@@ -2,28 +2,14 @@ import gym
 # noinspection PyUnresolvedReferences
 import vizdoomgym
 
+from utils.envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer
 from utils.envs.doom.wrappers.additional_input import DoomAdditionalInput
-from utils.envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, VerticalCropWrapper
 from utils.envs.doom.wrappers.observation_space import SetResolutionWrapper
 from utils.envs.doom.wrappers.step_human_input import StepHumanInput
+from utils.envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
 
-DOOM_W = 160
-DOOM_H = 90
-
-
-def key_to_action(key):
-    from pynput.keyboard import Key
-
-    action_table = {
-        Key.up: 3,
-        Key.down: 6,
-        Key.left: 1,
-        Key.right: 2,
-        Key.ctrl: 7,
-        Key.shift: 8,
-    }
-
-    return action_table.get(key, None)
+DOOM_W = 128
+DOOM_H = 72
 
 
 class DoomCfg:
@@ -62,6 +48,8 @@ DOOM_ENVS = [
 
     DoomCfg('doom_battle', 'VizdoomBattle-v0', 1.0, 2100),
     DoomCfg('doom_battle2', 'VizdoomBattle2-v0', 1.0, 2100),
+
+    DoomCfg('doom_dm', 29, 1.0, int(1e9)),
 ]
 
 
@@ -77,10 +65,17 @@ def make_doom_env(
         doom_cfg, mode='train',
         skip_frames=True, human_input=False,
         show_automap=False, episode_horizon=None,
+        player_id=None, num_players=None,  # for multi-agent
         **kwargs,
 ):
     skip_frames = 4 if skip_frames else 1
-    env = gym.make(doom_cfg.env_id, show_automap=show_automap, skip_frames=skip_frames)
+
+    if player_id is None:
+        env = gym.make(doom_cfg.env_id, show_automap=show_automap, skip_frames=skip_frames)
+    else:
+        env = VizdoomEnvMultiplayer(
+            doom_cfg.env_id, player_id=player_id, num_players=num_players, skip_frames=skip_frames,
+        )
 
     if human_input:
         env = StepHumanInput(env)

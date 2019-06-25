@@ -230,6 +230,9 @@ class ResizeWrapper(gym.core.Wrapper):
         return spaces.Box(low, high, shape=new_shape, dtype=old_space.dtype)
 
     def _convert_obs(self, obs):
+        if obs is None:
+            return obs
+
         obs = cv2.resize(obs, (self.w, self.h), interpolation=self.interpolation)
         if self.grayscale:
             obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
@@ -309,6 +312,9 @@ class TimeLimitWrapper(gym.core.Wrapper):
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
+        if observation is None:
+            return observation, reward, done, info
+
         self._num_steps += num_env_steps([info])
         if done:
             pass

@@ -105,6 +105,13 @@ def create_parser(parser_creator=None):
         action="store_true",
         help="Full debug mode (also enables local-mode)",
     )
+    parser.add_argument(
+        "--stop-seconds",
+        default=int(1e9),
+        type=int,
+        help="Stop experiment after this many seconds",
+    )
+
     return parser
 
 
@@ -150,6 +157,8 @@ def run_experiment(args, parser):
     exp.spec['checkpoint_freq'] = 20
     exp.spec['checkpoint_at_end'] = True
     exp.spec['keep_checkpoints_num'] = 3
+
+    exp.spec['stop'] = {'time_total_s': args.stop_seconds}
 
     if args.dbg:
         exp.spec['config']['num_workers'] = 1
