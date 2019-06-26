@@ -74,7 +74,7 @@ class TestDoom(TestCase):
     @staticmethod
     def make_env_singleplayer():
         return make_doom_env(
-            doom_env_by_name('doom_battle'), skip_frames=True,
+            doom_env_by_name('doom_battle_tuple_actions'), skip_frames=True,
         )
 
     def test_doom_env(self):

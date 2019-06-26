@@ -28,7 +28,7 @@ config:
         conv_activation: relu
         fcnet_activation: relu  # was tanh
 
-        use_lstm: True
+        use_lstm: False
         max_seq_len: 16
         lstm_cell_size: 256
         lstm_use_prev_action_reward: True

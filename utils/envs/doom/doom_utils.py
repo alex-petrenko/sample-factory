@@ -1,8 +1,8 @@
-import gym
-# noinspection PyUnresolvedReferences
-import vizdoomgym
+from gym.spaces import Discrete
 
+from utils.envs.doom.doom_gym import VizdoomEnv
 from utils.envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer
+from utils.envs.doom.wrappers.action_space import doom_action_space
 from utils.envs.doom.wrappers.additional_input import DoomAdditionalInput
 from utils.envs.doom.wrappers.observation_space import SetResolutionWrapper
 from utils.envs.doom.wrappers.step_human_input import StepHumanInput
@@ -13,44 +13,27 @@ DOOM_H = 72
 
 
 class DoomCfg:
-    def __init__(self, name, env_id, reward_scaling, default_timeout):
+    def __init__(self, name, env_cfg, action_space, reward_scaling, default_timeout, no_idle=False):
         self.name = name
-        self.env_id = env_id
+        self.env_cfg = env_cfg
+        self.action_space = action_space
         self.reward_scaling = reward_scaling
         self.default_timeout = default_timeout
 
+        # set to True if the environment does not assume an IDLE action
+        self.no_idle = no_idle
+
 
 DOOM_ENVS = [
-    DoomCfg('doom_basic', 'VizdoomBasic-v0', 0.01, 300),
-    DoomCfg('doom_maze', 'VizdoomMyWayHome-v0', 1.0, 2100),
-    DoomCfg('doom_maze_sparse', 'VizdoomMyWayHomeSparse-v0', 1.0, 2100),
-    DoomCfg('doom_maze_very_sparse', 'VizdoomMyWayHomeVerySparse-v0', 1.0, 2100),
-    DoomCfg('doom_maze_multi_goal', 'VizdoomMyWayHomeMultiGoal-v0', 1.0, 2100),
-    DoomCfg('doom_maze_multi_goal_random', 'VizdoomMyWayHomeMultiGoalRandom-v0', 1.0, 2100),
-    DoomCfg('doom_maze_no_goal', 'VizdoomMyWayHomeNoGoal-v0', 1.0, 20000),
-    DoomCfg('doom_maze_no_goal_random', 'VizdoomMyWayHomeNoGoalRandom-v0', 1.0, 20000),
+    DoomCfg('doom_basic', 'basic.cfg', Discrete(3), 0.01, 300, no_idle=True),
 
-    DoomCfg('doom_maze_goal', 'VizdoomMyWayHomeGoal-v0', 1.0, 2100),
+    DoomCfg('doom_battle', 'D3_battle.cfg', Discrete(9), 1.0, 2100),
+    DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space(), 1.0, 2100),
 
-    DoomCfg('doom_maze_sptm', 'VizdoomSptmBattleNavigation-v0', 1.0, 2100),
+    DoomCfg('doom_battle2', 'D4_battle2.cfg', Discrete(9), 1.0, 2100),
 
-    DoomCfg('doom_textured_easy', 'VizdoomTexturedMazeEasy-v0', 1.0, 20000),
-    DoomCfg('doom_textured_very_sparse', 'VizdoomTexturedMazeVerySparse-v0', 1.0, 20000),
-    DoomCfg('doom_textured', 'VizdoomTexturedMaze-v0', 1.0, 2100),
-
-    DoomCfg('doom_textured_super_sparse', 'VizdoomTexturedMazeSuperSparse-v0', 1.0, 20000),
-    DoomCfg('doom_textured_super_sparse_v2', 'VizdoomTexturedMazeSuperSparse-v2', 1.0, 1e9),
-    DoomCfg('doom_textured_multi_goal', 'VizdoomTexturedMazeMultiGoal-v0', 1.0, 20000),
-
-    DoomCfg('doom_textured_large_no_goal', 'VizdoomTexturedMazeLargeNoGoal-v0', 1.0, 2100),
-    DoomCfg('doom_textured_no_goal_random', 'VizdoomTexturedMazeNoGoalRandom-v0', 1.0, 20000),
-    DoomCfg('doom_textured_random_goal_v2', 'VizdoomTexturedMazeRandomGoal-v2', 1.0, 20000),
-
-    DoomCfg('doom_battle', 'VizdoomBattle-v0', 1.0, 2100),
-    DoomCfg('doom_battle2', 'VizdoomBattle2-v0', 1.0, 2100),
-
-    DoomCfg('doom_dm', 29, 1.0, int(1e9)),
-    DoomCfg('doom_dm_test', 30, 1.0, int(1e9)),
+    DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9)),
+    DoomCfg('doom_dm_test', 'cig.cfg', doom_action_space(), 1.0, int(1e9)),
 ]
 
 
@@ -72,11 +55,14 @@ def make_doom_env(
     skip_frames = 4 if skip_frames else 1
 
     if player_id is None:
-        env = gym.make(doom_cfg.env_id, show_automap=show_automap, skip_frames=skip_frames)
+        env = VizdoomEnv(doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames)
     else:
         env = VizdoomEnvMultiplayer(
-            doom_cfg.env_id, player_id=player_id, num_players=num_players, skip_frames=skip_frames,
+            doom_cfg.action_space, doom_cfg.env_cfg,
+            player_id=player_id, num_players=num_players, skip_frames=skip_frames,
         )
+
+    env.no_idle_action = doom_cfg.no_idle
 
     if human_input:
         env = StepHumanInput(env)

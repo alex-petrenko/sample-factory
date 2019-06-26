@@ -2,18 +2,17 @@ import time
 from enum import Enum
 from multiprocessing import Process, JoinableQueue
 from queue import Empty
-from random import choice
 
 import numpy as np
 from vizdoom import *
-from vizdoomgym.envs import VizdoomEnv
 
+from utils.envs.doom.doom_gym import VizdoomEnv
 from utils.utils import log
 
 
 class VizdoomEnvMultiplayer(VizdoomEnv):
-    def __init__(self, level, player_id, num_players, skip_frames, level_map='map01'):
-        super().__init__(level, skip_frames=skip_frames, level_map=level_map)
+    def __init__(self, action_space, config_file, player_id, num_players, skip_frames):
+        super().__init__(action_space, config_file, skip_frames=skip_frames)
 
         self.worker_index = 0
         self.vector_index = 0
@@ -35,12 +34,12 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         self.game.load_config(self.config_path)
         self.game.set_screen_resolution(self.screen_resolution)
-        # Setting an invalid level map will cause the game to freeze silently
-        self.game.set_doom_map(self.level_map)
-        self.game.set_seed(self.rng.random_integers(0, 2**32-1))
+        self.game.set_seed(self.rng.randint(0, 2**32-1))
 
         if mode == 'algo':
             self.game.set_window_visible(False)
+        else:
+            raise Exception('Only algo mode is currently supported by multiplayer wrappers')
 
         # make sure not to use more than 10 envs per worker
         port = 50300 + self.worker_index * 10 + self.vector_index
@@ -71,16 +70,15 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args('+name Host +colorset 0')
+            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
         else:
-            # TODO: port, name
             # Join existing game.
             self.game.add_game_args(f'-join 127.0.0.1:{port}')  # Connect to a host for a multiplayer game.
 
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args('+name AI +colorset 0')
+            self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
 
         self.game.set_mode(Mode.PLAYER)
 
@@ -97,17 +95,13 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         img = self.state.screen_buffer
         return np.transpose(img, (1, 2, 0))
 
-    def step(self, action):
+    def step(self, actions):
         self._ensure_initialized()
         info = {'num_frames': self.skip_frames}
 
-        # convert action to vizdoom action space (one hot)
-        act = np.zeros(self.action_space.n)
-        act[action] = 1
-        act = np.uint8(act)
-        act = act.tolist()
+        actions_binary = self._convert_actions(actions)
 
-        self.game.set_action(act)
+        self.game.set_action(actions_binary)
         self.game.advance_action(1, self.update_state)
         self.timestep += 1
 
@@ -290,143 +284,3 @@ class VizdoomMultiAgentEnv:
             time.sleep(0.1)
         for worker in self.workers:
             worker.process.join()
-
-
-def start_host(num_players):
-    game = DoomGame()
-
-    # Use CIG example config or your own.
-    game.load_config("/home/apetrenk/all/projects/doom/vizdoomgym/vizdoomgym/envs/scenarios/cig.cfg")
-
-    game.set_doom_map("map01")  # Limited deathmatch.
-    # game.set_doom_map("map02")  # Full deathmatch.
-
-    # Host game with options that will be used in the competition.
-    game.add_game_args(f"-host {num_players} -port 5030 "
-                       # This machine will function as a host for a multiplayer game with this many players (including this machine).
-                       # It will wait for other machines to connect using the -join parameter and then start the game when everyone is connected.
-                       "-deathmatch "  # Deathmatch rules are used for the game.
-                       "+timelimit 10.0 "  # The game (episode) will end after this many minutes have elapsed.
-                       "+sv_forcerespawn 1 "  # Players will respawn automatically after they die.
-                       "+sv_noautoaim 1 "  # Autoaim is disabled for all players.
-                       "+sv_respawnprotect 1 "  # Players will be invulnerable for two second after spawning.
-                       "+sv_spawnfarthest 1 "  # Players will be spawned as far as possible from any other players.
-                       "+sv_nocrouch 1 "  # Disables crouching.
-                       "+viz_respawn_delay 1 "  # Sets delay between respanws (in seconds).
-                       "+viz_nocheat 1")  # Disables depth and labels buffer and the ability to use commands that could interfere with multiplayer game.
-
-    # This can be used to host game without taking part in it (can be simply added as argument of vizdoom executable).
-    # game.add_game_args("+viz_spectator 1")
-
-    # Name your agent and select color
-    # colors: 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-    game.add_game_args("+name Host +colorset 0")
-
-    # During the competition, async mode will be forced for all agents.
-    game.set_mode(Mode.PLAYER)
-    # game.set_mode(Mode.ASYNC_PLAYER)
-
-    game.set_screen_resolution(ScreenResolution.RES_160X120)
-    game.set_window_visible(False)
-
-    game.init()
-
-    start = time.time()
-    num_frames = 10000
-    for i in range(num_frames):
-        if not advance_player(game, 0, i):
-            game.new_episode()
-
-    elapsed = time.time() - start
-    fps = num_frames / elapsed
-    log.info('FPS on the server: %.1f', fps)
-
-    game.close()
-
-
-def start_client(client_id):
-    game = DoomGame()
-
-    # Use CIG example config or your own.
-    game.load_config("/home/apetrenk/all/projects/doom/vizdoomgym/vizdoomgym/envs/scenarios/cig.cfg")
-
-    game.set_doom_map("map01")  # Limited deathmatch.
-    # game.set_doom_map("map02")  # Full deathmatch.
-
-    # Join existing game.
-    game.add_game_args("-join 127.0.0.1:5030")  # Connect to a host for a multiplayer game.
-    # game.add_game_args("-port 5029")  # Connect to a host for a multiplayer game.
-
-    # Name your agent and select color
-    # colors: 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-    game.add_game_args("+name AI +colorset 0")
-
-    # During the competition, async mode will be forced for all agents.
-    game.set_mode(Mode.PLAYER)
-    # game.set_mode(Mode.ASYNC_PLAYER)
-
-    game.set_screen_resolution(ScreenResolution.RES_160X120)
-    game.set_window_visible(False)
-
-    game.init()
-
-    time.sleep(0.5)
-
-    start = time.time()
-    num_frames = 10000
-    for i in range(num_frames):
-        if not advance_player(game, client_id, i):
-            time.sleep(0.005)
-            game.new_episode()
-
-    elapsed = time.time() - start
-    fps = num_frames / elapsed
-    log.info('FPS on the client: %.1f', fps)
-
-
-def advance_player(game, client_id, timestep):
-    actions = [[1, 0, 0, 0, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0, 0, 0, 0]]
-
-    # Play until the game (episode) is over.
-    if not game.is_episode_finished():
-        # Get the state.
-        s = game.get_state()
-        # if client_id != 0:
-        #     sleep(random() * 0.5 + 0.001)
-        server_state = game.get_server_state()
-
-        player_type = 'host' if client_id == 0 else f'client_{client_id}'
-        if client_id == 0 and timestep % 100 == 0:
-            log.info('Server state tic %d at %s', server_state.tic, player_type)
-
-        # Analyze the state.
-
-        # Make your action.
-        game.make_action(choice(actions), 4)
-
-        # Check if player is dead
-        if game.is_player_dead():
-            # Use this to respawn immediately after death, new state will be available.
-            game.respawn_player()
-
-        return True
-    else:
-        log.info('Game finished')
-        return False
-
-
-def main():
-    num_players = 8
-
-    for i in range(1, num_players):
-        log.info('Starting client #%d', i)
-        client = Process(target=start_client, args=(i,))
-        client.start()
-
-    log.info('Starting host...')
-    start_host(num_players)
-
-
-if __name__ == '__main__':
-    main()
-
