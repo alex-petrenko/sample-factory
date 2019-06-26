@@ -4,6 +4,7 @@ from multiprocessing import Process, JoinableQueue
 from queue import Empty
 
 import numpy as np
+from ray.rllib import MultiAgentEnv
 from vizdoom import *
 
 from utils.envs.doom.doom_gym import VizdoomEnv
@@ -197,7 +198,7 @@ class MultiAgentEnvWorker:
             self.task_queue.task_done()
 
 
-class VizdoomMultiAgentEnv:
+class VizdoomMultiAgentEnv(MultiAgentEnv):
     def __init__(self, num_players, make_env_func, env_config, skip_frames):
         self.num_players = num_players
         self.skip_frames = skip_frames

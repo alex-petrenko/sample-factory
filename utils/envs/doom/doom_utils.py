@@ -1,7 +1,7 @@
 from gym.spaces import Discrete
 
 from utils.envs.doom.doom_gym import VizdoomEnv
-from utils.envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer
+from utils.envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv
 from utils.envs.doom.wrappers.action_space import doom_action_space
 from utils.envs.doom.wrappers.additional_input import DoomAdditionalInput
 from utils.envs.doom.wrappers.observation_space import SetResolutionWrapper
@@ -50,6 +50,7 @@ def make_doom_env(
         skip_frames=True, human_input=False,
         show_automap=False, episode_horizon=None,
         player_id=None, num_players=None,  # for multi-agent
+        env_config=None,
         **kwargs,
 ):
     skip_frames = 4 if skip_frames else 1
@@ -88,4 +89,26 @@ def make_doom_env(
         env = RewardScalingWrapper(env, doom_cfg.reward_scaling)
 
     env = DoomAdditionalInput(env)
+    return env
+
+
+def make_doom_multiagent_env(
+        doom_cfg, mode='train',
+        skip_frames=True, num_players=None, env_config=None,
+        **kwargs,
+):
+    def make_env_func(player_id, num_players_):
+        return make_doom_env(
+            doom_cfg, mode,
+            skip_frames=skip_frames,
+            player_id=player_id, num_players=num_players_,
+            **kwargs,
+        )
+
+    env = VizdoomMultiAgentEnv(
+        num_players=num_players,
+        make_env_func=make_env_func,
+        env_config=env_config,
+        skip_frames=skip_frames,
+    )
     return env

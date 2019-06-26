@@ -1,4 +1,4 @@
-env: doom_battle
+env: doom_battle_tuple_actions
 run: PPO
 config:
     lambda: 0.95

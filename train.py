@@ -15,7 +15,7 @@ from ray.tune.config_parser import make_parser
 from ray.tune.tune import _make_scheduler, run
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from utils.envs.doom.doom_utils import make_doom_env, doom_env_by_name
+from utils.envs.doom.doom_utils import make_doom_env, doom_env_by_name, make_doom_multiagent_env
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -163,7 +163,7 @@ def run_experiment(args, parser):
     if args.dbg:
         exp.spec['config']['num_workers'] = 1
         exp.spec['config']['num_gpus'] = 1
-        exp.spec['config']['num_envs_per_worker'] = 1  # TODO
+        exp.spec['config']['num_envs_per_worker'] = 1
 
     run(
         exp,
@@ -175,13 +175,21 @@ def run_experiment(args, parser):
 
 
 # noinspection PyUnusedLocal
-def doom_env():
-    env = make_doom_env(doom_env_by_name('doom_battle'))
+def doom_env(name):
+    env = make_doom_env(doom_env_by_name(name))
+    return env
+
+
+def doom_multiagent_env(env_config, name):
+    env = make_doom_multiagent_env(doom_env_by_name(name), num_players=8, env_config=env_config)
     return env
 
 
 def main():
-    register_env('doom_battle', lambda config: doom_env())
+    register_env('doom_battle', lambda config: doom_env('doom_battle'))
+    register_env('doom_battle_tuple_actions', lambda config: doom_env('doom_battle_tuple_actions'))
+    register_env('doom_dm', lambda config: doom_multiagent_env(config, 'doom_dm'))
+
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 
     parser = create_parser()
