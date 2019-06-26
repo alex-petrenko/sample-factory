@@ -50,6 +50,7 @@ DOOM_ENVS = [
     DoomCfg('doom_battle2', 'VizdoomBattle2-v0', 1.0, 2100),
 
     DoomCfg('doom_dm', 29, 1.0, int(1e9)),
+    DoomCfg('doom_dm_test', 30, 1.0, int(1e9)),
 ]
 
 

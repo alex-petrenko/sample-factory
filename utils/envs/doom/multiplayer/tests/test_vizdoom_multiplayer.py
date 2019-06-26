@@ -20,14 +20,19 @@ class TestDoom(TestCase):
     def test_doom_env(self):
         self.assertIsNotNone(self.make_env_dm(player_id=0, num_players=8))
 
-    def doom_multiagent(self, worker_index):
+    def doom_multiagent(self, worker_index, num_steps=1000):
         env_config = {'worker_index': worker_index, 'vector_index': 0}
         num_players = 8
-        multi_env = VizdoomMultiAgentEnv(num_players=num_players, make_env_func=self.make_env_dm, env_config=env_config)
+        skip_frames = 4
+        multi_env = VizdoomMultiAgentEnv(
+            num_players=num_players,
+            make_env_func=self.make_env_dm,
+            env_config=env_config,
+            skip_frames=skip_frames,
+        )
 
         obs = multi_env.reset()
 
-        num_steps = 5000
         visualize = False
         start = time.time()
 
@@ -51,8 +56,6 @@ class TestDoom(TestCase):
         log.info('Took %.3f seconds for %d steps', took, num_steps)
         log.info('Server steps per second: %.1f', num_steps / took)
         log.info('Observations fps: %.1f', num_steps * num_players / took)
-
-        skip_frames = 4
         log.info('Environment fps: %.1f', num_steps * num_players * skip_frames / took)
 
         multi_env.close()
@@ -66,7 +69,7 @@ class TestDoom(TestCase):
 
         for i in range(num_workers):
             log.info('Starting worker #%d', i)
-            worker = Process(target=self.doom_multiagent, args=(i,))
+            worker = Process(target=self.doom_multiagent, args=(i, 200))
             worker.start()
             workers.append(worker)
 

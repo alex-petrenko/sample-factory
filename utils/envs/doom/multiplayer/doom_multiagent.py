@@ -59,10 +59,14 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_respawnprotect 1 '  # Players will be invulnerable for two second after spawning.
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
-                '+viz_respawn_delay 1 '  # Sets delay between respanws (in seconds).
-                '+viz_nocheat 1',  # Disables depth and labels buffer and the ability to use commands
-                                   # that could interfere with multiplayer game.
+                '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
             )
+
+            # Additional commands:
+            #
+            # disables depth and labels buffer and the ability to use commands
+            # that could interfere with multiplayer game (should use this in evaluation)
+            # '+viz_nocheat 1'
 
             # Name your agent and select color
             # colors:
@@ -103,17 +107,15 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         act = np.uint8(act)
         act = act.tolist()
 
-        reward = 0
-
         self.game.set_action(act)
         self.game.advance_action(1, self.update_state)
-        reward += self.game.get_last_reward()
         self.timestep += 1
 
         if not self.update_state:
             return None, None, None, None
 
         state = self.game.get_state()
+        reward = self.game.get_last_reward()
         done = self.game.is_episode_finished()
         if not done:
             observation = np.transpose(state.screen_buffer, (1, 2, 0))
@@ -202,9 +204,9 @@ class MultiAgentEnvWorker:
 
 
 class VizdoomMultiAgentEnv:
-    def __init__(self, num_players, make_env_func, env_config):
+    def __init__(self, num_players, make_env_func, env_config, skip_frames):
         self.num_players = num_players
-        self.skip_frames = 4
+        self.skip_frames = skip_frames
 
         env = make_env_func(player_id=-1, num_players=num_players)  # temporary
         self.action_space = env.action_space
@@ -248,7 +250,7 @@ class VizdoomMultiAgentEnv:
             worker.task_queue.join()
             results = safe_get(
                 worker.result_queue,
-                timeout=0.02 if timeout is None else timeout,
+                timeout=0.04 if timeout is None else timeout,
                 msg=f'Takes a surprisingly long time to process task {task_type}, retry...',
             )
 

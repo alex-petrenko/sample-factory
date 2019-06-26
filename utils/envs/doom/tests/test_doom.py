@@ -56,7 +56,7 @@ def test_multi_env_performance(test, env_type, num_envs, num_workers):
     next_print = print_step = 10000
     with t.timeit('experience'):
         while frames < total_num_frames:
-            _, _, done, info = multi_env.step([0] * num_envs)
+            _, rew, done, info = multi_env.step([0] * num_envs)
             frames += num_env_steps(info)
             if frames > next_print:
                 log.info('Collected %d frames of experience...', frames)
@@ -84,4 +84,4 @@ class TestDoom(TestCase):
         test_env_performance(self, 'doom')
 
     def test_doom_performance_multi(self):
-        test_multi_env_performance(self, 'doom', num_envs=128, num_workers=16)
+        test_multi_env_performance(self, 'doom', num_envs=200, num_workers=20)
