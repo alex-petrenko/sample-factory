@@ -4,31 +4,17 @@ from unittest import TestCase
 
 import cv2
 
-from utils.envs.doom.doom_helpers import concat_grid
-from utils.envs.doom.doom_utils import doom_env_by_name, make_doom_env
-from utils.envs.doom.multiplayer.doom_multiagent import VizdoomMultiAgentEnv
-from utils.utils import log
+from envs.doom import concat_grid
+from envs.doom import doom_env_by_name, make_doom_multiagent_env
+from utils.utils import log, AttrDict
 
 
 class TestDoom(TestCase):
     @staticmethod
-    def make_env_dm(player_id, num_players):
-        return make_doom_env(
-            doom_env_by_name('doom_dm'), player_id=player_id, num_players=num_players, skip_frames=True,
-        )
-
-    def test_doom_env(self):
-        self.assertIsNotNone(self.make_env_dm(player_id=0, num_players=8))
-
-    def doom_multiagent(self, worker_index, num_steps=1000):
-        env_config = {'worker_index': worker_index, 'vector_index': 0}
-        num_players = 8
-        skip_frames = 4
-        multi_env = VizdoomMultiAgentEnv(
-            num_players=num_players,
-            make_env_func=self.make_env_dm,
-            env_config=env_config,
-            skip_frames=skip_frames,
+    def doom_multiagent(worker_index, num_steps=1000):
+        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0})
+        multi_env = make_doom_multiagent_env(
+            doom_env_by_name('doom_dm'), env_config=env_config,
         )
 
         obs = multi_env.reset()
@@ -49,14 +35,24 @@ class TestDoom(TestCase):
             if i % 100 == 0 or any(dones.values()):
                 log.info('Rew %r done %r info %r', rew, dones, infos)
 
+            # for player, info in infos.items():
+            #     if 'HEALTH' in info:
+            #         if info['HEALTH'] < -10:
+            #             log.info('Player %r health: %.3f (%.3f)', player, info['HEALTH'], obs[player]['measurements'][2])
+
+            for player, o in obs.items():
+                health = o['measurements'][2]
+                if health < -3:
+                    log.info('Player %r health: %.3f', player, health)
+
             if dones['__all__']:
                 multi_env.reset()
 
         took = time.time() - start
         log.info('Took %.3f seconds for %d steps', took, num_steps)
         log.info('Server steps per second: %.1f', num_steps / took)
-        log.info('Observations fps: %.1f', num_steps * num_players / took)
-        log.info('Environment fps: %.1f', num_steps * num_players * skip_frames / took)
+        log.info('Observations fps: %.1f', num_steps * multi_env.num_players / took)
+        log.info('Environment fps: %.1f', num_steps * multi_env.num_players * multi_env.skip_frames / took)
 
         multi_env.close()
 

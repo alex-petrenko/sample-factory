@@ -1,6 +1,6 @@
 import sys
 
-from utils.envs.doom.doom_utils import make_doom_env, doom_env_by_name
+from envs.doom import make_doom_env, doom_env_by_name
 
 
 def main():

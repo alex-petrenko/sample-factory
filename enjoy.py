@@ -15,7 +15,7 @@ from ray.tune.util import merge_dicts
 from ray.rllib.env.base_env import _DUMMY_AGENT_ID
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from utils.envs.doom.doom_utils import make_doom_env, doom_env_by_name
+from envs.doom import make_doom_env, doom_env_by_name
 from ray.rllib.rollout import create_parser, DefaultMapping
 
 from utils.utils import log

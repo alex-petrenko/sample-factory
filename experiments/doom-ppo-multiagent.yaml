@@ -1,4 +1,4 @@
-env: doom_battle_tuple_actions
+env: doom_dm
 run: PPO
 config:
     lr: 1e-4
@@ -8,12 +8,12 @@ config:
     clip_param: 0.1
     vf_clip_param: 100000.0
     entropy_coeff: 0.003
-    train_batch_size: 6144
+    train_batch_size: 512
     sample_batch_size: 32
     sgd_minibatch_size: 512
     num_sgd_iter: 10
-    num_workers: 18
-    num_envs_per_worker: 8
+    num_workers: 16
+    num_envs_per_worker: 1
     batch_mode: truncate_episodes
     observation_filter: NoFilter
     vf_share_layers: true
@@ -36,3 +36,4 @@ config:
         framestack: False
         grayscale: False
         zero_mean: False
+    multiagent:

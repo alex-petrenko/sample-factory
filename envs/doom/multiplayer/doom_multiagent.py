@@ -7,7 +7,7 @@ import numpy as np
 from ray.rllib import MultiAgentEnv
 from vizdoom import *
 
-from utils.envs.doom.doom_gym import VizdoomEnv
+from envs.doom.doom_gym import VizdoomEnv
 from utils.utils import log
 
 
@@ -136,9 +136,8 @@ class TaskType(Enum):
 
 
 class MultiAgentEnvWorker:
-    def __init__(self, player_id, num_players, make_env_func, env_config):
+    def __init__(self, player_id, make_env_func, env_config):
         self.player_id = player_id
-        self.num_players = num_players
         self.make_env_func = make_env_func
         self.env_config = env_config
 
@@ -148,9 +147,12 @@ class MultiAgentEnvWorker:
 
     def _init(self):
         log.info('Initializing env for player %d...', self.player_id)
-        env = self.make_env_func(player_id=self.player_id, num_players=self.num_players)
-        env.unwrapped.worker_index = self.env_config['worker_index']
-        env.unwrapped.vector_index = self.env_config['vector_index']
+        env = self.make_env_func(player_id=self.player_id)
+
+        if self.env_config is not None:
+            env.unwrapped.worker_index = self.env_config.worker_index
+            env.unwrapped.vector_index = self.env_config.vector_index
+
         env.seed(self.player_id)
         return env
 
@@ -201,14 +203,14 @@ class MultiAgentEnvWorker:
 class VizdoomMultiAgentEnv(MultiAgentEnv):
     def __init__(self, num_players, make_env_func, env_config, skip_frames):
         self.num_players = num_players
-        self.skip_frames = skip_frames
+        self.skip_frames = skip_frames  # number of frames to skip (1 = no skip)
 
-        env = make_env_func(player_id=-1, num_players=num_players)  # temporary
+        env = make_env_func(player_id=-1)  # temporary env just to query observation_space and stuff
         self.action_space = env.action_space
         self.observation_space = env.observation_space
         env.close()
 
-        self.workers = [MultiAgentEnvWorker(i, num_players, make_env_func, env_config) for i in range(num_players)]
+        self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_players)]
 
         for worker in self.workers:
             worker.task_queue.put((None, TaskType.INIT))

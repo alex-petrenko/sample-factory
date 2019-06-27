@@ -1,19 +1,21 @@
 from gym.spaces import Discrete
+from ray.tune import register_env
 
-from utils.envs.doom.doom_gym import VizdoomEnv
-from utils.envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv
-from utils.envs.doom.wrappers.action_space import doom_action_space
-from utils.envs.doom.wrappers.additional_input import DoomAdditionalInput
-from utils.envs.doom.wrappers.observation_space import SetResolutionWrapper
-from utils.envs.doom.wrappers.step_human_input import StepHumanInput
-from utils.envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
+from envs.doom.doom_gym import VizdoomEnv
+from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv
+from envs.doom.wrappers.action_space import doom_action_space
+from envs.doom.wrappers.additional_input import DoomAdditionalInput
+from envs.doom.wrappers.observation_space import SetResolutionWrapper
+from envs.doom.wrappers.step_human_input import StepHumanInput
+from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
 
 DOOM_W = 128
 DOOM_H = 72
+DEFAULT_FRAMESKIP = 4
 
 
 class DoomCfg:
-    def __init__(self, name, env_cfg, action_space, reward_scaling, default_timeout, no_idle=False):
+    def __init__(self, name, env_cfg, action_space, reward_scaling, default_timeout, num_players=1, no_idle=False):
         self.name = name
         self.env_cfg = env_cfg
         self.action_space = action_space
@@ -22,6 +24,9 @@ class DoomCfg:
 
         # set to True if the environment does not assume an IDLE action
         self.no_idle = no_idle
+
+        # 1 for singleplayer, >1 otherwise
+        self.num_players = num_players
 
 
 DOOM_ENVS = [
@@ -32,8 +37,8 @@ DOOM_ENVS = [
 
     DoomCfg('doom_battle2', 'D4_battle2.cfg', Discrete(9), 1.0, 2100),
 
-    DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9)),
-    DoomCfg('doom_dm_test', 'cig.cfg', doom_action_space(), 1.0, int(1e9)),
+    DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
+    DoomCfg('doom_dm_test', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
 ]
 
 
@@ -47,13 +52,13 @@ def doom_env_by_name(name):
 # noinspection PyUnusedLocal
 def make_doom_env(
         doom_cfg, mode='train',
-        skip_frames=True, human_input=False,
+        skip_frames=DEFAULT_FRAMESKIP, human_input=False,
         show_automap=False, episode_horizon=None,
         player_id=None, num_players=None,  # for multi-agent
         env_config=None,
         **kwargs,
 ):
-    skip_frames = 4 if skip_frames else 1
+    skip_frames = skip_frames if skip_frames is not None else 1
 
     if player_id is None:
         env = VizdoomEnv(doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames)
@@ -94,21 +99,33 @@ def make_doom_env(
 
 def make_doom_multiagent_env(
         doom_cfg, mode='train',
-        skip_frames=True, num_players=None, env_config=None,
+        skip_frames=DEFAULT_FRAMESKIP, env_config=None,
         **kwargs,
 ):
-    def make_env_func(player_id, num_players_):
+    def make_env_func(player_id):
         return make_doom_env(
             doom_cfg, mode,
             skip_frames=skip_frames,
-            player_id=player_id, num_players=num_players_,
+            player_id=player_id, num_players=doom_cfg.num_players,
             **kwargs,
         )
 
     env = VizdoomMultiAgentEnv(
-        num_players=num_players,
+        num_players=doom_cfg.num_players,
         make_env_func=make_env_func,
         env_config=env_config,
         skip_frames=skip_frames,
     )
     return env
+
+
+def register_doom_envs_rllib():
+    """Register env factories in RLLib system."""
+    register_env('doom_battle', lambda config: make_doom_env(doom_env_by_name('doom_battle')))
+    register_env(
+        'doom_battle_tuple_actions', lambda config: make_doom_env(doom_env_by_name('doom_battle_tuple_actions')),
+    )
+    register_env(
+        'doom_dm',
+        lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dm'), env_config=config),
+    )

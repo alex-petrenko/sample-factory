@@ -1,8 +1,6 @@
 import gym
 import numpy as np
 
-from utils.utils import log
-
 
 class DoomAdditionalInput(gym.Wrapper):
     """Add game variables to the observation space."""
@@ -13,7 +11,9 @@ class DoomAdditionalInput(gym.Wrapper):
 
         self.observation_space = gym.spaces.Dict({
             'obs': current_obs_space,
-            'measurements': gym.spaces.Box(0.0, 100.0, shape=(4, )),
+            'measurements': gym.spaces.Box(
+                low=np.array([0.0, 0.0, -1.0, -1e3]), high=np.array([20.0, 1000.0, 100.0, 1e3]),
+            ),
         })
 
         self.prev_health = 100.0
@@ -31,7 +31,8 @@ class DoomAdditionalInput(gym.Wrapper):
         # same as DFP paper
         selected_weapon_ammo /= 7.5
         health = info.get('HEALTH', 0.0) / 30.0
-        kills = info.get('USER2', 0.0)
+        health = max(0.0, health)  # we don't really care how much negative health we have, dead is dead
+        kills = info.get('USER2', 0.0) / 10.0
 
         obs_dict['measurements'][0] = selected_weapon
         obs_dict['measurements'][1] = selected_weapon_ammo

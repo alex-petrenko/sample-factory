@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_env import MultiEnv
-from utils.envs.doom.doom_utils import doom_env_by_name, make_doom_env
+from envs.doom import doom_env_by_name, make_doom_env
 from utils.timing import Timing
 from utils.utils import log
 

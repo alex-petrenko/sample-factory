@@ -1,21 +1,17 @@
-#!/usr/bin/env python
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import argparse
 
 import ray
 import yaml
 from ray.rllib.models import ModelCatalog
 from ray.tests.cluster_utils import Cluster
-from ray.tune import register_env, Experiment
+from ray.tune import Experiment, function
 from ray.tune.config_parser import make_parser
+from ray.tune.registry import ENV_CREATOR
+# noinspection PyProtectedMember
 from ray.tune.tune import _make_scheduler, run
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from utils.envs.doom.doom_utils import make_doom_env, doom_env_by_name, make_doom_multiagent_env
+from envs.doom.doom_utils import register_doom_envs_rllib
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -160,6 +156,25 @@ def run_experiment(args, parser):
 
     exp.spec['stop'] = {'time_total_s': args.stop_seconds}
 
+    if 'multiagent' in exp.spec['config']:
+        # noinspection PyProtectedMember
+        make_env = ray.tune.registry._global_registry.get(ENV_CREATOR, exp.spec['config']['env'])
+        temp_env = make_env(None)
+        obs_space, action_space = temp_env.observation_space, temp_env.action_space
+        temp_env.close()
+        del temp_env
+
+        policies = dict(
+            main=(None, obs_space, action_space, {}),
+            dummy=(None, obs_space, action_space, {}),
+        )
+
+        exp.spec['config']['multiagent'] = {
+            'policies': policies,
+            'policy_mapping_fn': function(lambda agent_id: 'main'),
+            'policies_to_train': ['main'],
+        }
+
     if args.dbg:
         exp.spec['config']['num_workers'] = 1
         exp.spec['config']['num_gpus'] = 1
@@ -174,21 +189,8 @@ def run_experiment(args, parser):
     )
 
 
-# noinspection PyUnusedLocal
-def doom_env(name):
-    env = make_doom_env(doom_env_by_name(name))
-    return env
-
-
-def doom_multiagent_env(env_config, name):
-    env = make_doom_multiagent_env(doom_env_by_name(name), num_players=8, env_config=env_config)
-    return env
-
-
 def main():
-    register_env('doom_battle', lambda config: doom_env('doom_battle'))
-    register_env('doom_battle_tuple_actions', lambda config: doom_env('doom_battle_tuple_actions'))
-    register_env('doom_dm', lambda config: doom_multiagent_env(config, 'doom_dm'))
+    register_doom_envs_rllib()
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 
@@ -199,4 +201,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
