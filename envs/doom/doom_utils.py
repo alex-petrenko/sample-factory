@@ -4,7 +4,7 @@ from ray.tune import register_env
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv
 from envs.doom.wrappers.action_space import doom_action_space
-from envs.doom.wrappers.additional_input import DoomAdditionalInput
+from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.observation_space import SetResolutionWrapper
 from envs.doom.wrappers.step_human_input import StepHumanInput
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
@@ -95,7 +95,7 @@ def make_doom_env(
     if doom_cfg.reward_scaling != 1.0:
         env = RewardScalingWrapper(env, doom_cfg.reward_scaling)
 
-    env = DoomAdditionalInput(env)
+    env = DoomAdditionalInputAndRewards(env)
     return env
 
 

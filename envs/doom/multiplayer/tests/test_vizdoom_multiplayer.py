@@ -29,11 +29,6 @@ class TestDoom(TestCase):
             if i % 100 == 0 or any(dones.values()):
                 log.info('Rew %r done %r info %r', rew, dones, infos)
 
-            for player, o in obs.items():
-                health = o['measurements'][2]
-                if health < -3:
-                    log.info('Player %r health: %.3f', player, health)
-
             if dones['__all__']:
                 multi_env.reset()
 

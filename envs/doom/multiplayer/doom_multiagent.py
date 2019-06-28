@@ -307,7 +307,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
         if self.last_obs is None:
             return
 
-        render_multiagent = False
+        render_multiagent = True
         if render_multiagent:
             obs_display = [o['obs'] for o in self.last_obs.values()]
             obs_grid = concat_grid(obs_display)
