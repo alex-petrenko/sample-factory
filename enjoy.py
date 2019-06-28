@@ -67,7 +67,7 @@ def run(args, parser):
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
     num_steps = int(args.steps)
-    rollout_loop(agent, args.env, num_steps, args.no_render, fps=45)
+    rollout_loop(agent, args.env, num_steps, args.no_render, fps=100)
 
 
 # noinspection PyUnusedLocal
@@ -177,6 +177,8 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
                 reward_total += sum(rewards.values())
             else:
                 reward_total += rewards
+
+            log.info('Reward total: %.3f', reward_total)
 
         print('Episode reward', reward_total)
 

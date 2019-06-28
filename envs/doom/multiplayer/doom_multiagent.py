@@ -315,11 +315,11 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
             obs_display = [o['obs'] for o in self.last_obs.values()]
             obs_grid = concat_grid(obs_display)
             cv2.imshow('vizdoom', obs_grid)
-            cv2.waitKey(1)
         else:
             obs_display = self.last_obs['0']['obs']
             cv2.imshow('vizdoom', cvt_doom_obs(obs_display))
-            cv2.waitKey(1)
+
+        cv2.waitKey(1)
 
     def close(self):
         log.info('Stopping multi env...')
