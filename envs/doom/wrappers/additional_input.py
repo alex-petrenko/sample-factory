@@ -104,7 +104,6 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         obs_dict, shaping_rew = self._parse_info(obs, info)
         rew += shaping_rew
 
-        # if abs(rew) > EPS and self.env.unwrapped.player_id == 1:
-        #     log.info('Total reward for the agent %r is %.3f', self.env.unwrapped.player_id, rew)
-
+        # if abs(rew) > EPS:
+        #     log.info('Reward: %.3f %d', rew, self.env.unwrapped.player_id)
         return obs_dict, rew, done, info
