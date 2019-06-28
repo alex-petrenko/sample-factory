@@ -6,12 +6,12 @@ def key_to_action(key):
     from pynput.keyboard import Key
 
     action_table = {
-        Key.up: 3,
-        Key.down: 6,
-        Key.left: 1,
-        Key.right: 2,
-        Key.ctrl: 7,
-        Key.shift: 8,
+        Key.up: 0,
+        Key.down: 1,
+        Key.right: 4,
+        Key.left: 5,
+        Key.ctrl: 6,
+        Key.shift: 7,
     }
 
     return action_table.get(key, None)
@@ -38,7 +38,7 @@ def concat_grid(obs):
 
 
 def cvt_doom_obs(obs):
-    w, h = 800, 450
+    w, h = 960, 540
     obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
     obs = cv2.resize(obs, (w, h))
     return obs

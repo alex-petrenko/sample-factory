@@ -1,14 +1,19 @@
 import os
 import re
+import time
 from os.path import join
-from time import sleep
+from threading import Thread
 
 import cv2
 import gym
 import numpy as np
 from gym.utils import seeding
+from pynput.keyboard import Listener, Key
 
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
+
+from envs.doom.doom_helpers import key_to_action
+from utils.utils import log
 
 
 class VizdoomEnv(gym.Env):
@@ -68,6 +73,10 @@ class VizdoomEnv(gym.Env):
             self.current_histogram = np.zeros((len_x, len_y), dtype=np.int32)
             self.previous_histogram = np.zeros_like(self.current_histogram)
 
+        # helpers for human play with pynput keyboard input
+        self._terminate = False
+        self._current_actions = []
+
         self.seed()
 
     def seed(self, seed=None):
@@ -95,8 +104,8 @@ class VizdoomEnv(gym.Env):
             self.game.add_game_args('+freelook 1')
             self.game.set_window_visible(True)
 
-            # it's called SPECTATOR because the agent is supposed to spectate and learn from a human
-            self.game.set_mode(Mode.SPECTATOR)
+            # another option is to use spectator mode, then the game handles keyboard for you
+            self.game.set_mode(Mode.PLAYER)
         else:
             raise Exception('Unsupported mode')
 
@@ -224,7 +233,7 @@ class VizdoomEnv(gym.Env):
             img = np.transpose(img, [1, 2, 0])
 
             h, w = img.shape[:2]
-            render_w = 640
+            render_w = 1024
 
             if w < render_w:
                 render_h = int(render_w * h / w)
@@ -232,7 +241,7 @@ class VizdoomEnv(gym.Env):
 
             if self.viewer is None:
                 from gym.envs.classic_control import rendering
-                self.viewer = rendering.SimpleImageViewer(maxwidth=800)
+                self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
             self.viewer.imshow(img)
         except AttributeError:
             pass
@@ -241,36 +250,77 @@ class VizdoomEnv(gym.Env):
         if self.viewer is not None:
             self.viewer.close()
 
-    def play_human_mode(self, num_episodes=3):
+    def _keyboard_on_press(self, key):
+        if key == Key.esc:
+            self._terminate = True
+            return False
+
+        action = key_to_action(key)
+        if action is not None:
+            if action not in self._current_actions:
+                self._current_actions.append(action)
+
+    def _keyboard_on_release(self, key):
+        action = key_to_action(key)
+        if action is not None:
+            if action in self._current_actions:
+                self._current_actions.remove(action)
+
+    def play_human_mode(self, skip_frames=1, num_episodes=3):
+        def start_listener():
+            with Listener(on_press=self._keyboard_on_press, on_release=self._keyboard_on_release) as listener:
+                listener.join()
+
+        listener_thread = Thread(target=start_listener)
+        listener_thread.start()
+
         for episode in range(num_episodes):
             self.reset('human')
-            while not self.game.is_episode_finished():
-                self.game.advance_action()
-                state = self.game.get_state()
-                total_reward = self.game.get_total_reward()
+            last_render_time = time.time()
+            time_between_frames = 1.0 / 35.0
 
-                if state is not None:
-                    print('===============================')
-                    print('Info: ', self.get_info())
-                    print('State: #' + str(state.number))
-                    print('Action: \t' + str(self.game.get_last_action()) + '\t (=> only allowed actions)')
-                    print('Reward: \t' + str(self.game.get_last_reward()))
-                    print('Total Reward: \t' + str(total_reward))
+            while not self.game.is_episode_finished() and not self._terminate:
+                num_actions = 8  # hardcoded here for simplicity
+                actions = [0] * num_actions
+                for action in self._current_actions:
+                    actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
+
+                for frame in range(skip_frames):
+                    self.game.make_action(actions, 1)
+                    log.info('Action taken: %r', actions)
+                    state = self.game.get_state()
+                    total_reward = self.game.get_total_reward()
+
+                    verbose = False
+                    if state is not None and verbose:
+                        print('===============================')
+                        print('Info: ', self.get_info())
+                        print('State: #' + str(state.number))
+                        print('Action: \t' + str(self.game.get_last_action()) + '\t (=> only allowed actions)')
+                        print('Reward: \t' + str(self.game.get_last_reward()))
+                        print('Total Reward: \t' + str(total_reward))
+
+                    time_since_last_render = time.time() - last_render_time
+                    time_wait = time_between_frames - time_since_last_render
 
                     if self.show_automap and state.automap_buffer is not None:
                         map_ = state.automap_buffer
                         map_ = np.swapaxes(map_, 0, 2)
                         map_ = np.swapaxes(map_, 0, 1)
                         cv2.imshow('ViZDoom Automap Buffer', map_)
-                        cv2.waitKey(28)
+                        if time_wait > 0:
+                            cv2.waitKey(int(time_wait) * 1000)
                     else:
-                        sleep(0.02857)  # 35 fps = 0.02857 sleep between frames
+                        if time_wait > 0:
+                            time.sleep(time_wait)
+
+                    last_render_time = time.time()
+
             if self.show_automap:
                 cv2.destroyAllWindows()
 
-        sleep(1)
-        print('===============================')
-        print('Done')
+        log.debug('Press ESC to exit...')
+        listener_thread.join()
 
     def get_info(self, variables=None):
         if variables is None:

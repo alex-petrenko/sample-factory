@@ -1,11 +1,11 @@
 import sys
 
-from envs.doom import make_doom_env, doom_env_by_name
+from envs.doom.doom_utils import make_doom_env, doom_env_by_name, DEFAULT_FRAMESKIP
 
 
 def main():
-    env = make_doom_env(doom_env_by_name('doom_battle'), mode='test', show_automap=True)
-    return env.unwrapped.play_human_mode()
+    env = make_doom_env(doom_env_by_name('doom_battle'), mode='human', show_automap=True)
+    return env.unwrapped.play_human_mode(skip_frames=1)
 
 
 if __name__ == '__main__':

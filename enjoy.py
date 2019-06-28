@@ -7,23 +7,28 @@ import gym
 import ray
 from ray.rllib import MultiAgentEnv
 from ray.rllib.agents.registry import get_agent_class
-from ray.rllib.models import ModelCatalog
-from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
-from ray.tune import register_env
-from ray.tune.util import merge_dicts
 # noinspection PyProtectedMember
 from ray.rllib.env.base_env import _DUMMY_AGENT_ID
+from ray.rllib.evaluation.sampler import _unbatch_tuple_actions
+from ray.rllib.models import ModelCatalog
+from ray.rllib.models.action_dist import TupleActions
+from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
+from ray.rllib.rollout import create_parser, DefaultMapping
+from ray.tune.util import merge_dicts
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from envs.doom import make_doom_env, doom_env_by_name
-from ray.rllib.rollout import create_parser, DefaultMapping
-
+from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
 from utils.utils import log
 
 
-def doom_env():
-    env = make_doom_env(doom_env_by_name('doom_battle'), mode='test')
-    return env
+def create_parser_custom():
+    parser = create_parser()
+    parser.add_argument(
+        '--dbg',
+        action='store_true',
+        help='Full debug mode (also enables local-mode)',
+    )
+    return parser
 
 
 def run(args, parser):
@@ -49,13 +54,20 @@ def run(args, parser):
             parser.error("the following arguments are required: --env")
         args.env = config.get("env")
 
-    ray.init(local_mode=True)
+    local_mode = False
+    if args.dbg:
+        local_mode = True
+        config['num_workers'] = 1
+        config['num_gpus'] = 1
+        config['num_envs_per_worker'] = 1
+
+    ray.init(local_mode=local_mode)
 
     cls = get_agent_class(args.run)
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
     num_steps = int(args.steps)
-    rollout_loop(agent, args.env, num_steps, args.no_render, fps=15)
+    rollout_loop(agent, args.env, num_steps, args.no_render, fps=45)
 
 
 # noinspection PyUnusedLocal
@@ -120,42 +132,61 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
                             prev_action=prev_actions[agent_id],
                             prev_reward=prev_rewards[agent_id],
                             policy_id=policy_id)
+
+                    if isinstance(env.action_space, gym.spaces.Tuple):
+                        a_action = TupleActions(a_action)
+                        a_action = _unbatch_tuple_actions(a_action)[0]
+
                     action_dict[agent_id] = a_action
                     prev_actions[agent_id] = a_action
             action = action_dict
 
             action = action if multiagent else action[_DUMMY_AGENT_ID]
-            next_obs, reward, done, _ = env.step(action)
-            if multiagent:
-                for agent_id, r in reward.items():
-                    prev_rewards[agent_id] = r
-            else:
-                prev_rewards[_DUMMY_AGENT_ID] = reward
+            frameskip = DEFAULT_FRAMESKIP
+            rewards = None
+            for frame in range(frameskip):
+                next_obs, reward, done, _ = env.step(action)
+                if rewards is None:
+                    rewards = reward
+                else:
+                    if multiagent:
+                        for agent_id, r in reward.items():
+                            rewards[agent_id] += r
+                    else:
+                        rewards += reward
+
+                if not no_render:
+                    time_since_last_render = time.time() - last_render_time
+                    time_between_frames = 1.0 / fps
+                    time_wait = time_between_frames - time_since_last_render
+                    if time_wait > 0:
+                        time.sleep(time_wait)
+                    env.render()
+                    last_render_time = time.time()
+                steps += 1
+                obs = next_obs
 
             if multiagent:
-                done = done["__all__"]
-                reward_total += sum(reward.values())
+                for agent_id, r in rewards.items():
+                    prev_rewards[agent_id] = r
             else:
-                reward_total += reward
-            if not no_render:
-                time_since_last_render = time.time() - last_render_time
-                time_between_frames = 1.0 / fps
-                time_wait = time_between_frames - time_since_last_render
-                if time_wait > 0:
-                    log.info('Wait %.4f sec', time_wait)
-                    time.sleep(time_wait)
-                env.render()
-                last_render_time = time.time()
-            steps += 1
-            obs = next_obs
-        print("Episode reward", reward_total)
+                prev_rewards[_DUMMY_AGENT_ID] = rewards
+
+            if multiagent:
+                done = done['__all__']
+                reward_total += sum(rewards.values())
+            else:
+                reward_total += rewards
+
+        print('Episode reward', reward_total)
 
 
 def main():
-    register_env('doom_battle', lambda config: doom_env())
+    register_doom_envs_rllib(mode='test')
+
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 
-    parser = create_parser()
+    parser = create_parser_custom()
     args = parser.parse_args()
     run(args, parser)
 

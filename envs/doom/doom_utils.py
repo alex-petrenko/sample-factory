@@ -59,13 +59,16 @@ def make_doom_env(
         **kwargs,
 ):
     skip_frames = skip_frames if skip_frames is not None else 1
+    if mode == 'test':
+        skip_frames = 1
 
     if player_id is None:
         env = VizdoomEnv(doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames)
     else:
+        # skip_frames is handled by multi-agent wrapper
         env = VizdoomEnvMultiplayer(
             doom_cfg.action_space, doom_cfg.env_cfg,
-            player_id=player_id, num_players=num_players, skip_frames=skip_frames,
+            player_id=player_id, num_players=num_players,
         )
 
     env.no_idle_action = doom_cfg.no_idle
@@ -73,10 +76,9 @@ def make_doom_env(
     if human_input:
         env = StepHumanInput(env)
 
-    # courtesy of https://github.com/pathak22/noreward-rl/blob/master/src/envs.py
-    # and https://github.com/ppaquette/gym-doom
-    if mode == 'test':
-        env = SetResolutionWrapper(env, '800x450')
+    # TODO: render higher resolution at test time?
+    if mode == 'human':
+        env = SetResolutionWrapper(env, '1280x720')
     else:
         env = SetResolutionWrapper(env, '256x144')
 
@@ -102,10 +104,12 @@ def make_doom_multiagent_env(
         skip_frames=DEFAULT_FRAMESKIP, env_config=None,
         **kwargs,
 ):
+    if mode == 'test':
+        skip_frames = 1
+
     def make_env_func(player_id):
         return make_doom_env(
             doom_cfg, mode,
-            skip_frames=skip_frames,
             player_id=player_id, num_players=doom_cfg.num_players,
             **kwargs,
         )
@@ -119,13 +123,14 @@ def make_doom_multiagent_env(
     return env
 
 
-def register_doom_envs_rllib():
+def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    register_env('doom_battle', lambda config: make_doom_env(doom_env_by_name('doom_battle')))
+    register_env('doom_battle', lambda config: make_doom_env(doom_env_by_name('doom_battle'), **kwargs))
     register_env(
-        'doom_battle_tuple_actions', lambda config: make_doom_env(doom_env_by_name('doom_battle_tuple_actions')),
+        'doom_battle_tuple_actions',
+        lambda config: make_doom_env(doom_env_by_name('doom_battle_tuple_actions'), **kwargs),
     )
     register_env(
         'doom_dm',
-        lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dm'), env_config=config),
+        lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dm'), env_config=config, **kwargs),
     )

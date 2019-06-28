@@ -3,17 +3,19 @@ from enum import Enum
 from multiprocessing import Process, JoinableQueue
 from queue import Empty
 
+import cv2
 import numpy as np
 from ray.rllib import MultiAgentEnv
 from vizdoom import *
 
 from envs.doom.doom_gym import VizdoomEnv
+from envs.doom.doom_helpers import concat_grid, cvt_doom_obs
 from utils.utils import log
 
 
 class VizdoomEnvMultiplayer(VizdoomEnv):
-    def __init__(self, action_space, config_file, player_id, num_players, skip_frames):
-        super().__init__(action_space, config_file, skip_frames=skip_frames)
+    def __init__(self, action_space, config_file, player_id, num_players):
+        super().__init__(action_space, config_file)
 
         self.worker_index = 0
         self.vector_index = 0
@@ -98,7 +100,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
     def step(self, actions):
         self._ensure_initialized()
-        info = {'num_frames': self.skip_frames}
+        info = {}
 
         actions_binary = self._convert_actions(actions)
 
@@ -212,13 +214,11 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
 
         self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_players)]
 
-        for worker in self.workers:
-            worker.task_queue.put((None, TaskType.INIT))
-            time.sleep(0.1)  # just in case
-        for worker in self.workers:
-            worker.task_queue.join()
+        # only needed when rendering
+        self.enable_rendering = False
+        self.last_obs = None
 
-        log.info('%d agent workers initialized!', len(self.workers))
+        self.initialized = False
 
     def await_tasks(self, data, task_type, timeout=None):
         """
@@ -264,20 +264,59 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
 
         return result_dicts
 
+    def _ensure_initialized(self):
+        if self.initialized:
+            return
+
+        for worker in self.workers:
+            worker.task_queue.put((None, TaskType.INIT))
+            time.sleep(0.1)  # just in case
+        for worker in self.workers:
+            worker.task_queue.join()
+
+        log.info('%d agent workers initialized!', len(self.workers))
+        self.initialized = True
+
     def info(self):
+        self._ensure_initialized()
         info = self.await_tasks(None, TaskType.INFO)[0]
         return info
 
     def reset(self):
+        self._ensure_initialized()
         observation = self.await_tasks(None, TaskType.RESET)[0]
         return observation
 
     def step(self, actions):
+        self._ensure_initialized()
+
         for frame in range(self.skip_frames - 1):
             self.await_tasks(actions, TaskType.STEP)
         obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
         dones['__all__'] = all(dones.values())
+
+        if self.enable_rendering:
+            self.last_obs = obs
+
         return obs, rew, dones, infos
+
+    # noinspection PyUnusedLocal
+    def render(self, *args, **kwargs):
+        self.enable_rendering = True
+
+        if self.last_obs is None:
+            return
+
+        render_multiagent = False
+        if render_multiagent:
+            obs_display = [o['obs'] for o in self.last_obs.values()]
+            obs_grid = concat_grid(obs_display)
+            cv2.imshow('vizdoom', obs_grid)
+            cv2.waitKey(1)
+        else:
+            obs_display = self.last_obs['0']['obs']
+            cv2.imshow('vizdoom', cvt_doom_obs(obs_display))
+            cv2.waitKey(1)
 
     def close(self):
         log.info('Stopping multi env...')

@@ -2,10 +2,7 @@ import time
 from multiprocessing import Process
 from unittest import TestCase
 
-import cv2
-
-from envs.doom import concat_grid
-from envs.doom import doom_env_by_name, make_doom_multiagent_env
+from envs.doom.doom_utils import make_doom_multiagent_env, doom_env_by_name
 from utils.utils import log, AttrDict
 
 
@@ -27,18 +24,10 @@ class TestDoom(TestCase):
             obs, rew, dones, infos = multi_env.step(actions)
 
             if visualize:
-                obs_display = [o['obs'] for o in obs.values()]
-                obs_grid = concat_grid(obs_display)
-                cv2.imshow('vizdoom', obs_grid)
-                cv2.waitKey(1)
+                multi_env.render()
 
             if i % 100 == 0 or any(dones.values()):
                 log.info('Rew %r done %r info %r', rew, dones, infos)
-
-            # for player, info in infos.items():
-            #     if 'HEALTH' in info:
-            #         if info['HEALTH'] < -10:
-            #             log.info('Player %r health: %.3f (%.3f)', player, info['HEALTH'], obs[player]['measurements'][2])
 
             for player, o in obs.items():
                 health = o['measurements'][2]

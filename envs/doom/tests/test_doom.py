@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_env import MultiEnv
-from envs.doom import doom_env_by_name, make_doom_env
+from envs.doom.doom_utils import make_doom_env, doom_env_by_name
 from utils.timing import Timing
 from utils.utils import log
 
@@ -74,7 +74,7 @@ class TestDoom(TestCase):
     @staticmethod
     def make_env_singleplayer():
         return make_doom_env(
-            doom_env_by_name('doom_battle_tuple_actions'), skip_frames=True,
+            doom_env_by_name('doom_battle_tuple_actions'),
         )
 
     def test_doom_env(self):
