@@ -159,6 +159,9 @@ class MultiAgentEnvWorker:
         return env
 
     def _terminate(self, env):
+        if env is None:
+            return
+
         log.info('Stop env for player %d...', self.player_id)
         env.close()
         log.info('Env with player %d terminated!', self.player_id)
