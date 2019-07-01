@@ -67,7 +67,7 @@ def run(args, parser):
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
     num_steps = int(args.steps)
-    rollout_loop(agent, args.env, num_steps, args.no_render, fps=100)
+    rollout_loop(agent, args.env, num_steps, args.no_render, fps=45)
 
 
 # noinspection PyUnusedLocal
@@ -97,9 +97,9 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
         multiagent = False
         use_lstm = {DEFAULT_POLICY_ID: False}
 
-    last_render_time = time.time()
-
     steps = 0
+    last_render_start = time.time()
+
     while steps < (num_steps or steps + 1):
         mapping_cache = {}  # in case policy_agent_mapping is stochastic
         obs = env.reset()
@@ -144,10 +144,12 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
             action = action if multiagent else action[_DUMMY_AGENT_ID]
             frameskip = DEFAULT_FRAMESKIP
             rewards = None
+
             for frame in range(frameskip):
                 next_obs, reward, done, _ = env.step(action)
                 if rewards is None:
                     rewards = reward
+
                 else:
                     if multiagent:
                         for agent_id, r in reward.items():
@@ -156,13 +158,17 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
                         rewards += reward
 
                 if not no_render:
-                    time_since_last_render = time.time() - last_render_time
-                    time_between_frames = 1.0 / fps
-                    time_wait = time_between_frames - time_since_last_render
+                    target_delay = 1.0 / fps
+                    current_delay = time.time() - last_render_start
+                    time_wait = target_delay - current_delay
+
                     if time_wait > 0:
+                        log.info('Wait time %.3f', time_wait)
                         time.sleep(time_wait)
+
+                    last_render_start = time.time()
                     env.render()
-                    last_render_time = time.time()
+
                 steps += 1
                 obs = next_obs
 

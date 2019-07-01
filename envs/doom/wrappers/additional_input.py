@@ -33,6 +33,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self.prev_vars = {}
         self._reset_vars()
 
+        self._orig_env_reward = 0.0
+
     def _reset_vars(self):
         for k in self.reward_shaping_vars.keys():
             self.prev_vars[k] = 0.0
@@ -74,8 +76,12 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             elif delta < -EPS:
                 reward_delta = -delta * rewards[1]
 
-            # if abs(reward_delta) > EPS and self.env.unwrapped.player_id == 1:
-            #     log.info('Reward %.3f for %s, delta %.3f (player %r)', reward_delta, var_name, delta, self.env.unwrapped.player_id)
+            # player_id = 1
+            # if hasattr(self.env.unwrapped, 'player_id'):
+            #     player_id = self.env.unwrapped.player_id
+            #
+            # if abs(reward_delta) > EPS:
+            #     log.info('Reward %.3f for %s, delta %.3f (player %r)', reward_delta, var_name, delta, player_id)
 
             shaping_reward += reward_delta
 
@@ -94,6 +100,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         obs = self.env.reset()
         info = self.env.unwrapped.get_info()
         obs, _ = self._parse_info(obs, info)
+
+        self._orig_env_reward = 0.0
         return obs
 
     def step(self, action):
@@ -101,9 +109,11 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         if obs is None:
             return obs, rew, done, info
 
+        self._orig_env_reward += rew
+
         obs_dict, shaping_rew = self._parse_info(obs, info)
         rew += shaping_rew
 
-        # if abs(rew) > EPS:
-        #     log.info('Reward: %.3f %d', rew, self.env.unwrapped.player_id)
+        # log.info('Original env reward before shaping: %.3f', self._orig_env_reward)
+
         return obs_dict, rew, done, info
