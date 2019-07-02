@@ -55,7 +55,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             self.game.add_game_args(
                 f'-host {self.num_players} -port {port} '
                 '-deathmatch '  # Deathmatch rules are used for the game.                
-                '+timelimit 10.0 '  # The game (episode) will end after this many minutes have elapsed.
+                '+timelimit 5.0 '  # The game (episode) will end after this many minutes have elapsed.
                 '+sv_forcerespawn 1 '  # Players will respawn automatically after they die.
                 '+sv_noautoaim 1 '  # Autoaim is disabled for all players.
                 '+sv_respawnprotect 1 '  # Players will be invulnerable for two second after spawning.

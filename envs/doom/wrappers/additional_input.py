@@ -2,7 +2,6 @@ import gym
 import numpy as np
 
 from algorithms.utils.algo_utils import EPS
-from utils.utils import log
 
 
 class DoomAdditionalInputAndRewards(gym.Wrapper):
@@ -31,19 +30,12 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         }
 
         self.prev_vars = {}
-        self._reset_vars()
 
         self._orig_env_reward = 0.0
+        self._total_shaping_reward = 0.0
+        self._episode_frames = 0
 
-    def _reset_vars(self):
-        for k in self.reward_shaping_vars.keys():
-            self.prev_vars[k] = 0.0
-
-        # specific values
-        self.prev_vars['HEALTH'] = 100.0
-        self.prev_vars['SELECTED_WEAPON_AMMO'] = 100.0
-
-    def _parse_info(self, obs, info):
+    def _parse_info(self, obs, info, done):
         obs_dict = {'obs': obs, 'measurements': np.empty(4)}
 
         # by default these are negative values if no weapon is selected
@@ -66,42 +58,45 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         shaping_reward = 0.0
 
-        for var_name, rewards in self.reward_shaping_vars.items():
-            new_value = info.get(var_name, 0.0)
-            prev_value = self.prev_vars[var_name]
-            delta = new_value - prev_value
-            reward_delta = 0
-            if delta > EPS:
-                reward_delta = delta * rewards[0]
-            elif delta < -EPS:
-                reward_delta = -delta * rewards[1]
+        if not done:
+            for var_name, rewards in self.reward_shaping_vars.items():
+                if var_name not in self.prev_vars:
+                    continue
 
-            # player_id = 1
-            # if hasattr(self.env.unwrapped, 'player_id'):
-            #     player_id = self.env.unwrapped.player_id
-            #
-            # if abs(reward_delta) > EPS:
-            #     log.info('Reward %.3f for %s, delta %.3f (player %r)', reward_delta, var_name, delta, player_id)
+                # generate reward based on how the env variable values changed
+                new_value = info.get(var_name, 0.0)
+                prev_value = self.prev_vars[var_name]
+                delta = new_value - prev_value
+                reward_delta = 0
+                if delta > EPS:
+                    reward_delta = delta * rewards[0]
+                elif delta < -EPS:
+                    reward_delta = -delta * rewards[1]
 
-            shaping_reward += reward_delta
+                # player_id = 1
+                # if hasattr(self.env.unwrapped, 'player_id'):
+                #     player_id = self.env.unwrapped.player_id
+                #
+                # if abs(reward_delta) > EPS:
+                #     log.info('Reward %.3f for %s, delta %.3f (player %r)', reward_delta, var_name, delta, player_id)
+
+                shaping_reward += reward_delta
 
         # remember new variable values
         for var_name in self.reward_shaping_vars.keys():
             self.prev_vars[var_name] = info.get(var_name, 0.0)
 
-        # if print_info and self.env.unwrapped.player_id == 1:
-        #     log.info('DEATHCOUNT: %d, FRAGCOUNT %d, KILLCOUNT %d, DEAD %d (player %r)', info.get('DEATHCOUNT', -42), info.get('FRAGCOUNT', -42), info.get('KILLCOUNT', -42), info.get('DEAD', -42), self.env.unwrapped.player_id)
-
         return obs_dict, shaping_reward
 
     def reset(self):
-        self._reset_vars()
+        self.prev_vars = {}
 
         obs = self.env.reset()
         info = self.env.unwrapped.get_info()
-        obs, _ = self._parse_info(obs, info)
+        obs, _ = self._parse_info(obs, info, False)
 
-        self._orig_env_reward = 0.0
+        self._orig_env_reward = self._total_shaping_reward = 0.0
+        self._episode_frames = 0
         return obs
 
     def step(self, action):
@@ -111,9 +106,22 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         self._orig_env_reward += rew
 
-        obs_dict, shaping_rew = self._parse_info(obs, info)
+        obs_dict, shaping_rew = self._parse_info(obs, info, done)
         rew += shaping_rew
+        self._total_shaping_reward += shaping_rew
+        self._episode_frames += 1
 
         # log.info('Original env reward before shaping: %.3f', self._orig_env_reward)
+        # player_id = 1
+        # if hasattr(self.env.unwrapped, 'player_id'):
+        #     player_id = self.env.unwrapped.player_id
+        # worker_index = 0
+        # if hasattr(self.env.unwrapped, 'worker_index'):
+        #     worker_index = self.env.unwrapped.worker_index
+        #
+        # log.info(
+        #     'Total shaping reward is %.3f for %d %d (done %d)',
+        #     self._total_shaping_reward, worker_index, player_id, done,
+        # )
 
         return obs_dict, rew, done, info
