@@ -8,7 +8,6 @@ import cv2
 import gym
 import numpy as np
 from gym.utils import seeding
-from pynput.keyboard import Listener, Key
 
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
@@ -251,6 +250,7 @@ class VizdoomEnv(gym.Env):
             self.viewer.close()
 
     def _keyboard_on_press(self, key):
+        from pynput.keyboard import Key
         if key == Key.esc:
             self._terminate = True
             return False
@@ -267,6 +267,8 @@ class VizdoomEnv(gym.Env):
                 self._current_actions.remove(action)
 
     def play_human_mode(self, skip_frames=1, num_episodes=3):
+        from pynput.keyboard import Listener
+
         def start_listener():
             with Listener(on_press=self._keyboard_on_press, on_release=self._keyboard_on_release) as listener:
                 listener.join()
