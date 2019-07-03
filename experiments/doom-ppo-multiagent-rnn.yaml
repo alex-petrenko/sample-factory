@@ -12,12 +12,12 @@ config:
     sample_batch_size: 32
     sgd_minibatch_size: 512
     num_sgd_iter: 10
-    num_workers: 16
+    num_workers: 24
     num_envs_per_worker: 1
     batch_mode: truncate_episodes
     observation_filter: NoFilter
     vf_share_layers: true
-    num_gpus: 2
+    num_gpus: 3
     model:
         custom_model: vizdoom_vision_model
         conv_filters: [

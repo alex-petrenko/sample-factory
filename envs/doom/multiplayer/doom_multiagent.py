@@ -62,6 +62,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
                 '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
+                '+viz_connect_timeout 600 '  # In seconds
             )
 
             # Additional commands:
