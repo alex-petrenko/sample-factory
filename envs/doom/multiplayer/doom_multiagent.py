@@ -220,6 +220,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
         env.close()
 
         self.safe_init = env_config is not None and env_config.get('safe_init', True)
+        self.safe_init = False  # override
 
         if self.safe_init:
             sleep_seconds = env_config.worker_index * 1.0
