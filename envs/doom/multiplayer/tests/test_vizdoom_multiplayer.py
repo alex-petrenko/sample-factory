@@ -9,7 +9,7 @@ from utils.utils import log, AttrDict
 class TestDoom(TestCase):
     @staticmethod
     def doom_multiagent(worker_index, num_steps=1000):
-        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0})
+        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0, 'safe_init': False})
         multi_env = make_doom_multiagent_env(
             doom_env_by_name('doom_dm'), env_config=env_config,
         )

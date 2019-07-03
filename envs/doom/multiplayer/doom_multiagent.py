@@ -45,7 +45,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             raise Exception('Only algo mode is currently supported by multiplayer wrappers')
 
         # make sure not to use more than 10 envs per worker
-        port = 50300 + self.worker_index * 10 + self.vector_index
+        port = 50300 + self.worker_index * 10 + self.vector_index + 7
         log.info('Using port %d...', port)
 
         if self._is_server():
@@ -219,8 +219,10 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
         self.observation_space = env.observation_space
         env.close()
 
-        if env_config is not None:
-            sleep_seconds = env_config.worker_index * 2.0 + env_config.vector_index
+        self.safe_init = env_config is not None and env_config.get('safe_init', True)
+
+        if self.safe_init:
+            sleep_seconds = env_config.worker_index * 1.0
             log.info('Sleeping %.3f seconds to avoid creating all envs at once', sleep_seconds)
             time.sleep(sleep_seconds)
             log.info('Done sleeping at %d', env_config.worker_index)
@@ -283,7 +285,11 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
 
         for worker in self.workers:
             worker.task_queue.put((None, TaskType.INIT))
-            time.sleep(0.5)  # just in case
+            if self.safe_init:
+                time.sleep(0.5)  # just in case
+            else:
+                time.sleep(0.1)
+
         for worker in self.workers:
             worker.task_queue.join()
 
