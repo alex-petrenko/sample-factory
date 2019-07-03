@@ -62,7 +62,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
                 '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
-                '+viz_connect_timeout 600 '  # In seconds
+                '+viz_connect_timeout 999 '  # In seconds
             )
 
             # Additional commands:
@@ -77,7 +77,10 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
         else:
             # Join existing game.
-            self.game.add_game_args(f'-join 127.0.0.1:{port}')  # Connect to a host for a multiplayer game.
+            self.game.add_game_args(
+                f'-join 127.0.0.1:{port} '  # Connect to a host for a multiplayer game.
+                '+viz_connect_timeout 999 '
+            )
 
             # Name your agent and select color
             # colors:
