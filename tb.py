@@ -25,6 +25,7 @@ def kill(proc_pid):
 
 def main():
     parser = argparse.ArgumentParser(description=r'Launch tensorboard on multiple directories in an easy way.')
+    parser.add_argument('--dir', default='~/ray_results', help='Base folder with summaries')
     parser.add_argument('--port', default=6006, type=int, help='The port to use for tensorboard')
     parser.add_argument('--quiet', '-q', action='store_true', help='Run in silent mode')
     parser.add_argument('--refresh-every', '-r', dest='refresh', type=int, default=1800,
@@ -34,7 +35,7 @@ def main():
 
     train_dirs = []
     for f in args.filters:
-        matches = glob.glob(join(os.path.expanduser('~/ray_results'), f))
+        matches = glob.glob(join(os.path.expanduser(args.dir), f))
         for match in matches:
             if os.path.isdir(match):
                 train_dirs.append(match)

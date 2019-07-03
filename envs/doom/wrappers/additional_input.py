@@ -26,7 +26,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             'HITCOUNT': (+0.5, -0.5),
 
             'HEALTH': (+0.002, -0.002),
-            'SELECTED_WEAPON_AMMO': (+0.01, 0.0),
+            'SELECTED_WEAPON_AMMO': (+0.01, -0.01),
         }
 
         self.prev_vars = {}

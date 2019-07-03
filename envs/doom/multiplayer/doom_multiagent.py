@@ -215,6 +215,12 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
         self.observation_space = env.observation_space
         env.close()
 
+        if env_config is not None:
+            sleep_seconds = env_config.worker_index * 2.0 + env_config.vector_index
+            log.info('Sleeping %.3f seconds to avoid creating all envs at once', sleep_seconds)
+            time.sleep(sleep_seconds)
+            log.info('Done sleeping at %d', env_config.worker_index)
+
         self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_players)]
 
         # only needed when rendering
@@ -273,7 +279,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
 
         for worker in self.workers:
             worker.task_queue.put((None, TaskType.INIT))
-            time.sleep(0.1)  # just in case
+            time.sleep(0.5)  # just in case
         for worker in self.workers:
             worker.task_queue.join()
 
