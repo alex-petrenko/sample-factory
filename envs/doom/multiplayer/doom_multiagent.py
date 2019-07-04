@@ -287,9 +287,9 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
         for worker in self.workers:
             worker.task_queue.put((None, TaskType.INIT))
             if self.safe_init:
-                time.sleep(0.5)  # just in case
+                time.sleep(1.0)  # just in case
             else:
-                time.sleep(0.1)
+                time.sleep(0.25)
 
         for worker in self.workers:
             worker.task_queue.join()

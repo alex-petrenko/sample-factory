@@ -22,8 +22,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         # plus corresponding reward values for positive and negative delta (per unit)
         self.reward_shaping_vars = {
             'FRAGCOUNT': (+1, -1),
-            'DEATHCOUNT': (-1, +1),
-            'HITCOUNT': (+0.5, -0.5),
+            'DEATHCOUNT': (-0.1, +0.1),
+            'HITCOUNT': (+0.05, -0.05),
 
             'HEALTH': (+0.002, -0.002),
             'SELECTED_WEAPON_AMMO': (+0.01, -0.01),

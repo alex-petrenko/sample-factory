@@ -1,7 +1,12 @@
 import argparse
+import math
+import time
+from collections import deque
 
 import ray
 import yaml
+import numpy as np
+
 from ray.rllib.models import ModelCatalog
 from ray.tests.cluster_utils import Cluster
 from ray.tune import Experiment, function
@@ -11,7 +16,7 @@ from ray.tune.registry import ENV_CREATOR
 from ray.tune.tune import _make_scheduler, run
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from envs.doom.doom_utils import register_doom_envs_rllib
+from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -111,6 +116,35 @@ def create_parser(parser_creator=None):
     return parser
 
 
+class FpsHelper:
+    def __init__(self):
+        self.last_num_samples = -1
+        self.last_result = time.time()
+
+        history_len = 30
+        self.num_samples = deque(maxlen=history_len)
+        self.durations = deque(maxlen=history_len)
+
+    def record(self, num_samples):
+        now = time.time()
+
+        if self.last_num_samples > 0:
+            delta_samples = num_samples - self.last_num_samples
+            self.num_samples.append(delta_samples)
+            duration = now - self.last_result
+            self.durations.append(duration)
+
+        self.last_result = now
+        self.last_num_samples = num_samples
+
+    def get_fps(self):
+        if len(self.num_samples) > 0:
+            fps = np.sum(self.num_samples) / max(float(np.sum(self.durations)), 1e-9)
+            return fps
+        else:
+            return math.nan
+
+
 def run_experiment(args, parser):
     # args.ray_object_store_memory = int(1e10)
     args.ray_redis_max_memory = int(5e9)
@@ -179,6 +213,19 @@ def run_experiment(args, parser):
         exp.spec['config']['num_workers'] = 1
         exp.spec['config']['num_gpus'] = 1
         exp.spec['config']['num_envs_per_worker'] = 1
+
+    if 'callbacks' not in exp.spec['config']:
+        exp.spec['config']['callbacks'] = {}
+
+    fps_helper = FpsHelper()
+
+    def on_train_result(info):
+        fps_helper.record(info['trainer'].optimizer.num_steps_trained)
+        fps = fps_helper.get_fps()
+        info['result']['custom_metrics']['fps'] = fps
+        info['result']['custom_metrics']['fps_frameskip'] = fps * DEFAULT_FRAMESKIP
+
+    exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
 
     run(
         exp,
