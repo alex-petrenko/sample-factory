@@ -5,7 +5,6 @@ from gym.spaces import Discrete
 def doom_action_space():
     """
     Standard action space for full-featured Doom environments (e.g. deathmatch).
-    TODO: weapon change?
     TODO: crouch?
     TODO: strafe?
 
@@ -17,6 +16,8 @@ def doom_action_space():
         MOVE_LEFT
         TURN_RIGHT
         TURN_LEFT
+        SELECT_NEXT_WEAPON
+        SELECT_PREV_WEAPON
         ATTACK
         SPEED
     """
@@ -24,20 +25,7 @@ def doom_action_space():
         Discrete(3),  # noop, forward, backward
         Discrete(3),  # noop, move right, move left
         Discrete(3),  # noop, turn right, turn left
+        Discrete(3),  # noop, prev_weapon, next_weapon
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
     ))
-
-
-
-class DoomActionSpaceWrapper(gym.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-
-        self.action_space = gym.spaces.Tuple((env.action_space, gym.spaces.Discrete(2)))
-
-    def reset(self):
-        return self.env.reset()
-
-    def step(self, action):
-        return self.env.step(action[0])

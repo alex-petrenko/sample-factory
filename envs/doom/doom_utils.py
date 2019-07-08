@@ -38,7 +38,8 @@ DOOM_ENVS = [
     DoomCfg('doom_battle2', 'D4_battle2.cfg', Discrete(9), 1.0, 2100),
 
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
-    DoomCfg('doom_dm_test', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
+
+    DoomCfg('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
 ]
 
 
@@ -133,4 +134,8 @@ def register_doom_envs_rllib(**kwargs):
     register_env(
         'doom_dm',
         lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dm'), env_config=config, **kwargs),
+    )
+    register_env(
+        'doom_dwango5',
+        lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dwango5'), env_config=config, **kwargs),
     )
