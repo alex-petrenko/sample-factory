@@ -1,5 +1,5 @@
 env: doom_battle_tuple_actions
-run: PPO
+run: CUSTOM_PPO
 config:
     lr: 0.0001
     lambda: 0.95

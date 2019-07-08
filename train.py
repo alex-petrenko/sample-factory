@@ -6,16 +6,19 @@ from collections import deque
 import ray
 import yaml
 import numpy as np
+from ray.rllib.agents.ppo import PPOTrainer
+from ray.rllib.agents.registry import ALGORITHMS
 
 from ray.rllib.models import ModelCatalog
 from ray.tests.cluster_utils import Cluster
 from ray.tune import Experiment, function
 from ray.tune.config_parser import make_parser
-from ray.tune.registry import ENV_CREATOR
+from ray.tune.registry import ENV_CREATOR, register_trainable
 # noinspection PyProtectedMember
 from ray.tune.tune import _make_scheduler, run
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
+from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
 from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
 
 EXAMPLE_USAGE = """
@@ -240,6 +243,11 @@ def main():
     register_doom_envs_rllib()
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
+
+    def custom_ppo():
+        return PPOTrainer.with_updates(default_policy=CustomPPOTFPolicy)
+
+    register_trainable('CUSTOM_PPO', custom_ppo())
 
     parser = create_parser()
     args = parser.parse_args()

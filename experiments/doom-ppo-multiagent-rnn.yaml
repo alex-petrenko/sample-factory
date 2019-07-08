@@ -1,5 +1,5 @@
 env: doom_dm
-run: PPO
+run: CUSTOM_PPO
 config:
     lr: 0.0001
     lambda: 0.95
