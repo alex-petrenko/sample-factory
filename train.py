@@ -111,7 +111,7 @@ def create_parser(parser_creator=None):
     )
     parser.add_argument(
         "--stop-seconds",
-        default=int(1e9),
+        default=-1,
         type=int,
         help="Stop experiment after this many seconds",
     )
@@ -191,7 +191,8 @@ def run_experiment(args, parser):
     exp.spec['checkpoint_at_end'] = True
     exp.spec['keep_checkpoints_num'] = 3
 
-    exp.spec['stop'] = {'time_total_s': args.stop_seconds}
+    if args.stop_seconds > 0:
+        exp.spec['stop'] = {'time_total_s': args.stop_seconds}
 
     if 'multiagent' in exp.spec['config']:
         # noinspection PyProtectedMember
