@@ -187,7 +187,7 @@ def run_experiment(args, parser):
         )
 
     exp = Experiment.from_json(args.experiment_name, exp)
-    exp.spec['checkpoint_freq'] = 40
+    exp.spec['checkpoint_freq'] = 20
     exp.spec['checkpoint_at_end'] = True
     exp.spec['keep_checkpoints_num'] = 3
 

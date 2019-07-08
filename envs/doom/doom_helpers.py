@@ -25,6 +25,10 @@ def concat_grid(obs):
 
     max_horizontal = 4
     horizontal = min(max_horizontal, len(obs))
+
+    while len(obs) % horizontal != 0:
+        obs.append(np.zeros_like(obs[0]))  # pad with black images until right size
+
     vertical = max(1, len(obs) // horizontal)
 
     assert vertical * horizontal == len(obs)
@@ -38,7 +42,7 @@ def concat_grid(obs):
 
 
 def cvt_doom_obs(obs):
-    w, h = 960, 540
+    w, h = 400, 225
     obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
     obs = cv2.resize(obs, (w, h))
     return obs

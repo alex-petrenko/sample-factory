@@ -14,14 +14,14 @@ from utils.utils import log
 
 
 class VizdoomEnvMultiplayer(VizdoomEnv):
-    def __init__(self, action_space, config_file, player_id, num_players):
-        super().__init__(action_space, config_file)
+    def __init__(self, action_space, config_file, player_id, max_num_players, async_mode=False):
+        super().__init__(action_space, config_file, async_mode=async_mode)
 
         self.worker_index = 0
         self.vector_index = 0
 
         self.player_id = player_id
-        self.num_players = num_players
+        self.max_num_players = max_num_players
         self.timestep = 0
         self.update_state = True
 
@@ -53,7 +53,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # It will wait for other machines to connect using the -join parameter and then
             # start the game when everyone is connected.
             self.game.add_game_args(
-                f'-host {self.num_players} -port {port} '
+                f'-host {self.max_num_players} -port {port} '
                 '-deathmatch '  # Deathmatch rules are used for the game.                
                 '+timelimit 5.0 '  # The game (episode) will end after this many minutes have elapsed.
                 '+sv_forcerespawn 1 '  # Players will respawn automatically after they die.
@@ -87,8 +87,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
             self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
 
-        self.game.set_mode(Mode.PLAYER)
-
+        self._set_game_mode()
         self.game.init()
 
         self.initialized = True

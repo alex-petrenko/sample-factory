@@ -28,6 +28,13 @@ def create_parser_custom():
         action='store_true',
         help='Full debug mode (also enables local-mode)',
     )
+    parser.add_argument(
+        '--num-agents',
+        default=-1,
+        type=int,
+        help='Allows to set number of agents less than number of players, to allow humans to join the match'
+             'Default value (-1) means number of agents is the same as max number of players',
+    )
     return parser
 
 
@@ -162,6 +169,7 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
                     current_delay = time.time() - last_render_start
                     time_wait = target_delay - current_delay
 
+                    # note: ASYNC_PLAYER mode actually makes this sleep redundant
                     if time_wait > 0:
                         log.info('Wait time %.3f', time_wait)
                         time.sleep(time_wait)
@@ -190,12 +198,13 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
 
 
 def main():
-    register_doom_envs_rllib(mode='test')
+    parser = create_parser_custom()
+    args = parser.parse_args()
+
+    register_doom_envs_rllib(mode='test', num_agents=args.num_agents)
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 
-    parser = create_parser_custom()
-    args = parser.parse_args()
     run(args, parser)
 
 

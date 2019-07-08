@@ -23,7 +23,8 @@ class VizdoomEnv(gym.Env):
                  coord_limits=None,
                  max_histogram_length=200,
                  show_automap=False,
-                 skip_frames=1):
+                 skip_frames=1,
+                 async_mode=False):
         self.initialized = False
 
         # essential game data
@@ -32,6 +33,7 @@ class VizdoomEnv(gym.Env):
         self.curr_seed = 0
         self.rng = None
         self.skip_frames = skip_frames
+        self.async_mode = async_mode
 
         # optional - for topdown view rendering and visitation heatmaps
         self.show_automap = show_automap
@@ -86,6 +88,13 @@ class VizdoomEnv(gym.Env):
     def calc_observation_space(self):
         self.observation_space = gym.spaces.Box(0, 255, (self.screen_h, self.screen_w, self.channels), dtype=np.uint8)
 
+    def _set_game_mode(self):
+        if self.async_mode:
+            log.info('Starting in async mode! Use this only for testing, otherwise PLAYER mode is much faster')
+            self.game.set_mode(Mode.ASYNC_PLAYER)
+        else:
+            self.game.set_mode(Mode.PLAYER)
+
     def _ensure_initialized(self, mode='algo'):
         if self.initialized:
             # Doom env already initialized!
@@ -102,11 +111,10 @@ class VizdoomEnv(gym.Env):
         elif mode == 'human':
             self.game.add_game_args('+freelook 1')
             self.game.set_window_visible(True)
-
-            # another option is to use spectator mode, then the game handles keyboard for you
-            self.game.set_mode(Mode.PLAYER)
         else:
             raise Exception('Unsupported mode')
+
+        self._set_game_mode()
 
         # (optional) top-down view provided by the game engine
         if self.show_automap:
@@ -232,7 +240,7 @@ class VizdoomEnv(gym.Env):
             img = np.transpose(img, [1, 2, 0])
 
             h, w = img.shape[:2]
-            render_w = 1280
+            render_w = 1024
 
             if w < render_w:
                 render_h = int(render_w * h / w)
