@@ -11,10 +11,20 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         super().__init__(env)
         current_obs_space = self.observation_space
 
+        self.num_weapons = 10
+
+        weapons_low = [0.0] * self.num_weapons
+        ammo_low = [0.0] * self.num_weapons
+        low = [0.0, 0.0, -1.0, -1.0, -1e3] + weapons_low + ammo_low
+
+        weapons_high = [5.0] * self.num_weapons  # can have multiple weapons in the same slot?
+        ammo_high = [1000.0] * self.num_weapons
+        high = [20.0, 1000.0, 100.0, 100.0, 1e3] + weapons_high + ammo_high
+
         self.observation_space = gym.spaces.Dict({
             'obs': current_obs_space,
             'measurements': gym.spaces.Box(
-                low=np.array([0.0, 0.0, -1.0, -1e3]), high=np.array([20.0, 1000.0, 100.0, 1e3]),
+                low=np.array(low), high=np.array(high),
             ),
         })
 
@@ -27,8 +37,11 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
             'HEALTH': (+0.002, -0.002),
             'ARMOR': (+0.002, -0.001),
-            'SELECTED_WEAPON_AMMO': (+0.01, -0.01),
         }
+
+        for weapon in range(self.num_weapons):
+            self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.2, -0.1)
+            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, -0.001)
 
         self.prev_vars = {}
 
@@ -37,7 +50,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self._episode_frames = 0
 
     def _parse_info(self, obs, info, done):
-        obs_dict = {'obs': obs, 'measurements': np.empty(4)}
+        obs_dict = {'obs': obs, 'measurements': []}
 
         # by default these are negative values if no weapon is selected
         selected_weapon = info.get('SELECTED_WEAPON', 0.0)
@@ -50,12 +63,19 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         # we don't really care how much negative health we have, dead is dead
         info['HEALTH'] = max(0.0, info.get('HEALTH', 0.0))
         health = info.get('HEALTH', 0.0) / 30.0
+        armor = info.get('ARMOR', 0.0) / 30.0
         kills = info.get('USER2', 0.0) / 10.0  # only works in battle and battle2, this is not really useful
 
-        obs_dict['measurements'][0] = selected_weapon
-        obs_dict['measurements'][1] = selected_weapon_ammo
-        obs_dict['measurements'][2] = health
-        obs_dict['measurements'][3] = kills
+        obs_dict['measurements'].append(selected_weapon)
+        obs_dict['measurements'].append(selected_weapon_ammo)
+        obs_dict['measurements'].append(health)
+        obs_dict['measurements'].append(armor)
+        obs_dict['measurements'].append(kills)
+
+        for weapon in range(self.num_weapons):
+            obs_dict['measurements'].append(max(0.0, info.get(f'WEAPON{weapon}', 0.0)))
+        for weapon in range(self.num_weapons):
+            obs_dict['measurements'].append(float(max(0.0, info.get(f'AMMO{weapon}', 0.0))))
 
         shaping_reward = 0.0
 

@@ -301,7 +301,7 @@ class VizdoomEnv(gym.Env):
                     state = self.game.get_state()
                     total_reward = self.game.get_total_reward()
 
-                    verbose = False
+                    verbose = True
                     if state is not None and verbose:
                         print('===============================')
                         print('Info: ', self.get_info())
