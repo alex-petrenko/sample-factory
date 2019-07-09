@@ -2,6 +2,7 @@ import gym
 import numpy as np
 
 from algorithms.utils.algo_utils import EPS
+from utils.utils import log
 
 
 class DoomAdditionalInputAndRewards(gym.Wrapper):
@@ -15,11 +16,11 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         weapons_low = [0.0] * self.num_weapons
         ammo_low = [0.0] * self.num_weapons
-        low = [0.0, 0.0, -1.0, -1.0, -1e3] + weapons_low + ammo_low
+        low = [0.0, 0.0, -1.0, -1.0, -1e3, 0.0] + weapons_low + ammo_low
 
         weapons_high = [5.0] * self.num_weapons  # can have multiple weapons in the same slot?
         ammo_high = [1000.0] * self.num_weapons
-        high = [20.0, 1000.0, 100.0, 100.0, 1e3] + weapons_high + ammo_high
+        high = [20.0, 1000.0, 100.0, 100.0, 1e3, 1.0] + weapons_high + ammo_high
 
         self.observation_space = gym.spaces.Dict({
             'obs': current_obs_space,
@@ -65,12 +66,14 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         health = info.get('HEALTH', 0.0) / 30.0
         armor = info.get('ARMOR', 0.0) / 30.0
         kills = info.get('USER2', 0.0) / 10.0  # only works in battle and battle2, this is not really useful
+        attack_ready = info.get('ATTACK_READY', 0.0)
 
         obs_dict['measurements'].append(selected_weapon)
         obs_dict['measurements'].append(selected_weapon_ammo)
         obs_dict['measurements'].append(health)
         obs_dict['measurements'].append(armor)
         obs_dict['measurements'].append(kills)
+        obs_dict['measurements'].append(attack_ready)
 
         for weapon in range(self.num_weapons):
             obs_dict['measurements'].append(max(0.0, info.get(f'WEAPON{weapon}', 0.0)))
@@ -102,6 +105,25 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 #     log.info('Reward %.3f for %s, delta %.3f (player %r)', reward_delta, var_name, delta, player_id)
 
                 shaping_reward += reward_delta
+
+            # small reward for being able to perform an attack
+            # shaping_reward += 0.001 * info.get('ATTACK_READY', 0.0)
+
+            # weapon preference reward
+            weapon_preference = {
+                2: 1,   # pistol
+                3: 5,   # shotguns
+                4: 10,  # machinegun
+                5: 5,   # rocket launcher
+                6: 10,  # plasmagun
+                7: 20,  # bfg
+            }
+
+            weapon_reward_coeff = 0.0001
+            weapon_goodness = weapon_preference.get(selected_weapon, 0)
+            if selected_weapon_ammo > 0:
+                weapon_reward = weapon_goodness * attack_ready * weapon_reward_coeff
+                shaping_reward += weapon_reward
 
         # remember new variable values
         for var_name in self.reward_shaping_vars.keys():
