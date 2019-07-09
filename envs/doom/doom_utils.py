@@ -152,16 +152,13 @@ def make_doom_multiagent_env(
 
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    register_env('doom_battle', lambda config: make_doom_env(doom_env_by_name('doom_battle'), **kwargs))
-    register_env(
-        'doom_battle_tuple_actions',
-        lambda config: make_doom_env(doom_env_by_name('doom_battle_tuple_actions'), **kwargs),
-    )
-    register_env(
-        'doom_dm',
-        lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dm'), env_config=config, **kwargs),
-    )
-    register_env(
-        'doom_dwango5',
-        lambda config: make_doom_multiagent_env(doom_env_by_name('doom_dwango5'), env_config=config, **kwargs),
-    )
+    singleplayer_envs = ['doom_battle', 'doom_battle_tuple_actions']
+    for env_name in singleplayer_envs:
+        register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), **kwargs))
+
+    multiplayer_envs = ['doom_dm', 'doom_dwango5', 'doom_dwango5_bots']
+    for env_name in multiplayer_envs:
+        register_env(
+            env_name,
+            lambda config: make_doom_multiagent_env(doom_env_by_name(env_name), env_config=config, **kwargs),
+        )
