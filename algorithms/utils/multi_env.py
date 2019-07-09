@@ -46,8 +46,10 @@ class _MultiEnvWorker:
 
     def _init(self, envs):
         log.info('Initializing envs %s...', list_to_string(self.env_indices))
+        worker_index = self.env_indices[0] // len(self.env_indices)
         for i in self.env_indices:
-            env = self.make_env_func()
+            env_config = AttrDict({'worker_index': worker_index, 'vector_index': i - self.env_indices[0]})
+            env = self.make_env_func(env_config)
             env.seed(i)
             env.reset()
             envs.append(env)
@@ -173,7 +175,7 @@ class MultiEnv:
             raise Exception('num_envs should be a multiple of num_workers')
 
         # create a temp env to query information
-        env = make_env_func()
+        env = make_env_func(None)
         self.action_space = env.action_space
         self.observation_space = env.observation_space
         env.close()

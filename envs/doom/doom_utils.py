@@ -2,7 +2,7 @@ from gym.spaces import Discrete
 from ray.tune import register_env
 
 from envs.doom.doom_gym import VizdoomEnv
-from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv
+from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
 from envs.doom.wrappers.action_space import doom_action_space
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.observation_space import SetResolutionWrapper
@@ -15,7 +15,11 @@ DEFAULT_FRAMESKIP = 4
 
 
 class DoomCfg:
-    def __init__(self, name, env_cfg, action_space, reward_scaling, default_timeout, num_players=1, no_idle=False):
+    def __init__(
+            self, name, env_cfg, action_space, reward_scaling, default_timeout,
+            num_agents=1, num_bots=0,
+            no_idle=False,
+    ):
         self.name = name
         self.env_cfg = env_cfg
         self.action_space = action_space
@@ -26,7 +30,10 @@ class DoomCfg:
         self.no_idle = no_idle
 
         # 1 for singleplayer, >1 otherwise
-        self.num_players = num_players
+        self.num_agents = num_agents
+
+        # CLI arguments override this (see enjoy.py)
+        self.num_bots = num_bots
 
 
 DOOM_ENVS = [
@@ -37,9 +44,10 @@ DOOM_ENVS = [
 
     DoomCfg('doom_battle2', 'D4_battle2.cfg', Discrete(9), 1.0, 2100),
 
-    DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
+    DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
-    DoomCfg('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_players=8),
+    DoomCfg('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
+    DoomCfg('doom_dwango5_bots', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=1, num_bots=7),
 ]
 
 
@@ -55,7 +63,7 @@ def make_doom_env(
         doom_cfg, mode='train',
         skip_frames=DEFAULT_FRAMESKIP, human_input=False,
         show_automap=False, episode_horizon=None,
-        player_id=None, max_num_players=None,  # for multi-agent
+        player_id=None, max_num_players=None, num_bots=0,  # for multi-agent
         env_config=None,
         **kwargs,
 ):
@@ -71,7 +79,8 @@ def make_doom_env(
         # skip_frames is handled by multi-agent wrapper
         env = VizdoomEnvMultiplayer(
             doom_cfg.action_space, doom_cfg.env_cfg,
-            player_id=player_id, max_num_players=max_num_players,
+            player_id=player_id, max_num_players=max_num_players, num_bots=num_bots,
+            skip_frames=skip_frames,
             async_mode=async_mode,
         )
 
@@ -104,28 +113,40 @@ def make_doom_env(
 
 
 def make_doom_multiagent_env(
-        doom_cfg, mode='train', num_agents=-1,
+        doom_cfg, mode='train', num_agents=-1, num_bots=-1, num_humans=0,
         skip_frames=DEFAULT_FRAMESKIP, env_config=None,
         **kwargs,
 ):
     if mode == 'test':
         skip_frames = 1
 
+    if num_bots < 0:
+        num_bots = doom_cfg.num_bots
+
+    num_agents = doom_cfg.num_agents if num_agents <= 0 else num_agents
+    max_num_players = num_agents + num_humans
+
+    is_multiagent = num_agents > 1
+
     def make_env_func(player_id):
         return make_doom_env(
             doom_cfg, mode,
-            player_id=player_id, max_num_players=doom_cfg.num_players,
+            player_id=player_id, max_num_players=max_num_players, num_bots=num_bots,
+            skip_frames=1 if is_multiagent else skip_frames,  # multi-agent skipped frames are handled by the wrapper
             **kwargs,
         )
 
-    num_players = doom_cfg.num_players if num_agents <= 0 else num_agents
+    if is_multiagent:
+        env = VizdoomMultiAgentEnv(
+            num_agents=num_agents,
+            make_env_func=make_env_func,
+            env_config=env_config,
+            skip_frames=skip_frames,
+        )
+    else:
+        # if we have only one agent, there's no need for multi-agent wrapper
+        env = init_multiplayer_env(make_env_func, player_id=0, env_config=env_config)
 
-    env = VizdoomMultiAgentEnv(
-        num_players=num_players,
-        make_env_func=make_env_func,
-        env_config=env_config,
-        skip_frames=skip_frames,
-    )
     return env
 
 

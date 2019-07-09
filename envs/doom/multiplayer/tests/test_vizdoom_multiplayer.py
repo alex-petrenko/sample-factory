@@ -8,11 +8,15 @@ from utils.utils import log, AttrDict
 
 class TestDoom(TestCase):
     @staticmethod
-    def doom_multiagent(worker_index, num_steps=1000):
-        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0, 'safe_init': False})
-        multi_env = make_doom_multiagent_env(
+    def make_standard_dm(env_config):
+        return make_doom_multiagent_env(
             doom_env_by_name('doom_dm'), env_config=env_config,
         )
+
+    @staticmethod
+    def doom_multiagent(make_multi_env, worker_index, num_steps=1000):
+        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0, 'safe_init': False})
+        multi_env = make_multi_env(env_config)
 
         obs = multi_env.reset()
 
@@ -41,7 +45,7 @@ class TestDoom(TestCase):
         multi_env.close()
 
     def test_doom_multiagent(self):
-        self.doom_multiagent(worker_index=0)
+        self.doom_multiagent(self.make_standard_dm, worker_index=0)
 
     def test_doom_multiagent_parallel(self):
         num_workers = 16
@@ -49,7 +53,7 @@ class TestDoom(TestCase):
 
         for i in range(num_workers):
             log.info('Starting worker #%d', i)
-            worker = Process(target=self.doom_multiagent, args=(i, 200))
+            worker = Process(target=self.doom_multiagent, args=(self.make_standard_dm, i, 200))
             worker.start()
             workers.append(worker)
 

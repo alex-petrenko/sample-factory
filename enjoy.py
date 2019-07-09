@@ -35,6 +35,12 @@ def create_parser_custom():
         help='Allows to set number of agents less than number of players, to allow humans to join the match'
              'Default value (-1) means number of agents is the same as max number of players',
     )
+    parser.add_argument(
+        '--num-bots',
+        default=-1,
+        type=int,
+        help='Add classic (non-neural) bots to the match. If default (-1) then use number of bots specified in env cfg',
+    )
     return parser
 
 
@@ -201,7 +207,7 @@ def main():
     parser = create_parser_custom()
     args = parser.parse_args()
 
-    register_doom_envs_rllib(mode='test', num_agents=args.num_agents)
+    register_doom_envs_rllib(mode='test', num_agents=args.num_agents, num_bots=args.num_bots)
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 

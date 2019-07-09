@@ -14,14 +14,15 @@ from utils.utils import log
 
 
 class VizdoomEnvMultiplayer(VizdoomEnv):
-    def __init__(self, action_space, config_file, player_id, max_num_players, async_mode=False):
-        super().__init__(action_space, config_file, async_mode=async_mode)
+    def __init__(self, action_space, config_file, player_id, max_num_players, num_bots, skip_frames, async_mode=False):
+        super().__init__(action_space, config_file, skip_frames=skip_frames, async_mode=async_mode)
 
         self.worker_index = 0
         self.vector_index = 0
 
         self.player_id = player_id
         self.max_num_players = max_num_players
+        self.num_bots = num_bots
         self.timestep = 0
         self.update_state = True
 
@@ -45,7 +46,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             raise Exception('Only algo mode is currently supported by multiplayer wrappers')
 
         # make sure not to use more than 10 envs per worker
-        port = 50300 + self.worker_index * 10 + self.vector_index + 7
+        port = 50300 + self.worker_index * 100 + self.vector_index + 7
         log.info('Using port %d...', port)
 
         if self._is_server():
@@ -90,6 +91,12 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self._set_game_mode()
         self.game.init()
 
+        if self._is_server():
+            self.game.send_game_command('removebots')
+            for i in range(self.num_bots):
+                log.info('Adding bot %d...', i)
+                self.game.send_game_command('addbot')  # can use addbot [name] to add specific (harder) bots?
+
         self.initialized = True
 
     def reset(self, mode='algo'):
@@ -102,6 +109,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         return np.transpose(img, (1, 2, 0))
 
     def step(self, actions):
+        if self.skip_frames > 1:
+            # not used in multi-agent mode due to VizDoom limitations
+            # this means that we have only one agent (+ maybe some bots, which is why we're in multiplayer mode)
+            return super().step(actions)
+
         self._ensure_initialized()
         info = {}
 
@@ -140,6 +152,17 @@ class TaskType(Enum):
     INIT, TERMINATE, RESET, STEP, STEP_UPDATE, INFO = range(6)
 
 
+def init_multiplayer_env(make_env_func, player_id, env_config):
+    env = make_env_func(player_id=player_id)
+
+    if env_config is not None:
+        env.unwrapped.worker_index = env_config.worker_index
+        env.unwrapped.vector_index = env_config.vector_index
+
+    env.seed(env.unwrapped.worker_index * 1000 + env.unwrapped.vector_index * 10 + player_id)
+    return env
+
+
 class MultiAgentEnvWorker:
     def __init__(self, player_id, make_env_func, env_config):
         self.player_id = player_id
@@ -152,13 +175,7 @@ class MultiAgentEnvWorker:
 
     def _init(self):
         log.info('Initializing env for player %d...', self.player_id)
-        env = self.make_env_func(player_id=self.player_id)
-
-        if self.env_config is not None:
-            env.unwrapped.worker_index = self.env_config.worker_index
-            env.unwrapped.vector_index = self.env_config.vector_index
-
-        env.seed(self.player_id)
+        env = init_multiplayer_env(self.make_env_func, self.player_id, self.env_config)
         return env
 
     def _terminate(self, env):
@@ -209,8 +226,8 @@ class MultiAgentEnvWorker:
 
 
 class VizdoomMultiAgentEnv(MultiAgentEnv):
-    def __init__(self, num_players, make_env_func, env_config, skip_frames):
-        self.num_players = num_players
+    def __init__(self, num_agents, make_env_func, env_config, skip_frames):
+        self.num_agents = num_agents
         self.skip_frames = skip_frames  # number of frames to skip (1 = no skip)
 
         env = make_env_func(player_id=-1)  # temporary env just to query observation_space and stuff
@@ -227,7 +244,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
             time.sleep(sleep_seconds)
             log.info('Done sleeping at %d', env_config.worker_index)
 
-        self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_players)]
+        self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_agents)]
 
         # only needed when rendering
         self.enable_rendering = False
@@ -249,9 +266,9 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
 
         """
         if data is None:
-            data = {str(i): None for i in range(self.num_players)}
+            data = {str(i): None for i in range(self.num_agents)}
 
-        assert len(data) == self.num_players
+        assert len(data) == self.num_agents
 
         for i, worker in enumerate(self.workers[1:], start=1):
             worker.task_queue.put((data[str(i)], task_type))

@@ -3,15 +3,15 @@ from unittest import TestCase
 
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_env import MultiEnv
-from envs.doom.doom_utils import make_doom_env, doom_env_by_name
+from envs.doom.doom_utils import make_doom_env, doom_env_by_name, make_doom_multiagent_env
 from utils.timing import Timing
-from utils.utils import log
+from utils.utils import log, AttrDict
 
 
-def test_env_performance(test, env_type):
+def test_env_performance(make_env, env_type):
     t = Timing()
     with t.timeit('init'):
-        env = test.make_env_singleplayer()
+        env = make_env(AttrDict({'worker_index': 0, 'vector_index': 0}))
         total_num_frames, frames = 10000, 0
 
     with t.timeit('first_reset'):
@@ -44,10 +44,10 @@ def test_env_performance(test, env_type):
     env.close()
 
 
-def test_multi_env_performance(test, env_type, num_envs, num_workers):
+def test_multi_env_performance(make_env, env_type, num_envs, num_workers):
     t = Timing()
     with t.timeit('init'):
-        multi_env = MultiEnv(num_envs, num_workers, test.make_env_singleplayer, stats_episodes=100)
+        multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
         total_num_frames, frames = 20000, 0
 
     with t.timeit('first_reset'):
@@ -71,17 +71,32 @@ def test_multi_env_performance(test, env_type, num_envs, num_workers):
 
 
 class TestDoom(TestCase):
+    # noinspection PyUnusedLocal
     @staticmethod
-    def make_env_singleplayer():
+    def make_env_singleplayer(env_config):
         return make_doom_env(
             doom_env_by_name('doom_battle_tuple_actions'),
         )
 
+    @staticmethod
+    def make_env_bots(env_config):
+        log.info('Create host env with cfg: %r', env_config)
+        return make_doom_multiagent_env(
+            doom_env_by_name('doom_dwango5_bots'), env_config=env_config,
+        )
+
     def test_doom_env(self):
-        self.assertIsNotNone(self.make_env_singleplayer())
+        self.assertIsNotNone(self.make_env_singleplayer(None))
 
     def test_doom_performance(self):
-        test_env_performance(self, 'doom')
+        test_env_performance(self.make_env_singleplayer, 'doom')
 
     def test_doom_performance_multi(self):
-        test_multi_env_performance(self, 'doom', num_envs=200, num_workers=20)
+        test_multi_env_performance(self.make_env_singleplayer, 'doom', num_envs=200, num_workers=20)
+
+    def test_doom_performance_bots(self):
+        test_env_performance(self.make_env_bots, 'doom')
+
+    def test_doom_performance_bots_multi(self):
+        test_multi_env_performance(self.make_env_bots, 'doom', num_envs=200, num_workers=20)
+
