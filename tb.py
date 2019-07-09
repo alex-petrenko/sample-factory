@@ -42,7 +42,7 @@ def main():
                 print('Monitoring', match, '...')
 
     train_dirs = ','.join([f'{os.path.basename(s)}:{s}' for s in train_dirs])
-    cmd = f'tensorboard --port={args.port} --logdir={train_dirs}'
+    cmd = f'tensorboard --port={args.port} --logdir={train_dirs} --reload_interval=20 --max_reload_threads=8 --samples_per_plugin="scalars=500"'
     if args.quiet:
         cmd += ' 2>/dev/null'
 

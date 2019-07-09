@@ -16,11 +16,11 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         weapons_low = [0.0] * self.num_weapons
         ammo_low = [0.0] * self.num_weapons
-        low = [0.0, 0.0, -1.0, -1.0, -1e3, 0.0] + weapons_low + ammo_low
+        low = [0.0, 0.0, -1.0, -1.0, -50.0, 0.0] + weapons_low + ammo_low
 
         weapons_high = [5.0] * self.num_weapons  # can have multiple weapons in the same slot?
-        ammo_high = [1000.0] * self.num_weapons
-        high = [20.0, 1000.0, 100.0, 100.0, 1e3, 1.0] + weapons_high + ammo_high
+        ammo_high = [50.0] * self.num_weapons
+        high = [20.0, 50.0, 50.0, 50.0, 50.0, 1.0] + weapons_high + ammo_high
 
         self.observation_space = gym.spaces.Dict({
             'obs': current_obs_space,
@@ -46,9 +46,20 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         self.prev_vars = {}
 
+        self.weapon_preference = {
+            2: 1,  # pistol
+            3: 5,  # shotguns
+            4: 10,  # machinegun
+            5: 5,  # rocket launcher
+            6: 10,  # plasmagun
+            7: 20,  # bfg
+        }
+
         self._orig_env_reward = 0.0
         self._total_shaping_reward = 0.0
         self._episode_frames = 0
+
+        self._verbose = False
 
     def _parse_info(self, obs, info, done):
         obs_dict = {'obs': obs, 'measurements': []}
@@ -58,8 +69,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         selected_weapon = round(max(0, selected_weapon))
         selected_weapon_ammo = float(max(0.0, info.get('SELECTED_WEAPON_AMMO', 0.0)))
 
-        # same as DFP paper
-        selected_weapon_ammo /= 7.5
+        # similar to DFP paper
+        selected_weapon_ammo /= 15.0
 
         # we don't really care how much negative health we have, dead is dead
         info['HEALTH'] = max(0.0, info.get('HEALTH', 0.0))
@@ -78,7 +89,9 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         for weapon in range(self.num_weapons):
             obs_dict['measurements'].append(max(0.0, info.get(f'WEAPON{weapon}', 0.0)))
         for weapon in range(self.num_weapons):
-            obs_dict['measurements'].append(float(max(0.0, info.get(f'AMMO{weapon}', 0.0))))
+            ammo = float(max(0.0, info.get(f'AMMO{weapon}', 0.0)))
+            ammo /= 15.0  # scaling factor similar to DFP paper (to keep everything small)
+            obs_dict['measurements'].append(ammo)
 
         shaping_reward = 0.0
 
@@ -106,21 +119,9 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
                 shaping_reward += reward_delta
 
-            # small reward for being able to perform an attack
-            # shaping_reward += 0.001 * info.get('ATTACK_READY', 0.0)
-
             # weapon preference reward
-            weapon_preference = {
-                2: 1,   # pistol
-                3: 5,   # shotguns
-                4: 10,  # machinegun
-                5: 5,   # rocket launcher
-                6: 10,  # plasmagun
-                7: 20,  # bfg
-            }
-
             weapon_reward_coeff = 0.0001
-            weapon_goodness = weapon_preference.get(selected_weapon, 0)
+            weapon_goodness = self.weapon_preference.get(selected_weapon, 0)
             if selected_weapon_ammo > 0:
                 weapon_reward = weapon_goodness * attack_ready * weapon_reward_coeff
                 shaping_reward += weapon_reward
@@ -154,17 +155,15 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self._total_shaping_reward += shaping_rew
         self._episode_frames += 1
 
-        # log.info('Original env reward before shaping: %.3f', self._orig_env_reward)
-        # player_id = 1
-        # if hasattr(self.env.unwrapped, 'player_id'):
-        #     player_id = self.env.unwrapped.player_id
-        # worker_index = 0
-        # if hasattr(self.env.unwrapped, 'worker_index'):
-        #     worker_index = self.env.unwrapped.worker_index
-        #
-        # log.info(
-        #     'Total shaping reward is %.3f for %d %d (done %d)',
-        #     self._total_shaping_reward, worker_index, player_id, done,
-        # )
+        if self._verbose:
+            log.info('Original env reward before shaping: %.3f', self._orig_env_reward)
+            player_id = 1
+            if hasattr(self.env.unwrapped, 'player_id'):
+                player_id = self.env.unwrapped.player_id
+
+            log.info(
+                'Total shaping reward is %.3f for %d (done %d)',
+                self._total_shaping_reward, player_id, done,
+            )
 
         return obs_dict, rew, done, info
