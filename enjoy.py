@@ -80,7 +80,7 @@ def run(args, parser):
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
     num_steps = int(args.steps)
-    rollout_loop(agent, args.env, num_steps, args.no_render, fps=45)
+    rollout_loop(agent, args.env, num_steps, args.no_render, fps=1000)
 
 
 # noinspection PyUnusedLocal

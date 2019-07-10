@@ -93,10 +93,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         if self._is_server():
             self.game.send_game_command('removebots')
+            # log.info('Adding bots...')
             for i in range(self.num_bots):
-                log.info('Adding bot %d...', i)
                 self.game.send_game_command('addbot')  # can use addbot [name] to add specific (harder) bots?
 
+        log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)
         self.initialized = True
 
     def reset(self, mode='algo'):

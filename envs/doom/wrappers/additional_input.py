@@ -34,7 +34,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self.reward_shaping_vars = {
             'FRAGCOUNT': (+1, -1.5),
             'DEATHCOUNT': (-0.25, +0.25),
-            'HITCOUNT': (+0.05, -0.05),
+            'HITCOUNT': (+0.01, -0.01),
 
             'HEALTH': (+0.002, -0.002),
             'ARMOR': (+0.002, -0.001),
@@ -42,7 +42,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         for weapon in range(self.num_weapons):
             self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.2, -0.1)
-            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, -0.001)
+            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, +0.001)  # encourage to shoot
 
         self.prev_vars = {}
 
@@ -94,6 +94,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             obs_dict['measurements'].append(ammo)
 
         shaping_reward = 0.0
+        deltas = []
 
         if not done:
             for var_name, rewards in self.reward_shaping_vars.items():
@@ -113,18 +114,22 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 # player_id = 1
                 # if hasattr(self.env.unwrapped, 'player_id'):
                 #     player_id = self.env.unwrapped.player_id
-                #
-                # if abs(reward_delta) > EPS:
-                #     log.info('Reward %.3f for %s, delta %.3f (player %r)', reward_delta, var_name, delta, player_id)
 
                 shaping_reward += reward_delta
+
+                if abs(reward_delta) > EPS:
+                    deltas.append((var_name, reward_delta, delta))
 
             # weapon preference reward
             weapon_reward_coeff = 0.0001
             weapon_goodness = self.weapon_preference.get(selected_weapon, 0)
             if selected_weapon_ammo > 0:
-                weapon_reward = weapon_goodness * attack_ready * weapon_reward_coeff
+                weapon_reward = weapon_goodness * weapon_reward_coeff
+                deltas.append((f'weapon{selected_weapon}', weapon_reward))
                 shaping_reward += weapon_reward
+
+        if abs(shaping_reward) > 0.5:
+            log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
 
         # remember new variable values
         for var_name in self.reward_shaping_vars.keys():
@@ -164,6 +169,12 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             log.info(
                 'Total shaping reward is %.3f for %d (done %d)',
                 self._total_shaping_reward, player_id, done,
+            )
+
+        if abs(rew) > 0.5:
+            log.info(
+                'Final rew: %.4f, total env_rew %.4f, total shaping rew %.4f, shaping %.4f',
+                rew, self._orig_env_reward, self._total_shaping_reward, shaping_rew,
             )
 
         return obs_dict, rew, done, info
