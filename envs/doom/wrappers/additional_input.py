@@ -171,10 +171,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 self._total_shaping_reward, player_id, done,
             )
 
-        if abs(rew) > 0.5:
-            log.info(
-                'Final rew: %.4f, total env_rew %.4f, total shaping rew %.4f, shaping %.4f',
-                rew, self._orig_env_reward, self._total_shaping_reward, shaping_rew,
-            )
+        # if abs(rew) > 0.5:
+        #     log.info(
+        #         'Final rew: %.4f, total env_rew %.4f, total shaping rew %.4f, shaping %.4f',
+        #         rew, self._orig_env_reward, self._total_shaping_reward, shaping_rew,
+        #     )
 
         return obs_dict, rew, done, info
