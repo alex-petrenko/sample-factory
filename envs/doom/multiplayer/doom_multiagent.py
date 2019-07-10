@@ -42,8 +42,8 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         if mode == 'algo':
             self.game.set_window_visible(False)
-        else:
-            raise Exception('Only algo mode is currently supported by multiplayer wrappers')
+        elif mode == 'human' and self._is_server():
+            self.game.set_window_visible(True)
 
         # make sure not to use more than 10 envs per worker
         port = 50300 + self.worker_index * 100 + self.vector_index + 7
@@ -95,6 +95,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             self.game.send_game_command('removebots')
             # log.info('Adding bots...')
             for i in range(self.num_bots):
+                log.info('Adding bot %d', i)
                 self.game.send_game_command('addbot')  # can use addbot [name] to add specific (harder) bots?
 
         log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)
@@ -110,7 +111,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         return np.transpose(img, (1, 2, 0))
 
     def step(self, actions):
-        if self.skip_frames > 1:
+        if self.skip_frames > 1 or self.max_num_players == 1:
             # not used in multi-agent mode due to VizDoom limitations
             # this means that we have only one agent (+ maybe some bots, which is why we're in multiplayer mode)
             return super().step(actions)

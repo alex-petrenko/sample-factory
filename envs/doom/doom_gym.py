@@ -77,6 +77,7 @@ class VizdoomEnv(gym.Env):
         # helpers for human play with pynput keyboard input
         self._terminate = False
         self._current_actions = []
+        self._actions_binary = None
 
         self.seed()
 
@@ -185,6 +186,8 @@ class VizdoomEnv(gym.Env):
             self.previous_histogram = swap
             self.current_histogram.fill(0)
 
+        self._actions_binary = None
+
         return np.transpose(img, (1, 2, 0))
 
     def _convert_actions(self, actions):
@@ -219,7 +222,12 @@ class VizdoomEnv(gym.Env):
         self._ensure_initialized()
         info = {'num_frames': self.skip_frames}
 
-        actions_binary = self._convert_actions(actions)
+        if self._actions_binary is not None:
+            # provided externally, e.g. via human play
+            actions_binary = self._actions_binary
+            self._actions_binary = None
+        else:
+            actions_binary = self._convert_actions(actions)
 
         reward = self.game.make_action(actions_binary, self.skip_frames)
         state = self.game.get_state()
@@ -256,81 +264,6 @@ class VizdoomEnv(gym.Env):
     def close(self):
         if self.viewer is not None:
             self.viewer.close()
-
-    def _keyboard_on_press(self, key):
-        from pynput.keyboard import Key
-        if key == Key.esc:
-            self._terminate = True
-            return False
-
-        action = key_to_action(key)
-        if action is not None:
-            if action not in self._current_actions:
-                self._current_actions.append(action)
-
-    def _keyboard_on_release(self, key):
-        action = key_to_action(key)
-        if action is not None:
-            if action in self._current_actions:
-                self._current_actions.remove(action)
-
-    def play_human_mode(self, skip_frames=1, num_episodes=3):
-        from pynput.keyboard import Listener
-
-        def start_listener():
-            with Listener(on_press=self._keyboard_on_press, on_release=self._keyboard_on_release) as listener:
-                listener.join()
-
-        listener_thread = Thread(target=start_listener)
-        listener_thread.start()
-
-        for episode in range(num_episodes):
-            self.reset('human')
-            last_render_time = time.time()
-            time_between_frames = 1.0 / 35.0
-
-            while not self.game.is_episode_finished() and not self._terminate:
-                num_actions = 10  # hardcoded here for simplicity
-                actions = [0] * num_actions
-                for action in self._current_actions:
-                    actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
-
-                for frame in range(skip_frames):
-                    self.game.make_action(actions, 1)
-                    state = self.game.get_state()
-
-                    verbose = True
-                    if state is not None and verbose:
-                        info = self.get_info()
-                        print('Weapon:', info['SELECTED_WEAPON'], 'ready:', info['ATTACK_READY'], 'ammo:', info['SELECTED_WEAPON_AMMO'])
-                        # print('Info: ', self.get_info())
-                        # print('State: #' + str(state.number))
-                        # print('Action: \t' + str(self.game.get_last_action()) + '\t (=> only allowed actions)')
-                        # print('Reward: \t' + str(self.game.get_last_reward()))
-                        # total_reward = self.game.get_total_reward()
-                        # print('Total Reward: \t' + str(total_reward))
-
-                    time_since_last_render = time.time() - last_render_time
-                    time_wait = time_between_frames - time_since_last_render
-
-                    if self.show_automap and state.automap_buffer is not None:
-                        map_ = state.automap_buffer
-                        map_ = np.swapaxes(map_, 0, 2)
-                        map_ = np.swapaxes(map_, 0, 1)
-                        cv2.imshow('ViZDoom Automap Buffer', map_)
-                        if time_wait > 0:
-                            cv2.waitKey(int(time_wait) * 1000)
-                    else:
-                        if time_wait > 0:
-                            time.sleep(time_wait)
-
-                    last_render_time = time.time()
-
-            if self.show_automap:
-                cv2.destroyAllWindows()
-
-        log.debug('Press ESC to exit...')
-        listener_thread.join()
 
     def get_info(self, variables=None):
         if variables is None:
@@ -392,3 +325,84 @@ class VizdoomEnv(gym.Env):
         dy = int((dy - eps) * self.current_histogram.shape[1])
 
         self.current_histogram[dx, dy] += 1
+
+    def _keyboard_on_press(self, key):
+        from pynput.keyboard import Key
+        if key == Key.esc:
+            self._terminate = True
+            return False
+
+        action = key_to_action(key)
+        if action is not None:
+            if action not in self._current_actions:
+                self._current_actions.append(action)
+
+    def _keyboard_on_release(self, key):
+        action = key_to_action(key)
+        if action is not None:
+            if action in self._current_actions:
+                self._current_actions.remove(action)
+
+    # noinspection PyProtectedMember
+    @staticmethod
+    def play_human_mode(env, skip_frames=1, num_episodes=3):
+        from pynput.keyboard import Listener
+
+        doom = env.unwrapped
+        doom.skip_frames = 1  # handled by this script separately
+
+        # noinspection PyProtectedMember
+        def start_listener():
+            with Listener(on_press=doom._keyboard_on_press, on_release=doom._keyboard_on_release) as listener:
+                listener.join()
+
+        listener_thread = Thread(target=start_listener)
+        listener_thread.start()
+
+        for episode in range(num_episodes):
+            doom.reset('human')
+            last_render_time = time.time()
+            time_between_frames = 1.0 / 35.0
+
+            while not doom.game.is_episode_finished() and not doom._terminate:
+                num_actions = 10  # hardcoded here for simplicity
+                actions = [0] * num_actions
+                for action in doom._current_actions:
+                    actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
+
+                for frame in range(skip_frames):
+                    doom._actions_binary = actions
+                    env.step(actions)
+                    state = doom.game.get_state()
+
+                    verbose = True
+                    if state is not None and verbose:
+                        info = doom.get_info()
+                        print(
+                            'Weapon:', info['SELECTED_WEAPON'],
+                            'ready:', info['ATTACK_READY'],
+                            'ammo:', info['SELECTED_WEAPON_AMMO'],
+                            'pc:', info['PLAYER_COUNT'],
+                        )
+
+                    time_since_last_render = time.time() - last_render_time
+                    time_wait = time_between_frames - time_since_last_render
+
+                    if doom.show_automap and state.automap_buffer is not None:
+                        map_ = state.automap_buffer
+                        map_ = np.swapaxes(map_, 0, 2)
+                        map_ = np.swapaxes(map_, 0, 1)
+                        cv2.imshow('ViZDoom Automap Buffer', map_)
+                        if time_wait > 0:
+                            cv2.waitKey(int(time_wait) * 1000)
+                    else:
+                        if time_wait > 0:
+                            time.sleep(time_wait)
+
+                    last_render_time = time.time()
+
+            if doom.show_automap:
+                cv2.destroyAllWindows()
+
+        log.debug('Press ESC to exit...')
+        listener_thread.join()

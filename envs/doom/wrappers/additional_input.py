@@ -139,7 +139,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 deltas.append((f'weapon{selected_weapon}', weapon_reward))
                 shaping_reward += weapon_reward
 
-        if abs(shaping_reward) > 0.5:
+        if abs(shaping_reward) > 0.9:
             log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
 
         # remember new variable values
@@ -187,11 +187,5 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         if done and self._prev_info is not None:
             info.update(self._prev_info)
         self._prev_info = info
-
-        # if abs(rew) > 0.5:
-        #     log.info(
-        #         'Final rew: %.4f, total env_rew %.4f, total shaping rew %.4f, shaping %.4f',
-        #         rew, self._orig_env_reward, self._total_shaping_reward, shaping_rew,
-        #     )
 
         return obs_dict, rew, done, info

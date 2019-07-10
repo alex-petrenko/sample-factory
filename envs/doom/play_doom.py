@@ -1,11 +1,12 @@
 import sys
 
-from envs.doom.doom_utils import make_doom_env, doom_env_by_name, DEFAULT_FRAMESKIP
+from envs.doom.doom_gym import VizdoomEnv
+from envs.doom.doom_utils import doom_env_by_name, DEFAULT_FRAMESKIP, make_doom_multiagent_env
 
 
 def main():
-    env = make_doom_env(doom_env_by_name('doom_dwango5_single'), mode='human', show_automap=True)
-    return env.unwrapped.play_human_mode(skip_frames=DEFAULT_FRAMESKIP)
+    env = make_doom_multiagent_env(doom_env_by_name('doom_dwango5_bots'), env_config=None, mode='human')
+    return VizdoomEnv.play_human_mode(env, skip_frames=DEFAULT_FRAMESKIP)
 
 
 if __name__ == '__main__':
