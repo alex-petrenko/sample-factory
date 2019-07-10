@@ -231,6 +231,42 @@ def run_experiment(args, parser):
 
     exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
 
+    def on_episode_end(info):
+        episode = info['episode']
+        stats = {
+            'DEATHCOUNT': 0,
+            'FRAGCOUNT': 0,
+            'HITCOUNT': 0,
+            'DAMAGECOUNT': 0,
+            'KDR': 0,
+            'FINAL_PLACE': 0,
+            'LEADER_GAP': 0,
+        }
+
+        # noinspection PyProtectedMember
+        agent_to_last_info = episode._agent_to_last_info
+        for agent in agent_to_last_info.keys():
+            agent_info = agent_to_last_info[agent]
+            for stats_key in stats.keys():
+                stats[stats_key] += agent_info.get(stats_key, 0.0)
+
+            stats['KDR'] += stats['FRAGCOUNT'] / (stats['DEATHCOUNT'] + 1)
+
+            player_count = 16  # hardcoded
+            player_num = int(agent_info.get('PLAYER_NUM', 1))
+            fragcounts = [-int(agent_info.get(f'PLAYER{pi}_FRAGCOUNT', -1e9)) for pi in range(1, player_count + 1)]
+            places = np.argsort(fragcounts)
+            final_place = places[player_num - 1] + 1
+            stats['FINAL_PLACE'] += final_place
+            stats['LEADER_GAP'] += -min(fragcounts) + fragcounts[player_num - 1]
+
+        for stats_key in stats.keys():
+            stats[stats_key] /= len(agent_to_last_info.keys())
+
+        episode.custom_metrics.update(stats)
+
+    exp.spec['config']['callbacks']['on_episode_end'] = function(on_episode_end)
+
     run(
         exp,
         name=args.experiment_name,

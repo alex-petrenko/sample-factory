@@ -4,7 +4,7 @@ from envs.doom.doom_utils import make_doom_env, doom_env_by_name, DEFAULT_FRAMES
 
 
 def main():
-    env = make_doom_env(doom_env_by_name('doom_battle'), mode='human', show_automap=True)
+    env = make_doom_env(doom_env_by_name('doom_dwango5_single'), mode='human', show_automap=True)
     return env.unwrapped.play_human_mode(skip_frames=DEFAULT_FRAMESKIP)
 
 

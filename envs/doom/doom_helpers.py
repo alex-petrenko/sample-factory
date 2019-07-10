@@ -10,8 +10,9 @@ def key_to_action(key):
         Key.down: 1,
         Key.right: 4,
         Key.left: 5,
-        Key.ctrl: 6,
-        Key.shift: 7,
+        Key.alt: 6,
+        Key.ctrl: 8,
+        Key.shift: 9,
     }
 
     return action_table.get(key, None)

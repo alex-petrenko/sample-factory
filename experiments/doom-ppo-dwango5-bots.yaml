@@ -7,7 +7,7 @@ config:
     clip_rewards: False
     clip_param: 0.1
     vf_clip_param: 100000.0
-    entropy_coeff: 0.001
+    entropy_coeff: 0.0005
     train_batch_size: 6144
     sample_batch_size: 32
     sgd_minibatch_size: 512

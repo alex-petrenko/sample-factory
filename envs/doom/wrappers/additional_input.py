@@ -1,3 +1,5 @@
+from collections import deque
+
 import gym
 import numpy as np
 
@@ -35,6 +37,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             'FRAGCOUNT': (+1, -1.5),
             'DEATHCOUNT': (-0.25, +0.25),
             'HITCOUNT': (+0.01, -0.01),
+            'DAMAGECOUNT': (+0.01, -0.01),
 
             'HEALTH': (+0.002, -0.002),
             'ARMOR': (+0.002, -0.001),
@@ -42,7 +45,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         for weapon in range(self.num_weapons):
             self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.2, -0.1)
-            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, +0.001)  # encourage to shoot
+            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, -0.00001)
 
         self.prev_vars = {}
 
@@ -59,6 +62,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self._total_shaping_reward = 0.0
         self._episode_frames = 0
 
+        self._selected_weapon = deque([], maxlen=5)
+
+        self._prev_info = None
+
         self._verbose = False
 
     def _parse_info(self, obs, info, done):
@@ -68,6 +75,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         selected_weapon = info.get('SELECTED_WEAPON', 0.0)
         selected_weapon = round(max(0, selected_weapon))
         selected_weapon_ammo = float(max(0.0, info.get('SELECTED_WEAPON_AMMO', 0.0)))
+        self._selected_weapon.append(selected_weapon)
 
         # similar to DFP paper
         selected_weapon_ammo /= 15.0
@@ -121,9 +129,12 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                     deltas.append((var_name, reward_delta, delta))
 
             # weapon preference reward
-            weapon_reward_coeff = 0.0001
+            weapon_reward_coeff = 0.0002
             weapon_goodness = self.weapon_preference.get(selected_weapon, 0)
-            if selected_weapon_ammo > 0:
+
+            unholstered = len(self._selected_weapon) > 4 and all(sw == selected_weapon for sw in self._selected_weapon)
+
+            if selected_weapon_ammo > 0 and unholstered:
                 weapon_reward = weapon_goodness * weapon_reward_coeff
                 deltas.append((f'weapon{selected_weapon}', weapon_reward))
                 shaping_reward += weapon_reward
@@ -139,6 +150,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
     def reset(self):
         self.prev_vars = {}
+        self._prev_info = None
+        self._selected_weapon.clear()
 
         obs = self.env.reset()
         info = self.env.unwrapped.get_info()
@@ -170,6 +183,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 'Total shaping reward is %.3f for %d (done %d)',
                 self._total_shaping_reward, player_id, done,
             )
+
+        if done and self._prev_info is not None:
+            info.update(self._prev_info)
+        self._prev_info = info
 
         # if abs(rew) > 0.5:
         #     log.info(

@@ -48,6 +48,7 @@ DOOM_ENVS = [
 
     DoomCfg('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
     DoomCfg('doom_dwango5_bots', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=1, num_bots=7),
+    DoomCfg('doom_dwango5_single', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9)),
 ]
 
 
@@ -152,7 +153,7 @@ def make_doom_multiagent_env(
 
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    singleplayer_envs = ['doom_battle', 'doom_battle_tuple_actions']
+    singleplayer_envs = ['doom_battle', 'doom_battle_tuple_actions', 'doom_dwango5_single']
     for env_name in singleplayer_envs:
         register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), **kwargs))
 

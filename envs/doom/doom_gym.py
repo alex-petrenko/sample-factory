@@ -290,25 +290,25 @@ class VizdoomEnv(gym.Env):
             time_between_frames = 1.0 / 35.0
 
             while not self.game.is_episode_finished() and not self._terminate:
-                num_actions = 8  # hardcoded here for simplicity
+                num_actions = 10  # hardcoded here for simplicity
                 actions = [0] * num_actions
                 for action in self._current_actions:
                     actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
 
                 for frame in range(skip_frames):
                     self.game.make_action(actions, 1)
-                    log.info('Action taken: %r', actions)
                     state = self.game.get_state()
-                    total_reward = self.game.get_total_reward()
 
                     verbose = True
                     if state is not None and verbose:
-                        print('===============================')
-                        print('Info: ', self.get_info())
-                        print('State: #' + str(state.number))
-                        print('Action: \t' + str(self.game.get_last_action()) + '\t (=> only allowed actions)')
-                        print('Reward: \t' + str(self.game.get_last_reward()))
-                        print('Total Reward: \t' + str(total_reward))
+                        info = self.get_info()
+                        print('Weapon:', info['SELECTED_WEAPON'], 'ready:', info['ATTACK_READY'], 'ammo:', info['SELECTED_WEAPON_AMMO'])
+                        # print('Info: ', self.get_info())
+                        # print('State: #' + str(state.number))
+                        # print('Action: \t' + str(self.game.get_last_action()) + '\t (=> only allowed actions)')
+                        # print('Reward: \t' + str(self.game.get_last_reward()))
+                        # total_reward = self.game.get_total_reward()
+                        # print('Total Reward: \t' + str(total_reward))
 
                     time_since_last_render = time.time() - last_render_time
                     time_wait = time_between_frames - time_since_last_render
