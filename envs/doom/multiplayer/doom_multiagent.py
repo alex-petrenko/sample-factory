@@ -1,3 +1,4 @@
+import copy
 import time
 from enum import Enum
 from multiprocessing import Process, JoinableQueue
@@ -102,13 +103,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.initialized = True
 
     def reset(self, mode='algo'):
+        obs = super().reset(mode)
         self._ensure_initialized(mode)
         self.timestep = 0
         self.update_state = True
-        self.game.new_episode()
-        self.state = self.game.get_state()
-        img = self.state.screen_buffer
-        return np.transpose(img, (1, 2, 0))
+        return obs
 
     def step(self, actions):
         if self.skip_frames > 1 or self.max_num_players == 1:
@@ -138,6 +137,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         else:
             observation = np.zeros(self.observation_space.shape, dtype=np.uint8)
 
+        self._vizdoom_variables_bug_workaround(info)
         return observation, reward, done, info
 
 

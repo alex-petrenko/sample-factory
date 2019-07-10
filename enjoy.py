@@ -41,6 +41,11 @@ def create_parser_custom():
         type=int,
         help='Add classic (non-neural) bots to the match. If default (-1) then use number of bots specified in env cfg',
     )
+    parser.add_argument(
+        '--sync-mode',
+        action='store_true',
+        help='Enable sync mode with unlimited FPS',
+    )
     return parser
 
 
@@ -122,7 +127,8 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
             lambda agent_id_: action_init[mapping_cache[agent_id_]])
         prev_rewards = collections.defaultdict(lambda: 0.)
         done = False
-        reward_total = 0.0
+        reward_episode = 0.0
+
         while not done and steps < (num_steps or steps + 1):
             multi_obs = obs if multiagent else {_DUMMY_AGENT_ID: obs}
             action_dict = {}
@@ -160,6 +166,10 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
 
             for frame in range(frameskip):
                 next_obs, reward, done, _ = env.step(action)
+                if done:
+                    log.info('Done at steps %d', steps)
+                    break
+
                 if rewards is None:
                     rewards = reward
 
@@ -194,20 +204,19 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
 
             if multiagent:
                 done = done['__all__']
-                reward_total += sum(rewards.values())
+                reward_episode += sum(rewards.values())
             else:
-                reward_total += rewards
+                reward_episode += rewards
 
-            log.info('Reward total: %.3f', reward_total)
-
-        print('Episode reward', reward_total)
+            log.info('Reward episode: %.3f', reward_episode)
 
 
 def main():
     parser = create_parser_custom()
     args = parser.parse_args()
 
-    register_doom_envs_rllib(mode='test', num_agents=args.num_agents, num_bots=args.num_bots)
+    mode = 'train' if args.sync_mode else 'test'
+    register_doom_envs_rllib(mode=mode, num_agents=args.num_agents, num_bots=args.num_bots)
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 

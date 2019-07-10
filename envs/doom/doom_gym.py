@@ -1,3 +1,4 @@
+import copy
 import os
 import re
 import time
@@ -78,6 +79,9 @@ class VizdoomEnv(gym.Env):
         self._terminate = False
         self._current_actions = []
         self._actions_binary = None
+
+        self._prev_info = None
+        self._last_episode_info = None
 
         self.seed()
 
@@ -187,6 +191,8 @@ class VizdoomEnv(gym.Env):
             self.current_histogram.fill(0)
 
         self._actions_binary = None
+        self._last_episode_info = copy.deepcopy(self._prev_info)
+        self._prev_info = None
 
         return np.transpose(img, (1, 2, 0))
 
@@ -214,6 +220,17 @@ class VizdoomEnv(gym.Env):
 
         return actions_binary
 
+    def _vizdoom_variables_bug_workaround(self, info, done):
+        """Some variables don't get reset to zero on game.new_episode(). This fixes it (unless overflow)."""
+        if not done:
+            self._prev_info = copy.deepcopy(info)
+        if self._last_episode_info is not None:
+            bugged_vars = ['DEATHCOUNT', 'HITCOUNT', 'DAMAGECOUNT']
+            for v in bugged_vars:
+                if v not in info:
+                    continue
+                info[v] -= self._last_episode_info.get(v, 0)
+
     def step(self, actions):
         """
         Action is either a single value (discrete, one-hot), or a tuple with an action for each of the
@@ -240,6 +257,7 @@ class VizdoomEnv(gym.Env):
         else:
             observation = np.zeros(self.observation_space.shape, dtype=np.uint8)
 
+        self._vizdoom_variables_bug_workaround(info, done)
         return observation, reward, done, info
 
     def render(self, mode='human'):
@@ -383,6 +401,7 @@ class VizdoomEnv(gym.Env):
                             'ready:', info['ATTACK_READY'],
                             'ammo:', info['SELECTED_WEAPON_AMMO'],
                             'pc:', info['PLAYER_COUNT'],
+                            'dmg:', info['DAMAGECOUNT'],
                         )
 
                     time_since_last_render = time.time() - last_render_time

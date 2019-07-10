@@ -139,12 +139,12 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 deltas.append((f'weapon{selected_weapon}', weapon_reward))
                 shaping_reward += weapon_reward
 
+            # remember new variable values
+            for var_name in self.reward_shaping_vars.keys():
+                self.prev_vars[var_name] = info.get(var_name, 0.0)
+
         if abs(shaping_reward) > 0.9:
             log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
-
-        # remember new variable values
-        for var_name in self.reward_shaping_vars.keys():
-            self.prev_vars[var_name] = info.get(var_name, 0.0)
 
         return obs_dict, shaping_reward
 
@@ -185,7 +185,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             )
 
         if done and self._prev_info is not None:
-            info.update(self._prev_info)
-        self._prev_info = info
+            info = self._prev_info
+        if not done:
+            self._prev_info = info
+
+        # log.info('Damage: %.3f hit %.3f death %.3f', info['DAMAGECOUNT'], info['HITCOUNT'], info['DEATHCOUNT'])
 
         return obs_dict, rew, done, info
