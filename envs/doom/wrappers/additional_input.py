@@ -1,3 +1,4 @@
+import copy
 from collections import deque
 
 import gym
@@ -47,7 +48,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.2, -0.1)
             self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, -0.00001)
 
-        self.prev_vars = {}
+        self._prev_vars = {}
 
         self.weapon_preference = {
             2: 1,  # pistol
@@ -106,12 +107,12 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         if not done:
             for var_name, rewards in self.reward_shaping_vars.items():
-                if var_name not in self.prev_vars:
+                if var_name not in self._prev_vars:
                     continue
 
                 # generate reward based on how the env variable values changed
                 new_value = info.get(var_name, 0.0)
-                prev_value = self.prev_vars[var_name]
+                prev_value = self._prev_vars[var_name]
                 delta = new_value - prev_value
                 reward_delta = 0
                 if delta > EPS:
@@ -139,23 +140,19 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 deltas.append((f'weapon{selected_weapon}', weapon_reward))
                 shaping_reward += weapon_reward
 
-            # remember new variable values
-            for var_name in self.reward_shaping_vars.keys():
-                self.prev_vars[var_name] = info.get(var_name, 0.0)
-
         if abs(shaping_reward) > 0.9:
             log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
 
         return obs_dict, shaping_reward
 
     def reset(self):
-        self.prev_vars = {}
-        self._prev_info = None
-        self._selected_weapon.clear()
-
         obs = self.env.reset()
         info = self.env.unwrapped.get_info()
         obs, _ = self._parse_info(obs, info, False)
+        self._prev_vars = {}
+
+        self._prev_info = None
+        self._selected_weapon.clear()
 
         self._orig_env_reward = self._total_shaping_reward = 0.0
         self._episode_frames = 0
@@ -187,7 +184,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         if done and self._prev_info is not None:
             info = self._prev_info
         if not done:
-            self._prev_info = info
+            # remember new variable values
+            for var_name in self.reward_shaping_vars.keys():
+                self._prev_vars[var_name] = info.get(var_name, 0.0)
+            self._prev_info = copy.deepcopy(info)
 
         # log.info('Damage: %.3f hit %.3f death %.3f', info['DAMAGECOUNT'], info['HITCOUNT'], info['DEATHCOUNT'])
 

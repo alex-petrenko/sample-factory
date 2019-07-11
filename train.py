@@ -252,9 +252,9 @@ def run_experiment(args, parser):
 
             stats['KDR'] += stats['FRAGCOUNT'] / (stats['DEATHCOUNT'] + 1)
 
-            player_count = agent_info.get('PLAYER_COUNT', 1)
+            player_count = int(agent_info.get('PLAYER_COUNT', 1))
             player_num = int(agent_info.get('PLAYER_NUM', 1))
-            fragcounts = [-int(agent_info.get(f'PLAYER{pi}_FRAGCOUNT', -1e9)) for pi in range(1, player_count + 1)]
+            fragcounts = [-int(agent_info.get(f'PLAYER{pi}_FRAGCOUNT', -100000)) for pi in range(1, player_count + 1)]
             places = np.argsort(fragcounts)
             final_place = places[player_num - 1] + 1
             stats['FINAL_PLACE'] += final_place
