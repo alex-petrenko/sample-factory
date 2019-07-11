@@ -69,7 +69,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         self._verbose = False
 
-    def _parse_info(self, obs, info, done):
+    def _parse_info(self, obs, info, done, reset=False):
         obs_dict = {'obs': obs, 'measurements': []}
 
         # by default these are negative values if no weapon is selected
@@ -104,6 +104,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         shaping_reward = 0.0
         deltas = []
+
+        if reset:
+            # skip reward calculation
+            return obs_dict, shaping_reward
 
         if not done:
             for var_name, rewards in self.reward_shaping_vars.items():
@@ -148,8 +152,9 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
     def reset(self):
         obs = self.env.reset()
         info = self.env.unwrapped.get_info()
-        obs, _ = self._parse_info(obs, info, False)
+
         self._prev_vars = {}
+        obs, _ = self._parse_info(obs, info, False, reset=True)
 
         self._prev_info = None
         self._selected_weapon.clear()
