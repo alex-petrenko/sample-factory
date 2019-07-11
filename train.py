@@ -6,7 +6,7 @@ from collections import deque
 import ray
 import yaml
 import numpy as np
-from ray.rllib.agents.ppo import PPOTrainer
+from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
 from ray.rllib.agents.registry import ALGORITHMS
 
 from ray.rllib.models import ModelCatalog
@@ -18,6 +18,7 @@ from ray.tune.registry import ENV_CREATOR, register_trainable
 from ray.tune.tune import _make_scheduler, run
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
+from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
 from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
 
@@ -284,7 +285,11 @@ def main():
     def custom_ppo():
         return PPOTrainer.with_updates(default_policy=CustomPPOTFPolicy)
 
+    def custom_appo():
+        return APPOTrainer.with_updates(default_policy=CustomAPPOTFPolicy)
+
     register_trainable('CUSTOM_PPO', custom_ppo())
+    register_trainable('CUSTOM_APPO', custom_appo())
 
     parser = create_parser()
     args = parser.parse_args()
