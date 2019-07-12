@@ -153,9 +153,6 @@ def run_experiment(args, parser):
     # args.ray_object_store_memory = int(1e10)
     args.ray_redis_max_memory = int(5e9)
 
-    if args.dbg:
-        args.local_mode = True
-
     if args.config_file:
         with open(args.config_file) as f:
             exp = yaml.load(f)
@@ -166,6 +163,9 @@ def run_experiment(args, parser):
         parser.error("the following arguments are required: --run")
     if not exp.get("env") and not exp.get("config", {}).get("env"):
         parser.error("the following arguments are required: --env")
+
+    if args.dbg and 'APPO' not in exp['run']:
+        args.local_mode = True
 
     if args.ray_num_nodes:
         cluster = Cluster()
@@ -225,7 +225,12 @@ def run_experiment(args, parser):
     fps_helper = FpsHelper()
 
     def on_train_result(info):
-        fps_helper.record(info['trainer'].optimizer.num_steps_trained)
+        if 'APPO' in exp.spec['run']:
+            samples = info['result']['info']['num_steps_sampled']
+        else:
+            samples = info['trainer'].optimizer.num_steps_trained
+
+        fps_helper.record(samples)
         fps = fps_helper.get_fps()
         info['result']['custom_metrics']['fps'] = fps
         info['result']['custom_metrics']['fps_frameskip'] = fps * DEFAULT_FRAMESKIP
@@ -286,7 +291,10 @@ def main():
         return PPOTrainer.with_updates(default_policy=CustomPPOTFPolicy)
 
     def custom_appo():
-        return APPOTrainer.with_updates(default_policy=CustomAPPOTFPolicy)
+        return APPOTrainer.with_updates(
+            default_policy=CustomAPPOTFPolicy,
+            get_policy_class=lambda _: CustomAPPOTFPolicy,
+        )
 
     register_trainable('CUSTOM_PPO', custom_ppo())
     register_trainable('CUSTOM_APPO', custom_appo())

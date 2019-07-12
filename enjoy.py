@@ -204,9 +204,9 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
 
             if multiagent:
                 done = done['__all__']
-                reward_episode += sum(rewards.values())
+                reward_episode += 0 if rewards is None else sum(rewards.values())
             else:
-                reward_episode += rewards
+                reward_episode += 0 if rewards is None else rewards
 
             log.info('Reward episode: %.3f', reward_episode)
 
