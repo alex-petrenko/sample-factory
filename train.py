@@ -3,12 +3,10 @@ import math
 import time
 from collections import deque
 
+import numpy as np
 import ray
 import yaml
-import numpy as np
 from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
-from ray.rllib.agents.registry import ALGORITHMS
-
 from ray.rllib.models import ModelCatalog
 from ray.tests.cluster_utils import Cluster
 from ray.tune import Experiment, function
@@ -164,8 +162,9 @@ def run_experiment(args, parser):
     if not exp.get("env") and not exp.get("config", {}).get("env"):
         parser.error("the following arguments are required: --env")
 
-    if args.dbg and 'APPO' not in exp['run']:
-        args.local_mode = True
+    # broken in the last version of Ray
+    # if args.dbg and 'APPO' not in exp['run']:
+    #     args.local_mode = True
 
     if args.ray_num_nodes:
         cluster = Cluster()
@@ -190,6 +189,7 @@ def run_experiment(args, parser):
     exp = Experiment.from_json(args.experiment_name, exp)
     exp.spec['checkpoint_freq'] = 20
     exp.spec['checkpoint_at_end'] = True
+    exp.spec['checkpoint_score_attr'] = 'episode_reward_mean'
     exp.spec['keep_checkpoints_num'] = 3
 
     if args.stop_seconds > 0:
@@ -264,7 +264,14 @@ def run_experiment(args, parser):
             places = np.argsort(fragcounts)
             final_place = places[player_num - 1] + 1
             stats['FINAL_PLACE'] += final_place
-            stats['LEADER_GAP'] += -min(fragcounts) + fragcounts[player_num - 1]
+
+            if final_place > 1:
+                stats['LEADER_GAP'] += -min(fragcounts) + fragcounts[player_num - 1]
+            elif player_num > 1:
+                # we won, let's log gap to 2nd place
+                assert places[player_num - 1] == 0
+                fragcounts.sort()
+                stats['LEADER_GAP'] += -fragcounts[1] + fragcounts[0]  # should be negative or 0
 
         for stats_key in stats.keys():
             stats[stats_key] /= len(agent_to_last_info.keys())
