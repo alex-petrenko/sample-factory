@@ -144,7 +144,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 deltas.append((f'weapon{selected_weapon}', weapon_reward))
                 shaping_reward += weapon_reward
 
-        if abs(shaping_reward) > 0.9:
+        if abs(shaping_reward) > 2.5:
             log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
 
         return obs_dict, shaping_reward
