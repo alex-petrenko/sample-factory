@@ -48,7 +48,7 @@ def test_multi_env_performance(make_env, env_type, num_envs, num_workers):
     t = Timing()
     with t.timeit('init'):
         multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
-        total_num_frames, frames = 20000, 0
+        total_num_frames, frames = 30000, 0
 
     with t.timeit('first_reset'):
         multi_env.reset()

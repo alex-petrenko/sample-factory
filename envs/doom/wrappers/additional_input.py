@@ -19,11 +19,11 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         weapons_low = [0.0] * self.num_weapons
         ammo_low = [0.0] * self.num_weapons
-        low = [0.0, 0.0, -1.0, -1.0, -50.0, 0.0] + weapons_low + ammo_low
+        low = [0.0, 0.0, -1.0, -1.0, -50.0, 0.0, 0.0] + weapons_low + ammo_low
 
         weapons_high = [5.0] * self.num_weapons  # can have multiple weapons in the same slot?
         ammo_high = [50.0] * self.num_weapons
-        high = [20.0, 50.0, 50.0, 50.0, 50.0, 1.0] + weapons_high + ammo_high
+        high = [20.0, 50.0, 50.0, 50.0, 50.0, 1.0, 10.0] + weapons_high + ammo_high
 
         self.observation_space = gym.spaces.Dict({
             'obs': current_obs_space,
@@ -36,17 +36,13 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         # plus corresponding reward values for positive and negative delta (per unit)
         self.reward_shaping_vars = {
             'FRAGCOUNT': (+1, -1.5),
-            'DEATHCOUNT': (-0.25, +0.25),
+            'DEATHCOUNT': (-0.75, +0.75),
             'HITCOUNT': (+0.01, -0.01),
             'DAMAGECOUNT': (+0.01, -0.01),
 
             'HEALTH': (+0.002, -0.002),
             'ARMOR': (+0.002, -0.001),
         }
-
-        for weapon in range(self.num_weapons):
-            self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.2, -0.1)
-            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.002, -0.00001)
 
         self._prev_vars = {}
 
@@ -56,8 +52,13 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             4: 10,  # machinegun
             5: 5,  # rocket launcher
             6: 10,  # plasmagun
-            7: 20,  # bfg
+            7: 30,  # bfg
         }
+
+        for weapon in range(self.num_weapons):
+            pref = self.weapon_preference.get(weapon, 1)
+            self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.02 * pref, -0.01 * pref)
+            self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.0002 * pref, -0.0001 * pref)
 
         self._orig_env_reward = 0.0
         self._total_shaping_reward = 0.0
@@ -78,7 +79,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         selected_weapon_ammo = float(max(0.0, info.get('SELECTED_WEAPON_AMMO', 0.0)))
         self._selected_weapon.append(selected_weapon)
 
-        # similar to DFP paper
+        # similar to DFP paper, scaling all measurements so that they are small numbers
         selected_weapon_ammo /= 15.0
 
         # we don't really care how much negative health we have, dead is dead
@@ -87,20 +88,23 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         armor = info.get('ARMOR', 0.0) / 30.0
         kills = info.get('USER2', 0.0) / 10.0  # only works in battle and battle2, this is not really useful
         attack_ready = info.get('ATTACK_READY', 0.0)
+        num_players = info.get('PLAYER_COUNT', 1) / 5.0
 
-        obs_dict['measurements'].append(selected_weapon)
-        obs_dict['measurements'].append(selected_weapon_ammo)
-        obs_dict['measurements'].append(health)
-        obs_dict['measurements'].append(armor)
-        obs_dict['measurements'].append(kills)
-        obs_dict['measurements'].append(attack_ready)
+        measurements = obs_dict['measurements']
+        measurements.append(selected_weapon)
+        measurements.append(selected_weapon_ammo)
+        measurements.append(health)
+        measurements.append(armor)
+        measurements.append(kills)
+        measurements.append(attack_ready)
+        measurements.append(num_players)
 
         for weapon in range(self.num_weapons):
-            obs_dict['measurements'].append(max(0.0, info.get(f'WEAPON{weapon}', 0.0)))
+            measurements.append(max(0.0, info.get(f'WEAPON{weapon}', 0.0)))
         for weapon in range(self.num_weapons):
             ammo = float(max(0.0, info.get(f'AMMO{weapon}', 0.0)))
             ammo /= 15.0  # scaling factor similar to DFP paper (to keep everything small)
-            obs_dict['measurements'].append(ammo)
+            measurements.append(ammo)
 
         shaping_reward = 0.0
         deltas = []

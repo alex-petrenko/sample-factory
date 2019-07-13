@@ -30,9 +30,21 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.player_id = player_id
         self.num_agents = num_agents  # num agents that are not humans or bots
         self.max_num_players = max_num_players
-        self.num_bots = num_bots
+        self.max_num_bots = num_bots
         self.timestep = 0
         self.update_state = True
+
+        # hardcode bot names for consistency, otherwise they are generated randomly
+        self.bot_names = [
+            'Blazkowicz',
+            'PerfectBlue',
+            'PerfectRed',
+            'PerfectGreen',
+            'PerfectPurple',
+            'PerfectYellow',
+            'PerfectWhite',
+            'PerfectLtGreen',
+        ]
 
     def _is_server(self):
         return self.player_id == 0
@@ -99,19 +111,27 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self._set_game_mode()
         self.game.init()
 
-        if self._is_server():
-            self.game.send_game_command('removebots')
-            # log.info('Adding bots...')
-            for i in range(self.num_bots):
-                log.info('Adding bot %d', i)
-                self.game.send_game_command('addbot Blazkowicz')  # can use addbot [name] to add specific (harder) bots?
-
         log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)
         self.initialized = True
 
     def reset(self, mode='algo'):
         obs = super().reset(mode)
-        self._ensure_initialized(mode)
+
+        if self._is_server() and self.max_num_bots > 0:
+            self.game.send_game_command('removebots')
+            num_bots = self.max_num_bots if mode == 'test' else self.rng.randint(1, self.max_num_bots + 1)
+
+            bot_names = copy.deepcopy(self.bot_names)
+            self.rng.shuffle(bot_names)
+
+            for i in range(num_bots):
+                if i < len(bot_names):
+                    bot_name = ' ' + bot_names[i]
+                else:
+                    bot_name = ''
+                log.info('Adding bot %d %s', i, bot_name)
+                self.game.send_game_command(f'addbot{bot_name}')
+
         self.timestep = 0
         self.update_state = True
         return obs
@@ -144,7 +164,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         else:
             observation = np.zeros(self.observation_space.shape, dtype=np.uint8)
 
-        self._vizdoom_variables_bug_workaround(info)
+        self._vizdoom_variables_bug_workaround(info, done)
         return observation, reward, done, info
 
 
