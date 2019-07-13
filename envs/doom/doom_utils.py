@@ -151,7 +151,7 @@ def make_doom_multiagent_env(
 
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    singleplayer_envs = ['doom_battle', 'doom_battle_tuple_actions', 'doom_dwango5_single']
+    singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_dwango5_single']
     for env_name in singleplayer_envs:
         register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), **kwargs))
 
