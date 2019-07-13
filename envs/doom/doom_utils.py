@@ -3,7 +3,7 @@ from ray.tune import register_env
 
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
-from envs.doom.wrappers.action_space import doom_action_space
+from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.observation_space import SetResolutionWrapper
 from envs.doom.wrappers.step_human_input import StepHumanInput
@@ -39,10 +39,8 @@ class DoomCfg:
 DOOM_ENVS = [
     DoomCfg('doom_basic', 'basic.cfg', Discrete(3), 0.01, 300, no_idle=True),
 
-    DoomCfg('doom_battle', 'D3_battle.cfg', Discrete(9), 1.0, 2100),
-    DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space(), 1.0, 2100),
-
-    DoomCfg('doom_battle2', 'D4_battle2.cfg', Discrete(9), 1.0, 2100),
+    DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
+    DoomCfg('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
 
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 

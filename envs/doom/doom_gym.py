@@ -52,6 +52,8 @@ class VizdoomEnv(gym.Env):
         # treat 0th action as the actual action instead of no-op
         self.no_idle_action = False
 
+        self.delta_actions_scaling_factor = 7.5
+
         scenarios_dir = join(os.path.dirname(__file__), 'scenarios')
         self.config_path = join(scenarios_dir, config_file)
         self.variable_indices = self._parse_variable_indices(self.config_path)
@@ -78,7 +80,7 @@ class VizdoomEnv(gym.Env):
         # helpers for human play with pynput keyboard input
         self._terminate = False
         self._current_actions = []
-        self._actions_binary = None
+        self._actions_flattened = None
 
         self._prev_info = None
         self._last_episode_info = None
@@ -190,7 +192,7 @@ class VizdoomEnv(gym.Env):
             self.previous_histogram = swap
             self.current_histogram.fill(0)
 
-        self._actions_binary = None
+        self._actions_flattened = None
         self._last_episode_info = copy.deepcopy(self._prev_info)
         self._prev_info = None
 
@@ -199,26 +201,31 @@ class VizdoomEnv(gym.Env):
     def _convert_actions(self, actions):
         """
         Convert actions from gym action space to the action space expected by Doom game.
-        TODO: continuous actions for aiming?
         """
+
         if not isinstance(actions, (tuple, list)):
             actions = (actions,)
 
         spaces = self.action_space.spaces if hasattr(self.action_space, 'spaces') else (self.action_space, )
 
-        actions_binary = []
+        actions_flattened = []
         for i, action in enumerate(actions):
-            num_non_idle_actions = spaces[i].n if self.no_idle_action else spaces[i].n - 1
-            action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
+            if not isinstance(action, np.ndarray):
+                # discrete action
+                num_non_idle_actions = spaces[i].n if self.no_idle_action else spaces[i].n - 1
+                action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
 
-            if self.no_idle_action:
-                action_one_hot[action] = 1
-            elif action > 0:
-                action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
+                if self.no_idle_action:
+                    action_one_hot[action] = 1
+                elif action > 0:
+                    action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
 
-            actions_binary.extend(action_one_hot)
+                actions_flattened.extend(action_one_hot)
+            else:
+                # continuous action
+                actions_flattened.extend(list(action * self.delta_actions_scaling_factor))
 
-        return actions_binary
+        return actions_flattened
 
     def _vizdoom_variables_bug_workaround(self, info, done):
         """Some variables don't get reset to zero on game.new_episode(). This fixes it (unless overflow)."""
@@ -239,14 +246,14 @@ class VizdoomEnv(gym.Env):
         self._ensure_initialized()
         info = {'num_frames': self.skip_frames}
 
-        if self._actions_binary is not None:
+        if self._actions_flattened is not None:
             # provided externally, e.g. via human play
-            actions_binary = self._actions_binary
-            self._actions_binary = None
+            actions_flattened = self._actions_flattened
+            self._actions_flattened = None
         else:
-            actions_binary = self._convert_actions(actions)
+            actions_flattened = self._convert_actions(actions)
 
-        reward = self.game.make_action(actions_binary, self.skip_frames)
+        reward = self.game.make_action(actions_flattened, self.skip_frames)
         state = self.game.get_state()
         done = self.game.is_episode_finished()
         if not done:
@@ -368,6 +375,7 @@ class VizdoomEnv(gym.Env):
 
         doom = env.unwrapped
         doom.skip_frames = 1  # handled by this script separately
+        turn_delta_action_idx = 8
 
         # noinspection PyProtectedMember
         def start_listener():
@@ -383,13 +391,19 @@ class VizdoomEnv(gym.Env):
             time_between_frames = 1.0 / 35.0
 
             while not doom.game.is_episode_finished() and not doom._terminate:
-                num_actions = 10  # hardcoded here for simplicity
+                num_actions = 9  # hardcoded here for simplicity
                 actions = [0] * num_actions
                 for action in doom._current_actions:
-                    actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
+                    if isinstance(action, int):
+                        actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
+                    else:
+                        if action == 'turn_left':
+                            actions[turn_delta_action_idx] = -doom.delta_actions_scaling_factor
+                        elif action == 'turn_right':
+                            actions[turn_delta_action_idx] = doom.delta_actions_scaling_factor
 
                 for frame in range(skip_frames):
-                    doom._actions_binary = actions
+                    doom._actions_flattened = actions
                     env.step(actions)
                     state = doom.game.get_state()
 
