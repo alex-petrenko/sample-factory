@@ -64,7 +64,7 @@ def make_doom_env(
         doom_cfg, mode='train',
         skip_frames=DEFAULT_FRAMESKIP, human_input=False,
         show_automap=False, episode_horizon=None,
-        player_id=None, max_num_players=None, num_bots=0,  # for multi-agent
+        player_id=None, num_agents=None, max_num_players=None, num_bots=0,  # for multi-agent
         env_config=None,
         **kwargs,
 ):
@@ -80,7 +80,7 @@ def make_doom_env(
         # skip_frames is handled by multi-agent wrapper
         env = VizdoomEnvMultiplayer(
             doom_cfg.action_space, doom_cfg.env_cfg,
-            player_id=player_id, max_num_players=max_num_players, num_bots=num_bots,
+            player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=skip_frames,
             async_mode=async_mode,
         )
@@ -132,7 +132,7 @@ def make_doom_multiagent_env(
     def make_env_func(player_id):
         return make_doom_env(
             doom_cfg, mode,
-            player_id=player_id, max_num_players=max_num_players, num_bots=num_bots,
+            player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=1 if is_multiagent else skip_frames,  # multi-agent skipped frames are handled by the wrapper
             **kwargs,
         )

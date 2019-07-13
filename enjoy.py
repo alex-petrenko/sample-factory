@@ -42,6 +42,12 @@ def create_parser_custom():
         help='Add classic (non-neural) bots to the match. If default (-1) then use number of bots specified in env cfg',
     )
     parser.add_argument(
+        '--num-humans',
+        default=0,
+        type=int,
+        help='Meatbags want to play?',
+    )
+    parser.add_argument(
         '--sync-mode',
         action='store_true',
         help='Enable sync mode with unlimited FPS',
@@ -216,7 +222,7 @@ def main():
     args = parser.parse_args()
 
     mode = 'train' if args.sync_mode else 'test'
-    register_doom_envs_rllib(mode=mode, num_agents=args.num_agents, num_bots=args.num_bots)
+    register_doom_envs_rllib(mode=mode, num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans)
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 

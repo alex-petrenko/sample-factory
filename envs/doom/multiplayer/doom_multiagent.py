@@ -15,13 +15,20 @@ from utils.utils import log
 
 
 class VizdoomEnvMultiplayer(VizdoomEnv):
-    def __init__(self, action_space, config_file, player_id, max_num_players, num_bots, skip_frames, async_mode=False):
+    def __init__(
+            self,
+            action_space,
+            config_file,
+            player_id, num_agents, max_num_players, num_bots,
+            skip_frames, async_mode=False,
+    ):
         super().__init__(action_space, config_file, skip_frames=skip_frames, async_mode=async_mode)
 
         self.worker_index = 0
         self.vector_index = 0
 
         self.player_id = player_id
+        self.num_agents = num_agents  # num agents that are not humans or bots
         self.max_num_players = max_num_players
         self.num_bots = num_bots
         self.timestep = 0
@@ -97,7 +104,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # log.info('Adding bots...')
             for i in range(self.num_bots):
                 log.info('Adding bot %d', i)
-                self.game.send_game_command('addbot')  # can use addbot [name] to add specific (harder) bots?
+                self.game.send_game_command('addbot Blazkowicz')  # can use addbot [name] to add specific (harder) bots?
 
         log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)
         self.initialized = True
@@ -110,7 +117,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         return obs
 
     def step(self, actions):
-        if self.skip_frames > 1 or self.max_num_players == 1:
+        if self.skip_frames > 1 or self.num_agents == 1:
             # not used in multi-agent mode due to VizDoom limitations
             # this means that we have only one agent (+ maybe some bots, which is why we're in multiplayer mode)
             return super().step(actions)
