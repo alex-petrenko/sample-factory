@@ -31,6 +31,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.num_agents = num_agents  # num agents that are not humans or bots
         self.max_num_players = max_num_players
         self.max_num_bots = num_bots
+        self.min_num_bots = min(4, self.max_num_bots)
         self.timestep = 0
         self.update_state = True
 
@@ -45,6 +46,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             'PerfectWhite',
             'PerfectLtGreen',
         ]
+        self.random_bots = True  # ignore the specific bots, just add them randomly
 
     def _is_server(self):
         return self.player_id == 0
@@ -119,18 +121,25 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         if self._is_server() and self.max_num_bots > 0:
             self.game.send_game_command('removebots')
-            num_bots = self.max_num_bots if mode == 'test' else self.rng.randint(1, self.max_num_bots + 1)
+            if mode == 'test':
+                num_bots = self.max_num_bots
+            else:
+                num_bots = self.rng.randint(self.min_num_bots, self.max_num_bots + 1)
 
             bot_names = copy.deepcopy(self.bot_names)
             self.rng.shuffle(bot_names)
 
             for i in range(num_bots):
-                if i < len(bot_names):
-                    bot_name = ' ' + bot_names[i]
+                if self.random_bots:
+                    self.game.send_game_command('addbot')
                 else:
-                    bot_name = ''
-                log.info('Adding bot %d %s', i, bot_name)
-                self.game.send_game_command(f'addbot{bot_name}')
+                    if i < len(bot_names):
+                        bot_name = ' ' + bot_names[i]
+                    else:
+                        bot_name = ''
+
+                    log.info('Adding bot %d %s', i, bot_name)
+                    self.game.send_game_command(f'addbot{bot_name}')
 
         self.timestep = 0
         self.update_state = True
