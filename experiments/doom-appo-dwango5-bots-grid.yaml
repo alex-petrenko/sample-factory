@@ -1,4 +1,4 @@
-env: doom_dwango5_bots
+env: doom_dwango5_bots_hybrid
 run: CUSTOM_APPO
 stop:
     time_total_s: 10800
@@ -10,14 +10,14 @@ config:
     clip_param: 0.1
     entropy_coeff: 0.0005
     train_batch_size:
-        grid_search: [512, 1024, 2048]
+        grid_search: [2048, 1024, 512]
     sample_batch_size:
-        grid_search: [32, 64]
+        grid_search: [128, 32]
     num_sgd_iter:
-        grid_search: [2, 4, 8, 16]
+        grid_search: [16, 8, 4]
     num_workers: 18
     num_envs_per_worker:
-        grid_search: [8, 16]
+        grid_search: [16, 8]
     batch_mode: truncate_episodes
     observation_filter: NoFilter
     num_gpus: 1
