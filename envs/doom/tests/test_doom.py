@@ -85,6 +85,12 @@ class TestDoom(TestCase):
             doom_env_by_name('doom_dwango5_bots'), env_config=env_config,
         )
 
+    @staticmethod
+    def make_env_bots_hybrid_actions(env_config):
+        return make_doom_multiagent_env(
+            doom_env_by_name('doom_dwango5_bots_hybrid'), env_config=env_config,
+        )
+
     def test_doom_env(self):
         self.assertIsNotNone(self.make_env_singleplayer(None))
 
@@ -96,6 +102,9 @@ class TestDoom(TestCase):
 
     def test_doom_performance_bots(self):
         test_env_performance(self.make_env_bots, 'doom')
+
+    def test_doom_performance_bots_hybrid_actions(self):
+        test_env_performance(self.make_env_bots_hybrid_actions, 'doom')
 
     def test_doom_performance_bots_multi(self):
         test_multi_env_performance(self.make_env_bots, 'doom', num_envs=200, num_workers=20)

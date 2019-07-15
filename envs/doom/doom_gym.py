@@ -12,6 +12,7 @@ from gym.utils import seeding
 
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
+from algorithms.spaces.discretized import Discretized
 from envs.doom.doom_helpers import key_to_action
 from utils.utils import log
 
@@ -211,16 +212,21 @@ class VizdoomEnv(gym.Env):
         actions_flattened = []
         for i, action in enumerate(actions):
             if not isinstance(action, np.ndarray):
-                # discrete action
-                num_non_idle_actions = spaces[i].n if self.no_idle_action else spaces[i].n - 1
-                action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
+                if isinstance(spaces[i], Discretized):
+                    # discretized continuous action
+                    continuous_action = spaces[i].to_continuous(action)
+                    actions_flattened.append(continuous_action)
+                else:
+                    # discrete action
+                    num_non_idle_actions = spaces[i].n if self.no_idle_action else spaces[i].n - 1
+                    action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
 
-                if self.no_idle_action:
-                    action_one_hot[action] = 1
-                elif action > 0:
-                    action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
+                    if self.no_idle_action:
+                        action_one_hot[action] = 1
+                    elif action > 0:
+                        action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
 
-                actions_flattened.extend(action_one_hot)
+                    actions_flattened.extend(action_one_hot)
             else:
                 # continuous action
                 actions_flattened.extend(list(action * self.delta_actions_scaling_factor))

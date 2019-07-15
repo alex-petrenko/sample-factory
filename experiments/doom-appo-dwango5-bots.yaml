@@ -1,4 +1,4 @@
-env: doom_dwango5_bots
+env: doom_dwango5_bots_hybrid
 run: CUSTOM_APPO
 config:
     lr: 0.0001

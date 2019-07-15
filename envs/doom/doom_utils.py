@@ -3,7 +3,8 @@ from ray.tune import register_env
 
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
-from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete
+from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
+    doom_action_space_hybrid
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.observation_space import SetResolutionWrapper
 from envs.doom.wrappers.step_human_input import StepHumanInput
@@ -45,8 +46,30 @@ DOOM_ENVS = [
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
     DoomCfg('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
-    DoomCfg('doom_dwango5_bots', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=1, num_bots=7),
-    DoomCfg('doom_dwango5_single', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9)),
+
+    DoomCfg(
+        'doom_dwango5_bots',
+        'dwango5_dm.cfg',
+        doom_action_space_discrete(),
+        1.0, int(1e9),
+        num_agents=1, num_bots=7,
+    ),
+
+    DoomCfg(
+        'doom_dwango5_bots_continuous',
+        'dwango5_dm_continuous.cfg',
+        doom_action_space(),
+        1.0, int(1e9),
+        num_agents=1, num_bots=7,
+    ),
+
+    DoomCfg(
+        'doom_dwango5_bots_hybrid',
+        'dwango5_dm.cfg',
+        doom_action_space_hybrid(),
+        1.0, int(1e9),
+        num_agents=1, num_bots=7,
+    ),
 ]
 
 
@@ -151,11 +174,14 @@ def make_doom_multiagent_env(
 
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_dwango5_single']
+    singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous']
     for env_name in singleplayer_envs:
         register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), **kwargs))
 
-    multiplayer_envs = ['doom_dm', 'doom_dwango5', 'doom_dwango5_bots']
+    multiplayer_envs = [
+        'doom_dm', 'doom_dwango5', 'doom_dwango5_bots', 'doom_dwango5_bots_continuous', 'doom_dwango5_bots_hybrid',
+    ]
+
     for env_name in multiplayer_envs:
         register_env(
             env_name,
