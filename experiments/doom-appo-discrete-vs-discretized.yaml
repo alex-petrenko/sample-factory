@@ -1,7 +1,7 @@
 env:
     grid_search:
         - doom_battle_tuple_actions
-        - doom_battle_continuous
+        - doom_battle_hybrid
 run: CUSTOM_APPO
 config:
     lr: 0.0001

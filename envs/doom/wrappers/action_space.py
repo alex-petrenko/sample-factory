@@ -43,6 +43,16 @@ def doom_action_space_hybrid():
     ))
 
 
+def doom_action_space_hybrid_no_weap():
+    return gym.spaces.Tuple((
+        Discrete(3),  # noop, forward, backward
+        Discrete(3),  # noop, move right, move left
+        Discrete(2),  # noop, attack
+        Discrete(2),  # noop, sprint
+        Discretized(11, min_action=-10.0, max_action=10.0),  # turning using discretized continuous control
+    ))
+
+
 def doom_action_space_no_weap():
     return gym.spaces.Tuple((
         Discrete(3),  # noop, forward, backward

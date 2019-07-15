@@ -44,15 +44,18 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             'ARMOR': (+0.002, -0.001),
         }
 
+        # without this we reward usinb BFG and shotguns too much
+        self.reward_delta_limits = {'DAMAGECOUNT': 200, 'HITCOUNT': 5}
+
         self._prev_vars = {}
 
         self.weapon_preference = {
             2: 1,  # pistol
             3: 5,  # shotguns
-            4: 10,  # machinegun
+            4: 5,  # machinegun
             5: 5,  # rocket launcher
             6: 10,  # plasmagun
-            7: 30,  # bfg
+            7: 10,  # bfg
         }
 
         for weapon in range(self.num_weapons):
@@ -122,6 +125,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
                 new_value = info.get(var_name, 0.0)
                 prev_value = self._prev_vars[var_name]
                 delta = new_value - prev_value
+                if var_name in self.reward_delta_limits:
+                    delta_limit = self.reward_delta_limits[var_name]
+                    delta = min(delta, delta_limit)
+
                 reward_delta = 0
                 if delta > EPS:
                     reward_delta = delta * rewards[0]

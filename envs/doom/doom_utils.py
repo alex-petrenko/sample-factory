@@ -4,7 +4,7 @@ from ray.tune import register_env
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
 from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
-    doom_action_space_hybrid
+    doom_action_space_hybrid, doom_action_space_hybrid_no_weap
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.observation_space import SetResolutionWrapper
 from envs.doom.wrappers.step_human_input import StepHumanInput
@@ -42,6 +42,7 @@ DOOM_ENVS = [
 
     DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
     DoomCfg('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
+    DoomCfg('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100),
 
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
@@ -174,7 +175,7 @@ def make_doom_multiagent_env(
 
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous']
+    singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid']
     for env_name in singleplayer_envs:
         register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), **kwargs))
 
