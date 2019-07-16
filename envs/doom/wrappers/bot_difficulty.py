@@ -16,7 +16,7 @@ class BotDifficultyWrapper(gym.Wrapper):
     def _analyze_standings(self, info):
         if 'FINAL_PLACE' in info:
             final_place = info['FINAL_PLACE']
-            if final_place <= 1:
+            if final_place <= 1 and info.get('LEADER_GAP', 0.0) < 0:
                 # we beat all the bots, increase difficulty
                 self._curr_difficulty += self._difficulty_step
                 self._curr_difficulty = min(self._curr_difficulty, self._max_difficulty)
