@@ -19,6 +19,7 @@ from algorithms.models.vizdoom_model import VizdoomVisionNetwork
 from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
 from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
+from utils.utils import log
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -247,6 +248,7 @@ def run_experiment(args, parser):
             'KDR': 0,
             'FINAL_PLACE': 0,
             'LEADER_GAP': 0,
+            'BOT_DIFFICULTY': 0,
         }
 
         # noinspection PyProtectedMember
@@ -255,23 +257,6 @@ def run_experiment(args, parser):
             agent_info = agent_to_last_info[agent]
             for stats_key in stats.keys():
                 stats[stats_key] += agent_info.get(stats_key, 0.0)
-
-            stats['KDR'] += stats['FRAGCOUNT'] / (stats['DEATHCOUNT'] + 1)
-
-            player_count = int(agent_info.get('PLAYER_COUNT', 1))
-            player_num = int(agent_info.get('PLAYER_NUM', 1))
-            fragcounts = [-int(agent_info.get(f'PLAYER{pi}_FRAGCOUNT', -100000)) for pi in range(1, player_count + 1)]
-            places = np.argsort(fragcounts)
-            final_place = places[player_num - 1] + 1
-            stats['FINAL_PLACE'] += final_place
-
-            if final_place > 1:
-                stats['LEADER_GAP'] += -min(fragcounts) + fragcounts[player_num - 1]
-            elif player_num > 1:
-                # we won, let's log gap to 2nd place
-                assert places[player_num - 1] == 0
-                fragcounts.sort()
-                stats['LEADER_GAP'] += -fragcounts[1] + fragcounts[0]  # should be negative or 0
 
         for stats_key in stats.keys():
             stats[stats_key] /= len(agent_to_last_info.keys())

@@ -46,7 +46,9 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             'PerfectWhite',
             'PerfectLtGreen',
         ]
-        self.random_bots = True  # ignore the specific bots, just add them randomly
+        self.bot_difficulty_mean = self.bot_difficulty_std = None
+        self.hardest_bot = 100
+        self.easiest_bot = 10
 
     def _is_server(self):
         return self.player_id == 0
@@ -130,9 +132,9 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             self.rng.shuffle(bot_names)
 
             for i in range(num_bots):
-                if self.random_bots:
-                    self.game.send_game_command('addbot')
-                else:
+                if self.bot_difficulty_mean is None:
+                    # add named bots from the list
+
                     if i < len(bot_names):
                         bot_name = ' ' + bot_names[i]
                     else:
@@ -140,6 +142,15 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
                     log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot{bot_name}')
+                else:
+                    # add random bots according to the desired difficulty
+                    diff = self.rng.normal(self.bot_difficulty_mean, self.bot_difficulty_std)
+                    diff = int(round(diff, -1))
+                    diff = max(self.easiest_bot, diff)
+                    diff = min(self.hardest_bot, diff)
+                    bot_name = f'BOT_{diff}'
+                    log.info('Adding bot %d %s', i, bot_name)
+                    self.game.send_game_command(f'addbot {bot_name}')
 
         self.timestep = 0
         self.update_state = True

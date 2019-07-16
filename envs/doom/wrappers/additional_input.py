@@ -9,7 +9,7 @@ from utils.utils import log
 
 
 class DoomAdditionalInputAndRewards(gym.Wrapper):
-    """Add game variables to the observation space."""
+    """Add game variables to the observation space + reward shaping."""
 
     def __init__(self, env):
         super().__init__(env)

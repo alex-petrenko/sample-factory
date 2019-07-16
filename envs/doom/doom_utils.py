@@ -6,6 +6,8 @@ from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, Vizdoom
 from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
     doom_action_space_hybrid, doom_action_space_hybrid_no_weap
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
+from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
+from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper
 from envs.doom.wrappers.step_human_input import StepHumanInput
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
@@ -66,7 +68,7 @@ DOOM_ENVS = [
 
     DoomCfg(
         'doom_dwango5_bots_hybrid',
-        'dwango5_dm.cfg',
+        'dwango5_dm_continuous.cfg',
         doom_action_space_hybrid(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
@@ -106,6 +108,10 @@ def make_doom_env(
             skip_frames=skip_frames,
             async_mode=async_mode,
         )
+
+    env = MultiplayerStatsWrapper(env)
+    if num_bots > 0:
+        env = BotDifficultyWrapper(env)
 
     env.no_idle_action = doom_cfg.no_idle
 
