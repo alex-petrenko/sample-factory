@@ -31,7 +31,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.num_agents = num_agents  # num agents that are not humans or bots
         self.max_num_players = max_num_players
         self.max_num_bots = num_bots
-        self.min_num_bots = min(4, self.max_num_bots)
+        self.min_num_bots = min(8, self.max_num_bots)
         self.timestep = 0
         self.update_state = True
 
@@ -118,18 +118,28 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)
         self.initialized = True
 
+    def _random_bot(self, difficulty, used_bots):
+        while True:
+            idx = self.rng.randint(0, self.max_num_bots)
+            bot_name = f'BOT_{difficulty}_{idx}'
+            if bot_name not in used_bots:
+                used_bots.append(bot_name)
+                return bot_name
+
     def reset(self, mode='algo'):
         obs = super().reset(mode)
 
         if self._is_server() and self.max_num_bots > 0:
             self.game.send_game_command('removebots')
-            if mode == 'test':
+            if self.launch_mode == 'test':
                 num_bots = self.max_num_bots
             else:
                 num_bots = self.rng.randint(self.min_num_bots, self.max_num_bots + 1)
 
             bot_names = copy.deepcopy(self.bot_names)
             self.rng.shuffle(bot_names)
+
+            used_bots = []
 
             for i in range(num_bots):
                 if self.bot_difficulty_mean is None:
@@ -148,7 +158,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     diff = int(round(diff, -1))
                     diff = max(self.easiest_bot, diff)
                     diff = min(self.hardest_bot, diff)
-                    bot_name = f'BOT_{diff}'
+                    bot_name = self._random_bot(diff, used_bots)
                     log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot {bot_name}')
 

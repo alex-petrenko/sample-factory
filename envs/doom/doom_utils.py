@@ -109,6 +109,8 @@ def make_doom_env(
             async_mode=async_mode,
         )
 
+    env.launch_mode = mode
+
     env = MultiplayerStatsWrapper(env)
     if num_bots > 0:
         env = BotDifficultyWrapper(env)

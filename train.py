@@ -248,6 +248,7 @@ def run_experiment(args, parser):
             'KDR': 0,
             'FINAL_PLACE': 0,
             'LEADER_GAP': 0,
+            'PLAYER_COUNT': 0,
             'BOT_DIFFICULTY': 0,
         }
 
