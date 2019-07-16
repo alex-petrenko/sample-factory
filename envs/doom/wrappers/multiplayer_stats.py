@@ -21,18 +21,20 @@ class MultiplayerStatsWrapper(gym.Wrapper):
             fragcounts = [int(info.get(f'PLAYER{pi}_FRAGCOUNT', -100000)) for pi in range(1, player_count + 1)]
             places = list(np.argsort(fragcounts))
 
-            final_place = places[player_num - 1]
+            final_place = places.index(player_num - 1)
             final_place = player_count - final_place  # inverse, because fragcount is sorted in increasing order
             extra_info['FINAL_PLACE'] = final_place
 
             if final_place > 1:
                 extra_info['LEADER_GAP'] = max(fragcounts) - fragcounts[player_num - 1]
-            elif player_num > 1:
+            elif player_count > 1:
                 # we won, let's log gap to 2nd place
-                assert places[player_num - 1] == player_num - 1
+                assert places.index(player_num - 1) == player_count - 1
                 fragcounts.sort(reverse=True)
-                extra_info['LEADER_GAP'] = fragcounts[0] - fragcounts[1]  # should be negative or 0
+                extra_info['LEADER_GAP'] = fragcounts[1] - fragcounts[0]  # should be negative or 0
                 assert extra_info['LEADER_GAP'] <= 0
+            else:
+                extra_info['LEADER_GAP'] = 0
 
             self._prev_extra_info = extra_info
         else:
