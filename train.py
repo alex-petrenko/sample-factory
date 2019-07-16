@@ -190,7 +190,7 @@ def run_experiment(args, parser):
     exp = Experiment.from_json(args.experiment_name, exp)
     exp.spec['checkpoint_freq'] = 20
     exp.spec['checkpoint_at_end'] = True
-    exp.spec['checkpoint_score_attr'] = 'episode_reward_mean'
+    # exp.spec['checkpoint_score_attr'] = 'episode_reward_mean'
     exp.spec['keep_checkpoints_num'] = 3
 
     if args.stop_seconds > 0:

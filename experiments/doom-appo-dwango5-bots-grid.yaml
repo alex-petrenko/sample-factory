@@ -8,16 +8,15 @@ config:
     kl_coeff: 0.5
     clip_rewards: False
     clip_param: 0.1
-    entropy_coeff: 0.0005
+    entropy_coeff:
+        grid_search: [0.0002, 0.0005, 0.001]
     train_batch_size:
-        grid_search: [2048, 1024, 512]
-    sample_batch_size:
-        grid_search: [128, 32]
+        grid_search: [1024, 2048]
+    sample_batch_size: 128
     num_sgd_iter:
-        grid_search: [16, 8, 4]
+        grid_search: [4, 8]
     num_workers: 18
-    num_envs_per_worker:
-        grid_search: [16, 8]
+    num_envs_per_worker: 8
     batch_mode: truncate_episodes
     observation_filter: NoFilter
     num_gpus: 1
@@ -35,9 +34,10 @@ config:
             [64, [3, 3], 2],
             [128, [3, 3], 2],
         ]
-        conv_activation: relu
-        fcnet_activation: relu  # was tanh
-
+        conv_activation:
+            grid_search: [elu, relu]
+        fcnet_activation:
+            grid_search: [elu, relu]
         use_lstm: False
         max_seq_len: 16
         lstm_cell_size: 256
