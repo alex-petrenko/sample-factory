@@ -150,7 +150,7 @@ class FpsHelper:
 
 def run_experiment(args, parser):
     # args.ray_object_store_memory = int(1e10)
-    args.ray_redis_max_memory = int(5e9)
+    args.ray_redis_max_memory = int(2e9)
 
     if args.config_file:
         with open(args.config_file) as f:

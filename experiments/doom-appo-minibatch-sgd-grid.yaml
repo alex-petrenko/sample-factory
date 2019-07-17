@@ -11,7 +11,8 @@ config:
     entropy_coeff: 0.0005
     train_batch_size: 1024
     sample_batch_size: 128
-    num_sgd_iter: [2, 4, 8]
+    num_sgd_iter:
+        grid_search: [2, 4, 8]
     num_workers: 18
     num_envs_per_worker: 8
     batch_mode: truncate_episodes
