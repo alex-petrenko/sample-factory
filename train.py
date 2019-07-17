@@ -16,10 +16,10 @@ from ray.tune.registry import ENV_CREATOR, register_trainable
 from ray.tune.tune import _make_scheduler, run
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
+from algorithms.pbt.pbt import get_pbt_scheduler
 from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
 from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
-from utils.utils import log
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -115,8 +115,20 @@ def create_parser(parser_creator=None):
         type=int,
         help="Stop experiment after this many seconds",
     )
+    parser.add_argument(
+        "--pbt",
+        action="store_true",
+        help="Experimental population-based training",
+    )
 
     return parser
+
+
+def make_custom_scheduler(args):
+    if args.pbt:
+        return get_pbt_scheduler()
+    else:
+        return _make_scheduler(args)
 
 
 class FpsHelper:
@@ -189,6 +201,9 @@ def run_experiment(args, parser):
 
     exp = Experiment.from_json(args.experiment_name, exp)
     exp.spec['checkpoint_freq'] = 20
+    if args.pbt:
+        exp.spec['checkpoint_freq'] = 3
+
     exp.spec['checkpoint_at_end'] = True
     # exp.spec['checkpoint_score_attr'] = 'episode_reward_mean'
     exp.spec['keep_checkpoints_num'] = 3
@@ -266,12 +281,17 @@ def run_experiment(args, parser):
 
     exp.spec['config']['callbacks']['on_episode_end'] = function(on_episode_end)
 
+    extra_kwargs = {}
+    if args.pbt:
+        extra_kwargs['reuse_actors'] = False
+
     run(
         exp,
         name=args.experiment_name,
-        scheduler=_make_scheduler(args),
+        scheduler=make_custom_scheduler(args),
         resume=args.resume,
         queue_trials=args.queue_trials,
+        **extra_kwargs
     )
 
 

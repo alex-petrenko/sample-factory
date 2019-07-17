@@ -85,18 +85,17 @@ def doom_env_by_name(name):
 
 # noinspection PyUnusedLocal
 def make_doom_env(
-        doom_cfg, mode='train',
-        skip_frames=DEFAULT_FRAMESKIP, human_input=False,
+        doom_cfg,
+        skip_frames=DEFAULT_FRAMESKIP,
+        human_input=False,
         show_automap=False, episode_horizon=None,
         player_id=None, num_agents=None, max_num_players=None, num_bots=0,  # for multi-agent
         env_config=None,
+        async_mode=False,
+        human_render=False,
         **kwargs,
 ):
     skip_frames = skip_frames if skip_frames is not None else 1
-    async_mode = False
-    if mode == 'test':
-        skip_frames = 1
-        async_mode = True
 
     if player_id is None:
         env = VizdoomEnv(doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode)
@@ -109,8 +108,6 @@ def make_doom_env(
             async_mode=async_mode,
         )
 
-    env.launch_mode = mode
-
     env = MultiplayerStatsWrapper(env)
     if num_bots > 0:
         env = BotDifficultyWrapper(env)
@@ -120,8 +117,7 @@ def make_doom_env(
     if human_input:
         env = StepHumanInput(env)
 
-    # TODO: render higher resolution at test time?
-    if mode == 'human':
+    if human_render:
         env = SetResolutionWrapper(env, '1280x720')
     else:
         env = SetResolutionWrapper(env, '256x144')
@@ -144,13 +140,10 @@ def make_doom_env(
 
 
 def make_doom_multiagent_env(
-        doom_cfg, mode='train', num_agents=-1, num_bots=-1, num_humans=0,
+        doom_cfg, num_agents=-1, num_bots=-1, num_humans=0,
         skip_frames=DEFAULT_FRAMESKIP, env_config=None,
         **kwargs,
 ):
-    if mode == 'test':
-        skip_frames = 1
-
     if num_bots < 0:
         num_bots = doom_cfg.num_bots
 
@@ -161,7 +154,7 @@ def make_doom_multiagent_env(
 
     def make_env_func(player_id):
         return make_doom_env(
-            doom_cfg, mode,
+            doom_cfg,
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=1 if is_multiagent else skip_frames,  # multi-agent skipped frames are handled by the wrapper
             **kwargs,

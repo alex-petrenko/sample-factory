@@ -17,7 +17,7 @@ from ray.rllib.rollout import create_parser, DefaultMapping
 from ray.tune.util import merge_dicts
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
+from envs.doom.doom_utils import register_doom_envs_rllib
 from utils.utils import log
 
 
@@ -48,9 +48,17 @@ def create_parser_custom():
         help='Meatbags want to play?',
     )
     parser.add_argument(
-        '--sync-mode',
-        action='store_true',
-        help='Enable sync mode with unlimited FPS',
+        '--fps',
+        default=0,
+        type=int,
+        help='Enable sync mode with adjustable FPS.'
+             'Default (0) means default Doom FPS (~35). Leave at 0 for multiplayer',
+    )
+    parser.add_argument(
+        '--frameskip',
+        default=4,
+        type=int,
+        help='Adjust environment frameskip',
     )
     return parser
 
@@ -90,8 +98,8 @@ def run(args, parser):
     cls = get_agent_class(args.run)
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
-    num_steps = int(args.steps)
-    rollout_loop(agent, args.env, num_steps, args.no_render, fps=1000)
+    num_steps = int(1e9)
+    rollout_loop(agent, args.env, num_steps, args.no_render, fps=args.fps, frameskip=args.frameskip)
 
 
 # noinspection PyUnusedLocal
@@ -99,7 +107,7 @@ def default_policy_agent_mapping(unused_agent_id):
     return DEFAULT_POLICY_ID
 
 
-def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
+def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000, frameskip=1):
     policy_agent_mapping = default_policy_agent_mapping
 
     if hasattr(agent, "workers"):
@@ -167,7 +175,6 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
             action = action_dict
 
             action = action if multiagent else action[_DUMMY_AGENT_ID]
-            frameskip = DEFAULT_FRAMESKIP
             rewards = None
 
             for frame in range(frameskip):
@@ -187,13 +194,13 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
                         rewards += reward
 
                 if not no_render:
-                    target_delay = 1.0 / fps
+                    target_delay = 1.0 / fps if fps > 0 else 0
                     current_delay = time.time() - last_render_start
                     time_wait = target_delay - current_delay
 
                     # note: ASYNC_PLAYER mode actually makes this sleep redundant
                     if time_wait > 0:
-                        log.info('Wait time %.3f', time_wait)
+                        # log.info('Wait time %.3f', time_wait)
                         time.sleep(time_wait)
 
                     last_render_start = time.time()
@@ -214,15 +221,22 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000):
             else:
                 reward_episode += 0 if rewards is None else rewards
 
-            log.info('Reward episode: %.3f', reward_episode)
+        log.info('Reward episode: %.3f', reward_episode)
 
 
 def main():
     parser = create_parser_custom()
     args = parser.parse_args()
 
-    mode = 'train' if args.sync_mode else 'test'
-    register_doom_envs_rllib(mode=mode, num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans)
+    # whether to run Doom env at it's default FPS (ASYNC mode)
+    async_mode = args.fps == 0
+
+    skip_frames = 4  # disable environment frameskip, it will be handled by the evaluation loop for smooth rendering
+
+    register_doom_envs_rllib(
+        async_mode=async_mode, skip_frames=skip_frames,
+        num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans,
+    )
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 

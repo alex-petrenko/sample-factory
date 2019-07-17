@@ -1,4 +1,5 @@
 import copy
+import operator
 from collections import deque
 
 import gym
@@ -70,6 +71,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self._selected_weapon = deque([], maxlen=5)
 
         self._prev_info = None
+
+        self._reward_structure = {}
 
         self._verbose = False
 
@@ -143,6 +146,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
                 if abs(reward_delta) > EPS:
                     deltas.append((var_name, reward_delta, delta))
+                    self._reward_structure[var_name] = self._reward_structure.get(var_name, 0.0) + reward_delta
 
             # weapon preference reward
             weapon_reward_coeff = 0.0002
@@ -152,11 +156,19 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
             if selected_weapon_ammo > 0 and unholstered:
                 weapon_reward = weapon_goodness * weapon_reward_coeff
-                deltas.append((f'weapon{selected_weapon}', weapon_reward))
+                weapon_key = f'weapon{selected_weapon}'
+                deltas.append((weapon_key, weapon_reward))
                 shaping_reward += weapon_reward
+                self._reward_structure[weapon_key] = self._reward_structure.get(weapon_key, 0.0) + weapon_reward
 
         if abs(shaping_reward) > 2.5:
             log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
+
+        if done:
+            sorted_rew = sorted(self._reward_structure.items(), key=operator.itemgetter(1))
+            sum_rew = sum(r for key, r in sorted_rew)
+            sorted_rew = {key: f'{r:.3f}' for key, r in sorted_rew}
+            log.info('Sum rewards: %.3f, reward structure: %r', sum_rew, sorted_rew)
 
         return obs_dict, shaping_reward
 
@@ -168,6 +180,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         obs, _ = self._parse_info(obs, info, False, reset=True)
 
         self._prev_info = None
+        self._reward_structure = {}
         self._selected_weapon.clear()
 
         self._orig_env_reward = self._total_shaping_reward = 0.0

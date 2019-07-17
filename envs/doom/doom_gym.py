@@ -37,8 +37,6 @@ class VizdoomEnv(gym.Env):
         self.skip_frames = skip_frames
         self.async_mode = async_mode
 
-        self.launch_mode = 'train'
-
         # optional - for topdown view rendering and visitation heatmaps
         self.show_automap = show_automap
         self.coord_limits = coord_limits
@@ -260,6 +258,8 @@ class VizdoomEnv(gym.Env):
             self._actions_flattened = None
         else:
             actions_flattened = self._convert_actions(actions)
+
+        # log.info('Skip: %d, actions: %r', self.skip_frames, actions_flattened)
 
         reward = self.game.make_action(actions_flattened, self.skip_frames)
         state = self.game.get_state()
