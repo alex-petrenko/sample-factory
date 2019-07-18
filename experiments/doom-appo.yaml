@@ -29,8 +29,8 @@ config:
             [64, [3, 3], 2],
             [128, [3, 3], 2],
         ]
-        conv_activation: relu
-        fcnet_activation: relu  # was tanh
+        conv_activation: elu
+        fcnet_activation: elu  # was tanh
 
         use_lstm: False
         max_seq_len: 16
