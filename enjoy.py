@@ -78,8 +78,10 @@ def run(args, parser):
     else:
         with open(config_path, "rb") as f:
             config = pickle.load(f)
-    if "num_workers" in config:
-        config["num_workers"] = min(2, config["num_workers"])
+
+    # if "num_workers" in config:
+    #     config["num_workers"] = min(2, config["num_workers"])
+
     config = merge_dicts(config, args.config)
     if not args.env:
         if not config.get("env"):
@@ -89,9 +91,10 @@ def run(args, parser):
     local_mode = False
     if args.dbg:
         local_mode = True
-        config['num_workers'] = 1
-        config['num_gpus'] = 1
-        config['num_envs_per_worker'] = 1
+
+    config['num_workers'] = 1
+    config['num_gpus'] = 0
+    config['num_envs_per_worker'] = 1
 
     ray.init(local_mode=local_mode)
 
@@ -231,7 +234,7 @@ def main():
     # whether to run Doom env at it's default FPS (ASYNC mode)
     async_mode = args.fps == 0
 
-    skip_frames = 4  # disable environment frameskip, it will be handled by the evaluation loop for smooth rendering
+    skip_frames = 1  # disable environment frameskip, it will be handled by the evaluation loop for smooth rendering
 
     register_doom_envs_rllib(
         async_mode=async_mode, skip_frames=skip_frames,
