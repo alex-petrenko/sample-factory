@@ -103,6 +103,7 @@ def make_doom_env(
         human_input=False,
         show_automap=False, episode_horizon=None,
         player_id=None, num_agents=None, max_num_players=None, num_bots=0,  # for multi-agent
+        bot_difficulty=None,
         env_config=None,
         async_mode=False,
         human_render=False,
@@ -124,7 +125,7 @@ def make_doom_env(
 
     env = MultiplayerStatsWrapper(env)
     if num_bots > 0:
-        env = BotDifficultyWrapper(env)
+        env = BotDifficultyWrapper(env, bot_difficulty)
 
     env.no_idle_action = doom_cfg.no_idle
 

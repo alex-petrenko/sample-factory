@@ -60,6 +60,12 @@ def create_parser_custom():
         type=int,
         help='Adjust environment frameskip',
     )
+    parser.add_argument(
+        '--bot-difficulty',
+        default=150,
+        type=int,
+        help='Adjust bot difficulty',
+    )
     return parser
 
 
@@ -236,9 +242,12 @@ def main():
 
     skip_frames = 1  # disable environment frameskip, it will be handled by the evaluation loop for smooth rendering
 
+    bot_difficulty = args.bot_difficulty
+
     register_doom_envs_rllib(
         async_mode=async_mode, skip_frames=skip_frames,
         num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans,
+        bot_difficulty=bot_difficulty,
     )
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)

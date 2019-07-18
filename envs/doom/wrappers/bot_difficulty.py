@@ -1,17 +1,21 @@
 import gym
 
+from utils.utils import log
+
 
 class BotDifficultyWrapper(gym.Wrapper):
     """Adjust bot difficulty according to agent's final position in the match."""
 
-    def __init__(self, env):
+    def __init__(self, env, initial_difficulty=None):
         super().__init__(env)
 
         self._min_difficulty = 0
         self._max_difficulty = 150
         self._difficulty_step = 10
-        self._curr_difficulty = 20
+        self._curr_difficulty = 20 if initial_difficulty is None else initial_difficulty
         self._difficulty_std = 10
+
+        log.info('Starting with bot difficulty %d', self._curr_difficulty)
 
     def _analyze_standings(self, info):
         if 'FINAL_PLACE' in info:
