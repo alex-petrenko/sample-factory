@@ -39,10 +39,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             'FRAGCOUNT': (+1, -1.5),
             'DEATHCOUNT': (-0.75, +0.75),
             'HITCOUNT': (+0.01, -0.01),
-            'DAMAGECOUNT': (+0.01, -0.01),
+            'DAMAGECOUNT': (+0.003, -0.003),
 
-            'HEALTH': (+0.002, -0.002),
-            'ARMOR': (+0.002, -0.001),
+            'HEALTH': (+0.005, -0.003),
+            'ARMOR': (+0.005, -0.001),
         }
 
         # without this we reward usinb BFG and shotguns too much

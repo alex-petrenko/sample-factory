@@ -4,7 +4,7 @@ from ray.tune import register_env
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
 from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
-    doom_action_space_hybrid, doom_action_space_hybrid_no_weap
+    doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
@@ -83,6 +83,14 @@ DOOM_ENVS = [
         'doom_dwango5_bots_hybrid',
         'dwango5_dm_continuous.cfg',
         doom_action_space_hybrid(),
+        1.0, int(1e9),
+        num_agents=1, num_bots=7,
+    ),
+
+    DoomCfg(
+        'doom_dwango5_bots_experimental',
+        'dwango5_dm_continuous_weap.cfg',
+        doom_action_space_experimental(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
     ),
@@ -200,6 +208,7 @@ def register_doom_envs_rllib(**kwargs):
 
     multiplayer_envs = [
         'doom_dm', 'doom_dwango5', 'doom_dwango5_bots', 'doom_dwango5_bots_continuous', 'doom_dwango5_bots_hybrid',
+        'doom_dwango5_bots_experimental',
     ]
 
     for env_name in multiplayer_envs:
