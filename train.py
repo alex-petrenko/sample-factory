@@ -19,7 +19,7 @@ from algorithms.models.vizdoom_model import VizdoomVisionNetwork
 from algorithms.pbt.pbt import get_pbt_scheduler
 from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
-from envs.doom.doom_utils import register_doom_envs_rllib, DEFAULT_FRAMESKIP
+from envs.doom.doom_utils import register_doom_envs_rllib, cfg_param
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -249,7 +249,7 @@ def run_experiment(args, parser):
         fps_helper.record(samples)
         fps = fps_helper.get_fps()
         info['result']['custom_metrics']['fps'] = fps
-        info['result']['custom_metrics']['fps_frameskip'] = fps * DEFAULT_FRAMESKIP
+        info['result']['custom_metrics']['fps_frameskip'] = fps * cfg_param('skip_frames', {})
 
     exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
 

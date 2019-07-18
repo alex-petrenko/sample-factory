@@ -190,6 +190,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             observation = np.zeros(self.observation_space.shape, dtype=np.uint8)
 
         self._vizdoom_variables_bug_workaround(info, done)
+
         return observation, reward, done, info
 
 
@@ -209,8 +210,9 @@ class TaskType(Enum):
 def init_multiplayer_env(make_env_func, player_id, env_config):
     env = make_env_func(player_id=player_id)
 
-    if env_config is not None:
+    if 'worker_index' in env_config:
         env.unwrapped.worker_index = env_config.worker_index
+    if 'vector_index' in env_config:
         env.unwrapped.vector_index = env_config.vector_index
 
     env.seed(env.unwrapped.worker_index * 1000 + env.unwrapped.vector_index * 10 + player_id)

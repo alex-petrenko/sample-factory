@@ -1,5 +1,7 @@
 env: doom_battle_hybrid
 run: CUSTOM_APPO
+stop:
+    time_total_s: 10800
 config:
     lr: 0.0001
     lambda: 0.95
@@ -41,4 +43,5 @@ config:
         zero_mean: False
 
     env_config:
-        skip_frames: 4
+        skip_frames:
+            grid_search: [1, 2, 3, 4, 5, 6]

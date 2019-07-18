@@ -50,6 +50,9 @@ class MultiplayerStatsWrapper(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
+        if obs is None:
+            return obs, reward, done, info
+
         info = self._parse_info(info)
         self._timestep += 1
         return obs, reward, done, info

@@ -164,7 +164,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         if abs(shaping_reward) > 2.5:
             log.info('Shaping reward %.3f for %r', shaping_reward, deltas)
 
-        if done:
+        if done and 'FRAGCOUNT' in self._reward_structure:
             sorted_rew = sorted(self._reward_structure.items(), key=operator.itemgetter(1))
             sum_rew = sum(r for key, r in sorted_rew)
             sorted_rew = {key: f'{r:.3f}' for key, r in sorted_rew}

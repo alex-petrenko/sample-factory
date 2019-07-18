@@ -14,7 +14,20 @@ from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrap
 
 DOOM_W = 128
 DOOM_H = 72
-DEFAULT_FRAMESKIP = 4
+
+
+DEFAULT_CONFIG = {
+    'skip_frames': 4,
+}
+
+
+def cfg_param(name, cfg=None):
+    value = None
+    if cfg is not None:
+        value = cfg.get(name, None)
+        if value is None:
+            value = DEFAULT_CONFIG[name]
+    return value
 
 
 class DoomCfg:
@@ -86,7 +99,7 @@ def doom_env_by_name(name):
 # noinspection PyUnusedLocal
 def make_doom_env(
         doom_cfg,
-        skip_frames=DEFAULT_FRAMESKIP,
+        skip_frames=None,  # this overrides the env_config
         human_input=False,
         show_automap=False, episode_horizon=None,
         player_id=None, num_agents=None, max_num_players=None, num_bots=0,  # for multi-agent
@@ -95,7 +108,8 @@ def make_doom_env(
         human_render=False,
         **kwargs,
 ):
-    skip_frames = skip_frames if skip_frames is not None else 1
+    env_config = DEFAULT_CONFIG if env_config is None else env_config
+    skip_frames = skip_frames if skip_frames is not None else cfg_param('skip_frames', env_config)
 
     if player_id is None:
         env = VizdoomEnv(doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode)
@@ -141,9 +155,12 @@ def make_doom_env(
 
 def make_doom_multiagent_env(
         doom_cfg, num_agents=-1, num_bots=-1, num_humans=0,
-        skip_frames=DEFAULT_FRAMESKIP, env_config=None,
+        skip_frames=None, env_config=None,
         **kwargs,
 ):
+    env_config = DEFAULT_CONFIG if env_config is None else env_config
+    skip_frames = skip_frames if skip_frames is not None else cfg_param('skip_frames', env_config)
+
     if num_bots < 0:
         num_bots = doom_cfg.num_bots
 
@@ -178,7 +195,7 @@ def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
     singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid']
     for env_name in singleplayer_envs:
-        register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), **kwargs))
+        register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), env_config=config, **kwargs))
 
     multiplayer_envs = [
         'doom_dm', 'doom_dwango5', 'doom_dwango5_bots', 'doom_dwango5_bots_continuous', 'doom_dwango5_bots_hybrid',
