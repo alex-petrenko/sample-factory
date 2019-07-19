@@ -5,6 +5,8 @@ import time
 
 import gym
 import ray
+import numpy as np
+
 from ray.rllib import MultiAgentEnv
 from ray.rllib.agents.registry import get_agent_class
 # noinspection PyProtectedMember
@@ -140,6 +142,7 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000, frameskip
 
     steps = 0
     last_render_start = time.time()
+    avg_reward = collections.deque([], maxlen=100)
 
     while steps < (num_steps or steps + 1):
         mapping_cache = {}  # in case policy_agent_mapping is stochastic
@@ -230,7 +233,8 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000, frameskip
             else:
                 reward_episode += 0 if rewards is None else rewards
 
-        log.info('Reward episode: %.3f', reward_episode)
+        avg_reward.append(reward_episode)
+        log.info('Reward episode: %.3f, avg_reward %.3f', reward_episode, np.mean(avg_reward))
 
 
 def main():
