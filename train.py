@@ -206,7 +206,7 @@ def run_experiment(args, parser):
 
     exp.spec['checkpoint_at_end'] = True
     # exp.spec['checkpoint_score_attr'] = 'episode_reward_mean'
-    exp.spec['keep_checkpoints_num'] = 3
+    exp.spec['keep_checkpoints_num'] = 5
 
     if args.stop_seconds > 0:
         exp.spec['stop'] = {'time_total_s': args.stop_seconds}

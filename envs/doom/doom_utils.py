@@ -8,9 +8,10 @@ from envs.doom.wrappers.action_space import doom_action_space, doom_action_space
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
-from envs.doom.wrappers.observation_space import SetResolutionWrapper
+from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
 from envs.doom.wrappers.step_human_input import StepHumanInput
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
+from utils.utils import log
 
 DOOM_W = 128
 DOOM_H = 72
@@ -25,8 +26,10 @@ def cfg_param(name, cfg=None):
     value = None
     if cfg is not None:
         value = cfg.get(name, None)
-        if value is None:
-            value = DEFAULT_CONFIG[name]
+
+    if value is None:
+        value = DEFAULT_CONFIG[name]
+
     return value
 
 
@@ -106,14 +109,19 @@ def make_doom_env(
         bot_difficulty=None,
         env_config=None,
         async_mode=False,
-        human_render=False,
+        record_to=None,
+        custom_resolution=None,
         **kwargs,
 ):
     env_config = DEFAULT_CONFIG if env_config is None else env_config
+
     skip_frames = skip_frames if skip_frames is not None else cfg_param('skip_frames', env_config)
 
     if player_id is None:
-        env = VizdoomEnv(doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode)
+        env = VizdoomEnv(
+            doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode,
+            record_to=record_to,
+        )
     else:
         # skip_frames is handled by multi-agent wrapper
         env = VizdoomEnvMultiplayer(
@@ -121,6 +129,7 @@ def make_doom_env(
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=skip_frames,
             async_mode=async_mode,
+            record_to=record_to,
         )
 
     env = MultiplayerStatsWrapper(env)
@@ -132,10 +141,11 @@ def make_doom_env(
     if human_input:
         env = StepHumanInput(env)
 
-    if human_render:
-        env = SetResolutionWrapper(env, '1280x720')
+    if custom_resolution is None:
+        env = SetResolutionWrapper(env, '256x144')  # default (wide aspect ratio)
     else:
-        env = SetResolutionWrapper(env, '256x144')
+        assert custom_resolution in resolutions
+        env = SetResolutionWrapper(env, custom_resolution)
 
     h, w, channels = env.observation_space.shape
     if w != DOOM_W:

@@ -2,6 +2,7 @@ import collections
 import os
 import pickle
 import time
+from os.path import join
 
 import gym
 import ray
@@ -19,8 +20,9 @@ from ray.rllib.rollout import create_parser, DefaultMapping
 from ray.tune.util import merge_dicts
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from envs.doom.doom_utils import register_doom_envs_rllib
-from utils.utils import log
+from envs.doom.doom_utils import register_doom_envs_rllib, cfg_param, make_doom_env, doom_env_by_name, \
+    make_doom_multiagent_env
+from utils.utils import log, project_root
 
 
 def create_parser_custom():
@@ -29,6 +31,12 @@ def create_parser_custom():
         '--dbg',
         action='store_true',
         help='Full debug mode (also enables local-mode)',
+    )
+    parser.add_argument(
+        '--num-episodes',
+        default=1000,
+        type=int,
+        help='Number of full episodes to rollout',
     )
     parser.add_argument(
         '--num-agents',
@@ -57,52 +65,43 @@ def create_parser_custom():
              'Default (0) means default Doom FPS (~35). Leave at 0 for multiplayer',
     )
     parser.add_argument(
-        '--frameskip',
-        default=4,
-        type=int,
-        help='Adjust environment frameskip',
-    )
-    parser.add_argument(
         '--bot-difficulty',
         default=150,
         type=int,
         help='Adjust bot difficulty',
     )
+    parser.add_argument(
+        '--env-frameskip',
+        default=1,
+        type=int,
+        help='Usually frameskip is handled by the rollout loop for smooth rendering, but this is also an option',
+    )
+    parser.add_argument(
+        '--render-action-repeat',
+        default=-1,
+        type=int,
+        help='Repeat an action that many frames during rollout. -1 (default) means read from env config',
+    )
+    parser.add_argument(
+        '--record-to',
+        default=join(project_root(), '..', 'doom_episodes'),
+        type=str,
+        help='Record episodes to this folder using Doom functionality',
+    )
+    parser.add_argument(
+        '--custom-res',
+        default=None,
+        type=str,
+        help='Custom resolution string (e.g. 1920x1080).'
+             'Can affect performance of the model if does not match the resolution the model was trained on!',
+    )
     return parser
 
 
-def run(args, parser):
-    config = {}
-    # Load configuration from file
-    config_dir = os.path.dirname(args.checkpoint)
-    config_path = os.path.join(config_dir, "params.pkl")
-    if not os.path.exists(config_path):
-        config_path = os.path.join(config_dir, "../params.pkl")
-    if not os.path.exists(config_path):
-        if not args.config:
-            raise ValueError(
-                "Could not find params.pkl in either the checkpoint dir or "
-                "its parent directory.")
-    else:
-        with open(config_path, "rb") as f:
-            config = pickle.load(f)
-
-    # if "num_workers" in config:
-    #     config["num_workers"] = min(2, config["num_workers"])
-
-    config = merge_dicts(config, args.config)
-    if not args.env:
-        if not config.get("env"):
-            parser.error("the following arguments are required: --env")
-        args.env = config.get("env")
-
+def run(args, config):
     local_mode = False
     if args.dbg:
         local_mode = True
-
-    config['num_workers'] = 1
-    config['num_gpus'] = 0
-    config['num_envs_per_worker'] = 1
 
     ray.init(local_mode=local_mode)
 
@@ -110,7 +109,21 @@ def run(args, parser):
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
     num_steps = int(1e9)
-    rollout_loop(agent, args.env, num_steps, args.no_render, fps=args.fps, frameskip=args.frameskip)
+
+    render_frameskip = args.render_action_repeat
+    if render_frameskip == -1:
+        # default - read from config
+        # fallback to default if env config does not have it
+        render_frameskip = cfg_param('skip_frames', config.get('env_config', None))
+
+    log.info('Using render frameskip %d! \n\n\n', render_frameskip)
+
+    rollout_loop(
+        agent,
+        args.env,
+        num_steps, num_episodes=args.num_episodes,
+        no_render=args.no_render, fps=args.fps, frameskip=render_frameskip,
+    )
 
 
 # noinspection PyUnusedLocal
@@ -118,15 +131,14 @@ def default_policy_agent_mapping(unused_agent_id):
     return DEFAULT_POLICY_ID
 
 
-def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000, frameskip=1):
+def rollout_loop(agent, env_name, num_steps, num_episodes, no_render=True, fps=1000, frameskip=1):
     policy_agent_mapping = default_policy_agent_mapping
 
     if hasattr(agent, "workers"):
         env = agent.workers.local_worker().env
         multiagent = isinstance(env, MultiAgentEnv)
         if agent.workers.local_worker().multiagent:
-            policy_agent_mapping = agent.config["multiagent"][
-                "policy_mapping_fn"]
+            policy_agent_mapping = agent.config["multiagent"]["policy_mapping_fn"]
 
         policy_map = agent.workers.local_worker().policy_map
         state_init = {p: m.get_initial_state() for p, m in policy_map.items()}
@@ -141,10 +153,11 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000, frameskip
         use_lstm = {DEFAULT_POLICY_ID: False}
 
     steps = 0
+    full_episodes = 0
     last_render_start = time.time()
     avg_reward = collections.deque([], maxlen=100)
 
-    while steps < (num_steps or steps + 1):
+    while steps < (num_steps or steps + 1) and full_episodes < num_episodes:
         mapping_cache = {}  # in case policy_agent_mapping is stochastic
         obs = env.reset()
         agent_states = DefaultMapping(
@@ -233,32 +246,66 @@ def rollout_loop(agent, env_name, num_steps, no_render=True, fps=1000, frameskip
             else:
                 reward_episode += 0 if rewards is None else rewards
 
+        full_episodes += 1
+
         avg_reward.append(reward_episode)
         log.info('Reward episode: %.3f, avg_reward %.3f', reward_episode, np.mean(avg_reward))
+
+    env.reset()  # this guarantees that recordings are saved to disk
 
 
 def main():
     parser = create_parser_custom()
     args = parser.parse_args()
 
+    config = {}
+    # Load configuration from file
+    config_dir = os.path.dirname(args.checkpoint)
+    config_path = os.path.join(config_dir, "params.pkl")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(config_dir, "../params.pkl")
+    if not os.path.exists(config_path):
+        if not args.config:
+            raise ValueError(
+                "Could not find params.pkl in either the checkpoint dir or "
+                "its parent directory.")
+    else:
+        with open(config_path, "rb") as f:
+            config = pickle.load(f)
+
+    config = merge_dicts(config, args.config)
+    if not args.env:
+        if not config.get("env"):
+            parser.error("the following arguments are required: --env")
+        args.env = config.get("env")
+
+    config['num_workers'] = 0
+    config['num_gpus'] = 0
+    config['num_envs_per_worker'] = 1
+
     # whether to run Doom env at it's default FPS (ASYNC mode)
     async_mode = args.fps == 0
 
-    skip_frames = 1  # disable environment frameskip, it will be handled by the evaluation loop for smooth rendering
+    skip_frames = args.env_frameskip
 
     bot_difficulty = args.bot_difficulty
+
+    record_to = join(args.record_to, f'{config["env"]}_{args.run}')
+
+    custom_resolution = args.custom_res
 
     register_doom_envs_rllib(
         async_mode=async_mode, skip_frames=skip_frames,
         num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans,
         bot_difficulty=bot_difficulty,
+        record_to=record_to,
+        custom_resolution=custom_resolution,
     )
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 
-    run(args, parser)
+    run(args, config)
 
 
 if __name__ == '__main__':
     main()
-

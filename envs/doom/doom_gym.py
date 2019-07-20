@@ -9,7 +9,6 @@ import cv2
 import gym
 import numpy as np
 from gym.utils import seeding
-
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
 from algorithms.spaces.discretized import Discretized
@@ -26,7 +25,8 @@ class VizdoomEnv(gym.Env):
                  max_histogram_length=200,
                  show_automap=False,
                  skip_frames=1,
-                 async_mode=False):
+                 async_mode=False,
+                 record_to=None):
         self.initialized = False
 
         # essential game data
@@ -62,6 +62,11 @@ class VizdoomEnv(gym.Env):
         # only created if we call render() method
         self.viewer = None
 
+        # record full episodes using VizDoom recording functionality
+        self.record_to = record_to
+
+        self.is_multiplayer = False  # overridden in derived classes
+
         # (optional) histogram to track positional coverage
         # do not pass coord_limits if you don't need this, to avoid extra calculation
         self.max_histogram_length = max_histogram_length
@@ -86,6 +91,8 @@ class VizdoomEnv(gym.Env):
         self._prev_info = None
         self._last_episode_info = None
 
+        self._num_episodes = 0
+
         self.seed()
 
     def seed(self, seed=None):
@@ -96,18 +103,17 @@ class VizdoomEnv(gym.Env):
     def calc_observation_space(self):
         self.observation_space = gym.spaces.Box(0, 255, (self.screen_h, self.screen_w, self.channels), dtype=np.uint8)
 
-    def _set_game_mode(self):
-        if self.async_mode:
-            log.info('Starting in async mode! Use this only for testing, otherwise PLAYER mode is much faster')
-            self.game.set_mode(Mode.ASYNC_PLAYER)
+    def _set_game_mode(self, mode):
+        if mode == 'replay':
+            self.game.set_mode(Mode.ASYNC_SPECTATOR)
         else:
-            self.game.set_mode(Mode.PLAYER)
+            if self.async_mode:
+                log.info('Starting in async mode! Use this only for testing, otherwise PLAYER mode is much faster')
+                self.game.set_mode(Mode.ASYNC_PLAYER)
+            else:
+                self.game.set_mode(Mode.PLAYER)
 
-    def _ensure_initialized(self, mode='algo'):
-        if self.initialized:
-            # Doom env already initialized!
-            return
-
+    def _create_doom_game(self, mode):
         self.game = DoomGame()
 
         self.game.load_config(self.config_path)
@@ -116,13 +122,20 @@ class VizdoomEnv(gym.Env):
 
         if mode == 'algo':
             self.game.set_window_visible(False)
-        elif mode == 'human':
+        elif mode == 'human' or mode == 'replay':
             self.game.add_game_args('+freelook 1')
             self.game.set_window_visible(True)
         else:
             raise Exception('Unsupported mode')
 
-        self._set_game_mode()
+        self._set_game_mode(mode)
+
+    def _ensure_initialized(self, mode='algo'):
+        if self.initialized:
+            # Doom env already initialized!
+            return
+
+        self._create_doom_game(mode)
 
         # (optional) top-down view provided by the game engine
         if self.show_automap:
@@ -179,10 +192,25 @@ class VizdoomEnv(gym.Env):
             variables[variable] = game_variables[idx]
         return variables
 
+    @staticmethod
+    def demo_name(episode_idx):
+        return f'ep_{episode_idx}_rec.lmp'
+
     def reset(self, mode='algo'):
         self._ensure_initialized(mode)
 
-        self.game.new_episode()
+        if self.record_to is None or self.is_multiplayer:
+            # no demo recording (default)
+            self.game.new_episode()
+        else:
+            # does not work in multiplayer (uses different mechanism)
+            if not os.path.exists(self.record_to):
+                os.makedirs(self.record_to)
+
+            demo_path = join(self.record_to, self.demo_name(self._num_episodes))
+            log.warning('Recording episode demo to %s', demo_path)
+            self.game.new_episode(demo_path)
+
         self.state = self.game.get_state()
         img = self.state.screen_buffer
 
@@ -196,6 +224,8 @@ class VizdoomEnv(gym.Env):
         self._actions_flattened = None
         self._last_episode_info = copy.deepcopy(self._prev_info)
         self._prev_info = None
+
+        self._num_episodes += 1
 
         return np.transpose(img, (1, 2, 0))
 
@@ -447,3 +477,22 @@ class VizdoomEnv(gym.Env):
 
         log.debug('Press ESC to exit...')
         listener_thread.join()
+
+    # noinspection PyProtectedMember
+    @staticmethod
+    def replay(env, rec_path):
+        doom = env.unwrapped
+        doom._ensure_initialized('replay')
+        doom.game.replay_episode(rec_path)
+
+        episode_reward = 0
+        start = time.time()
+
+        while not doom.game.is_episode_finished():
+            doom.game.advance_action()
+            r = doom.game.get_last_reward()
+            episode_reward += r
+            log.info('Episode reward: %.3f, time so far: %.1f s', episode_reward, time.time() - start)
+
+        log.info('Finishing replay')
+        doom.close()

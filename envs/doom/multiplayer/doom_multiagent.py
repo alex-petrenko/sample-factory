@@ -7,7 +7,6 @@ from queue import Empty
 import cv2
 import numpy as np
 from ray.rllib import MultiAgentEnv
-from vizdoom import *
 
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.doom_helpers import concat_grid, cvt_doom_obs
@@ -21,8 +20,8 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             config_file,
             player_id, num_agents, max_num_players, num_bots,
             skip_frames, async_mode=False,
-    ):
-        super().__init__(action_space, config_file, skip_frames=skip_frames, async_mode=async_mode)
+            record_to=None):
+        super().__init__(action_space, config_file, skip_frames=skip_frames, async_mode=async_mode, record_to=record_to)
 
         self.worker_index = 0
         self.vector_index = 0
@@ -49,6 +48,8 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.hardest_bot = 100
         self.easiest_bot = 10
 
+        self.is_multiplayer = True
+
     def _is_server(self):
         return self.player_id == 0
 
@@ -57,16 +58,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Doom env already initialized!
             return
 
-        self.game = DoomGame()
-
-        self.game.load_config(self.config_path)
-        self.game.set_screen_resolution(self.screen_resolution)
-        self.game.set_seed(self.rng.randint(0, 2**32-1))
-
-        if mode == 'algo':
-            self.game.set_window_visible(False)
-        elif mode == 'human' and self._is_server():
-            self.game.set_window_visible(True)
+        self._create_doom_game(mode)
 
         # make sure not to use more than 10 envs per worker
         port = 50300 + self.worker_index * 100 + self.vector_index + 7
@@ -98,7 +90,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
+            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')  # TODO!
         else:
             # Join existing game.
             self.game.add_game_args(
@@ -109,9 +101,8 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
+            self.game.add_game_args(f'+name AI{self.player_id} +colorset 6')
 
-        self._set_game_mode()
         self.game.init()
 
         log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)

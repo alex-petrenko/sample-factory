@@ -1,8 +1,11 @@
+import os
 import time
+from os.path import join
 from unittest import TestCase
 
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_env import MultiEnv
+from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.doom_utils import make_doom_env, doom_env_by_name, make_doom_multiagent_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict
@@ -86,9 +89,9 @@ class TestDoom(TestCase):
         )
 
     @staticmethod
-    def make_env_bots_hybrid_actions(env_config):
+    def make_env_bots_hybrid_actions(env_config, **kwargs):
         return make_doom_multiagent_env(
-            doom_env_by_name('doom_dwango5_bots_hybrid'), env_config=env_config,
+            doom_env_by_name('doom_dwango5_bots_hybrid'), env_config=env_config, **kwargs,
         )
 
     def test_doom_env(self):
@@ -109,3 +112,23 @@ class TestDoom(TestCase):
     def test_doom_performance_bots_multi(self):
         test_multi_env_performance(self.make_env_bots, 'doom', num_envs=200, num_workers=20)
 
+    def skip_test_recording(self):
+        # this seems to be broken in the last version of VizDoom
+        rec_dir = '/tmp/'
+        env = self.make_env_bots_hybrid_actions(env_config={'skip_frames': 2}, record_to=rec_dir)
+        env.reset()
+        for i in range(10):
+            env.step(env.action_space.sample())
+
+        env.reset()
+        env.close()
+
+        demo_path = join(rec_dir, VizdoomEnv.demo_name(episode_idx=0))
+
+        env = self.make_env_bots_hybrid_actions(env_config={'skip_frames': 2}, custom_resolution='1920x1080')
+
+        VizdoomEnv.replay(env, demo_path)
+
+        self.assertTrue(os.path.isfile(demo_path))
+        os.remove(demo_path)
+        self.assertFalse(os.path.isfile(demo_path))
