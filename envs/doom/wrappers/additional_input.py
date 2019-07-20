@@ -37,12 +37,14 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         # plus corresponding reward values for positive and negative delta (per unit)
         self.reward_shaping_vars = {
             'FRAGCOUNT': (+1, -1.5),
-            'DEATHCOUNT': (-0.75, +0.75),
+            'DEATHCOUNT': (-1, +1),
             'HITCOUNT': (+0.01, -0.01),
             'DAMAGECOUNT': (+0.003, -0.003),
 
-            'HEALTH': (+0.005, -0.003),
-            'ARMOR': (+0.005, -0.001),
+            'ITEMCOUNT': (+0.2, -0.2),
+
+            'HEALTH': (+0.005, -0.005),
+            'ARMOR': (+0.01, -0.001),
         }
 
         # without this we reward usinb BFG and shotguns too much
