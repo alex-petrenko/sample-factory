@@ -25,10 +25,11 @@ config:
     model:
         custom_model: vizdoom_vision_model
         conv_filters: [
-            [32, [8, 8], 4],
+            [32, [4, 4], 2],
             [64, [4, 4], 2],
-            [64, [3, 3], 2],
+            [64, [4, 4], 2],
             [128, [3, 3], 2],
+            [200, [3, 3], 2],
         ]
         conv_activation: elu
         fcnet_activation: elu  # was tanh
