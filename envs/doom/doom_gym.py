@@ -311,7 +311,7 @@ class VizdoomEnv(gym.Env):
             img = np.transpose(img, [1, 2, 0])
 
             h, w = img.shape[:2]
-            render_w = 1024
+            render_w = 1280
 
             if w < render_w:
                 render_h = int(render_w * h / w)
