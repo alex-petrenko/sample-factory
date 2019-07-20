@@ -9,7 +9,7 @@ config:
     clip_param: 0.1
     entropy_coeff: 0.0005
     train_batch_size: 1024
-    sample_batch_size: 32
+    sample_batch_size: 128
     num_sgd_iter: 4
     num_workers: 18
     num_envs_per_worker: 8
