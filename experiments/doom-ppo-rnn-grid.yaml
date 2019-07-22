@@ -1,30 +1,31 @@
-env: doom_battle_tuple_actions
+env: doom_battle_hybrid
 run: CUSTOM_PPO
 stop:
-    time_total_s: 3600
+    time_total_s: 24000
 config:
     lr: 0.0001
     lambda: 0.95
     kl_coeff: 0.5
     clip_rewards: False
     clip_param: 0.1
+    grad_clip: 8.0
     vf_clip_param: 100000.0
-    entropy_coeff:
-        grid_search: [0.0005]
-    train_batch_size:
-        grid_search: [6144, 10240]
-    sample_batch_size: 32
-    sgd_minibatch_size:
-        grid_search: [512, 1024]
-    num_sgd_iter: 10
+    entropy_coeff: 0.0005
+    train_batch_size: 6144
+    sample_batch_size: 128
+    sgd_minibatch_size: 1024
+    num_sgd_iter: 4
     num_workers: 18
     num_envs_per_worker: 8
     batch_mode: truncate_episodes
     observation_filter: NoFilter
     vf_share_layers: true
-    num_gpus: 2
-    shuffle_sequences:
+    num_gpus: 1
+    shuffle_sequences: True
+
+    simple_optimizer:
         grid_search: [True, False]
+
     model:
         custom_model: vizdoom_vision_model
         conv_filters: [
@@ -33,12 +34,12 @@ config:
             [64, [3, 3], 2],
             [128, [3, 3], 2],
         ]
-        conv_activation: relu
-        fcnet_activation: relu  # was tanh
+        conv_activation: elu
+        fcnet_activation: elu  # was tanh
 
-        use_lstm: True
-        max_seq_len:
-            grid_search: [16, 32]
+        use_lstm:
+            grid_search: [True, False]
+        max_seq_len: 32
         lstm_cell_size: 256
         lstm_use_prev_action_reward: False
         framestack: False

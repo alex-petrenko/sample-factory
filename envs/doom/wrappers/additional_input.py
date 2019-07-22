@@ -41,8 +41,6 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             'HITCOUNT': (+0.01, -0.01),
             'DAMAGECOUNT': (+0.003, -0.003),
 
-            'ITEMCOUNT': (+0.2, -0.2),
-
             'HEALTH': (+0.005, -0.005),
             'ARMOR': (+0.01, -0.001),
         }
@@ -63,7 +61,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
         for weapon in range(self.num_weapons):
             pref = self.weapon_preference.get(weapon, 1)
-            self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.02 * pref, -0.01 * pref)
+            self.reward_shaping_vars[f'WEAPON{weapon}'] = (+0.04 * pref, -0.01 * pref)
             self.reward_shaping_vars[f'AMMO{weapon}'] = (+0.0002 * pref, -0.0001 * pref)
 
         self._orig_env_reward = 0.0

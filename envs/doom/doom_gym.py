@@ -413,7 +413,6 @@ class VizdoomEnv(gym.Env):
 
         doom = env.unwrapped
         doom.skip_frames = 1  # handled by this script separately
-        turn_delta_action_idx = 8
 
         # noinspection PyProtectedMember
         def start_listener():
@@ -429,7 +428,9 @@ class VizdoomEnv(gym.Env):
             time_between_frames = 1.0 / 35.0
 
             while not doom.game.is_episode_finished() and not doom._terminate:
-                num_actions = 9  # hardcoded here for simplicity
+                num_actions = 14  # hardcoded here for simplicity
+                turn_delta_action_idx = num_actions - 1
+
                 actions = [0] * num_actions
                 for action in doom._current_actions:
                     if isinstance(action, int):
