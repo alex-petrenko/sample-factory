@@ -421,8 +421,8 @@ class VizdoomEnv(gym.Env):
         self.current_histogram[dx, dy] += 1
 
     def _key_to_action(self, key):
-        if hasattr(self.action_space, 'key_to_action_table'):
-            return self.action_space.key_to_action_table.get(key, None)
+        if hasattr(self.action_space, 'key_to_action'):
+            return self.action_space.key_to_action(key)
         else:
             return key_to_action_default(key)
 

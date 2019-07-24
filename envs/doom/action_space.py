@@ -4,6 +4,12 @@ from gym.spaces import Discrete, Box
 from algorithms.spaces.discretized import Discretized
 
 
+def key_to_action_basic(key):
+    from pynput.keyboard import Key
+    table = {Key.left: 0, Key.right: 1, Key.up: 2, Key.down: 3}
+    return table.get(key, None)
+
+
 def doom_action_space_basic():
     """
     TURN_LEFT
@@ -16,8 +22,7 @@ def doom_action_space_basic():
         Discrete(3),  # noop, forward, backward
     ))
 
-    from pynput.keyboard import Key
-    space.key_to_action_table = {Key.left: 0, Key.right: 1, Key.up: 2, Key.down: 3}
+    space.key_to_action = key_to_action_basic
     return space
 
 
