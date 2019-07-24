@@ -33,7 +33,8 @@ config:
 
         use_lstm:
             grid_search: [True, False]
-        max_seq_len: 32
+        max_seq_len:
+            grid_search: [32, 64]
         lstm_cell_size: 256
         lstm_use_prev_action_reward: False
         framestack: False
