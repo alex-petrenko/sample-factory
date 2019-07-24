@@ -9,9 +9,9 @@ config:
     vf_clip_param: 100000.0
     entropy_coeff: 0.0005
     train_batch_size: 6144
-    sample_batch_size: 32
-    sgd_minibatch_size: 512
-    num_sgd_iter: 10
+    sample_batch_size: 128
+    sgd_minibatch_size: 1024
+    num_sgd_iter: 4
     num_workers: 18
     num_envs_per_worker: 8
     batch_mode: truncate_episodes
@@ -29,7 +29,7 @@ config:
         conv_activation: elu
         fcnet_activation: elu  # was tanh
 
-        use_lstm: True
+        use_lstm: False
         max_seq_len: 16
         lstm_cell_size: 256
         lstm_use_prev_action_reward: False

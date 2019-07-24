@@ -197,6 +197,11 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         obs_dict, shaping_rew = self._parse_info(obs, info, done)
         rew += shaping_rew
         self._total_shaping_reward += shaping_rew
+
+        # this is very ugly, I know
+        # but wrappers need to communicate somehow...
+        self.env.unwrapped._total_shaping_reward = self._total_shaping_reward
+
         self._episode_frames += 1
 
         if self._verbose:

@@ -3,15 +3,14 @@ from ray.tune import register_env
 
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
-from envs.doom.wrappers.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
+from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
     doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
 from envs.doom.wrappers.step_human_input import StepHumanInput
-from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper
-from utils.utils import log
+from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper
 
 DOOM_W = 128
 DOOM_H = 72
@@ -128,7 +127,6 @@ def make_doom_env(
     if player_id is None:
         env = VizdoomEnv(
             doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode,
-            record_to=record_to,
         )
     else:
         # skip_frames is handled by multi-agent wrapper
@@ -137,8 +135,10 @@ def make_doom_env(
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=skip_frames,
             async_mode=async_mode,
-            record_to=record_to,
         )
+
+    if record_to is not None:
+        env = RecordingWrapper(env, record_to)
 
     env = MultiplayerStatsWrapper(env)
     if num_bots > 0:

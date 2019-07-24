@@ -28,8 +28,9 @@ def main():
     parser.add_argument('--dir', default='~/ray_results', help='Base folder with summaries')
     parser.add_argument('--port', default=6006, type=int, help='The port to use for tensorboard')
     parser.add_argument('--quiet', '-q', action='store_true', help='Run in silent mode')
-    parser.add_argument('--refresh-every', '-r', dest='refresh', type=int, default=1800,
+    parser.add_argument('--refresh_every', '-r', dest='refresh', type=int, default=1800,
                         help='Refresh every x seconds (default 1800 sec, i.e. 30 min)')
+    parser.add_argument('--reload_interval', type=int, default=60, help='How often to reload data')
     parser.add_argument('filters', nargs='+', type=str, help='directories in train_dir to monitor')
     args = parser.parse_args()
 
@@ -42,7 +43,15 @@ def main():
                 print('Monitoring', match, '...')
 
     train_dirs = ','.join([f'{os.path.basename(s)}:{s}' for s in train_dirs])
-    cmd = f'tensorboard --port={args.port} --logdir={train_dirs} --reload_interval=20 --max_reload_threads=8 --samples_per_plugin="scalars=500"'
+    cmd = (
+        f'tensorboard '
+        f'--port={args.port} '
+        f'--logdir={train_dirs} '
+        f'--reload_interval={args.reload_interval} '
+        f'--max_reload_threads=8 '
+        f'--samples_per_plugin="scalars=300"'
+    )
+
     if args.quiet:
         cmd += ' 2>/dev/null'
 

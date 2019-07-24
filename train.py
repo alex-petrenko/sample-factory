@@ -175,10 +175,6 @@ def run_experiment(args, parser):
     if not exp.get("env") and not exp.get("config", {}).get("env"):
         parser.error("the following arguments are required: --env")
 
-    # broken in the last version of Ray
-    # if args.dbg and 'APPO' not in exp['run']:
-    #     args.local_mode = True
-
     if args.ray_num_nodes:
         cluster = Cluster()
         for _ in range(args.ray_num_nodes):

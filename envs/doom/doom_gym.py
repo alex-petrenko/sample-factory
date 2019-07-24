@@ -12,8 +12,39 @@ from gym.utils import seeding
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
 from algorithms.spaces.discretized import Discretized
-from envs.doom.doom_helpers import key_to_action
 from utils.utils import log
+
+
+def key_to_action(key):
+    """
+        MOVE_FORWARD
+        MOVE_BACKWARD
+        MOVE_RIGHT
+        MOVE_LEFT
+        SELECT_WEAPON1
+        SELECT_WEAPON2
+        SELECT_WEAPON3
+        SELECT_WEAPON4
+        SELECT_WEAPON5
+        SELECT_WEAPON6
+        SELECT_WEAPON7
+        ATTACK
+        SPEED
+        TURN_LEFT_RIGHT_DELTA
+    """
+    from pynput.keyboard import Key
+
+    action_table = {
+        Key.up: 0,
+        Key.down: 1,
+        Key.alt: 6,
+        Key.ctrl: 11,
+        Key.shift: 12,
+        Key.right: 'turn_right',
+        Key.left: 'turn_left',
+    }
+
+    return action_table.get(key, None)
 
 
 class VizdoomEnv(gym.Env):

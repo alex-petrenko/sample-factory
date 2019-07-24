@@ -9,7 +9,7 @@ import numpy as np
 from ray.rllib import MultiAgentEnv
 
 from envs.doom.doom_gym import VizdoomEnv
-from envs.doom.doom_helpers import concat_grid, cvt_doom_obs
+from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from utils.utils import log
 
 

@@ -2,8 +2,10 @@
 Gym env wrappers that make the environment suitable for the RL algorithms.
 
 """
-
+import datetime
+import os
 from collections import deque
+from os.path import join
 
 import cv2
 import gym
@@ -12,7 +14,7 @@ import numpy as np
 from gym import spaces, RewardWrapper, ObservationWrapper
 
 from algorithms.utils.algo_utils import num_env_steps
-from utils.utils import numpy_all_the_way
+from utils.utils import numpy_all_the_way, ensure_dir_exists, log
 
 
 def reset_with_info(env):
@@ -365,3 +367,53 @@ class ClipRewardWrapper(gym.RewardWrapper):
         reward = min(5.0, reward)
         reward = max(-0.1, reward)
         return reward
+
+
+class RecordingWrapper(gym.core.Wrapper):
+    def __init__(self, env, record_to):
+        super().__init__(env)
+        tstamp = datetime.datetime.now().strftime('%Y_%m_%d--%H_%M_%S')
+        self._record_to = join(record_to, tstamp)
+        self._episode_recording_dir = None
+        self._record_id = 0
+        self._frame_id = 0
+        self._recorded_episode_reward = 0
+        self._recorded_episode_shaping_reward = 0
+
+    def reset(self):
+        if self._episode_recording_dir is not None and self._record_id > 0:
+            # rename previous episode dir
+            reward = self._recorded_episode_reward + self._recorded_episode_shaping_reward
+            new_dir_name = self._episode_recording_dir + f'_r{reward:.2f}'
+            os.rename(self._episode_recording_dir, new_dir_name)
+            log.info(
+                'Finished recording %s (rew %.3f, shaping %.3f)',
+                new_dir_name, reward, self._recorded_episode_shaping_reward,
+            )
+
+        dir_name = f'ep_{self._record_id:03d}'
+        self._episode_recording_dir = join(self._record_to, dir_name)
+        ensure_dir_exists(self._episode_recording_dir)
+
+        self._record_id += 1
+        self._frame_id = 0
+        self._recorded_episode_reward = 0
+        self._recorded_episode_shaping_reward = 0
+
+        return self.env.reset()
+
+    def _record(self, img):
+        frame_name = f'{self._frame_id:05d}.png'
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(join(self._episode_recording_dir, frame_name), img)
+        self._frame_id += 1
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        self._record(observation)
+        self._recorded_episode_reward += reward
+        if hasattr(self.env.unwrapped, '_total_shaping_reward'):
+            # noinspection PyProtectedMember
+            self._recorded_episode_shaping_reward = self.env.unwrapped._total_shaping_reward
+
+        return observation, reward, done, info
