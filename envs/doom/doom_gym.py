@@ -15,7 +15,7 @@ from algorithms.spaces.discretized import Discretized
 from utils.utils import log
 
 
-def key_to_action(key):
+def key_to_action_default(key):
     """
         MOVE_FORWARD
         MOVE_BACKWARD
@@ -420,19 +420,25 @@ class VizdoomEnv(gym.Env):
 
         self.current_histogram[dx, dy] += 1
 
+    def _key_to_action(self, key):
+        if hasattr(self.action_space, 'key_to_action_table'):
+            return self.action_space.key_to_action_table.get(key, None)
+        else:
+            return key_to_action_default(key)
+
     def _keyboard_on_press(self, key):
         from pynput.keyboard import Key
         if key == Key.esc:
             self._terminate = True
             return False
 
-        action = key_to_action(key)
+        action = self._key_to_action(key)
         if action is not None:
             if action not in self._current_actions:
                 self._current_actions.append(action)
 
     def _keyboard_on_release(self, key):
-        action = key_to_action(key)
+        action = self._key_to_action(key)
         if action is not None:
             if action in self._current_actions:
                 self._current_actions.remove(action)
@@ -480,13 +486,15 @@ class VizdoomEnv(gym.Env):
                     verbose = True
                     if state is not None and verbose:
                         info = doom.get_info()
-                        print(
-                            'Weapon:', info['SELECTED_WEAPON'],
-                            'ready:', info['ATTACK_READY'],
-                            'ammo:', info['SELECTED_WEAPON_AMMO'],
-                            'pc:', info['PLAYER_COUNT'],
-                            'dmg:', info['DAMAGECOUNT'],
-                        )
+                        # print(
+                        #     'Weapon:', info['SELECTED_WEAPON'],
+                        #     'ready:', info['ATTACK_READY'],
+                        #     'ammo:', info['SELECTED_WEAPON_AMMO'],
+                        #     'pc:', info['PLAYER_COUNT'],
+                        #     'dmg:', info['DAMAGECOUNT'],
+                        # )
+
+                        print('HP:', info.get('HEALTH', -100.0))
 
                     time_since_last_render = time.time() - last_render_time
                     time_wait = time_between_frames - time_since_last_render

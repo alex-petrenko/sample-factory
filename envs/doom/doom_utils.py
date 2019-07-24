@@ -4,11 +4,12 @@ from ray.tune import register_env
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
 from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
-    doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental
+    doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental, doom_action_space_basic
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
+from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from envs.doom.wrappers.step_human_input import StepHumanInput
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper
 
@@ -34,9 +35,10 @@ def cfg_param(name, cfg=None):
 
 class DoomCfg:
     def __init__(
-            self, name, env_cfg, action_space, reward_scaling, default_timeout,
+            self, name, env_cfg, action_space, reward_scaling=1.0, default_timeout=int(1e9),
             num_agents=1, num_bots=0,
             no_idle=False,
+            extra_wrappers=None,
     ):
         self.name = name
         self.env_cfg = env_cfg
@@ -53,6 +55,16 @@ class DoomCfg:
         # CLI arguments override this (see enjoy.py)
         self.num_bots = num_bots
 
+        # expect list of tuples (wrapper_cls, wrapper_kwargs)
+        self.extra_wrappers = self._extra_wrappers_or_default(extra_wrappers)
+
+    @staticmethod
+    def _extra_wrappers_or_default(wrappers):
+        if wrappers is None:
+            return [(DoomAdditionalInputAndRewards, {})]
+        else:
+            return wrappers
+
 
 DOOM_ENVS = [
     DoomCfg('doom_basic', 'basic.cfg', Discrete(3), 0.01, 300, no_idle=True),
@@ -62,6 +74,15 @@ DOOM_ENVS = [
     DoomCfg('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100),
 
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
+
+    DoomCfg(
+        'doom_two_colors_fixed', 'generated_scenarios/two_color/1/train/custom_scenario014.cfg',
+        doom_action_space_basic(),
+        extra_wrappers=[
+            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
+            (DoomGatheringRewardShaping, {}),
+        ]
+    ),
 
     DoomCfg('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
@@ -168,7 +189,10 @@ def make_doom_env(
     if doom_cfg.reward_scaling != 1.0:
         env = RewardScalingWrapper(env, doom_cfg.reward_scaling)
 
-    env = DoomAdditionalInputAndRewards(env)
+    if doom_cfg.extra_wrappers is not None:
+        for wrapper_cls, wrapper_kwargs in doom_cfg.extra_wrappers:
+            env = wrapper_cls(env, **wrapper_kwargs)
+
     return env
 
 
@@ -212,7 +236,9 @@ def make_doom_multiagent_env(
 
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
-    singleplayer_envs = ['doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid']
+    singleplayer_envs = [
+        'doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid', 'doom_two_colors_fixed'
+    ]
     for env_name in singleplayer_envs:
         register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), env_config=config, **kwargs))
 

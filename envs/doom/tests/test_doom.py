@@ -11,7 +11,7 @@ from utils.timing import Timing
 from utils.utils import log, AttrDict
 
 
-def test_env_performance(make_env, env_type):
+def test_env_performance(make_env, env_type, verbose=False):
     t = Timing()
     with t.timeit('init'):
         env = make_env(AttrDict({'worker_index': 0, 'vector_index': 0}))
@@ -34,7 +34,14 @@ def test_env_performance(make_env, env_type):
 
             while not done and frames < total_num_frames:
                 start_step = time.time()
+                if verbose:
+                    env.render()
+                    time.sleep(1.0 / 40)
+
                 obs, rew, done, info = env.step(env.action_space.sample())
+                if verbose:
+                    log.info('Received reward %.3f', rew)
+
                 t.step += time.time() - start_step
                 frames += num_env_steps([info])
 
@@ -111,6 +118,11 @@ class TestDoom(TestCase):
 
     def test_doom_performance_bots_multi(self):
         test_multi_env_performance(self.make_env_bots, 'doom', num_envs=200, num_workers=20)
+
+    def test_doom_two_color(self):
+        test_env_performance(
+            lambda env_config: make_doom_env(doom_env_by_name('doom_two_colors_fixed')), 'doom', verbose=True,
+        )
 
     def skip_test_recording(self):
         # this seems to be broken in the last version of VizDoom

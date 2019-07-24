@@ -4,6 +4,23 @@ from gym.spaces import Discrete, Box
 from algorithms.spaces.discretized import Discretized
 
 
+def doom_action_space_basic():
+    """
+    TURN_LEFT
+    TURN_RIGHT
+    MOVE_FORWARD
+    MOVE_BACKWARD
+    """
+    space = gym.spaces.Tuple((
+        Discrete(3),  # noop, turn left, turn right
+        Discrete(3),  # noop, forward, backward
+    ))
+
+    from pynput.keyboard import Key
+    space.key_to_action_table = {Key.left: 0, Key.right: 1, Key.up: 2, Key.down: 3}
+    return space
+
+
 def doom_action_space():
     """
     Standard action space for full-featured Doom environments (e.g. deathmatch).
@@ -28,7 +45,7 @@ def doom_action_space():
         Discrete(3),  # noop, prev_weapon, next_weapon
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
-        Box(-1.0, 1.0, (1, )),
+        Box(-1.0, 1.0, (1,)),
     ))
 
 
@@ -59,7 +76,7 @@ def doom_action_space_no_weap():
         Discrete(3),  # noop, move right, move left
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
-        Box(-1.0, 1.0, (1, )),
+        Box(-1.0, 1.0, (1,)),
     ))
 
 

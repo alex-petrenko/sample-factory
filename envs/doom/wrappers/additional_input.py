@@ -12,9 +12,11 @@ from utils.utils import log
 class DoomAdditionalInputAndRewards(gym.Wrapper):
     """Add game variables to the observation space + reward shaping."""
 
-    def __init__(self, env):
+    def __init__(self, env, with_reward_shaping=True):
         super().__init__(env)
         current_obs_space = self.observation_space
+
+        self.with_reward_shaping = with_reward_shaping
 
         self.num_weapons = 10
 
@@ -45,7 +47,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             'ARMOR': (+0.01, -0.001),
         }
 
-        # without this we reward usinb BFG and shotguns too much
+        # without this we reward using BFG and shotguns too much
         self.reward_delta_limits = {'DAMAGECOUNT': 200, 'HITCOUNT': 5}
 
         self._prev_vars = {}
@@ -195,8 +197,10 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         self._orig_env_reward += rew
 
         obs_dict, shaping_rew = self._parse_info(obs, info, done)
-        rew += shaping_rew
-        self._total_shaping_reward += shaping_rew
+
+        if self.with_reward_shaping:
+            rew += shaping_rew
+            self._total_shaping_reward += shaping_rew
 
         # this is very ugly, I know
         # but wrappers need to communicate somehow...
