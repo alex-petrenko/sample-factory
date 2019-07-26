@@ -245,7 +245,10 @@ def run_experiment(args, parser):
         fps_helper.record(samples)
         fps = fps_helper.get_fps()
         info['result']['custom_metrics']['fps'] = fps
-        info['result']['custom_metrics']['fps_frameskip'] = fps * cfg_param('skip_frames', {})
+
+        # remove this as currently
+        skip_frames = cfg_param('skip_frames', exp.spec['config'].get('env_config', None))
+        info['result']['custom_metrics']['fps_frameskip'] = fps * skip_frames
 
     exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
 
