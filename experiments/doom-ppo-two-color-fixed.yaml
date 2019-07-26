@@ -1,7 +1,7 @@
-env: doom_two_colors_fixed
+env: doom_two_colors_hard
 run: CUSTOM_PPO
 stop:
-    time_total_s: 72000
+    time_total_s: 100000
 config:
     lr: 0.0001
     lambda: 0.95

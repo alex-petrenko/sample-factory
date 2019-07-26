@@ -76,7 +76,7 @@ DOOM_ENVS = [
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
     DoomCfg(
-        'doom_two_colors_fixed', 'generated_scenarios/two_color/1/train/custom_scenario014.cfg',
+        'doom_two_colors_hard', 'two_colors_hard.cfg',
         doom_action_space_basic(),
         extra_wrappers=[
             (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
@@ -237,7 +237,7 @@ def make_doom_multiagent_env(
 def register_doom_envs_rllib(**kwargs):
     """Register env factories in RLLib system."""
     singleplayer_envs = [
-        'doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid', 'doom_two_colors_fixed'
+        'doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid', 'doom_two_colors_hard'
     ]
     for env_name in singleplayer_envs:
         register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), env_config=config, **kwargs))
