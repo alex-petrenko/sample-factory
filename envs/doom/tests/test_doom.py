@@ -6,7 +6,7 @@ from unittest import TestCase
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_env import MultiEnv
 from envs.doom.doom_gym import VizdoomEnv
-from envs.doom.doom_utils import make_doom_env, doom_env_by_name, make_doom_multiagent_env
+from envs.doom.doom_utils import make_doom_env_impl, doom_env_by_name, make_doom_multiplayer_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict
 
@@ -84,20 +84,20 @@ class TestDoom(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env_singleplayer(env_config):
-        return make_doom_env(
+        return make_doom_env_impl(
             doom_env_by_name('doom_battle_tuple_actions'),
         )
 
     @staticmethod
     def make_env_bots(env_config):
         log.info('Create host env with cfg: %r', env_config)
-        return make_doom_multiagent_env(
+        return make_doom_multiplayer_env(
             doom_env_by_name('doom_dwango5_bots'), env_config=env_config,
         )
 
     @staticmethod
     def make_env_bots_hybrid_actions(env_config, **kwargs):
-        return make_doom_multiagent_env(
+        return make_doom_multiplayer_env(
             doom_env_by_name('doom_dwango5_bots_hybrid'), env_config=env_config, **kwargs,
         )
 
@@ -121,7 +121,7 @@ class TestDoom(TestCase):
 
     def test_doom_two_color(self):
         test_env_performance(
-            lambda env_config: make_doom_env(doom_env_by_name('doom_two_colors_fixed')), 'doom', verbose=True,
+            lambda env_config: make_doom_env_impl(doom_env_by_name('doom_two_colors_fixed')), 'doom', verbose=True,
         )
 
     def skip_test_recording(self):

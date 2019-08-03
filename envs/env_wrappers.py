@@ -359,6 +359,35 @@ class RemainingTimeWrapper(ObservationWrapper):
         return dict_obs
 
 
+class PixelFormatChwWrapper(ObservationWrapper):
+    # TODO? This can be optimized, we can query CHW directly from VizDoom
+
+    def __init__(self, env):
+        super().__init__(env)
+
+        if not has_image_observations(env.observation_space):
+            raise Exception('Pixel format wrapper only works with image-based envs')
+
+        obs_shape = env.observation_space.shape
+        max_num_img_channels = 4
+
+        if len(obs_shape) <= 2:
+            raise Exception('Env obs do not have channel dimension?')
+
+        if obs_shape[0] <= max_num_img_channels:
+            raise Exception('Env obs already in CHW format?')
+
+        h, w, c = obs_shape
+        low, high = env.observation_space.low.flat[0], env.observation_space.high.flat[0]
+        new_shape = [c, h, w]
+        self.observation_space = spaces.Box(low, high, shape=new_shape, dtype=env.observation_space.dtype)
+        self.action_space = env.action_space
+
+    def observation(self, observation):
+        new_obs = np.transpose(observation, (2, 0, 1))  # HWC to CHW for PyTorch
+        return new_obs
+
+
 class ClipRewardWrapper(gym.RewardWrapper):
     def __init__(self, env):
         gym.RewardWrapper.__init__(self, env)

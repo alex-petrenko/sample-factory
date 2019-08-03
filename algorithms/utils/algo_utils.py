@@ -124,7 +124,7 @@ def calculate_gae(rewards, dones, values, gamma, gae_lambda):
     # targets for value function - this is just a simple discounted sum of rewards
     discounted_returns = calculate_discounted_sum(rewards, dones, gamma, values[-1])
 
-    return advantages, discounted_returns
+    return advantages.astype(np.float32), discounted_returns.astype(np.float32)
 
 
 def num_env_steps(infos):

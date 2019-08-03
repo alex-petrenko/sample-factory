@@ -3,6 +3,7 @@
 import logging
 import operator
 import os
+from logging import Logger
 from os.path import join
 
 import numpy as np
@@ -39,22 +40,21 @@ log.addHandler(ch)
 # general utilities
 
 class AttrDict(dict):
-    __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
-    def __init__(self, d=None):
-        super(AttrDict, self).__init__()
-        if d is not None:
-            for key, value in d.items():
-                self[key] = value
+    def __getattribute__(self, item):
+        if item in self:
+            return self[item]
+        else:
+            return super().__getattribute__(item)
 
 
-def scale_to_range(np_array, min, max):
+def scale_to_range(np_array, min_, max_):
     min_arr = np.min(np_array)
     max_arr = np.max(np_array)
     ret_array = (np_array - min_arr) / (max_arr - min_arr)  # scale to (0,1)
 
-    ret_array = ret_array * (max - min) + min  # scale to (min, max)
+    ret_array = ret_array * (max_ - min_) + min_  # scale to (min, max)
     return ret_array
 
 
@@ -163,3 +163,9 @@ def experiment_dir(experiment, experiments_root=None):
     return ensure_dir_exists(join(experiments_root, experiment))
 
 
+def model_dir(experiment_dir_):
+    return ensure_dir_exists(join(experiment_dir_, '.model'))
+
+
+def summaries_dir(experiment_dir_):
+    return ensure_dir_exists(join(experiment_dir_, '.summary'))

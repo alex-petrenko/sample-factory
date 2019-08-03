@@ -27,9 +27,6 @@ class TimingContext:
 
 
 class Timing(AttrDict):
-    def __init__(self, d=None):
-        super(Timing, self).__init__(d)
-
     def timeit(self, key):
         return TimingContext(self, key)
 

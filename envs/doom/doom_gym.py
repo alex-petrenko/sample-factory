@@ -57,7 +57,8 @@ class VizdoomEnv(gym.Env):
                  show_automap=False,
                  skip_frames=1,
                  async_mode=False,
-                 record_to=None):
+                 record_to=None,
+                 no_idle_action=False):
         self.initialized = False
 
         # essential game data
@@ -81,8 +82,9 @@ class VizdoomEnv(gym.Env):
         # can be quite complex multi-discrete spaces
         self.action_space = action_space
 
-        # treat 0th action as the actual action instead of no-op
-        self.no_idle_action = False
+        # treat 0th action in each action subspace as the actual action instead of no-op
+        # useful for envs that do not require a no-op action
+        self.no_idle_action = no_idle_action
 
         self.delta_actions_scaling_factor = 7.5
 

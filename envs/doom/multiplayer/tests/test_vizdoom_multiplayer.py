@@ -2,14 +2,14 @@ import time
 from multiprocessing import Process
 from unittest import TestCase
 
-from envs.doom.doom_utils import make_doom_multiagent_env, doom_env_by_name
+from envs.doom.doom_utils import make_doom_multiplayer_env, doom_env_by_name
 from utils.utils import log, AttrDict
 
 
 class TestDoom(TestCase):
     @staticmethod
     def make_standard_dm(env_config):
-        return make_doom_multiagent_env(
+        return make_doom_multiplayer_env(
             doom_env_by_name('doom_dm'), env_config=env_config,
         )
 

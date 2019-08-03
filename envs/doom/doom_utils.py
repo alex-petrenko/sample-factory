@@ -1,5 +1,4 @@
 from gym.spaces import Discrete
-from ray.tune import register_env
 
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
@@ -11,7 +10,8 @@ from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
 from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from envs.doom.wrappers.step_human_input import StepHumanInput
-from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper
+from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
+    PixelFormatChwWrapper
 
 DOOM_W = 128
 DOOM_H = 72
@@ -67,7 +67,12 @@ class DoomCfg:
 
 
 DOOM_ENVS = [
-    DoomCfg('doom_basic', 'basic.cfg', Discrete(3), 0.01, 300, no_idle=True),
+    DoomCfg(
+        'doom_basic', 'basic.cfg',
+        Discrete(4),  # idle, left, right, attack
+        0.01, 300,
+        extra_wrappers=[(DoomAdditionalInputAndRewards, {'with_reward_shaping': False})],
+    ),
 
     DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
     DoomCfg('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
@@ -76,8 +81,17 @@ DOOM_ENVS = [
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
     DoomCfg(
+        'doom_two_colors_easy', 'two_colors_easy.cfg',
+        Discrete(5),  # idle, left, right, forward, backward
+        extra_wrappers=[
+            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
+            (DoomGatheringRewardShaping, {}),
+        ]
+    ),
+
+    DoomCfg(
         'doom_two_colors_hard', 'two_colors_hard.cfg',
-        doom_action_space_basic(),
+        Discrete(5),  # idle, left, right, forward, backward
         extra_wrappers=[
             (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
             (DoomGatheringRewardShaping, {}),
@@ -128,9 +142,9 @@ def doom_env_by_name(name):
 
 
 # noinspection PyUnusedLocal
-def make_doom_env(
+def make_doom_env_impl(
         doom_cfg,
-        skip_frames=None,  # this overrides the env_config
+        skip_frames=None,  # non-None value overrides the env_config
         human_input=False,
         show_automap=False, episode_horizon=None,
         player_id=None, num_agents=None, max_num_players=None, num_bots=0,  # for multi-agent
@@ -139,6 +153,7 @@ def make_doom_env(
         async_mode=False,
         record_to=None,
         custom_resolution=None,
+        pixel_format='HWC',
         **kwargs,
 ):
     env_config = DEFAULT_CONFIG if env_config is None else env_config
@@ -148,6 +163,7 @@ def make_doom_env(
     if player_id is None:
         env = VizdoomEnv(
             doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode,
+            no_idle_action=doom_cfg.no_idle,
         )
     else:
         # skip_frames is handled by multi-agent wrapper
@@ -156,7 +172,11 @@ def make_doom_env(
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=skip_frames,
             async_mode=async_mode,
+            no_idle_action=doom_cfg.no_idle,
         )
+
+    if doom_cfg.reward_scaling != 1.0:
+        env = RewardScalingWrapper(env, doom_cfg.reward_scaling)
 
     if record_to is not None:
         env = RecordingWrapper(env, record_to)
@@ -164,8 +184,6 @@ def make_doom_env(
     env = MultiplayerStatsWrapper(env)
     if num_bots > 0:
         env = BotDifficultyWrapper(env, bot_difficulty)
-
-    env.no_idle_action = doom_cfg.no_idle
 
     if human_input:
         env = StepHumanInput(env)
@@ -186,8 +204,8 @@ def make_doom_env(
         timeout = episode_horizon
     env = TimeLimitWrapper(env, limit=timeout, random_variation_steps=49)
 
-    if doom_cfg.reward_scaling != 1.0:
-        env = RewardScalingWrapper(env, doom_cfg.reward_scaling)
+    if pixel_format == 'CHW':
+        env = PixelFormatChwWrapper(env)
 
     if doom_cfg.extra_wrappers is not None:
         for wrapper_cls, wrapper_kwargs in doom_cfg.extra_wrappers:
@@ -196,7 +214,7 @@ def make_doom_env(
     return env
 
 
-def make_doom_multiagent_env(
+def make_doom_multiplayer_env(
         doom_cfg, num_agents=-1, num_bots=-1, num_humans=0,
         skip_frames=None, env_config=None,
         **kwargs,
@@ -213,7 +231,7 @@ def make_doom_multiagent_env(
     is_multiagent = num_agents > 1
 
     def make_env_func(player_id):
-        return make_doom_env(
+        return make_doom_env_impl(
             doom_cfg,
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=1 if is_multiagent else skip_frames,  # multi-agent skipped frames are handled by the wrapper
@@ -234,21 +252,11 @@ def make_doom_multiagent_env(
     return env
 
 
-def register_doom_envs_rllib(**kwargs):
-    """Register env factories in RLLib system."""
-    singleplayer_envs = [
-        'doom_battle_tuple_actions', 'doom_battle_continuous', 'doom_battle_hybrid', 'doom_two_colors_hard'
-    ]
-    for env_name in singleplayer_envs:
-        register_env(env_name, lambda config: make_doom_env(doom_env_by_name(env_name), env_config=config, **kwargs))
+def make_doom_env(env_name, **kwargs):
+    cfg = doom_env_by_name(env_name)
 
-    multiplayer_envs = [
-        'doom_dm', 'doom_dwango5', 'doom_dwango5_bots', 'doom_dwango5_bots_continuous', 'doom_dwango5_bots_hybrid',
-        'doom_dwango5_bots_experimental',
-    ]
-
-    for env_name in multiplayer_envs:
-        register_env(
-            env_name,
-            lambda config: make_doom_multiagent_env(doom_env_by_name(env_name), env_config=config, **kwargs),
-        )
+    if cfg.num_agents > 1 or cfg.num_bots > 0:
+        # requires multiplayer setup (e.g. at least a host, not a singleplayer game)
+        return make_doom_multiplayer_env(cfg, **kwargs)
+    else:
+        return make_doom_env_impl(cfg, **kwargs)
