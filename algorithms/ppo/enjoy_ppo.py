@@ -15,7 +15,8 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
         # whether to run Doom env at it's default FPS (ASYNC mode)
         async_mode = args.fps == 0
 
-        record_to = join(args.record_to, f'{args.env}_{args.experiment}')
+        if args.record_to is not None:
+            args.record_to = join(args.record_to, f'{args.env}_{args.experiment}')
 
         return make_doom_env(
             args.env,
@@ -23,7 +24,7 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
             async_mode=async_mode, skip_frames=args.evaluation_env_frameskip,
             num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans,
             bot_difficulty=args.bot_difficulty,
-            record_to=record_to,
+            record_to=args.record_to,
             env_config=env_config,
         )
 

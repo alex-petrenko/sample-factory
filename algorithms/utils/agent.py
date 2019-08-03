@@ -5,6 +5,7 @@ Base classes for RL agent implementations with some boilerplate.
 import glob
 import math
 import os
+import time
 from collections import deque
 from os.path import join
 
@@ -79,33 +80,22 @@ class AgentLearner(Agent):
 
             # training process
             self.learning_rate = 1e-4
-            self.train_for_steps = self.train_for_env_steps = 10 * 1000 * 1000 * 1000
+            self.train_for_steps = self.train_for_env_steps = self.train_for_seconds = 10 * 1000 * 1000 * 1000
 
     def __init__(self, params):
         super().__init__(params)
 
         self.device = torch.device('cuda')
 
-        # if self.params.seed >= 0:
-        #     tf.random.set_random_seed(self.params.seed)
-
         self.train_step = self.env_steps = 0
+
+        self.total_train_seconds = 0
+        self.last_training_step = time.time()
 
         self.best_avg_reward = math.nan
 
         self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)], staircase=100)
         self.save_rate_decay = LinearDecay([(0, self.params.initial_save_rate), (1000000, 5000)], staircase=100)
-
-        # self.initial_best_avg_reward = tf.constant(-1e3)
-        # self.best_avg_reward = tf.Variable(self.initial_best_avg_reward)
-        # self.total_env_steps = tf.Variable(0, dtype=tf.int64)
-
-        # def update_best_value(best_value, new_value):
-        #     return tf.assign(best_value, tf.maximum(new_value, best_value))
-        # self.avg_reward_placeholder = tf.placeholder(tf.float32, [], 'new_avg_reward')
-        # self.update_best_reward = update_best_value(self.best_avg_reward, self.avg_reward_placeholder)
-        # self.total_env_steps_placeholder = tf.placeholder(tf.int64, [], 'new_env_steps')
-        # self.update_env_steps = tf.assign(self.total_env_steps, self.total_env_steps_placeholder)
 
         self.position_histograms = deque([], maxlen=self.params.num_position_histograms)
 
@@ -133,17 +123,36 @@ class AgentLearner(Agent):
 
         self._load_state(checkpoint_dict)
 
-    def _end_of_training(self):
-        return self.train_step >= self.params.train_for_steps or self.env_steps > self.params.train_for_env_steps
+    def finalize(self):
+        self.writer.close()
+
+    def _should_end_training(self):
+        end = self.train_step >= self.params.train_for_steps
+        end |= self.env_steps > self.params.train_for_env_steps
+        end |= self.total_train_seconds > self.params.train_for_seconds
+        return end
+
+    def _after_optimizer_step(self):
+        """A hook to be called after each optimizer step."""
+        self.train_step += 1
+        self._maybe_save()
+        self.total_train_seconds += time.time() - self.last_training_step
+        self.last_training_step = time.time()
+
+    def _on_finished_training(self):
+        """This is called after normal termination, e.g. number of training steps reached."""
+        log.info(
+            'Finished training at train_steps %d, env_steps %d, seconds %d',
+            self.train_step, self.env_steps, self.total_train_seconds,
+        )
+        self._save()
 
     def _load_state(self, checkpoint_dict):
         self.train_step = checkpoint_dict['train_step']
         self.env_steps = checkpoint_dict['env_steps']
         self.best_avg_reward = checkpoint_dict['best_avg_reward']
+        self.total_train_seconds = checkpoint_dict['total_train_seconds']
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
-
-    def finalize(self):
-        self.writer.close()
 
     def process_infos(self, infos):
         for i, info in enumerate(infos):
@@ -169,6 +178,7 @@ class AgentLearner(Agent):
             'train_step': self.train_step,
             'env_steps': self.env_steps,
             'best_avg_reward': self.best_avg_reward,
+            'total_train_seconds': self.total_train_seconds,
         }
         return checkpoint
 
@@ -176,7 +186,7 @@ class AgentLearner(Agent):
         checkpoint = self._get_checkpoint_dict()
         assert checkpoint is not None
 
-        filepath = join(self._checkpoint_dir(), f'checkpoint_{self.env_steps:012d}.pth.tar')
+        filepath = join(self._checkpoint_dir(), f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth')
         log.info('Saving %s...', filepath)
         torch.save(checkpoint, filepath)
 

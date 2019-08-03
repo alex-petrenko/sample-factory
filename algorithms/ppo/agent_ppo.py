@@ -485,19 +485,18 @@ class AgentPPO(AgentLearner):
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
                     assert all(abs(r - 1.0) < 1e-6 for r in ratio.detach().cpu().numpy())
 
-                    # TODO!!! Figure out whether we need to do it or not
-                    # Update memories for next epoch
-                    # if self.acmodel.recurrent and i < self.recurrence - 1:
-                    #     exps.memory[inds + i + 1] = memory.detach()
+                # TODO!!! Figure out whether we need to do it or not
+                # Update memories for next epoch
+                # if self.acmodel.recurrent and i < self.recurrence - 1:
+                #     exps.memory[inds + i + 1] = memory.detach()
 
                 # update the weights
                 self.optimizer.zero_grad()
                 mb_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.params.max_grad_norm)
                 self.optimizer.step()
-                self.train_step += 1
 
-                self._maybe_save()
+                self._after_optimizer_step()
 
                 # collect and report summaries
                 if with_summaries:
@@ -509,8 +508,6 @@ class AgentPPO(AgentLearner):
                     self._report_train_summaries(mb_stats)
 
                 # log.debug('Hidden distances: %r', hidden_distances)
-
-                # TODO logging and summaries
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
@@ -526,7 +523,7 @@ class AgentPPO(AgentLearner):
         if self.params.recurrence > 1:
             rnn_states = torch.zeros(self.params.num_envs, self.params.hidden_size).to(self.device)
 
-        while not self._end_of_training():
+        while not self._should_end_training():
             timing = Timing()
             num_steps = 0
             batch_start = time.time()
@@ -578,6 +575,8 @@ class AgentPPO(AgentLearner):
             self._maybe_print(avg_reward, avg_length, fps, timing)
             self._maybe_update_avg_reward(avg_reward, multi_env.stats_num_episodes())
             self._report_basic_summaries(fps, avg_reward, avg_length)
+
+        self._on_finished_training()
 
     def learn(self):
         status = TrainStatus.SUCCESS
