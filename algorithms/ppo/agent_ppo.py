@@ -294,6 +294,7 @@ class AgentPPO(AgentLearner):
             # components of the loss function
             self.value_loss_coeff = 0.5
             self.entropy_loss_coeff = 0.005
+            self.rnn_dist_loss_coeff = 0.0
 
             # training
             self.max_grad_norm = 2.0
@@ -400,7 +401,7 @@ class AgentPPO(AgentLearner):
         for epoch in range(self.params.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(
-                    value=0, entropy=0, value_loss=0, entropy_loss=0,
+                    value=0, entropy=0, value_loss=0, entropy_loss=0, rnn_dist=0, dist_loss=0,
                 ))
                 with_summaries = self._should_write_summaries(self.train_step)
                 mb_loss = 0.0
@@ -419,26 +420,19 @@ class AgentPPO(AgentLearner):
 
                 core_outputs = []
 
-                # hidden_distances = []
+                dist_loss = 0.0
 
                 for i in range(recurrence):
-                    # magnitude = rnn_states.pow(2)
-                    # magnitude = torch.sum(magnitude, dim=1)
-                    # magnitude = torch.sqrt(magnitude + EPS)
-                    # magnitude = magnitude.mean()
-                    #
-                    # dist = (rnn_states - mb.rnn_states).pow(2)
-                    # dist = torch.sum(dist, dim=1)
-                    # dist = torch.sqrt(dist + EPS)
-                    # dist = dist.mean()
-                    #
-                    # if i in [0, 1, 3, 7, 15, 31, 63]:
-                    #     hidden_distances.append((i, f'{dist.detach().cpu().item():.3f}'))
-                    # if i == 63:
-                    #     hidden_distances.append(f'mag: {magnitude.detach().cpu().item():.3f}')
-
                     # indices of head outputs corresponding to the current timestep
                     timestep_indices = np.arange(i, self.params.batch_size, self.params.recurrence)
+
+                    if self.params.rnn_dist_loss_coeff > EPS:
+                        dist = (rnn_states - mb.rnn_states[timestep_indices]).pow(2)
+                        dist = torch.sum(dist, dim=1)
+                        dist = torch.sqrt(dist + EPS)
+                        dist = dist.mean()
+                        mb_stats.rnn_dist += dist
+                        dist_loss += self.params.rnn_dist_loss_coeff * dist
 
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
@@ -470,16 +464,18 @@ class AgentPPO(AgentLearner):
                 entropy = action_distribution.entropy().mean()
                 entropy_loss = self.params.entropy_loss_coeff * -entropy
 
-                loss = policy_loss + value_loss + entropy_loss
-                # loss += 0.01 * dist
+                dist_loss /= recurrence
 
+                loss = policy_loss + value_loss + entropy_loss + dist_loss
                 mb_loss += loss
 
                 if with_summaries:
-                    mb_stats.value += result.values.mean()
-                    mb_stats.entropy += entropy
-                    mb_stats.value_loss += value_loss
-                    mb_stats.entropy_loss += entropy_loss
+                    mb_stats.value = result.values.mean()
+                    mb_stats.entropy = entropy
+                    mb_stats.value_loss = value_loss
+                    mb_stats.entropy_loss = entropy_loss
+                    mb_stats.dist_loss = dist_loss
+                    mb_stats.rnn_dist /= recurrence
 
                 if epoch == 0 and batch_num == 0:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -506,8 +502,6 @@ class AgentPPO(AgentLearner):
                     mb_stats.grad_norm = grad_norm
 
                     self._report_train_summaries(mb_stats)
-
-                # log.debug('Hidden distances: %r', hidden_distances)
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
