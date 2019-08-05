@@ -13,26 +13,26 @@ def add_eval_args(parser):
              'This is used only for evaluation, not for training',
     )
     parser.add_argument(
-        '--evaluation-env-frameskip',
+        '--evaluation_env_frameskip',
         default=1,
         type=int,
         help='Environment frameskip during evaluation',
     )
     parser.add_argument(
-        '--render-action-repeat',
+        '--render_action_repeat',
         default=4,
         type=int,
         help='Repeat an action that many frames during evaluation.'
              'Use in combination with env-frameskip for smooth rendering.',
     )
     parser.add_argument(
-        '--record-to',
+        '--record_to',
         default=join(project_root(), '..', 'doom_episodes'),
         type=str,
         help='Record episodes to this folder',
     )
     parser.add_argument(
-        '--no-render',
+        '--no_render',
         action='store_true',
         help='Do not render the environment during evaluation',
     )
