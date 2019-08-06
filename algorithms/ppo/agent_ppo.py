@@ -228,7 +228,7 @@ class ActorCritic(nn.Module):
 
         result = AttrDict(dict(
             actions=actions,
-            action_logits=log_probs,
+            action_logits=action_logits,
             log_prob_actions=log_prob_actions,
             action_distribution=dist,
             values=values,

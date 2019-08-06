@@ -95,6 +95,8 @@ class TupleActionDistribution:
     def log_prob(self, actions):
         # split into batches of actions from individual distributions
         list_of_action_batches = torch.chunk(actions, len(self.distributions), dim=1)
+        list_of_action_batches = [a.squeeze(dim=1) for a in list_of_action_batches]
+
         log_probs = self._calc_log_probs(list_of_action_batches)
         return log_probs
 
