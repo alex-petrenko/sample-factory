@@ -1,13 +1,12 @@
 import copy
-import math
 import time
 
 import numpy as np
 import torch
 from torch import nn
-from torch.distributions import Categorical
 from torch.nn import functional
 
+from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution
 from algorithms.utils.agent import AgentLearner, TrainStatus
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
 from algorithms.utils.multi_env import MultiEnv
@@ -135,6 +134,7 @@ class ActorCritic(nn.Module):
         super().__init__()
 
         self.params = params
+        self.action_space = action_space
 
         self.conv_head = nn.Sequential(
             nn.Conv2d(3, 32, 8, stride=4),
@@ -185,7 +185,7 @@ class ActorCritic(nn.Module):
             self.core = gru
 
         self.critic_linear = nn.Linear(self.hidden_size, 1)
-        self.dist_linear = nn.Linear(self.hidden_size, action_space.n)  # TODO multiple heads
+        self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
 
         self.apply(self.initialize_weights)
         self.apply_gain()
@@ -225,8 +225,7 @@ class ActorCritic(nn.Module):
         values = self.critic_linear(core_output)
         log_probs = functional.log_softmax(self.dist_linear(core_output), dim=1)
 
-        dist = Categorical(logits=log_probs)
-
+        dist = get_action_distribution(self.action_space, logits=log_probs)
         actions = dist.sample()
         log_prob_actions = dist.log_prob(actions)
 
