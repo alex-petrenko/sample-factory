@@ -121,7 +121,7 @@ class TestDoom(TestCase):
 
     def test_doom_two_color(self):
         test_env_performance(
-            lambda env_config: make_doom_env_impl(doom_env_by_name('doom_two_colors_fixed')), 'doom', verbose=True,
+            lambda env_config: make_doom_env_impl(doom_env_by_name('doom_two_colors_easy')), 'doom', verbose=False,
         )
 
     def skip_test_recording(self):

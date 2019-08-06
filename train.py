@@ -19,7 +19,8 @@ from algorithms.models.vizdoom_model import VizdoomVisionNetwork
 from algorithms.pbt.pbt import get_pbt_scheduler
 from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
-from envs.doom.doom_utils import register_doom_envs_rllib, cfg_param
+from envs.doom.doom_utils import cfg_param
+from envs.ray_envs import register_doom_envs_rllib
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:

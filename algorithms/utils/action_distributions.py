@@ -1,5 +1,3 @@
-from collections import namedtuple
-
 import gym
 import torch
 from torch.distributions import Categorical
@@ -22,9 +20,6 @@ def get_action_distribution(action_space, logits):
         return Categorical(logits=logits)
     elif isinstance(action_space, gym.spaces.Tuple):
         return TupleActionDistribution(action_space, logits_flat=logits)
-
-
-# TupleActions = namedtuple('TupleActions', ['action_batches'])
 
 
 class TupleActionDistribution:

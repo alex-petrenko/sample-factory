@@ -138,11 +138,11 @@ class ActorCritic(nn.Module):
 
         self.conv_head = nn.Sequential(
             nn.Conv2d(3, 32, 8, stride=4),
-            nn.ReLU(True),
+            nn.ELU(inplace=True),
             nn.Conv2d(32, 64, 4, stride=2),
-            nn.ReLU(True),
+            nn.ELU(inplace=True),
             nn.Conv2d(64, 128, 3, stride=2),
-            nn.ReLU(True),
+            nn.ELU(inplace=True),
         )
 
         obs_shape = AttrDict()
@@ -161,9 +161,9 @@ class ActorCritic(nn.Module):
         if 'measurements' in obs_shape:
             self.measurements_head = nn.Sequential(
                 nn.Linear(obs_shape.measurements[0], 128),
-                nn.ReLU(True),
+                nn.ELU(inplace=True),
                 nn.Linear(128, 128),
-                nn.ReLU(True),
+                nn.ELU(inplace=True),
             )
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
             self.head_out_size += measurements_out_size
@@ -176,13 +176,9 @@ class ActorCritic(nn.Module):
 
         if params.recurrence == 1:
             # no recurrence
-            self.core = nn.Sequential(
-                nn.Linear(self.hidden_size, self.hidden_size),
-                nn.ReLU(True),
-            )
+            self.core = None
         else:
-            gru = nn.GRUCell(self.hidden_size, self.hidden_size)
-            self.core = gru
+            self.core = nn.GRUCell(self.hidden_size, self.hidden_size)
 
         self.critic_linear = nn.Linear(self.hidden_size, 1)
         self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
@@ -193,12 +189,13 @@ class ActorCritic(nn.Module):
         self.train()
 
     def apply_gain(self):
-        relu_gain = nn.init.calculate_gain('relu')
-        for i in range(len(self.conv_head)):
-            if isinstance(self.conv_head[i], nn.Conv2d):
-                self.conv_head[i].weight.data.mul_(relu_gain)
-
-        self.linear1.weight.data.mul_(relu_gain)
+        # relu_gain = nn.init.calculate_gain('relu')
+        # for i in range(len(self.conv_head)):
+        #     if isinstance(self.conv_head[i], nn.Conv2d):
+        #         self.conv_head[i].weight.data.mul_(relu_gain)
+        #
+        # self.linear1.weight.data.mul_(relu_gain)
+        pass
 
     def forward_head(self, obs_dict):
         x = self.conv_head(obs_dict.obs)
@@ -209,12 +206,12 @@ class ActorCritic(nn.Module):
             x = torch.cat((x, measurements), dim=1)
 
         x = self.linear1(x)
-        x = functional.relu(x)
+        x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
         return x
 
     def forward_core(self, head_output, rnn_states, masks):
         if self.params.recurrence == 1:
-            x = self.core(head_output)
+            x = head_output
             new_rnn_states = torch.zeros(x.shape[0])
         else:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
@@ -361,11 +358,12 @@ class AgentPPO(AgentLearner):
             res = self.actor_critic(observations, rnn_states, masks)
 
             if deterministic:
-                _, actions = res.action_distribution.probs.max(1)
+                raise NotImplementedError('Not supported for some action distributions (TODO!)')
+                # _, actions = res.action_distribution.probs.max(1)
             else:
                 actions = res.action_distribution.sample()
 
-            return actions.cpu(), res.rnn_states
+            return actions.cpu().numpy(), res.rnn_states
 
     # noinspection PyTypeChecker
     def _get_masks(self, dones):
@@ -478,7 +476,7 @@ class AgentPPO(AgentLearner):
 
                 if epoch == 0 and batch_num == 0:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
-                    assert all(abs(r - 1.0) < 1e-6 for r in ratio.detach().cpu().numpy())
+                    assert all(abs(r - 1.0) < 1e-5 for r in ratio.detach().cpu().numpy())
 
                 # TODO!!! Figure out whether we need to do it or not
                 # Update memories for next epoch
