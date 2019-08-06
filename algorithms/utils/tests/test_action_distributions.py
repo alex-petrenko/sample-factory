@@ -3,8 +3,9 @@ from unittest import TestCase
 
 import gym
 import torch
+import numpy as np
 
-from algorithms.utils.action_distributions import get_action_distribution, calc_num_logits
+from algorithms.utils.action_distributions import get_action_distribution, calc_num_logits, sample_actions_log_probs
 
 
 class TestActionDistributions(TestCase):
@@ -63,5 +64,28 @@ class TestActionDistributions(TestCase):
         simple_logprob = simple_distr.log_prob(torch.ones(1))
         tuple_logprob = tuple_distr.log_prob(torch.ones(1, num_spaces))
         self.assertEqual(tuple_logprob, simple_logprob * num_spaces)
+
+    def test_sanity(self):
+        raw_logits = torch.tensor([[0.0, 1.0, 2.0]])
+        action_space = gym.spaces.Discrete(3)
+        categorical = get_action_distribution(action_space, raw_logits)
+
+        log_probs = categorical.log_prob(torch.tensor([0, 1, 2]))
+        probs = torch.exp(log_probs)
+
+        expected_probs = np.array([0.09003057317038046, 0.24472847105479764, 0.6652409557748219])
+
+        self.assertTrue(np.allclose(probs.numpy(), expected_probs))
+
+        tuple_space = gym.spaces.Tuple([action_space, action_space])
+        raw_logits = torch.tensor([[0.0, 1.0, 2.0, 0.0, 1.0, 2.0]])
+        tuple_distr = get_action_distribution(tuple_space, raw_logits)
+
+        for a1 in [0, 1, 2]:
+            for a2 in [0, 1, 2]:
+                action = torch.tensor([[a1, a2]])
+                log_prob = tuple_distr.log_prob(action)
+                probability = torch.exp(log_prob)[0].item()
+                self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2])
 
 

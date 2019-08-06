@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional
 
-from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution
+from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, sample_actions_log_probs
 from algorithms.utils.agent import AgentLearner, TrainStatus
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
 from algorithms.utils.multi_env import MultiEnv
@@ -220,11 +220,11 @@ class ActorCritic(nn.Module):
 
     def forward_tail(self, core_output):
         values = self.critic_linear(core_output)
-        log_probs = functional.log_softmax(self.dist_linear(core_output), dim=1)
+        action_logits = self.dist_linear(core_output)
+        dist = get_action_distribution(self.action_space, raw_logits=action_logits)
 
-        dist = get_action_distribution(self.action_space, logits=log_probs)
-        actions = dist.sample()
-        log_prob_actions = dist.log_prob(actions)
+        # for complex action spaces it is faster to do these together
+        actions, log_prob_actions = sample_actions_log_probs(dist)
 
         result = AttrDict(dict(
             actions=actions,
@@ -476,7 +476,7 @@ class AgentPPO(AgentLearner):
 
                 if epoch == 0 and batch_num == 0:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
-                    assert all(abs(r - 1.0) < 1e-5 for r in ratio.detach().cpu().numpy())
+                    assert all(abs(r - 1.0) < 1e-4 for r in ratio.detach().cpu().numpy())
 
                 # TODO!!! Figure out whether we need to do it or not
                 # Update memories for next epoch
