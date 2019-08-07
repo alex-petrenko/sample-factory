@@ -213,6 +213,7 @@ class ResizeWrapper(gym.core.Wrapper):
         self.interpolation = cv2.INTER_AREA if area_interpolation else cv2.INTER_NEAREST
 
         if isinstance(env.observation_space, spaces.Dict):
+            # TODO: does this even work?
             new_spaces = {}
             for key, space in env.observation_space.spaces.items():
                 new_spaces[key] = self._calc_new_obs_space(space)

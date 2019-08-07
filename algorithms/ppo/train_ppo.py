@@ -8,7 +8,8 @@ from envs.doom.doom_utils import make_doom_env
 def train(args, ppo_params):
     def make_env_func(env_config):
         return make_doom_env(
-            args.env, skip_frames=args.env_frameskip, pixel_format=args.pixel_format, env_config=env_config,
+            args.env, skip_frames=args.env_frameskip, pixel_format=args.pixel_format, memento=ppo_params.memento,
+            env_config=env_config,
         )
 
     agent = AgentPPO(make_env_func, params=ppo_params)

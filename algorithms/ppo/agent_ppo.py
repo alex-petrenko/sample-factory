@@ -160,13 +160,24 @@ class ActorCritic(nn.Module):
         self.measurements_head = None
         if 'measurements' in obs_shape:
             self.measurements_head = nn.Sequential(
-                nn.Linear(obs_shape.measurements[0], 128),
+                nn.Linear(obs_shape.measurements[0], 64),
                 nn.ELU(inplace=True),
-                nn.Linear(128, 128),
+                nn.Linear(64, 64),
                 nn.ELU(inplace=True),
             )
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
             self.head_out_size += measurements_out_size
+
+        self.memento_head = None
+        if 'memento' in obs_shape:
+            self.memento_head = nn.Sequential(
+                nn.Linear(obs_shape.memento[0], 64),
+                nn.ELU(inplace=True),
+                nn.Linear(64, 64),
+                nn.ELU(inplace=True),
+            )
+            memento_out_size = calc_num_elements(self.memento_head, obs_shape.memento)
+            self.head_out_size += memento_out_size
 
         log.debug('Policy head output size: %r', self.head_out_size)
 
@@ -189,6 +200,7 @@ class ActorCritic(nn.Module):
         self.train()
 
     def apply_gain(self):
+        # TODO: do we need this??
         # relu_gain = nn.init.calculate_gain('relu')
         # for i in range(len(self.conv_head)):
         #     if isinstance(self.conv_head[i], nn.Conv2d):
@@ -204,6 +216,10 @@ class ActorCritic(nn.Module):
         if self.measurements_head is not None:
             measurements = self.measurements_head(obs_dict.measurements)
             x = torch.cat((x, measurements), dim=1)
+
+        if self.memento_head is not None:
+            memento = self.memento_head(obs_dict.memento)
+            x = torch.cat((x, memento), dim=1)
 
         x = self.linear1(x)
         x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
@@ -294,6 +310,9 @@ class AgentPPO(AgentLearner):
 
             # training
             self.max_grad_norm = 2.0
+
+            # external memory
+            self.memento = 0
 
         @staticmethod
         def filename_prefix():
