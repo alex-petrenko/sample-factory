@@ -8,7 +8,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'doom_two_colors_memento',
-    '--env=doom_two_colors_easy --recurrence=1 --memento=4',
+    'python -m algorithms.ppo.train_ppo --env=doom_two_colors_easy --recurrence=1 --memento=4',
     _params.generate_params(randomize=False),
 )
 
