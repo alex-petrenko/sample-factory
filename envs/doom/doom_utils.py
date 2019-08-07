@@ -153,6 +153,7 @@ def make_doom_env_impl(
         custom_resolution=None,
         pixel_format='HWC',
         memento=0,
+        memento_increment=0, memento_decrease=0,
         **kwargs,
 ):
     env_config = DEFAULT_CONFIG if env_config is None else env_config
@@ -209,7 +210,7 @@ def make_doom_env_impl(
             env = wrapper_cls(env, **wrapper_kwargs)
 
     if memento > 0:
-        env = MementoWrapper(env, memento)
+        env = MementoWrapper(env, memento, memento_increment, memento_decrease)
 
     return env
 

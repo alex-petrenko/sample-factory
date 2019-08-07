@@ -3,12 +3,16 @@ import numpy as np
 import gym
 from gym.spaces import Discrete
 
+from utils.utils import log
+
 
 class MementoWrapper(gym.core.Wrapper):
-    def __init__(self, env, memory_size):
+    def __init__(self, env, memory_size, memento_increment, memento_decrease):
         super().__init__(env)
 
-        self.mem_max_value = 4.0
+        self.mem_max_value = 3.0
+        self.memento_increment = memento_increment
+        self.memento_decrease = memento_decrease
 
         # modify the original obs space
         memory_obs_space = gym.spaces.Box(low=-self.mem_max_value, high=self.mem_max_value, shape=[memory_size])
@@ -44,8 +48,14 @@ class MementoWrapper(gym.core.Wrapper):
 
         memory_cell = memory_action // 3
         increase = memory_action % 3 == 1
-        self.memory[memory_cell] += 1 if increase else -1
+        if increase:
+            self.memory[memory_cell] += self.memento_increment
+        else:
+            self.memory[memory_cell] -= self.memento_increment * self.memento_decrease
+
         self.memory = np.clip(self.memory, -self.mem_max_value, self.mem_max_value)
+
+        # log.info('Memento: %r', self.memory)
 
     def reset(self):
         self.memory.fill(0.0)

@@ -26,6 +26,7 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
             bot_difficulty=args.bot_difficulty,
             record_to=args.record_to,
             env_config=env_config,
+            memento=params.memento,
         )
 
     agent = AgentPPO(make_env_func, params=params.load())

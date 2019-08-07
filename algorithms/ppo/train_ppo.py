@@ -8,7 +8,8 @@ from envs.doom.doom_utils import make_doom_env
 def train(args, ppo_params):
     def make_env_func(env_config):
         return make_doom_env(
-            args.env, skip_frames=args.env_frameskip, pixel_format=args.pixel_format, memento=ppo_params.memento,
+            args.env, skip_frames=args.env_frameskip, pixel_format=args.pixel_format,
+            memento=ppo_params.memento, memento_increase=args.memento_increment, memento_decrease=args.memento_decrease,
             env_config=env_config,
         )
 
