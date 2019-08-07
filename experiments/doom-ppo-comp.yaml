@@ -1,5 +1,5 @@
 env:
-    grid_search: [doom_battle_discrete, doom_battle_hybrid]
+    grid_search: [doom_battle_hybrid, doom_battle_discrete]
 stop:
     time_total_s: 20000000
 run: CUSTOM_PPO

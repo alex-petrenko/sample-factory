@@ -20,14 +20,12 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             config_file,
             player_id, num_agents, max_num_players, num_bots,
             skip_frames, async_mode=False,
-            record_to=None,
-            no_idle_action=False):
+            record_to=None):
         super().__init__(
             action_space,
             config_file,
             skip_frames=skip_frames, async_mode=async_mode,
             record_to=record_to,
-            no_idle_action=no_idle_action,
         )
 
         self.worker_index = 0

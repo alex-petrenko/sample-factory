@@ -57,8 +57,7 @@ class VizdoomEnv(gym.Env):
                  show_automap=False,
                  skip_frames=1,
                  async_mode=False,
-                 record_to=None,
-                 no_idle_action=False):
+                 record_to=None):
         self.initialized = False
 
         # essential game data
@@ -81,10 +80,7 @@ class VizdoomEnv(gym.Env):
         # provided as a part of environment definition, since these depend on the scenario and
         # can be quite complex multi-discrete spaces
         self.action_space = action_space
-
-        # treat 0th action in each action subspace as the actual action instead of no-op
-        # useful for envs that do not require a no-op action
-        self.no_idle_action = no_idle_action
+        self.composite_action_space = hasattr(self.action_space, 'spaces')
 
         self.delta_actions_scaling_factor = 7.5
 
@@ -267,37 +263,38 @@ class VizdoomEnv(gym.Env):
         Convert actions from gym action space to the action space expected by Doom game.
         """
 
-        if not isinstance(actions, (tuple, list)):
-            actions = (actions,)
-
-        spaces = self.action_space.spaces if hasattr(self.action_space, 'spaces') else (self.action_space, )
+        if self.composite_action_space:
+            # composite action space with multiple subspaces
+            spaces = self.action_space.spaces
+        else:
+            # simple action space, e.g. Discrete. We still treat it like composite of length 1
+            spaces = (self.action_space, )
+            actions = (actions, )
 
         actions_flattened = []
         for i, action in enumerate(actions):
-            if not isinstance(action, np.ndarray):
-                if isinstance(spaces[i], Discretized):
-                    # discretized continuous action
-                    continuous_action = spaces[i].to_continuous(action)
-                    actions_flattened.append(continuous_action)
-                else:
-                    # discrete action
-                    num_non_idle_actions = spaces[i].n if self.no_idle_action else spaces[i].n - 1
-                    action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
-
-                    if self.no_idle_action:
-                        action_one_hot[action] = 1
-                    elif action > 0:
-                        action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
-
-                    actions_flattened.extend(action_one_hot)
-            else:
+            if isinstance(spaces[i], gym.spaces.Box):
                 # continuous action
                 actions_flattened.extend(list(action * self.delta_actions_scaling_factor))
+            elif isinstance(spaces[i], Discretized):
+                # discretized continuous action
+                continuous_action = spaces[i].to_continuous(action)
+                actions_flattened.append(continuous_action)
+            elif isinstance(spaces[i], gym.spaces.Discrete):
+                # standard discrete action
+                num_non_idle_actions = spaces[i].n - 1
+                action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
+                if action > 0:
+                    action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
+
+                actions_flattened.extend(action_one_hot)
+            else:
+                raise NotImplementedError(f'Action subspace type {type(spaces[i])} is not supported!')
 
         return actions_flattened
 
     def _vizdoom_variables_bug_workaround(self, info, done):
-        """Some variables don't get reset to zero on game.new_episode(). This fixes it (unless overflow)."""
+        """Some variables don't get reset to zero on game.new_episode(). This fixes it (also check overflow?)."""
         if not done:
             self._prev_info = copy.deepcopy(info)
         if self._last_episode_info is not None:

@@ -37,7 +37,6 @@ class DoomCfg:
     def __init__(
             self, name, env_cfg, action_space, reward_scaling=1.0, default_timeout=int(1e9),
             num_agents=1, num_bots=0,
-            no_idle=False,
             extra_wrappers=None,
     ):
         self.name = name
@@ -45,9 +44,6 @@ class DoomCfg:
         self.action_space = action_space
         self.reward_scaling = reward_scaling
         self.default_timeout = default_timeout
-
-        # set to True if the environment does not assume an IDLE action
-        self.no_idle = no_idle
 
         # 1 for singleplayer, >1 otherwise
         self.num_agents = num_agents
@@ -164,7 +160,6 @@ def make_doom_env_impl(
     if player_id is None:
         env = VizdoomEnv(
             doom_cfg.action_space, doom_cfg.env_cfg, skip_frames=skip_frames, async_mode=async_mode,
-            no_idle_action=doom_cfg.no_idle,
         )
     else:
         # skip_frames is handled by multi-agent wrapper
@@ -173,7 +168,6 @@ def make_doom_env_impl(
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=skip_frames,
             async_mode=async_mode,
-            no_idle_action=doom_cfg.no_idle,
         )
 
     if doom_cfg.reward_scaling != 1.0:
