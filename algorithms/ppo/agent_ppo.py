@@ -494,7 +494,7 @@ class AgentPPO(AgentLearner):
                     mb_stats.dist_loss = dist_loss
                     mb_stats.rnn_dist /= recurrence
 
-                if epoch == 0 and batch_num == 0:
+                if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
                     assert all(abs(r - 1.0) < 1e-4 for r in ratio.detach().cpu().numpy())
 
