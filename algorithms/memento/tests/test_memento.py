@@ -1,22 +1,27 @@
 from unittest import TestCase
 
 import gym
-import numpy as np
 
 from envs.doom.doom_utils import make_doom_env
-from utils.utils import log
+from utils.utils import log, AttrDict
 
 
 class TestMemento(TestCase):
-    # noinspection PyUnusedLocal
     @staticmethod
-    def make_env_simple(env_config):
-        return make_doom_env('doom_basic', memento=5)
+    def memento_args():
+        return AttrDict(dict(
+            memento_size=5,
+            memento_increment=0.1,
+            memento_history=10,
+        ))
 
     # noinspection PyUnusedLocal
-    @staticmethod
-    def make_env_advanced(env_config):
-        return make_doom_env('doom_battle_hybrid', memento=5)
+    def make_env_simple(self, env_config):
+        return make_doom_env('doom_basic', memento_args=self.memento_args())
+
+    # noinspection PyUnusedLocal
+    def make_env_advanced(self, env_config):
+        return make_doom_env('doom_battle_hybrid', memento_args=self.memento_args())
 
     def run_env(self, make_env_func):
         env = make_env_func(None)

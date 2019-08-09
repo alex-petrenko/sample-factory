@@ -312,8 +312,9 @@ class AgentPPO(AgentLearner):
             self.max_grad_norm = 2.0
 
             # external memory
-            self.memento = 0
-            self.memento_increment = 1.0
+            self.memento_size = 4
+            self.memento_increment = 0.1
+            self.memento_history = 50
 
         @staticmethod
         def filename_prefix():
