@@ -136,14 +136,21 @@ class ActorCritic(nn.Module):
         self.params = params
         self.action_space = action_space
 
-        self.conv_head = nn.Sequential(
-            nn.Conv2d(3, 32, 8, stride=4),
-            nn.ELU(inplace=True),
-            nn.Conv2d(32, 64, 4, stride=2),
-            nn.ELU(inplace=True),
-            nn.Conv2d(64, 128, 3, stride=2),
-            nn.ELU(inplace=True),
-        )
+        def nonlinearity():
+            return nn.ELU(inplace=True)
+
+        conv_layers = []
+        for layer in params.conv_filters:
+            if layer == 'maxpool_2x2':
+                conv_layers.append(nn.MaxPool2d((2, 2)))
+            elif isinstance(layer, (list, tuple)):
+                inp_ch, out_ch, filter_size, stride = layer
+                conv_layers.append(nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride))
+                conv_layers.append(nonlinearity())
+            else:
+                raise NotImplementedError(f'Layer {layer} not supported!')
+
+        self.conv_head = nn.Sequential(*conv_layers)
 
         obs_shape = AttrDict()
         if hasattr(obs_space, 'spaces'):
@@ -161,9 +168,9 @@ class ActorCritic(nn.Module):
         if 'measurements' in obs_shape:
             self.measurements_head = nn.Sequential(
                 nn.Linear(obs_shape.measurements[0], 64),
-                nn.ELU(inplace=True),
+                nonlinearity(),
                 nn.Linear(64, 64),
-                nn.ELU(inplace=True),
+                nonlinearity(),
             )
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
             self.head_out_size += measurements_out_size
@@ -172,9 +179,9 @@ class ActorCritic(nn.Module):
         if 'memento' in obs_shape:
             self.memento_head = nn.Sequential(
                 nn.Linear(obs_shape.memento[0], 64),
-                nn.ELU(inplace=True),
+                nonlinearity(),
                 nn.Linear(64, 64),
-                nn.ELU(inplace=True),
+                nonlinearity(),
             )
             memento_out_size = calc_num_elements(self.memento_head, obs_shape.memento)
             self.head_out_size += memento_out_size
@@ -291,10 +298,13 @@ class AgentPPO(AgentLearner):
 
             self.recurrence = 16
 
+            # observation preprocessing
+            self.obs_subtract_mean = 0.0
+            self.obs_scale = 1.0
+
             # actor-critic (encoders and models)
-            self.image_enc_name = 'convnet_84px'
-            self.model_fc_layers = 1
-            self.hidden_size = 256  # fc layer or RNN state size
+            self.conv_filters = None
+            self.hidden_size = None  # defined per env, see e.g. doom_params
 
             # ppo-specific
             self.ppo_clip_ratio = 1.1  # we use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper
@@ -312,8 +322,8 @@ class AgentPPO(AgentLearner):
             self.max_grad_norm = 2.0
 
             # external memory
-            self.memento_size = 4
-            self.memento_increment = 0.1
+            self.memento_size = 0
+            self.memento_increment = 1
             self.memento_history = 50
 
         @staticmethod
@@ -356,7 +366,8 @@ class AgentPPO(AgentLearner):
         obs_dict = AttrDict()
         if isinstance(observations[0], dict):
             for key in observations[0].keys():
-                obs_dict[key] = [o[key] for o in observations]
+                if not isinstance(observations[0][key], str):
+                    obs_dict[key] = [o[key] for o in observations]
         else:
             # handle flat observations also as dict
             obs_dict.obs = observations
@@ -364,7 +375,11 @@ class AgentPPO(AgentLearner):
         for key, x in obs_dict.items():
             obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
-        obs_dict.obs = (obs_dict.obs - 128.0) * (1.0 / 128.0)  # convert rgb observations to [-1, 1]
+        mean = self.params.obs_subtract_mean
+        scale = self.params.obs_scale
+
+        if abs(mean) > EPS and abs(scale - 1.0) > EPS:
+            obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
         return obs_dict
 
     def best_action(self, observations, dones=None, rnn_states=None, deterministic=False):
@@ -560,7 +575,9 @@ class AgentPPO(AgentLearner):
                             rewards, dones,
                         )
 
-                        observations = self._preprocess_observations(new_obs)
+                        with timing.timeit('obs'):
+                            # TODO: can we do it faster? Maybe in Pytorch
+                            observations = self._preprocess_observations(new_obs)
                         rnn_states = res.rnn_states
 
                         self.process_infos(infos)

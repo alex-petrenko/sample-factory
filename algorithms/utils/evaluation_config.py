@@ -20,7 +20,7 @@ def add_eval_args(parser):
     )
     parser.add_argument(
         '--render_action_repeat',
-        default=4,
+        default=None,
         type=int,
         help='Repeat an action that many frames during evaluation.'
              'Use in combination with env-frameskip for smooth rendering.',

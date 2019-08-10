@@ -1,22 +1,16 @@
 import sys
 
+from algorithms.memento.memento_wrapper import get_memento_args
 from algorithms.ppo.agent_ppo import AgentPPO
 from algorithms.utils.arguments import parse_args
-from envs.doom.doom_utils import make_doom_env
-from utils.utils import AttrDict
+from envs.create_env import create_env
 
 
 def train(args, ppo_params):
     def make_env_func(env_config):
-        memento_args = AttrDict(dict(
-            memento_size=ppo_params.memento_size,
-            memento_increment=ppo_params.memento_increment,
-            memento_history=ppo_params.memento_history,
-        ))
-
-        return make_doom_env(
+        return create_env(
             args.env, skip_frames=args.env_frameskip, pixel_format=args.pixel_format,
-            memento_args=memento_args,
+            memento_args=get_memento_args(ppo_params),
             env_config=env_config,
         )
 

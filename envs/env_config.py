@@ -1,3 +1,18 @@
+from utils.utils import log
+
+
+def env_override_default_params_and_args(env_name, params, args):
+    """Override default algorithm params based on env type."""
+    if env_name.startswith('doom'):
+        from envs.doom.doom_params import doom_override_default_params_and_args
+        doom_override_default_params_and_args(params, args)
+    elif env_name.startswith('MiniGrid'):
+        from envs.minigrid.minigrid_params import minigrid_override_default_params_and_args
+        minigrid_override_default_params_and_args(params, args)
+    else:
+        log.warning('Environment %r does not override default params')
+
+
 def add_env_args(parser):
     parser.add_argument(
         '--num_agents',
@@ -36,3 +51,4 @@ def add_env_args(parser):
         type=str,
         help='PyTorch expects CHW by default, Ray & TensorFlow expect HWC',
     )
+

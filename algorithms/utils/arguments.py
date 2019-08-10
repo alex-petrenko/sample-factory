@@ -2,7 +2,7 @@ import argparse
 import sys
 
 from algorithms.utils.evaluation_config import add_eval_args
-from envs.env_config import add_env_args
+from envs.env_config import add_env_args, env_override_default_params_and_args
 from utils.utils import log
 
 
@@ -31,7 +31,13 @@ def parse_args(params_cls, argv=None, evaluation=False):
 
     experiment = args.experiment
 
+    # create params object with default values
     params = params_cls(experiment)
+
+    env = args.env
+    env_override_default_params_and_args(env, params, args)
+
+    # read command line params, which have priority over default values
     params.set_command_line(sys.argv)
     params.update(args)
 

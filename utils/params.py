@@ -76,6 +76,10 @@ class Params:
         for name, value in self.__dict__.items():
             if name in arg_attrs:
                 new_value = args.__dict__[name]
+                if new_value is None and value is not None:
+                    log.info('Keep default value %r for parameter %s', value, name)
+                    continue
+
                 if value != new_value:
                     log.info('Replacing default value for %s (%r) with new value: %r', name, value, new_value)
                     setattr(self, name, new_value)

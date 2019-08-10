@@ -4,6 +4,17 @@ import gym
 import numpy as np
 from gym.spaces import Discrete
 
+from utils.utils import AttrDict
+
+
+def get_memento_args(params):
+    memento_args = AttrDict(dict(
+        memento_size=params.memento_size,
+        memento_increment=params.memento_increment,
+        memento_history=params.memento_history,
+    ))
+    return memento_args
+
 
 class MementoWrapper(gym.core.Wrapper):
     def __init__(self, env, memento_args):

@@ -366,10 +366,17 @@ class PixelFormatChwWrapper(ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
 
-        if not has_image_observations(env.observation_space):
+        if isinstance(env.observation_space, gym.spaces.Dict):
+            img_obs_space = env.observation_space['obs']
+            self.dict_obs_space = True
+        else:
+            img_obs_space = env.observation_space
+            self.dict_obs_space = False
+
+        if not has_image_observations(img_obs_space):
             raise Exception('Pixel format wrapper only works with image-based envs')
 
-        obs_shape = env.observation_space.shape
+        obs_shape = img_obs_space.shape
         max_num_img_channels = 4
 
         if len(obs_shape) <= 2:
@@ -379,14 +386,30 @@ class PixelFormatChwWrapper(ObservationWrapper):
             raise Exception('Env obs already in CHW format?')
 
         h, w, c = obs_shape
-        low, high = env.observation_space.low.flat[0], env.observation_space.high.flat[0]
+        low, high = img_obs_space.low.flat[0], img_obs_space.high.flat[0]
         new_shape = [c, h, w]
-        self.observation_space = spaces.Box(low, high, shape=new_shape, dtype=env.observation_space.dtype)
+
+        dtype = env.observation_space.dtype if env.observation_space.dtype is not None else np.float32
+        new_img_obs_space = spaces.Box(low, high, shape=new_shape, dtype=dtype)
+
+        if self.dict_obs_space:
+            self.observation_space = env.observation_space
+            self.observation_space.spaces['obs'] = new_img_obs_space
+        else:
+            self.observation_space = new_img_obs_space
+
         self.action_space = env.action_space
 
+    @staticmethod
+    def _transpose(obs):
+        return np.transpose(obs, (2, 0, 1))  # HWC to CHW for PyTorch
+
     def observation(self, observation):
-        new_obs = np.transpose(observation, (2, 0, 1))  # HWC to CHW for PyTorch
-        return new_obs
+        if self.dict_obs_space:
+            observation['obs'] = self._transpose(observation['obs'])
+        else:
+            observation = self._transpose(observation)
+        return observation
 
 
 class ClipRewardWrapper(gym.RewardWrapper):
