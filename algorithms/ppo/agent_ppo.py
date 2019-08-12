@@ -324,7 +324,7 @@ class AgentPPO(AgentLearner):
             # external memory
             self.memento_size = 0
             self.memento_increment = 1
-            self.memento_history = 50
+            self.memento_history = 1
 
         @staticmethod
         def filename_prefix():

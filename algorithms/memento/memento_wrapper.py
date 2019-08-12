@@ -25,8 +25,14 @@ class MementoWrapper(gym.core.Wrapper):
         self.increment = memento_args.memento_increment
         self.history = memento_args.memento_history
 
+        self.history_actions = False
+        self.joint_action_space = True
+
         # modify the original obs space
-        memory_obs_size = self.memory_size * self.history + self.memory_size * self.history
+        memory_obs_size = self.memory_size * self.history
+        if self.history_actions:
+            memory_obs_size += self.memory_size * self.history
+
         memory_obs_space = gym.spaces.Box(low=-self.mem_max_value, high=self.mem_max_value, shape=[memory_obs_size])
 
         if isinstance(env.observation_space, gym.spaces.Dict):
@@ -37,7 +43,10 @@ class MementoWrapper(gym.core.Wrapper):
         self.observation_space.spaces['memento'] = memory_obs_space
 
         # three actions for each "memory" cell (noop, inc, dec)
-        memory_action_spaces = [Discrete(3) for _ in range(self.memory_size)]
+        if self.joint_action_space:
+            memory_action_spaces = [Discrete(3 * self.memory_size)]
+        else:
+            memory_action_spaces = [Discrete(3) for _ in range(self.memory_size)]
 
         # modify the original action space
         if isinstance(env.action_space, gym.spaces.Tuple):
@@ -57,18 +66,30 @@ class MementoWrapper(gym.core.Wrapper):
         if not isinstance(obs, dict):
             obs = dict(obs=obs)
 
-        obs['memento'] = np.array(list(self.past_memory) + list(self.past_actions)).flatten()
+        if self.history_actions:
+            past = list(self.past_memory) + list(self.past_actions)
+        else:
+            past = list(self.past_memory)
+
+        obs['memento'] = np.array(past).flatten()
         return obs
 
-    def _modify_memory(self, memory_actions):
+    def _modify_memory(self, action):
+        if self.joint_action_space:
+            memory_actions = np.ones(self.memory_size)  # noop
+            cell_id = action // 3
+            memory_actions[cell_id] = action % 3
+        else:
+            memory_actions = action
+
         memory_actions = np.asarray(memory_actions) - 1
-        for memory_cell, memory_action in enumerate(memory_actions):
+        for memory_cell, action in enumerate(memory_actions):
             # actions:
             # 0 = noop
             # +1 = increase cell value
             # -1 = decrease cell value
 
-            self.memory[memory_cell] += self.increment * memory_action
+            self.memory[memory_cell] += self.increment * action
 
         self.memory = np.clip(self.memory, -self.mem_max_value, self.mem_max_value)
         self.past_memory.append(self.memory.copy())
@@ -76,18 +97,23 @@ class MementoWrapper(gym.core.Wrapper):
 
         # log.info('Memento: %r', self.memory)
 
+    def _parse_actions(self, actions):
+        if self.joint_action_space:
+            return actions[:-1], actions[-1]
+        else:
+            return actions[:-self.memory_size], actions[-self.memory_size:]
+
     def reset(self):
         self._reset_memory()
         obs = self._observation(self.env.reset())
         return obs
 
     def step(self, action):
-        memory_action = action[-self.memory_size:]
+        env_action, memory_action = self._parse_actions(action)
         self._modify_memory(memory_action)
 
-        action = action[:-self.memory_size]
-        if len(action) == 1:
-            action = action[0]
+        if len(env_action) == 1:
+            env_action = env_action[0]
 
-        observation, reward, done, info = self.env.step(action)
+        observation, reward, done, info = self.env.step(env_action)
         return self._observation(observation), reward, done, info

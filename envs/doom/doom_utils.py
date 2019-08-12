@@ -1,6 +1,5 @@
 from gym.spaces import Discrete
 
-from algorithms.memento.memento_wrapper import MementoWrapper
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer, VizdoomMultiAgentEnv, init_multiplayer_env
 from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
@@ -152,7 +151,6 @@ def make_doom_env_impl(
         record_to=None,
         custom_resolution=None,
         pixel_format='HWC',
-        memento_args=None,
         **kwargs,
 ):
     env_config = DEFAULT_CONFIG if env_config is None else env_config
@@ -207,9 +205,6 @@ def make_doom_env_impl(
     if doom_cfg.extra_wrappers is not None:
         for wrapper_cls, wrapper_kwargs in doom_cfg.extra_wrappers:
             env = wrapper_cls(env, **wrapper_kwargs)
-
-    if memento_args is not None and memento_args.memento_size > 0:
-        env = MementoWrapper(env, memento_args)
 
     return env
 
