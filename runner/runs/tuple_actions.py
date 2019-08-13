@@ -8,7 +8,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'doom_tuple_actions',
-    'python -m algorithms.ppo.train_ppo --env=doom_battle_hybrid --train_for_seconds=360000 --gamma=0.998 --batch_size=1024 --entropy_loss_coeff=0.0005 --num_envs=144 --num_workers=18 --hidden_size=512 --env_frameskip=2',
+    'python -m algorithms.ppo.train_ppo --env=doom_battle_hybrid --train_for_seconds=360000 --gamma=0.998 --batch_size=1024 --entropy_loss_coeff=0.0005 --num_envs=144 --num_workers=18 --env_frameskip=2',
     _params.generate_params(randomize=False),
 )
 

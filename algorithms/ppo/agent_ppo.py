@@ -304,7 +304,7 @@ class AgentPPO(AgentLearner):
 
             # actor-critic (encoders and models)
             self.conv_filters = None
-            self.hidden_size = None  # defined per env, see e.g. doom_params
+            self.hidden_size = 512  # defined per env, see e.g. doom_params
 
             # ppo-specific
             self.ppo_clip_ratio = 1.1  # we use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper
