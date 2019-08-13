@@ -14,6 +14,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('doom_tuple_actions_frameskip2', experiments=[_experiment], pause_between_experiments=30)
+gridsearch = RunDescription('doom_tuple_actions_v5', experiments=[_experiment], pause_between_experiments=30)
 
 run(gridsearch)
