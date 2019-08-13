@@ -28,8 +28,8 @@ def main():
     parser.add_argument('--dir', default='~/ray_results', help='Base folder with summaries')
     parser.add_argument('--port', default=6006, type=int, help='The port to use for tensorboard')
     parser.add_argument('--quiet', '-q', action='store_true', help='Run in silent mode')
-    parser.add_argument('--refresh_every', '-r', dest='refresh', type=int, default=1800,
-                        help='Refresh every x seconds (default 1800 sec, i.e. 30 min)')
+    parser.add_argument('--refresh_every', '-r', dest='refresh', type=int, default=7200,
+                        help='Refresh every x seconds (default 7200 sec, i.e. 120 min)')
     parser.add_argument('--reload_interval', type=int, default=60, help='How often to reload data')
     parser.add_argument('filters', nargs='+', type=str, help='directories in train_dir to monitor')
     args = parser.parse_args()

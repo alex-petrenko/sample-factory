@@ -4,7 +4,7 @@ import gym
 import numpy as np
 from gym.spaces import Discrete
 
-from utils.utils import AttrDict
+from utils.utils import AttrDict, log
 
 
 def get_memento_args(params):
@@ -96,6 +96,9 @@ class MementoWrapper(gym.core.Wrapper):
         self.past_actions.append(memory_actions)
 
         # log.info('Memento: %r', self.memory)
+        # import cv2
+        # cv2.imshow('test', np.zeros((10,10,3)))
+        # cv2.waitKey()
 
     def _parse_actions(self, actions):
         if self.joint_action_space:
