@@ -66,3 +66,10 @@ The model is checkpointed every 20 iterations, so wait at least a few minutes be
 ```
 python -m enjoy ~/ray_results/test-appo/CUSTOM_APPO_doom_battle_hybrid_0_2019-07-25_17-33-223ci_8euu/checkpoint_20/checkpoint-20 --run APPO
 ```
+
+## Working with PyTorch implementation
+
+```
+python -m algorithms.ppo.train_ppo --env=doom_basic --experiment=doom-test-ppo --recurrence=16
+python -m algorithms.ppo.enjoy_ppo --env=doom_basic --experiment=doom-test-ppo --recurrence=16 --fps=100
+```
