@@ -3,6 +3,8 @@ import torch
 from torch.nn import functional
 from torch.distributions import Categorical
 
+from algorithms.memento.mem_wrapper import MemActionSpace, MemCategorical
+
 
 def calc_num_logits(action_space):
     """Returns the number of logits required to represent the given action space."""
@@ -23,6 +25,9 @@ def get_action_distribution(action_space, raw_logits):
     """
     assert calc_num_logits(action_space) == raw_logits.shape[-1]
 
+    if isinstance(action_space, MemActionSpace):
+        log_probabilities = functional.log_softmax(raw_logits, dim=1)
+        return MemCategorical(logits=log_probabilities, prior_probs=action_space.prior_probs)
     if isinstance(action_space, gym.spaces.Discrete):
         log_probabilities = functional.log_softmax(raw_logits, dim=1)
         return Categorical(logits=log_probabilities)

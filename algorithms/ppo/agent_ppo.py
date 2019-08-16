@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional
 
+from algorithms.memento.mem_wrapper import MemWrapper
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, sample_actions_log_probs
 from algorithms.utils.agent import AgentLearner, TrainStatus
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
@@ -175,16 +176,14 @@ class ActorCritic(nn.Module):
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
             self.head_out_size += measurements_out_size
 
-        self.memento_head = None
-        if 'memento' in obs_shape:
-            self.memento_head = nn.Sequential(
-                nn.Linear(obs_shape.memento[0], 64),
-                nonlinearity(),
-                nn.Linear(64, 64),
+        self.mem_head = None
+        if params.mem_size > 0:
+            mem_out_size = 256
+            self.mem_head = nn.Sequential(
+                nn.Linear(params.mem_size * params.mem_feature, mem_out_size),
                 nonlinearity(),
             )
-            memento_out_size = calc_num_elements(self.memento_head, obs_shape.memento)
-            self.head_out_size += memento_out_size
+            self.head_out_size += mem_out_size
 
         log.debug('Policy head output size: %r', self.head_out_size)
 
@@ -197,6 +196,17 @@ class ActorCritic(nn.Module):
             self.core = None
         else:
             self.core = nn.GRUCell(self.hidden_size, self.hidden_size)
+
+        if params.mem_size > 0:
+            self.compressed_state = nn.Identity()
+            # TODO: compress
+            assert params.mem_feature == self.hidden_size
+
+            # self.compressed_state = nn.Sequential(
+            #     nn.Linear(self.hidden_size, params.mem_feature),
+            #     nonlinearity(),
+            # )
+            # self.reconstructed_state = nn.Linear(params.mem_feature, self.hidden_size)
 
         self.critic_linear = nn.Linear(self.hidden_size, 1)
         self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
@@ -224,9 +234,9 @@ class ActorCritic(nn.Module):
             measurements = self.measurements_head(obs_dict.measurements)
             x = torch.cat((x, measurements), dim=1)
 
-        if self.memento_head is not None:
-            memento = self.memento_head(obs_dict.memento)
-            x = torch.cat((x, memento), dim=1)
+        if self.mem_head is not None:
+            mem = self.mem_head(obs_dict.mem)
+            x = torch.cat((x, mem), dim=1)
 
         x = self.linear1(x)
         x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
@@ -239,7 +249,13 @@ class ActorCritic(nn.Module):
         else:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
 
-        return x, new_rnn_states
+        compressed_state = reconstructed_state = None
+        if self.params.mem_size > 0:
+            compressed_state = self.compressed_state(x)
+            # reconstructed_state = self.reconstructed_state(compressed_state)
+
+        # TODO: loss
+        return x, new_rnn_states, compressed_state, reconstructed_state
 
     def forward_tail(self, core_output):
         values = self.critic_linear(core_output)
@@ -261,9 +277,11 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs_dict, rnn_states, masks):
         x = self.forward_head(obs_dict)
-        x, new_rnn_states = self.forward_core(x, rnn_states, masks)
+        x, new_rnn_states, compressed_state, reconstructed_state = self.forward_core(x, rnn_states, masks)
         result = self.forward_tail(x)
         result.rnn_states = new_rnn_states
+        result.compressed_state = compressed_state
+        result.reconstructed_state = reconstructed_state
         return result
 
     @staticmethod
@@ -299,12 +317,12 @@ class AgentPPO(AgentLearner):
             self.recurrence = 16
 
             # observation preprocessing
-            self.obs_subtract_mean = 0.0
-            self.obs_scale = 1.0
+            self.obs_subtract_mean = None
+            self.obs_scale = None
 
             # actor-critic (encoders and models)
             self.conv_filters = None
-            self.hidden_size = 512  # defined per env, see e.g. doom_params
+            self.hidden_size = None  # defined per env, see e.g. doom_params
 
             # ppo-specific
             self.ppo_clip_ratio = 1.1  # we use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper
@@ -321,10 +339,9 @@ class AgentPPO(AgentLearner):
             # training
             self.max_grad_norm = 2.0
 
-            # external memory
-            self.memento_size = 0
-            self.memento_increment = 1
-            self.memento_history = 1
+            # external memory variant #2
+            self.mem_size = 0
+            self.mem_feature = 64  # memory feature vector dimensionality
 
         @staticmethod
         def filename_prefix():
@@ -334,8 +351,14 @@ class AgentPPO(AgentLearner):
         """Initialize PPO computation graph and some auxiliary tensors."""
         super().__init__(params)
 
-        self.make_env_func = make_env_func
-        env = make_env_func(None)  # we need the env to query observation shape, number of actions, etc.
+        def make_env(env_config):
+            env_ = make_env_func(env_config)
+            if params.mem_size > 0:
+                env_ = MemWrapper(env_, params.mem_size, params.mem_feature)
+            return env_
+
+        self.make_env_func = make_env
+        env = self.make_env_func(None)  # we need the env to query observation shape, number of actions, etc.
 
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.params)
         self.actor_critic.to(self.device)
@@ -382,6 +405,14 @@ class AgentPPO(AgentLearner):
             obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
         return obs_dict
 
+    def _preprocess_actions(self, actor_critic_output):
+        actions = actor_critic_output.actions.cpu().numpy()
+
+        if self.params.mem_size > 0:
+            actions = np.concatenate([actions, actor_critic_output.compressed_state.cpu().numpy()], axis=1)
+
+        return actions
+
     def best_action(self, observations, dones=None, rnn_states=None, deterministic=False):
         with torch.no_grad():
             observations = self._preprocess_observations(observations)
@@ -392,14 +423,15 @@ class AgentPPO(AgentLearner):
                 rnn_states = torch.zeros(num_envs, self.params.hidden_size).to(self.device)
 
             res = self.actor_critic(observations, rnn_states, masks)
+            actions = self._preprocess_actions(res)
 
-            if deterministic:
-                raise NotImplementedError('Not supported for some action distributions (TODO!)')
-                # _, actions = res.action_distribution.probs.max(1)
-            else:
-                actions = res.action_distribution.sample()
+            # if deterministic:
+            #     raise NotImplementedError('Not supported for some action distributions (TODO!)')
+            #     # _, actions = res.action_distribution.probs.max(1)
+            # else:
+            #     actions = res.action_distribution.sample()
 
-            return actions.cpu().numpy(), res.rnn_states
+            return actions, res.rnn_states
 
     # noinspection PyTypeChecker
     def _get_masks(self, dones):
@@ -470,7 +502,10 @@ class AgentPPO(AgentLearner):
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
 
-                    core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states, masks)
+                    # TODO: compressed_state loss
+                    core_output, rnn_states, _, _ = self.actor_critic.forward_core(
+                        step_head_outputs, rnn_states, masks,
+                    )
                     core_outputs.append(core_output)
 
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
@@ -563,9 +598,10 @@ class AgentPPO(AgentLearner):
                     for rollout_step in range(self.params.rollout):
                         masks = self._get_masks(dones)
                         res = self.actor_critic(observations, rnn_states, masks)
+                        actions = self._preprocess_actions(res)
 
                         # wait for all the workers to complete an environment step
-                        new_obs, rewards, dones, infos = multi_env.step(res.actions.cpu().numpy())
+                        new_obs, rewards, dones, infos = multi_env.step(actions)
 
                         buffer.add(
                             observations,

@@ -4,7 +4,6 @@ from os.path import join
 
 import cv2
 
-from algorithms.memento.memento_wrapper import get_memento_args
 from algorithms.ppo.agent_ppo import AgentPPO
 from algorithms.utils.arguments import parse_args
 from envs.create_env import create_env
@@ -29,13 +28,12 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
             bot_difficulty=args.bot_difficulty,
             record_to=args.record_to,
             env_config=env_config,
-            memento_args=get_memento_args(params),
         )
 
     agent = AgentPPO(make_env_func, params=params)
     agent.initialize()
 
-    env = make_env_func(None)
+    env = agent.make_env_func(None)
     env.seed(0)
 
     episode_rewards = []
@@ -62,7 +60,7 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
                     time_wait = target_delay - current_delay
 
                     if time_wait > 0:
-                        log.info('Wait time %.3f', time_wait)
+                        # log.info('Wait time %.3f', time_wait)
                         time.sleep(time_wait)
 
                     last_render_start = time.time()

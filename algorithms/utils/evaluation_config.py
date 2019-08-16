@@ -27,7 +27,7 @@ def add_eval_args(parser):
     )
     parser.add_argument(
         '--record_to',
-        default=join(project_root(), '..', 'doom_episodes'),
+        default=join(project_root(), '..', 'recorded_episodes'),
         type=str,
         help='Record episodes to this folder',
     )

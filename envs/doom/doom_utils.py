@@ -70,10 +70,10 @@ DOOM_ENVS = [
         extra_wrappers=[(DoomAdditionalInputAndRewards, {'with_reward_shaping': False})],
     ),
 
-    DoomCfg('doom_battle_discrete', 'D3_battle.cfg', Discrete(8), 0.2, 2100),
-    DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 0.2, 2100),
-    DoomCfg('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 0.2, 2100),
-    DoomCfg('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 0.2, 2100),
+    DoomCfg('doom_battle_discrete', 'D3_battle.cfg', Discrete(8), 1.0, 2100),
+    DoomCfg('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
+    DoomCfg('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
+    DoomCfg('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100),
 
     DoomCfg('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 

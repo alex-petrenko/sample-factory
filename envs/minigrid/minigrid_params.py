@@ -8,7 +8,7 @@ def minigrid_override_default_params_and_args(params, args):
         [32, 64, 2, 1],
     ]
 
-    params.hidden_size = 256
+    params.hidden_size = 128
 
     if 'render_action_repeat' in args:
         if args.render_action_repeat is None:

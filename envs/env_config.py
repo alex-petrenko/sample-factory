@@ -9,6 +9,9 @@ def env_override_default_params_and_args(env_name, params, args):
     elif env_name.startswith('MiniGrid'):
         from envs.minigrid.minigrid_params import minigrid_override_default_params_and_args
         minigrid_override_default_params_and_args(params, args)
+    elif env_name.startswith('dmlab'):
+        from envs.dmlab.dmlab_params import dmlab_override_default_params_and_args
+        dmlab_override_default_params_and_args(params, args)
     else:
         log.warning('Environment %r does not override default params')
 

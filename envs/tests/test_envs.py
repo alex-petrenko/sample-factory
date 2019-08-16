@@ -5,6 +5,7 @@ from unittest import TestCase
 
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_env import MultiEnv
+from envs.dmlab.dmlab_utils import make_dmlab_env
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.doom_utils import make_doom_env_impl, doom_env_by_name, make_doom_multiplayer_env
 from utils.timing import Timing
@@ -144,3 +145,16 @@ class TestDoom(TestCase):
         self.assertTrue(os.path.isfile(demo_path))
         os.remove(demo_path)
         self.assertFalse(os.path.isfile(demo_path))
+
+
+class TestDmlab(TestCase):
+    # noinspection PyUnusedLocal
+    @staticmethod
+    def make_env(env_config):
+        return make_dmlab_env('dmlab_nonmatch')
+
+    def test_dmlab_performance(self):
+        test_env_performance(self.make_env, 'dmlab')
+
+    def test_dmlab_performance_multi(self):
+        test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64)

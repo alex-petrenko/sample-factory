@@ -1,50 +1,30 @@
 from unittest import TestCase
 
-import gym
+import torch
 
-from envs.doom.doom_utils import make_doom_env
-from utils.utils import log, AttrDict
+from algorithms.memento.mem_wrapper import MemCategorical
 
 
-class TestMemento(TestCase):
-    @staticmethod
-    def memento_args():
-        return AttrDict(dict(
-            memento_size=5,
-            memento_increment=0.1,
-            memento_history=10,
-        ))
+class TestMemCategorical(TestCase):
+    def test_mem_categorical(self):
+        logits = torch.ones([3, 2])
+        prior_probs = [0.5, 0.5]
+        distr = MemCategorical(logits, prior_probs)
 
-    # noinspection PyUnusedLocal
-    def make_env_simple(self, env_config):
-        return make_doom_env('doom_basic', memento_args=self.memento_args())
+        kl = distr.entropy()
+        self.assertEqual(list(kl.shape), [3])
+        self.assertEqual(kl.cpu().tolist(), [0, 0, 0])
 
-    # noinspection PyUnusedLocal
-    def make_env_advanced(self, env_config):
-        return make_doom_env('doom_battle_hybrid', memento_args=self.memento_args())
+        logits = torch.ones([3, 2])
+        prior_probs = [0.1, 0.9]
+        distr = MemCategorical(logits, prior_probs)
+        kl_1 = distr.entropy()
+        self.assertEqual(list(kl_1.shape), [3])
 
-    def run_env(self, make_env_func):
-        env = make_env_func(None)
-        self.assertIsInstance(env.action_space, gym.spaces.Tuple)
-        self.assertIsInstance(env.observation_space, gym.spaces.Dict)
+        logits = torch.ones([3, 2])
+        prior_probs = [0.01, 0.99]
+        distr = MemCategorical(logits, prior_probs)
+        kl_2 = distr.entropy()
+        self.assertEqual(list(kl_2.shape), [3])
 
-        obs = env.reset()
-        self.assertIsInstance(obs, dict)
-        self.assertIn('obs', obs)
-        self.assertIn('memento', obs)
-
-        self.assertTrue(all(m == 0.0 for m in obs['memento']))
-
-        for i in range(10):
-            obs, rew, done, info = env.step(env.action_space.sample())
-            self.assertIsInstance(obs, dict)
-            self.assertIn('obs', obs)
-            self.assertIn('memento', obs)
-
-        log.info('Memento values: %r', obs['memento'])
-
-    def test_basic(self):
-        self.run_env(self.make_env_simple)
-
-    def test_advanced(self):
-        self.run_env(self.make_env_advanced)
+        self.assertGreater(kl_2[0].item(), kl_1[0].item())
