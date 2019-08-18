@@ -154,7 +154,11 @@ def experiments_dir():
     return ensure_dir_exists(join(project_root(), 'train_dir'))
 
 
-def experiment_dir(experiment, experiments_root=None):
+def experiment_dir(experiment=None, experiments_root=None, cfg=None):
+    if cfg is not None:
+        experiment = cfg.experiment
+        experiments_root = cfg.experiments_root
+
     if experiments_root is None:
         experiments_root = experiments_dir()
     else:

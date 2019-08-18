@@ -126,49 +126,47 @@ class DmlabGymEnv(gym.Env):
         self._dmlab.close()
 
 
-class DmLabCfg:
+class DmLabSpec:
     def __init__(self, name, level, extra_cfg=None):
         self.name = name
         self.level = level
-        self.default_timer = 1800
         self.extra_cfg = {} if extra_cfg is None else extra_cfg
 
 
 DMLAB_ENVS = [
-    DmLabCfg('dmlab_sparse', 'contributed/dmlab30/explore_goal_locations_large'),
-    DmLabCfg(
+    DmLabSpec('dmlab_sparse', 'contributed/dmlab30/explore_goal_locations_large'),
+    DmLabSpec(
         'dmlab_very_sparse', 'contributed/dmlab30/explore_goal_locations_large', extra_cfg={'minGoalDistance': '10'},
     ),
-    DmLabCfg('dmlab_sparse_doors', 'contributed/dmlab30/explore_obstructed_goals_large'),
-    DmLabCfg('dmlab_nonmatch', 'contributed/dmlab30/rooms_select_nonmatching_object'),
-    DmLabCfg('dmlab_watermaze', 'contributed/dmlab30/rooms_watermaze'),
+    DmLabSpec('dmlab_sparse_doors', 'contributed/dmlab30/explore_obstructed_goals_large'),
+    DmLabSpec('dmlab_nonmatch', 'contributed/dmlab30/rooms_select_nonmatching_object'),
+    DmLabSpec('dmlab_watermaze', 'contributed/dmlab30/rooms_watermaze'),
 ]
 
 
 def dmlab_env_by_name(name):
-    for cfg in DMLAB_ENVS:
-        if cfg.name == name:
-            return cfg
+    for spec in DMLAB_ENVS:
+        if spec.name == name:
+            return spec
     raise Exception('Unknown DMLab env')
 
 
 # noinspection PyUnusedLocal
-def make_dmlab_env_impl(cfg, skip_frames=None, record_to=None, pixel_format='HWC', **kwargs):
-    skip_frames = skip_frames if skip_frames is not None else 4
+def make_dmlab_env_impl(spec, cfg, **kwargs):
+    skip_frames = cfg.env_frameskip
 
-    env = DmlabGymEnv(cfg.level, skip_frames, cfg.extra_cfg)
-    # env = TimeLimitWrapper(env, 900, 0)
+    env = DmlabGymEnv(spec.level, skip_frames, spec.extra_cfg)
 
-    if record_to is not None:
-        env = RecordingWrapper(env, record_to)
+    if 'record_to' in cfg and cfg.record_to is not None:
+        env = RecordingWrapper(env, cfg.record_to)
 
-    if pixel_format == 'CHW':
+    if cfg.pixel_format == 'CHW':
         env = PixelFormatChwWrapper(env)
 
     return env
 
 
-def make_dmlab_env(env_name, **kwargs):
-    cfg = dmlab_env_by_name(env_name)
-    return make_dmlab_env_impl(cfg, **kwargs)
+def make_dmlab_env(env_name, cfg=None, **kwargs):
+    spec = dmlab_env_by_name(env_name)
+    return make_dmlab_env_impl(spec, cfg=cfg, **kwargs)
 

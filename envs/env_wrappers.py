@@ -405,6 +405,9 @@ class PixelFormatChwWrapper(ObservationWrapper):
         return np.transpose(obs, (2, 0, 1))  # HWC to CHW for PyTorch
 
     def observation(self, observation):
+        if observation is None:
+            return observation
+
         if self.dict_obs_space:
             observation['obs'] = self._transpose(observation['obs'])
         else:

@@ -8,7 +8,7 @@ from torch.nn import functional
 
 from algorithms.memento.mem_wrapper import MemWrapper
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, sample_actions_log_probs
-from algorithms.utils.agent import AgentLearner, TrainStatus
+from algorithms.utils.agent import TrainStatus, Agent
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
 from algorithms.utils.multi_env import MultiEnv
 from utils.timing import Timing
@@ -131,17 +131,24 @@ def calc_num_elements(module, module_input_shape):
 
 
 class ActorCritic(nn.Module):
-    def __init__(self, obs_space, action_space, params):
+    def __init__(self, obs_space, action_space, cfg):
         super().__init__()
 
-        self.params = params
+        self.cfg = cfg
         self.action_space = action_space
 
         def nonlinearity():
             return nn.ELU(inplace=True)
 
+        if cfg.encoder == 'convnet_simple':
+            conv_filters = [[3, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
+        elif cfg.encoder == 'minigrid_convnet_tiny':
+            conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
+        else:
+            raise NotImplementedError(f'Unknown encoder {cfg.encoder}')
+
         conv_layers = []
-        for layer in params.conv_filters:
+        for layer in conv_filters:
             if layer == 'maxpool_2x2':
                 conv_layers.append(nn.MaxPool2d((2, 2)))
             elif isinstance(layer, (list, tuple)):
@@ -177,30 +184,30 @@ class ActorCritic(nn.Module):
             self.head_out_size += measurements_out_size
 
         self.mem_head = None
-        if params.mem_size > 0:
+        if cfg.mem_size > 0:
             mem_out_size = 256
             self.mem_head = nn.Sequential(
-                nn.Linear(params.mem_size * params.mem_feature, mem_out_size),
+                nn.Linear(cfg.mem_size * cfg.mem_feature, mem_out_size),
                 nonlinearity(),
             )
             self.head_out_size += mem_out_size
 
         log.debug('Policy head output size: %r', self.head_out_size)
 
-        self.hidden_size = params.hidden_size
+        self.hidden_size = cfg.hidden_size
 
         self.linear1 = nn.Linear(self.head_out_size, self.hidden_size)
 
-        if params.recurrence == 1:
+        if cfg.recurrence == 1:
             # no recurrence
             self.core = None
         else:
             self.core = nn.GRUCell(self.hidden_size, self.hidden_size)
 
-        if params.mem_size > 0:
+        if cfg.mem_size > 0:
             self.compressed_state = nn.Identity()
             # TODO: compress
-            assert params.mem_feature == self.hidden_size
+            assert cfg.mem_feature == self.hidden_size
 
             # self.compressed_state = nn.Sequential(
             #     nn.Linear(self.hidden_size, params.mem_feature),
@@ -243,14 +250,14 @@ class ActorCritic(nn.Module):
         return x
 
     def forward_core(self, head_output, rnn_states, masks):
-        if self.params.recurrence == 1:
+        if self.cfg.recurrence == 1:
             x = head_output
             new_rnn_states = torch.zeros(x.shape[0])
         else:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
 
         compressed_state = reconstructed_state = None
-        if self.params.mem_size > 0:
+        if self.cfg.mem_size > 0:
             compressed_state = self.compressed_state(x)
             # reconstructed_state = self.reconstructed_state(compressed_state)
 
@@ -298,72 +305,53 @@ class ActorCritic(nn.Module):
             pass
 
 
-class AgentPPO(AgentLearner):
+class AgentPPO(Agent):
     """Agent based on PPO algorithm."""
 
-    class Params(AgentLearner.AgentParams):
-        """Hyperparams for the algorithm and the training process."""
+    @classmethod
+    def add_cli_args(cls, parser):
+        p = parser
+        super().add_cli_args(p)
 
-        def __init__(self, experiment_name):
-            """Default parameter values set in ctor."""
-            super(AgentPPO.Params, self).__init__(experiment_name)
+        p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting')
 
-            self.gamma = 0.99  # future reward discount
-            self.gae_lambda = 0.95
-            self.rollout = 64
-            self.num_envs = 96  # number of environments to collect the experience from
-            self.num_workers = 16  # number of workers used to run the environments
+        p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-            self.recurrence = 16
+        p.add_argument('--num_envs', default=96, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
+        p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-            # observation preprocessing
-            self.obs_subtract_mean = None
-            self.obs_scale = None
+        p.add_argument('--recurrence', default=16, type=int, help='Trajectory lenght for backpropagation through time. If recurrence=1 the feed-forward model is used (no BPTT)')
 
-            # actor-critic (encoders and models)
-            self.conv_filters = None
-            self.hidden_size = None  # defined per env, see e.g. doom_params
+        p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
+        p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
+        p.add_argument('--batch_size', default=512, type=int, help='PPO minibatch size')
+        p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
 
-            # ppo-specific
-            self.ppo_clip_ratio = 1.1  # we use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper
-            self.ppo_clip_value = 0.1  # maximum absolute change in value estimate until it's clipped
-            self.target_kl = 0.03
-            self.batch_size = 512
-            self.ppo_epochs = 4
+        p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
+        p.add_argument('--entropy_loss_coeff', default=0.005, type=float, help='Entropy coefficient')
+        p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
-            # components of the loss function
-            self.value_loss_coeff = 0.5
-            self.entropy_loss_coeff = 0.005
-            self.rnn_dist_loss_coeff = 0.0
+        p.add_argument('--max_grad_norm', default=2.0, type=float, help='Max L2 norm of the gradient vector')
 
-            # training
-            self.max_grad_norm = 2.0
+        p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
+        p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
 
-            # external memory variant #2
-            self.mem_size = 0
-            self.mem_feature = 64  # memory feature vector dimensionality
-
-        @staticmethod
-        def filename_prefix():
-            return 'ppo_'
-
-    def __init__(self, make_env_func, params):
-        """Initialize PPO computation graph and some auxiliary tensors."""
-        super().__init__(params)
+    def __init__(self, make_env_func, cfg):
+        super().__init__(cfg)
 
         def make_env(env_config):
             env_ = make_env_func(env_config)
-            if params.mem_size > 0:
-                env_ = MemWrapper(env_, params.mem_size, params.mem_feature)
+            if cfg.mem_size > 0:
+                env_ = MemWrapper(env_, cfg.mem_size, cfg.mem_feature)
             return env_
 
         self.make_env_func = make_env
         env = self.make_env_func(None)  # we need the env to query observation shape, number of actions, etc.
 
-        self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.params)
+        self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.cfg)
         self.actor_critic.to(self.device)
 
-        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), params.learning_rate)
+        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
 
         env.close()
 
@@ -376,7 +364,7 @@ class AgentPPO(AgentLearner):
     def _get_checkpoint_dict(self):
         checkpoint = super()._get_checkpoint_dict()
         checkpoint.update({
-            'params': self.params,
+            'cfg': self.cfg,
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         })
@@ -398,8 +386,8 @@ class AgentPPO(AgentLearner):
         for key, x in obs_dict.items():
             obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
-        mean = self.params.obs_subtract_mean
-        scale = self.params.obs_scale
+        mean = self.cfg.obs_subtract_mean
+        scale = self.cfg.obs_scale
 
         if abs(mean) > EPS and abs(scale - 1.0) > EPS:
             obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
@@ -408,7 +396,7 @@ class AgentPPO(AgentLearner):
     def _preprocess_actions(self, actor_critic_output):
         actions = actor_critic_output.actions.cpu().numpy()
 
-        if self.params.mem_size > 0:
+        if self.cfg.mem_size > 0:
             actions = np.concatenate([actions, actor_critic_output.compressed_state.cpu().numpy()], axis=1)
 
         return actions
@@ -420,7 +408,7 @@ class AgentPPO(AgentLearner):
 
             if rnn_states is None:
                 num_envs = len(dones)
-                rnn_states = torch.zeros(num_envs, self.params.hidden_size).to(self.device)
+                rnn_states = torch.zeros(num_envs, self.cfg.hidden_size).to(self.device)
 
             res = self.actor_critic(observations, rnn_states, masks)
             actions = self._preprocess_actions(res)
@@ -440,30 +428,30 @@ class AgentPPO(AgentLearner):
         return masks.float()
 
     def _minibatch_indices(self, experience_size):
-        assert self.params.rollout % self.params.recurrence == 0
-        assert experience_size % self.params.batch_size == 0
+        assert self.cfg.rollout % self.cfg.recurrence == 0
+        assert experience_size % self.cfg.batch_size == 0
 
         # indices that will start the mini-trajectories from the same episode (for bptt)
-        indices = np.arange(0, experience_size, self.params.recurrence)
+        indices = np.arange(0, experience_size, self.cfg.recurrence)
         indices = np.random.permutation(indices)
 
         # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
-        indices = [np.arange(i, i + self.params.recurrence) for i in indices]
+        indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
         indices = np.concatenate(indices)
 
         assert len(indices) == experience_size
 
-        num_minibatches = experience_size // self.params.batch_size
+        num_minibatches = experience_size // self.cfg.batch_size
         minibatches = np.split(indices, num_minibatches)
         return minibatches
 
     # noinspection PyUnresolvedReferences
     def _train(self, buffer):
-        clip_ratio = self.params.ppo_clip_ratio
-        clip_value = self.params.ppo_clip_value
-        recurrence = self.params.recurrence
+        clip_ratio = self.cfg.ppo_clip_ratio
+        clip_value = self.cfg.ppo_clip_value
+        recurrence = self.cfg.recurrence
 
-        for epoch in range(self.params.ppo_epochs):
+        for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(
                     value=0, entropy=0, value_loss=0, entropy_loss=0, rnn_dist=0, dist_loss=0,
@@ -478,7 +466,7 @@ class AgentPPO(AgentLearner):
                 head_outputs = self.actor_critic.forward_head(mb.obs)
 
                 # indices corresponding to 1st frames of trajectory segments
-                traj_indices = indices[::self.params.recurrence]
+                traj_indices = indices[::self.cfg.recurrence]
 
                 # initial rnn states
                 rnn_states = buffer.rnn_states[traj_indices]
@@ -489,15 +477,15 @@ class AgentPPO(AgentLearner):
 
                 for i in range(recurrence):
                     # indices of head outputs corresponding to the current timestep
-                    timestep_indices = np.arange(i, self.params.batch_size, self.params.recurrence)
+                    timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
 
-                    if self.params.rnn_dist_loss_coeff > EPS:
+                    if self.cfg.rnn_dist_loss_coeff > EPS:
                         dist = (rnn_states - mb.rnn_states[timestep_indices]).pow(2)
                         dist = torch.sum(dist, dim=1)
                         dist = torch.sqrt(dist + EPS)
                         dist = dist.mean()
                         mb_stats.rnn_dist += dist
-                        dist_loss += self.params.rnn_dist_loss_coeff * dist
+                        dist_loss += self.cfg.rnn_dist_loss_coeff * dist
 
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
@@ -527,10 +515,10 @@ class AgentPPO(AgentLearner):
                 value_original_loss = (result.values - mb.returns).pow(2)
                 value_clipped_loss = (value_clipped - mb.returns).pow(2)
                 value_loss = torch.max(value_original_loss, value_clipped_loss).mean()
-                value_loss *= self.params.value_loss_coeff
+                value_loss *= self.cfg.value_loss_coeff
 
                 entropy = action_distribution.entropy().mean()
-                entropy_loss = self.params.entropy_loss_coeff * -entropy
+                entropy_loss = self.cfg.entropy_loss_coeff * -entropy
 
                 dist_loss /= recurrence
 
@@ -557,7 +545,7 @@ class AgentPPO(AgentLearner):
                 # update the weights
                 self.optimizer.zero_grad()
                 mb_loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.params.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
                 self.optimizer.step()
 
                 self._after_optimizer_step()
@@ -579,11 +567,11 @@ class AgentPPO(AgentLearner):
         observations = self._preprocess_observations(observations)
 
         # actions, rewards and masks do not require backprop so can be stored in buffers
-        dones = [True] * self.params.num_envs
+        dones = [True] * self.cfg.num_envs
 
-        rnn_states = torch.zeros(self.params.num_envs)
-        if self.params.recurrence > 1:
-            rnn_states = torch.zeros(self.params.num_envs, self.params.hidden_size).to(self.device)
+        rnn_states = torch.zeros(self.cfg.num_envs)
+        if self.cfg.recurrence > 1:
+            rnn_states = torch.zeros(self.cfg.num_envs, self.cfg.hidden_size).to(self.device)
 
         while not self._should_end_training():
             timing = Timing()
@@ -595,7 +583,7 @@ class AgentPPO(AgentLearner):
             # collecting experience
             with torch.no_grad():
                 with timing.timeit('experience'):
-                    for rollout_step in range(self.params.rollout):
+                    for rollout_step in range(self.cfg.rollout):
                         masks = self._get_masks(dones)
                         res = self.actor_critic(observations, rnn_states, masks)
                         actions = self._preprocess_actions(res)
@@ -616,7 +604,6 @@ class AgentPPO(AgentLearner):
                             observations = self._preprocess_observations(new_obs)
                         rnn_states = res.rnn_states
 
-                        self.process_infos(infos)
                         num_steps += num_env_steps(infos)
 
                     # last step values are required for TD-return calculation
@@ -627,14 +614,14 @@ class AgentPPO(AgentLearner):
 
                 with timing.timeit('finalize'):
                     # calculate discounted returns and GAE
-                    buffer.finalize_batch(self.params.gamma, self.params.gae_lambda)
+                    buffer.finalize_batch(self.cfg.gamma, self.cfg.gae_lambda)
 
             # exit no_grad context, update actor and critic
             with timing.timeit('train'):
                 self._train(buffer)
 
-            avg_reward = multi_env.calc_avg_rewards(n=self.params.stats_episodes)
-            avg_length = multi_env.calc_avg_episode_lengths(n=self.params.stats_episodes)
+            avg_reward = multi_env.calc_avg_rewards(n=self.cfg.stats_episodes)
+            avg_length = multi_env.calc_avg_episode_lengths(n=self.cfg.stats_episodes)
             fps = num_steps / (time.time() - batch_start)
 
             self._maybe_print(avg_reward, avg_length, fps, timing)
@@ -648,10 +635,10 @@ class AgentPPO(AgentLearner):
         multi_env = None
         try:
             multi_env = MultiEnv(
-                self.params.num_envs,
-                self.params.num_workers,
+                self.cfg.num_envs,
+                self.cfg.num_workers,
                 make_env_func=self.make_env_func,
-                stats_episodes=self.params.stats_episodes,
+                stats_episodes=self.cfg.stats_episodes,
             )
 
             self._learn_loop(multi_env)

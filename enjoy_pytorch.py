@@ -4,34 +4,26 @@ from os.path import join
 
 import cv2
 
-from algorithms.ppo.agent_ppo import AgentPPO
-from algorithms.utils.arguments import parse_args
+from algorithms.utils.arguments import parse_args, get_algo_class
 from envs.create_env import create_env
 from utils.utils import log
 
 
-def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
-    params = params.load()
-
+def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     def make_env_func(env_config):
-        # whether to run Doom env at it's default FPS (ASYNC mode)
-        async_mode = args.fps == 0
+        if cfg.env_frameskip is None:
+            cfg.env_frameskip = 1  # for evaluation
 
-        if args.record_to is not None:
-            args.record_to = join(args.record_to, f'{args.env}_{args.experiment}')
+        if cfg.record_to is not None:
+            cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
 
-        return create_env(
-            args.env,
-            pixel_format=args.pixel_format,
-            async_mode=async_mode, skip_frames=args.evaluation_env_frameskip,
-            num_agents=args.num_agents, num_bots=args.num_bots, num_humans=args.num_humans,
-            bot_difficulty=args.bot_difficulty,
-            record_to=args.record_to,
-            env_config=env_config,
-        )
+        return create_env(cfg.env, cfg=cfg, env_config=env_config)
 
-    agent = AgentPPO(make_env_func, params=params)
+    agent = get_algo_class(cfg.algo)(make_env_func, cfg)
     agent.initialize()
+    cfg = agent.cfg  # at this point we should have read it from the json file
+
+    render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
 
     env = agent.make_env_func(None)
     env.seed(0)
@@ -53,9 +45,9 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
         while True:
             actions, rnn_states = agent.best_action([obs], [done], rnn_states, deterministic=False)
 
-            for _ in range(args.render_action_repeat):
-                if not args.no_render:
-                    target_delay = 1.0 / args.fps if args.fps > 0 else 0
+            for _ in range(render_action_repeat):
+                if not cfg.no_render:
+                    target_delay = 1.0 / cfg.fps if cfg.fps > 0 else 0
                     current_delay = time.time() - last_render_start
                     time_wait = target_delay - current_delay
 
@@ -97,8 +89,8 @@ def enjoy(args, params, max_num_episodes=1000000, max_num_frames=1e9):
 
 def main():
     """Script entry point."""
-    args, params = parse_args(AgentPPO.Params, evaluation=True)
-    return enjoy(args, params)
+    cfg = parse_args(evaluation=True)
+    return enjoy(cfg)
 
 
 if __name__ == '__main__':

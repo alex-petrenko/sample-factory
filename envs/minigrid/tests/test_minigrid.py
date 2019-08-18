@@ -1,12 +1,14 @@
 from unittest import TestCase
 
+from algorithms.utils.arguments import default_cfg
 from envs.create_env import create_env
 from utils.utils import log
 
 
 class TestMinigrid(TestCase):
     def test_minigrid_env(self):
-        env = create_env('MiniGrid-Empty-Random-5x5-v0', pixel_format='CHW')
+        env_name = 'MiniGrid-Empty-Random-5x5-v0'
+        env = create_env(env_name, cfg=default_cfg(env=env_name))
         log.info('Env action space: %r', env.action_space)
         log.info('Env obs space: %r', env.observation_space)
 

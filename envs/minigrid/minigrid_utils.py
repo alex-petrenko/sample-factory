@@ -25,6 +25,7 @@ class MinigridRecordingWrapper(RecordingWrapper):
     def __init__(self, env, record_to):
         super().__init__(env, record_to)
 
+    # noinspection PyMethodOverriding
     def render(self, mode, **kwargs):
         self.env.render()
         frame = self.env.render('rgb_array')
@@ -38,14 +39,14 @@ class MinigridRecordingWrapper(RecordingWrapper):
 
 
 # noinspection PyUnusedLocal
-def make_minigrid_env(env_name, record_to=None, pixel_format='HWC', **kwargs):
+def make_minigrid_env(env_name, cfg=None, **kwargs):
     env = gym.make(env_name)
     env = RenameImageObsWrapper(env)
 
-    if record_to is not None:
-        env = MinigridRecordingWrapper(env, record_to)
+    if 'record_to' in cfg and cfg.record_to is not None:
+        env = MinigridRecordingWrapper(env, cfg.record_to)
 
-    if pixel_format == 'CHW':
+    if cfg.pixel_format == 'CHW':
         env = PixelFormatChwWrapper(env)
 
     return env

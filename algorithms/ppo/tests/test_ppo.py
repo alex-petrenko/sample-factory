@@ -1,40 +1,38 @@
 import os
 import shutil
-from os.path import join
 from unittest import TestCase
 
-from algorithms.ppo.agent_ppo import AgentPPO
-from algorithms.ppo.enjoy_ppo import enjoy
-from algorithms.ppo.train_ppo import train
 from algorithms.utils.agent import TrainStatus
 from algorithms.utils.arguments import parse_args
-from utils.utils import experiments_dir
+from enjoy_pytorch import enjoy
+from train_pytorch import train
+from utils.utils import experiment_dir
 
 
 class TestPPO(TestCase):
     def ppo_run(self, recurrence):
         test_name = self.__class__.__name__
 
-        argv = ['--env=doom_basic', f'--experiment={test_name}']
-        args, params = parse_args(AgentPPO.Params, argv=argv)
-        params.experiments_root = test_name
-        params.num_envs = 16
-        params.train_for_steps = 60
-        params.initial_save_rate = 20
-        params.batch_size = 32
-        params.ppo_epochs = 2
-        params.recurrence = recurrence
-        status = train(args, params)
+        argv = ['--env=doom_basic', f'--experiment={test_name}', '--algo=PPO']
+        cfg = parse_args(argv)
+        cfg.experiments_root = test_name
+        cfg.num_envs = 16
+        cfg.train_for_steps = 60
+        cfg.initial_save_rate = 20
+        cfg.batch_size = 32
+        cfg.ppo_epochs = 2
+        cfg.recurrence = recurrence
+        status = train(cfg)
 
         self.assertEqual(status, TrainStatus.SUCCESS)
 
-        root_dir = params.experiment_dir()
+        root_dir = experiment_dir(cfg=cfg)
         self.assertTrue(os.path.isdir(root_dir))
 
-        eval_args, _ = parse_args(AgentPPO.Params, argv=argv, evaluation=True)
-        eval_args.fps = 1e9
-        enjoy(eval_args, params, max_num_episodes=1, max_num_frames=100)
-        shutil.rmtree(join(experiments_dir(), params.experiments_root))
+        cfg = parse_args(argv, evaluation=True)
+        cfg.fps = 1e9
+        enjoy(cfg, max_num_episodes=1, max_num_frames=100)
+        shutil.rmtree(experiment_dir(cfg=cfg))
 
         self.assertFalse(os.path.isdir(root_dir))
 

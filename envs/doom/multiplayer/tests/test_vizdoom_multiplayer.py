@@ -3,6 +3,7 @@ from multiprocessing import Process
 from unittest import TestCase
 
 from envs.doom.doom_utils import make_doom_multiplayer_env, doom_env_by_name
+from envs.tests.test_envs import default_doom_cfg
 from utils.utils import log, AttrDict
 
 
@@ -10,7 +11,7 @@ class TestDoom(TestCase):
     @staticmethod
     def make_standard_dm(env_config):
         return make_doom_multiplayer_env(
-            doom_env_by_name('doom_dm'), env_config=env_config,
+            doom_env_by_name('doom_dm'), cfg=default_doom_cfg(), env_config=env_config,
         )
 
     @staticmethod

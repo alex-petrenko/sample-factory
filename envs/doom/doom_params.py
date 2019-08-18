@@ -1,16 +1,20 @@
-def doom_override_default_params_and_args(params, args):
-    params.obs_subtract_mean = 128.0
-    params.obs_scale = 128.0
+# noinspection PyUnusedLocal
+def doom_override_defaults(env, parser):
+    """RL params specific to Doom envs."""
+    parser.set_defaults(
+        encoder='convnet_simple',
+        hidden_size=512,
+        obs_subtract_mean=128.0,
+        obs_scale=128.0,
+        env_frameskip=4,
+    )
 
-    params.conv_filters = [
-        [3, 32, 8, 4],
-        [32, 64, 4, 2],
-        [64, 128, 3, 2],
-    ]
 
-    params.hidden_size = 512
+# noinspection PyUnusedLocal
+def add_doom_env_args(env, parser):
+    p = parser
 
-    # TODO: put into params. This is a part of the algorithm after all, not the part of the environment
-    if 'render_action_repeat' in args:
-        if args.render_action_repeat is None:
-            args.render_action_repeat = 4
+    p.add_argument('--num_agents', default=-1, type=int, help='Allows to set number of agents less than number of players, to allow humans to join the match. Default value (-1) means default number defined by the environment')
+    p.add_argument('--num_humans', default=0, type=int, help='Meatbags want to play?')
+    p.add_argument('--num_bots', default=-1, type=int, help='Add classic (non-neural) bots to the match. If default (-1) then use number of bots specified in env cfg')
+    p.add_argument('--start_bot_difficulty', default=None, type=int, help='Adjust bot difficulty, useful for evaluation')

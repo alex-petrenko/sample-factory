@@ -2,13 +2,16 @@ import os
 import shutil
 from unittest import TestCase
 
-from algorithms.utils.agent import AgentLearner
+from algorithms.utils.agent import Agent
+from algorithms.utils.arguments import parse_args
+from utils.utils import experiment_dir
 
 
 class TestAgent(TestCase):
     def test_checkpoints(self):
-        params = AgentLearner.AgentParams(self.__class__.__name__)
-        agent = AgentLearner(params)
+        cfg = parse_args(argv=['--experiment=__test__', '--env=e', '--algo=a'])
+
+        agent = Agent(cfg)
         agent.initialize()
 
         for _ in range(10):
@@ -25,6 +28,6 @@ class TestAgent(TestCase):
 
         agent._save()
 
-        agent_dir = params.experiment_dir()
+        agent_dir = experiment_dir(cfg=cfg)
         shutil.rmtree(agent_dir)
         self.assertFalse(os.path.isdir(agent_dir))
