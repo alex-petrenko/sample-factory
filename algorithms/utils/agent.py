@@ -14,7 +14,7 @@ import torch
 from tensorboardX import SummaryWriter
 
 from utils.decay import LinearDecay
-from utils.utils import log, ensure_dir_exists, summaries_dir, memory_consumption_mb, experiment_dir, AttrDict
+from utils.utils import log, ensure_dir_exists, summaries_dir, memory_consumption_mb, experiment_dir, cfg_file
 
 
 class TrainStatus:
@@ -71,18 +71,16 @@ class Agent:
         checkpoints = self._get_checkpoints()
         if len(checkpoints) <= 0:
             log.warning('No checkpoints found in %s. Starting from scratch!', experiment_dir(cfg=self.cfg))
-            return
-
-        latest_checkpoint = checkpoints[-1]
-        log.warning('Loading state from checkpoint %s...', latest_checkpoint)
-
-        if str(self.device) == 'cuda':  # the checkpoint will try to load onto the GPU storage unless specified
-            checkpoint_dict = torch.load(latest_checkpoint)
         else:
-            checkpoint_dict = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
+            latest_checkpoint = checkpoints[-1]
+            log.warning('Loading state from checkpoint %s...', latest_checkpoint)
 
-        self._load_state(checkpoint_dict)
-        self._load_cfg()
+            if str(self.device) == 'cuda':  # the checkpoint will try to load onto the GPU storage unless specified
+                checkpoint_dict = torch.load(latest_checkpoint)
+            else:
+                checkpoint_dict = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
+
+            self._load_state(checkpoint_dict)
 
         log.debug('Experiment parameters:')
         for key, value in self._cfg_dict().items():
@@ -119,23 +117,9 @@ class Agent:
         self.total_train_seconds = checkpoint_dict['total_train_seconds']
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
 
-    def _params_file(self):
-        params_file = join(experiment_dir(cfg=self.cfg), 'params.json')
-        return params_file
-
-    def _load_cfg(self):
-        with open(self._params_file(), 'r') as json_file:
-            json_params = json.load(json_file)
-            log.info('Load experiment configuration from %s', self._params_file())
-            log.warning(
-                'Command-line parameters will be ignored!'
-                'If you want to resume experiment with different parameters, you should edit params.json!'
-            )
-            self.cfg = AttrDict(json_params)
-
     def _maybe_save(self):
         save_every = self.save_rate_decay.at(self.train_step)
-        if (self.train_step + 1) % save_every == 0:
+        if (self.train_step + 1) % save_every == 0 or self.train_step <= 1:
             self._save()
 
     def _checkpoint_dir(self):
@@ -179,7 +163,7 @@ class Agent:
 
     def _save_cfg(self):
         cfg_dict = self._cfg_dict()
-        with open(self._params_file(), 'w') as json_file:
+        with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
     def _should_write_summaries(self, step):

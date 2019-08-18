@@ -4,12 +4,14 @@ from os.path import join
 
 import cv2
 
-from algorithms.utils.arguments import parse_args, get_algo_class
+from algorithms.utils.arguments import parse_args, get_algo_class, load_from_checkpoint
 from envs.create_env import create_env
 from utils.utils import log
 
 
 def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
+    cfg = load_from_checkpoint(cfg)
+
     def make_env_func(env_config):
         if cfg.env_frameskip is None:
             cfg.env_frameskip = 1  # for evaluation
@@ -21,7 +23,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
     agent = get_algo_class(cfg.algo)(make_env_func, cfg)
     agent.initialize()
-    cfg = agent.cfg  # at this point we should have read it from the json file
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
 

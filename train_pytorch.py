@@ -1,10 +1,12 @@
 import sys
 
-from algorithms.utils.arguments import parse_args, get_algo_class
+from algorithms.utils.arguments import parse_args, get_algo_class, maybe_load_from_checkpoint
 from envs.create_env import create_env
 
 
 def train(cfg):
+    cfg = maybe_load_from_checkpoint(cfg)
+
     def make_env_func(env_config):
         return create_env(cfg.env, cfg=cfg, env_config=env_config)
 

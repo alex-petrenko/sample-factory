@@ -173,3 +173,8 @@ def model_dir(experiment_dir_):
 
 def summaries_dir(experiment_dir_):
     return ensure_dir_exists(join(experiment_dir_, '.summary'))
+
+
+def cfg_file(cfg):
+    params_file = join(experiment_dir(cfg=cfg), 'cfg.json')
+    return params_file
