@@ -19,7 +19,6 @@ from algorithms.models.vizdoom_model import VizdoomVisionNetwork
 from algorithms.pbt.pbt import get_pbt_scheduler
 from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
-from envs.doom.doom_utils import cfg_param
 from envs.ray_envs import register_doom_envs_rllib
 
 EXAMPLE_USAGE = """
@@ -30,7 +29,7 @@ Grid search example via RLlib CLI:
     rllib train -f tuned_examples/cartpole-grid-search-example.yaml
 
 Grid search example via executable:
-    ./train.py -f tuned_examples/cartpole-grid-search-example.yaml
+    ./train_rllib.py -f tuned_examples/cartpole-grid-search-example.yaml
 
 Note that -f overrides all other trial-specific command-line options.
 """
@@ -248,7 +247,7 @@ def run_experiment(args, parser):
         info['result']['custom_metrics']['fps'] = fps
 
         # remove this as currently
-        skip_frames = cfg_param('skip_frames', exp.spec['config'].get('env_config', None))
+        skip_frames = exp.spec['config']['env_config']['skip_frames']
         info['result']['custom_metrics']['fps_frameskip'] = fps * skip_frames
 
     exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
