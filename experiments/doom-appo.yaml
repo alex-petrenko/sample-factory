@@ -1,18 +1,14 @@
 env: doom_battle_hybrid
 run: CUSTOM_APPO
 config:
-    vtrace: True
     lr: 0.0001
     lambda: 0.95
-    use_kl_loss: True
     kl_coeff: 0.5
-    gamma: 0.998
-    grad_clip: 8.0
     clip_rewards: False
     clip_param: 0.1
     entropy_coeff: 0.0005
     train_batch_size: 1024
-    sample_batch_size: 64
+    sample_batch_size: 32
     num_sgd_iter: 4
     num_workers: 18
     num_envs_per_worker: 8
@@ -21,7 +17,7 @@ config:
     num_gpus: 1
 
     num_data_loader_buffers: 1
-    minibatch_buffer_size: 1
+    minibatch_buffer_size: 2
     replay_proportion: 0.0
     replay_buffer_num_slots: 0
 
@@ -37,7 +33,7 @@ config:
         fcnet_activation: elu  # was tanh
 
         use_lstm: False
-        max_seq_len: 32
+        max_seq_len: 16
         lstm_cell_size: 256
         lstm_use_prev_action_reward: False
         framestack: False
@@ -45,4 +41,4 @@ config:
         zero_mean: False
 
     env_config:
-        skip_frames: 2
+        skip_frames: 4
