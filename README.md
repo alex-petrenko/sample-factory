@@ -58,18 +58,18 @@ cd python/ray
 From the doom-neurobot root, run the train script:
 
 ```
-python -m train -f=experiments/doom-appo.yaml --experiment-name=test-appo
+python -m train_rllib -f=experiments/doom-appo.yaml --experiment-name=test-appo
 ```
 
 The model is checkpointed every 20 iterations, so wait at least a few minutes before stopping. Then you can see the agent's performance with:
 
 ```
-python -m enjoy ~/ray_results/test-appo/CUSTOM_APPO_doom_battle_hybrid_0_2019-07-25_17-33-223ci_8euu/checkpoint_20/checkpoint-20 --run APPO
+python -m enjoy_rllib ~/ray_results/test-appo/CUSTOM_APPO_doom_battle_hybrid_0_2019-07-25_17-33-223ci_8euu/checkpoint_20/checkpoint-20 --run APPO
 ```
 
 ## Working with PyTorch implementation
 
 ```
-python -m algorithms.ppo.train_ppo --env=doom_basic --experiment=doom-test-ppo --recurrence=16
-python -m algorithms.ppo.enjoy_ppo --env=doom_basic --experiment=doom-test-ppo --recurrence=16 --fps=100
+python -m train_pytorch --env=doom_basic --experiment=doom-test-ppo --recurrence=16
+python -m enjoy_pytorch --env=doom_basic --experiment=doom-test-ppo --recurrence=16 --fps=100
 ```

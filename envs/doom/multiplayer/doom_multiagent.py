@@ -75,7 +75,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_respawnprotect 1 '  # Players will be invulnerable for two second after spawning.
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
-                '+viz_respawn_delay 1 '  # Sets delay between respanws (in seconds).
+                '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
                 '+viz_connect_timeout 999 '  # In seconds
             )
 
@@ -88,7 +88,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 3')
+            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
         else:
             # Join existing game.
             self.game.add_game_args(
@@ -99,7 +99,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id} +colorset 6')
+            self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
 
         self.game.init()
 

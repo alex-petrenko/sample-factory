@@ -175,9 +175,9 @@ class ActorCritic(nn.Module):
         self.measurements_head = None
         if 'measurements' in obs_shape:
             self.measurements_head = nn.Sequential(
-                nn.Linear(obs_shape.measurements[0], 64),
+                nn.Linear(obs_shape.measurements[0], 128),
                 nonlinearity(),
-                nn.Linear(64, 64),
+                nn.Linear(128, 128),
                 nonlinearity(),
             )
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)

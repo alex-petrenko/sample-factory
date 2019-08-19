@@ -12,19 +12,17 @@ from utils.utils import log
 def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg = load_from_checkpoint(cfg)
 
+    render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
+    cfg.env_frameskip = 1  # for evaluation
+
+    if cfg.record_to is not None:
+        cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
+
     def make_env_func(env_config):
-        if cfg.env_frameskip is None:
-            cfg.env_frameskip = 1  # for evaluation
-
-        if cfg.record_to is not None:
-            cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
-
         return create_env(cfg.env, cfg=cfg, env_config=env_config)
 
     agent = get_algo_class(cfg.algo)(make_env_func, cfg)
     agent.initialize()
-
-    render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
 
     env = agent.make_env_func(None)
     env.seed(0)
