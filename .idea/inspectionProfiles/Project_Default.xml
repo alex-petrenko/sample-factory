@@ -103,6 +103,7 @@
           <option value="torch.zeros" />
           <option value="torch.FloatTensor" />
           <option value="float.backward" />
+          <option value="object.tolist" />
         </list>
       </option>
     </inspection_tool>

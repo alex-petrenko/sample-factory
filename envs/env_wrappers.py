@@ -3,6 +3,7 @@ Gym env wrappers that make the environment suitable for the RL algorithms.
 
 """
 import datetime
+import json
 import os
 from collections import deque
 from os.path import join
@@ -436,8 +437,14 @@ class RecordingWrapper(gym.core.Wrapper):
         self._recorded_episode_reward = 0
         self._recorded_episode_shaping_reward = 0
 
+        self._recorded_actions = []
+
     def reset(self):
         if self._episode_recording_dir is not None and self._record_id > 0:
+            # save actions to text file
+            with open(join(self._episode_recording_dir, 'actions.json'), 'w') as actions_file:
+                json.dump(self._recorded_actions, actions_file)
+
             # rename previous episode dir
             reward = self._recorded_episode_reward + self._recorded_episode_shaping_reward
             new_dir_name = self._episode_recording_dir + f'_r{reward:.2f}'
@@ -456,6 +463,8 @@ class RecordingWrapper(gym.core.Wrapper):
         self._recorded_episode_reward = 0
         self._recorded_episode_shaping_reward = 0
 
+        self._recorded_actions = []
+
         return self.env.reset()
 
     def _record(self, img):
@@ -466,6 +475,13 @@ class RecordingWrapper(gym.core.Wrapper):
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
+
+        if isinstance(action, np.ndarray):
+            self._recorded_actions.append(action.tolist())
+        else:
+            # noinspection PyTypeChecker
+            self._recorded_actions.append(list(action))
+
         self._record(observation)
         self._recorded_episode_reward += reward
         if hasattr(self.env.unwrapped, '_total_shaping_reward'):

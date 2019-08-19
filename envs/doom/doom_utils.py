@@ -171,10 +171,10 @@ def make_doom_env_impl(
         env = ResizeWrapper(env, DOOM_W, DOOM_H, grayscale=False)
 
     # randomly vary episode duration to somewhat decorrelate the experience
-    timeout = doom_spec.default_timeout - 50
+    timeout = doom_spec.default_timeout
     if episode_horizon is not None and episode_horizon > 0:
         timeout = episode_horizon
-    env = TimeLimitWrapper(env, limit=timeout, random_variation_steps=49)
+    env = TimeLimitWrapper(env, limit=timeout, random_variation_steps=0)
 
     pixel_format = cfg.pixel_format if 'pixel_format' in cfg else 'HWC'
     if pixel_format == 'CHW':
