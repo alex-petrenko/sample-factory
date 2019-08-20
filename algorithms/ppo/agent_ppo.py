@@ -375,8 +375,9 @@ class AgentPPO(Agent):
             obs_dict.obs = observations
 
         # add memory
-        obs_dict.memory = self.memory.copy()
-        obs_dict.memory = obs_dict.memory.reshape((self.cfg.num_envs, self.cfg.mem_size * self.cfg.mem_feature))
+        if self.cfg.mem_size > 0:
+            obs_dict.memory = self.memory.copy()
+            obs_dict.memory = obs_dict.memory.reshape((self.cfg.num_envs, self.cfg.mem_size * self.cfg.mem_feature))
 
         for key, x in obs_dict.items():
             obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
@@ -395,6 +396,10 @@ class AgentPPO(Agent):
         return actions
 
     def _update_memory(self, actions, memory_write, dones):
+        if memory_write is None:
+            assert self.cfg.mem_size == 0
+            return
+
         memory_write = memory_write.cpu().numpy()
 
         for env_i, action in enumerate(actions):
@@ -598,7 +603,8 @@ class AgentPPO(Agent):
                         actions = self._preprocess_actions(res)
 
                         # wait for all the workers to complete an environment step
-                        new_obs, rewards, dones, infos = multi_env.step(actions)
+                        with timing.add_time('env_step'):
+                            new_obs, rewards, dones, infos = multi_env.step(actions)
 
                         self._update_memory(actions, res.memory_write, dones)
 
@@ -610,7 +616,7 @@ class AgentPPO(Agent):
                             rewards, dones,
                         )
 
-                        with timing.timeit('obs'):
+                        with timing.add_time('obs'):
                             observations = self._preprocess_observations(new_obs)
                         rnn_states = res.rnn_states
 
