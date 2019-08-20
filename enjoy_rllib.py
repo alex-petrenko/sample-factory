@@ -19,7 +19,6 @@ from ray.rllib.rollout import create_parser, DefaultMapping
 from ray.tune.util import merge_dicts
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from envs.doom.doom_utils import cfg_param
 from envs.ray_envs import register_doom_envs_rllib
 from utils.utils import log, project_root
 

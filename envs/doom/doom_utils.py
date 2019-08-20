@@ -64,7 +64,7 @@ DOOM_ENVS = [
         'doom_two_colors_easy', 'two_colors_easy.cfg',
         Discrete(5),  # idle, left, right, forward, backward
         extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
+            # (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
             (DoomGatheringRewardShaping, {}),
         ]
     ),
@@ -73,7 +73,7 @@ DOOM_ENVS = [
         'doom_two_colors_hard', 'two_colors_hard.cfg',
         Discrete(5),  # idle, left, right, forward, backward
         extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
+            # (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
             (DoomGatheringRewardShaping, {}),
         ]
     ),

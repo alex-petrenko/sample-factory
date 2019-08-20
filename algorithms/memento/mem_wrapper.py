@@ -33,6 +33,13 @@ class MemCategorical(Categorical):
         return -kl
 
 
+def split_env_and_memory_actions(actions, memory_size):
+    num_memory_actions = memory_size
+    env_actions = actions[:-num_memory_actions]
+    memory_actions = actions[-num_memory_actions:]
+    return env_actions, memory_actions
+
+
 class MemWrapper(gym.core.Wrapper):
     def __init__(self, env, mem_size, mem_feature):
         super().__init__(env)
@@ -64,51 +71,14 @@ class MemWrapper(gym.core.Wrapper):
         else:
             self.action_space = gym.spaces.Tuple([env.action_space] + memory_action_spaces)
 
-        self.memory = None
-        self.memory_empty = True
-        self._reset_memory()
-
-    def _reset_memory(self):
-        self.memory = np.zeros(shape=(self.mem_size, self.mem_feature), dtype=np.float32)
-        self.memory_empty = True
-
-    def _parse_actions(self, actions):
-        num_memory_actions = self.mem_size + self.mem_feature
-        env_actions = actions[:-num_memory_actions]
-        memory_actions_and_state = actions[-num_memory_actions:]
-
-        memory_actions = memory_actions_and_state[:self.mem_size]
-        new_state = memory_actions_and_state[self.mem_size:]
-
-        assert len(new_state) == self.mem_feature
-
-        return env_actions, memory_actions, new_state
-
-    def _modify_memory(self, memory_actions, agent_state):
-        for cell_idx in range(self.mem_size):
-            if memory_actions[cell_idx] != 0 or self.memory_empty:
-                self.memory[cell_idx] = agent_state
-
-        self.memory_empty = False
-
-    def _observation(self, obs):
-        if not isinstance(obs, dict):
-            obs = dict(obs=obs)
-        obs['mem'] = np.array(self.memory).flatten()
-        return obs
-
     def reset(self):
-        self._reset_memory()
-        obs = self._observation(self.env.reset())
-        return obs
+        return self.env.reset()
 
     def step(self, actions):
-        env_actions, memory_actions, agent_state = self._parse_actions(actions)
-        # log.info('Memory actions: %r', list(memory_actions))
-        self._modify_memory(memory_actions, agent_state)
+        env_actions, memory_actions = split_env_and_memory_actions(actions, self.mem_size)
 
         if len(env_actions) == 1:
             env_actions = env_actions[0]
 
         observation, reward, done, info = self.env.step(env_actions)
-        return self._observation(observation), reward, done, info
+        return observation, reward, done, info

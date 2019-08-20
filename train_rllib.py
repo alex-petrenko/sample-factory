@@ -14,12 +14,14 @@ from ray.tune.config_parser import make_parser
 from ray.tune.registry import ENV_CREATOR, register_trainable
 # noinspection PyProtectedMember
 from ray.tune.tune import _make_scheduler, run
+from ray.tune.util import merge_dicts
 
 from algorithms.models.vizdoom_model import VizdoomVisionNetwork
 from algorithms.pbt.pbt import get_pbt_scheduler
 from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
 from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
 from envs.ray_envs import register_doom_envs_rllib
+from utils.utils import log
 
 EXAMPLE_USAGE = """
 Training example via RLlib CLI:
@@ -121,6 +123,12 @@ def create_parser(parser_creator=None):
         help="Experimental population-based training",
     )
 
+    parser.add_argument(
+        "--cfg-mixins",
+        nargs='+',
+        help='List of config files to override the default configuration (config "mixins")',
+    )
+
     return parser
 
 
@@ -169,6 +177,12 @@ def run_experiment(args, parser):
             exp = yaml.load(f)
     else:
         raise Exception('No config file!')
+
+    for cfg_mixin_file in args.cfg_mixins:
+        with open(cfg_mixin_file, 'r') as f:
+            override_cfg = yaml.load(f)
+            log.info('Overriding parameters from %s: %r', cfg_mixin_file, override_cfg)
+            exp = merge_dicts(exp, override_cfg)
 
     if not exp.get("run"):
         parser.error("the following arguments are required: --run")

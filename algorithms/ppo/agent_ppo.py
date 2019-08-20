@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional
 
-from algorithms.memento.mem_wrapper import MemWrapper
+from algorithms.memento.mem_wrapper import MemWrapper, split_env_and_memory_actions
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, sample_actions_log_probs
 from algorithms.utils.agent import TrainStatus, Agent
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
@@ -205,15 +205,7 @@ class ActorCritic(nn.Module):
             self.core = nn.GRUCell(self.hidden_size, self.hidden_size)
 
         if cfg.mem_size > 0:
-            self.compressed_state = nn.Identity()
-            # TODO: compress
-            assert cfg.mem_feature == self.hidden_size
-
-            # self.compressed_state = nn.Sequential(
-            #     nn.Linear(self.hidden_size, params.mem_feature),
-            #     nonlinearity(),
-            # )
-            # self.reconstructed_state = nn.Linear(params.mem_feature, self.hidden_size)
+            self.memory_write = nn.Linear(self.hidden_size, cfg.mem_feature)
 
         self.critic_linear = nn.Linear(self.hidden_size, 1)
         self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
@@ -242,7 +234,7 @@ class ActorCritic(nn.Module):
             x = torch.cat((x, measurements), dim=1)
 
         if self.mem_head is not None:
-            mem = self.mem_head(obs_dict.mem)
+            mem = self.mem_head(obs_dict.memory)
             x = torch.cat((x, mem), dim=1)
 
         x = self.linear1(x)
@@ -256,13 +248,11 @@ class ActorCritic(nn.Module):
         else:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
 
-        compressed_state = reconstructed_state = None
+        memory_write = None
         if self.cfg.mem_size > 0:
-            compressed_state = self.compressed_state(x)
-            # reconstructed_state = self.reconstructed_state(compressed_state)
+            memory_write = self.memory_write(x)
 
-        # TODO: loss
-        return x, new_rnn_states, compressed_state, reconstructed_state
+        return x, new_rnn_states, memory_write
 
     def forward_tail(self, core_output):
         values = self.critic_linear(core_output)
@@ -284,11 +274,10 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs_dict, rnn_states, masks):
         x = self.forward_head(obs_dict)
-        x, new_rnn_states, compressed_state, reconstructed_state = self.forward_core(x, rnn_states, masks)
+        x, new_rnn_states, memory_write = self.forward_core(x, rnn_states, masks)
         result = self.forward_tail(x)
         result.rnn_states = new_rnn_states
-        result.compressed_state = compressed_state
-        result.reconstructed_state = reconstructed_state
+        result.memory_write = memory_write
         return result
 
     @staticmethod
@@ -353,6 +342,8 @@ class AgentPPO(Agent):
 
         self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
 
+        self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
+
         env.close()
 
     def _load_state(self, checkpoint_dict):
@@ -383,6 +374,10 @@ class AgentPPO(Agent):
             # handle flat observations also as dict
             obs_dict.obs = observations
 
+        # add memory
+        obs_dict.memory = self.memory.copy()
+        obs_dict.memory = obs_dict.memory.reshape((self.cfg.num_envs, self.cfg.mem_size * self.cfg.mem_feature))
+
         for key, x in obs_dict.items():
             obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
@@ -391,17 +386,34 @@ class AgentPPO(Agent):
 
         if abs(mean) > EPS and abs(scale - 1.0) > EPS:
             obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
+
         return obs_dict
 
-    def _preprocess_actions(self, actor_critic_output):
+    @staticmethod
+    def _preprocess_actions(actor_critic_output):
         actions = actor_critic_output.actions.cpu().numpy()
-
-        if self.cfg.mem_size > 0:
-            actions = np.concatenate([actions, actor_critic_output.compressed_state.cpu().numpy()], axis=1)
-
         return actions
 
-    def best_action(self, observations, dones=None, rnn_states=None, deterministic=False):
+    def _update_memory(self, actions, memory_write, dones):
+        memory_write = memory_write.cpu().numpy()
+
+        for env_i, action in enumerate(actions):
+            if dones[env_i]:
+                self.memory[env_i][:][:] = 0.0
+                continue
+
+            _, memory_action = split_env_and_memory_actions(action, self.cfg.mem_size)
+
+            for cell_i, memory_cell_action in enumerate(memory_action):
+                if memory_cell_action == 0:
+                    # noop action - leave memory intact
+                    continue
+                else:
+                    # write action, update memory cell value
+                    self.memory[env_i][cell_i] = memory_write[env_i]
+
+    # noinspection PyUnusedLocal
+    def best_action(self, observations, dones=None, rnn_states=None, **kwargs):
         with torch.no_grad():
             observations = self._preprocess_observations(observations)
             masks = self._get_masks(dones)
@@ -412,13 +424,6 @@ class AgentPPO(Agent):
 
             res = self.actor_critic(observations, rnn_states, masks)
             actions = self._preprocess_actions(res)
-
-            # if deterministic:
-            #     raise NotImplementedError('Not supported for some action distributions (TODO!)')
-            #     # _, actions = res.action_distribution.probs.max(1)
-            # else:
-            #     actions = res.action_distribution.sample()
-
             return actions, res.rnn_states
 
     # noinspection PyTypeChecker
@@ -490,8 +495,8 @@ class AgentPPO(Agent):
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
 
-                    # TODO: compressed_state loss
-                    core_output, rnn_states, _, _ = self.actor_critic.forward_core(
+                    # TODO: backpropagate through memory
+                    core_output, rnn_states, memory_write = self.actor_critic.forward_core(
                         step_head_outputs, rnn_states, masks,
                     )
                     core_outputs.append(core_output)
@@ -554,7 +559,11 @@ class AgentPPO(Agent):
                 if with_summaries:
                     mb_stats.loss = mb_loss
 
-                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.actor_critic.parameters()) ** 0.5
+                    grad_norm = sum(
+                        p.grad.data.norm(2).item() ** 2
+                        for p in self.actor_critic.parameters()
+                        if p.grad is not None
+                    ) ** 0.5
                     mb_stats.grad_norm = grad_norm
 
                     self._report_train_summaries(mb_stats)
@@ -591,6 +600,8 @@ class AgentPPO(Agent):
                         # wait for all the workers to complete an environment step
                         new_obs, rewards, dones, infos = multi_env.step(actions)
 
+                        self._update_memory(actions, res.memory_write, dones)
+
                         buffer.add(
                             observations,
                             res.actions, res.action_logits, res.log_prob_actions,
@@ -600,7 +611,6 @@ class AgentPPO(Agent):
                         )
 
                         with timing.timeit('obs'):
-                            # TODO: can we do it faster? Maybe in Pytorch
                             observations = self._preprocess_observations(new_obs)
                         rnn_states = res.rnn_states
 

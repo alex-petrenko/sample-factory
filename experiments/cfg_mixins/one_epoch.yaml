@@ -1,0 +1,2 @@
+config:
+    num_sgd_iter: 1

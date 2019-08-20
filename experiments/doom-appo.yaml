@@ -10,7 +10,7 @@ config:
     train_batch_size: 1024
     sample_batch_size: 32
     num_sgd_iter: 4
-    num_workers: 18
+    num_workers: 16
     num_envs_per_worker: 8
     batch_mode: truncate_episodes
     observation_filter: NoFilter
