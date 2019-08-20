@@ -304,23 +304,23 @@ class AgentPPO(Agent):
 
         p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting')
 
-        p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
+        p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-        p.add_argument('--num_envs', default=96, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
+        p.add_argument('--num_envs', default=128, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
         p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
         p.add_argument('--recurrence', default=16, type=int, help='Trajectory lenght for backpropagation through time. If recurrence=1 the feed-forward model is used (no BPTT)')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
-        p.add_argument('--batch_size', default=512, type=int, help='PPO minibatch size')
+        p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
 
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
-        p.add_argument('--entropy_loss_coeff', default=0.005, type=float, help='Entropy coefficient')
+        p.add_argument('--entropy_loss_coeff', default=0.0005, type=float, help='Entropy coefficient')
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
-        p.add_argument('--max_grad_norm', default=2.0, type=float, help='Max L2 norm of the gradient vector')
+        p.add_argument('--max_grad_norm', default=10.0, type=float, help='Max L2 norm of the gradient vector')
 
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
         p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')

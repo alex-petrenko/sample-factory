@@ -2,7 +2,7 @@
 
 """
 Little handy script to launch tensorboard using a wildcard mask.
-Courtesy of Shao-Hua Sun.
+Inspired by code originally written by Shao-Hua Sun https://github.com/shaohua0116
 """
 
 import sys
@@ -25,11 +25,11 @@ def kill(proc_pid):
 
 def main():
     parser = argparse.ArgumentParser(description=r'Launch tensorboard on multiple directories in an easy way.')
-    parser.add_argument('--dir', default='~/ray_results', help='Base folder with summaries')
+    parser.add_argument('--dir', default='./train_dir', help='Base folder with summaries')
     parser.add_argument('--port', default=6006, type=int, help='The port to use for tensorboard')
     parser.add_argument('--quiet', '-q', action='store_true', help='Run in silent mode')
-    parser.add_argument('--refresh_every', '-r', dest='refresh', type=int, default=7200,
-                        help='Refresh every x seconds (default 7200 sec, i.e. 120 min)')
+    parser.add_argument('--refresh_every', '-r', dest='refresh', type=int, default=18000,
+                        help='Restard tensorboard process every x seconds to prevent mem leaks (default 18000 sec, which is 5 hours)')
     parser.add_argument('--reload_interval', type=int, default=60, help='How often to reload data')
     parser.add_argument('filters', nargs='+', type=str, help='directories in train_dir to monitor')
     args = parser.parse_args()
@@ -48,8 +48,8 @@ def main():
         f'--port={args.port} '
         f'--logdir={train_dirs} '
         f'--reload_interval={args.reload_interval} '
-        f'--max_reload_threads=8 '
-        f'--samples_per_plugin="scalars=300"'
+        f'--max_reload_threads=4 '
+        f'--samples_per_plugin="scalars=100"'
     )
 
     if args.quiet:
