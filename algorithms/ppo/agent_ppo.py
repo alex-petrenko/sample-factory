@@ -12,7 +12,7 @@ from algorithms.utils.agent import TrainStatus, Agent
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
 from algorithms.utils.multi_env import MultiEnv
 from utils.timing import Timing
-from utils.utils import log, AttrDict
+from utils.utils import log, AttrDict, str2bool
 
 
 class ExperienceBuffer:
@@ -82,7 +82,7 @@ class ExperienceBuffer:
                 self.__dict__[item] = _do_transform(x)
 
     # noinspection PyTypeChecker
-    def finalize_batch(self, gamma, gae_lambda):
+    def finalize_batch(self, gamma, gae_lambda, normalize_advantage):
         device = self.values[0].device
 
         self.rewards = np.asarray(self.rewards, dtype=np.float32)
@@ -92,6 +92,10 @@ class ExperienceBuffer:
 
         # calculate discounted returns and GAE
         self.advantages, self.returns = calculate_gae(self.rewards, self.dones, values, gamma, gae_lambda)
+
+        # normalize advantages if needed
+        if normalize_advantage:
+            self.advantages = (self.advantages - self.advantages.mean()) / max(1e-4, self.advantages.std())
 
         # values vector has one extra last value that we don't need
         self.values = self.values[:-1]
@@ -311,10 +315,12 @@ class AgentPPO(Agent):
 
         p.add_argument('--recurrence', default=16, type=int, help='Trajectory lenght for backpropagation through time. If recurrence=1 the feed-forward model is used (no BPTT)')
 
-        p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
+        p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
+
+        p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         p.add_argument('--entropy_loss_coeff', default=0.0005, type=float, help='Entropy coefficient')
@@ -630,7 +636,7 @@ class AgentPPO(Agent):
 
                 with timing.timeit('finalize'):
                     # calculate discounted returns and GAE
-                    buffer.finalize_batch(self.cfg.gamma, self.cfg.gae_lambda)
+                    buffer.finalize_batch(self.cfg.gamma, self.cfg.gae_lambda, self.cfg.normalize_advantage)
 
             # exit no_grad context, update actor and critic
             with timing.timeit('train'):

@@ -1,5 +1,5 @@
 """Utilities."""
-
+import argparse
 import logging
 import operator
 import os
@@ -77,6 +77,19 @@ def min_with_idx(x):
 
 def max_with_idx(x):
     return op_with_idx(x, operator.gt)
+
+
+# CLI args
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str) and v.lower() in ('true', ):
+        return True
+    elif isinstance(v, str) and v.lower() in ('false', ):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected')
 
 
 # numpy stuff
