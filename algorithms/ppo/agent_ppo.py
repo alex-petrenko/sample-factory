@@ -187,26 +187,29 @@ class ActorCritic(nn.Module):
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
             self.head_out_size += measurements_out_size
 
+        log.debug('Policy head output size: %r', self.head_out_size)
+
+        self.hidden_size = cfg.hidden_size
+        self.linear1 = nn.Linear(self.head_out_size, self.hidden_size)
+
+        fc_output_size = self.hidden_size
+
         self.mem_head = None
         if cfg.mem_size > 0:
-            mem_out_size = 256
+            mem_out_size = 128
             self.mem_head = nn.Sequential(
                 nn.Linear(cfg.mem_size * cfg.mem_feature, mem_out_size),
                 nonlinearity(),
             )
-            self.head_out_size += mem_out_size
+            fc_output_size += mem_out_size
 
-        log.debug('Policy head output size: %r', self.head_out_size)
-
-        self.hidden_size = cfg.hidden_size
-
-        self.linear1 = nn.Linear(self.head_out_size, self.hidden_size)
-
-        if cfg.recurrence == 1:
-            # no recurrence
-            self.core = None
+        if cfg.use_rnn:
+            self.core = nn.GRUCell(fc_output_size, self.hidden_size)
         else:
-            self.core = nn.GRUCell(self.hidden_size, self.hidden_size)
+            self.core = nn.Sequential(
+                nn.Linear(fc_output_size, cfg.hidden_size),
+                nonlinearity(),
+            )
 
         if cfg.mem_size > 0:
             self.memory_write = nn.Linear(self.hidden_size, cfg.mem_feature)
@@ -237,20 +240,20 @@ class ActorCritic(nn.Module):
             measurements = self.measurements_head(obs_dict.measurements)
             x = torch.cat((x, measurements), dim=1)
 
-        if self.mem_head is not None:
-            mem = self.mem_head(obs_dict.memory)
-            x = torch.cat((x, mem), dim=1)
-
         x = self.linear1(x)
         x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
         return x
 
-    def forward_core(self, head_output, rnn_states, masks):
-        if self.cfg.recurrence == 1:
-            x = head_output
-            new_rnn_states = torch.zeros(x.shape[0])
-        else:
+    def forward_core(self, head_output, rnn_states, masks, memory):
+        if self.mem_head is not None:
+            memory = self.mem_head(memory)
+            head_output = torch.cat((head_output, memory), dim=1)
+
+        if self.cfg.use_rnn == 1:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
+        else:
+            x = self.core(head_output)
+            new_rnn_states = torch.zeros(x.shape[0])
 
         memory_write = None
         if self.cfg.mem_size > 0:
@@ -278,7 +281,7 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs_dict, rnn_states, masks):
         x = self.forward_head(obs_dict)
-        x, new_rnn_states, memory_write = self.forward_core(x, rnn_states, masks)
+        x, new_rnn_states, memory_write = self.forward_core(x, rnn_states, masks, obs_dict.get('memory', None))
         result = self.forward_tail(x)
         result.rnn_states = new_rnn_states
         result.memory_write = memory_write
@@ -313,7 +316,8 @@ class AgentPPO(Agent):
         p.add_argument('--num_envs', default=128, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
         p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-        p.add_argument('--recurrence', default=16, type=int, help='Trajectory lenght for backpropagation through time. If recurrence=1 the feed-forward model is used (no BPTT)')
+        p.add_argument('--recurrence', default=16, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
+        p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
@@ -467,6 +471,30 @@ class AgentPPO(Agent):
         clip_value = self.cfg.ppo_clip_value
         recurrence = self.cfg.recurrence
 
+        # t1 = torch.ones([2, 3], requires_grad=True)
+        # t2 = torch.ones([2, 3], requires_grad=False)
+        # t3 = torch.cat((t1, t2), dim=1)
+        # loss_t = t3.sum()
+        # print(t3)
+        # opti_t = torch.optim.Adam([t1, t2], lr=0.01)
+        # opti_t.zero_grad()
+        # loss_t.backward()
+        # opti_t.step()
+        #
+        # g1 = torch.ones([2, 15], requires_grad=False)
+        # g2 = torch.ones([2, 5], requires_grad=True)
+        # g1[:, 5:10] = g2
+        # g1[:, 6:11] = g2
+        # loss_g = g1.sum()
+        # opti_g = torch.optim.Adam([g2], lr=0.01)
+        # opti_g.zero_grad()
+        # loss_g.backward()
+        # opti_g.step()
+        # pass
+
+        # TODO: backprop into initial memory vector?
+        empty_memory = torch.zeros(self.cfg.mem_size * self.cfg.mem_feature, device=self.device, requires_grad=False)
+
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(
@@ -487,6 +515,11 @@ class AgentPPO(Agent):
                 # initial rnn states
                 rnn_states = buffer.rnn_states[traj_indices]
 
+                # initial memory values
+                memory = None
+                if self.cfg.mem_size > 0:
+                    memory = buffer.obs.memory[traj_indices]
+
                 core_outputs = []
 
                 dist_loss = 0.0
@@ -506,11 +539,38 @@ class AgentPPO(Agent):
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
 
-                    # TODO: backpropagate through memory
                     core_output, rnn_states, memory_write = self.actor_critic.forward_core(
-                        step_head_outputs, rnn_states, masks,
+                        step_head_outputs, rnn_states, masks, memory,
                     )
                     core_outputs.append(core_output)
+
+                    behavior_policy_actions = mb.actions[timestep_indices]
+                    dones = mb.dones[timestep_indices]
+
+                    if self.cfg.mem_size > 0:
+                        new_memories = []
+                        cell_size = self.cfg.mem_feature
+                        for traj_i, action in enumerate(behavior_policy_actions.cpu().numpy()):
+                            if dones[traj_i]:
+                                new_memories.append(empty_memory)
+                                continue
+
+                            _, memory_action = split_env_and_memory_actions(action, self.cfg.mem_size)
+
+                            new_memory = []
+
+                            for cell_i, memory_cell_action in enumerate(memory_action):
+                                if memory_cell_action == 0:
+                                    # noop action - leave memory intact
+                                    new_memory.append(memory[traj_i][cell_i * cell_size:(cell_i + 1) * cell_size])
+                                else:
+                                    # write action, update memory cell value
+                                    new_memory.append(memory_write[traj_i])
+
+                            new_memory = torch.cat(new_memory, dim=0)
+                            new_memories.append(new_memory)
+
+                        memory = torch.stack(new_memories, dim=0)
 
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                 # which is the same shape as the minibatch
@@ -573,7 +633,6 @@ class AgentPPO(Agent):
                     grad_norm = sum(
                         p.grad.data.norm(2).item() ** 2
                         for p in self.actor_critic.parameters()
-                        if p.grad is not None
                     ) ** 0.5
                     mb_stats.grad_norm = grad_norm
 
@@ -590,7 +649,7 @@ class AgentPPO(Agent):
         dones = [True] * self.cfg.num_envs
 
         rnn_states = torch.zeros(self.cfg.num_envs)
-        if self.cfg.recurrence > 1:
+        if self.cfg.use_rnn:
             rnn_states = torch.zeros(self.cfg.num_envs, self.cfg.hidden_size).to(self.device)
 
         while not self._should_end_training():

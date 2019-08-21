@@ -2,16 +2,18 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.run_many import run
 
 _params = ParamGrid([
-    ('recurrence', [1, 16]),
-    ('memento', [0, 4]),
+    ('use_rnn', [True, False]),
+    ('recurrence', [32]),
+    ('mem_size', [0, 4]),
+    ('mem_feature', [32]),
 ])
 
 _experiment = Experiment(
-    'doom_two_colors_memento',
-    'python -m algorithms.ppo.train_ppo --env=doom_two_colors_easy --recurrence=1 --memento=4',
+    'doom_two_colors_mem',
+    'python -m train_pytorch --algo=PPO --env=doom_two_colors_easy --rollout=64 --num_envs=64',
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('doom_two_colors_memento', experiments=[_experiment], pause_between_experiments=30, use_gpus=4, experiments_per_gpu=1)
+gridsearch = RunDescription('doom_two_colors_mem', experiments=[_experiment], pause_between_experiments=10, use_gpus=2, experiments_per_gpu=2, max_parallel=4)
 
 run(gridsearch)
