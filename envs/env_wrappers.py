@@ -478,9 +478,10 @@ class RecordingWrapper(gym.core.Wrapper):
 
         if isinstance(action, np.ndarray):
             self._recorded_actions.append(action.tolist())
+        elif isinstance(action, np.int64):
+            self._recorded_actions.append(int(action))
         else:
-            # noinspection PyTypeChecker
-            self._recorded_actions.append(list(action))
+            self._recorded_actions.append(action)
 
         self._record(observation)
         self._recorded_episode_reward += reward

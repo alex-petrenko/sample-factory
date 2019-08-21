@@ -48,12 +48,15 @@ class DoomSpec:
 DOOM_ENVS = [
     DoomSpec(
         'doom_basic', 'basic.cfg',
-        Discrete(4),  # idle, left, right, attack
+        Discrete(1 + 3),  # idle, left, right, attack
         0.01, 300,
         extra_wrappers=[(DoomAdditionalInputAndRewards, {'with_reward_shaping': False})],
     ),
 
-    DoomSpec('doom_battle_discrete', 'D3_battle.cfg', Discrete(8), 1.0, 2100),
+    DoomSpec('doom_corridor', 'deadly_corridor.cfg', Discrete(1 + 7), 0.01, 2100),
+    DoomSpec('doom_gathering', 'health_gathering.cfg', Discrete(1 + 3), 0.01, 2100),
+
+    DoomSpec('doom_battle_discrete', 'D3_battle.cfg', Discrete(1 + 8), 1.0, 2100),
     DoomSpec('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
     DoomSpec('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
     DoomSpec('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100),
