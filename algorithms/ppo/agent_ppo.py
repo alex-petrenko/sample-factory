@@ -364,6 +364,7 @@ class AgentPPO(Agent):
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
         self.kl_coeff = self.cfg.initial_kl_coeff
+        self.last_batch_kl_divergence = 0.0
 
         env.close()
 
@@ -584,6 +585,10 @@ class AgentPPO(Agent):
 
                 old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
                 kl_old = action_distribution.kl_divergence(old_action_distribution).mean()
+
+                # kl_reverse = old_action_distribution.kl_divergence(action_distribution).mean()
+                # log.debug('KL-divergence from old policy distribution is %f (reverse %f)', kl_old, kl_reverse)
+
                 kl_penalty = self.kl_coeff * kl_old
 
                 dist_loss /= recurrence
@@ -603,8 +608,8 @@ class AgentPPO(Agent):
                     mb_stats.prior_loss = prior_loss
                     mb_stats.dist_loss = dist_loss
                     mb_stats.rnn_dist /= recurrence
-                    mb_stats.kl_old = kl_old
                     mb_stats.kl_coeff = self.kl_coeff
+                    mb_stats.kl_old = self.last_batch_kl_divergence
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -642,6 +647,7 @@ class AgentPPO(Agent):
         elif kl_old < self.cfg.target_kl / 2:
             self.kl_coeff /= 1.5
         self.kl_coeff = max(self.kl_coeff, 1e-6)
+        self.last_batch_kl_divergence = kl_old
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
