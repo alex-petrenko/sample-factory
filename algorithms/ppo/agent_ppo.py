@@ -327,20 +327,20 @@ class AgentPPO(Agent):
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
+        p.add_argument('--max_grad_norm', default=10.0, type=float, help='Max L2 norm of the gradient vector')
+
         # components of the loss function
         p.add_argument(
             '--prior_loss_coeff', default=0.0005, type=float,
-            help=('Coefficient for the exploration component of the loss function. Typically its entropy maximization,'
-                  'but here we use KL-divergence between our policy and a prior.'
-                  'Prior is uniform distribution by default, and this is numerically equivalent to maximizing entropy'
+            help=('Coefficient for the exploration component of the loss function. Typically this is entropy maximization, but here we use KL-divergence between our policy and a prior.'
+                  'By default prior is a uniform distribution, and this is numerically equivalent to maximizing entropy.'
                   'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
         )
         p.add_argument('--initial_kl_coeff', default=0.01, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
-        p.add_argument('--max_grad_norm', default=10.0, type=float, help='Max L2 norm of the gradient vector')
-
+        # external memory
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
         p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
 
