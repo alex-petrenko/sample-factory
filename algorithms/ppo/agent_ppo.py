@@ -323,9 +323,11 @@ class AgentPPO(Agent):
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
+        p.add_argument('--target_kl', default=0.01, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
+        # components of the loss function
         p.add_argument(
             '--prior_loss_coeff', default=0.0005, type=float,
             help=('Coefficient for the exploration component of the loss function. Typically its entropy maximization,'
@@ -333,6 +335,7 @@ class AgentPPO(Agent):
                   'Prior is uniform distribution by default, and this is numerically equivalent to maximizing entropy'
                   'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
         )
+        p.add_argument('--initial_kl_coeff', default=0.01, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
@@ -360,18 +363,21 @@ class AgentPPO(Agent):
 
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
+        self.kl_coeff = self.cfg.initial_kl_coeff
+
         env.close()
 
     def _load_state(self, checkpoint_dict):
         super()._load_state(checkpoint_dict)
 
+        self.kl_coeff = checkpoint_dict['kl_coeff']
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
 
     def _get_checkpoint_dict(self):
         checkpoint = super()._get_checkpoint_dict()
         checkpoint.update({
-            'cfg': self.cfg,
+            'kl_coeff': self.kl_coeff,
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         })
@@ -478,13 +484,12 @@ class AgentPPO(Agent):
         recurrence = self.cfg.recurrence
 
         # TODO: backprop into initial memory vector?
-        empty_memory = torch.zeros(self.cfg.mem_feature, device=self.device, requires_grad=False)
+
+        kl_old = 0.0
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
-                mb_stats = AttrDict(dict(
-                    value=0, entropy=0, kl_prior=0, value_loss=0, prior_loss=0, rnn_dist=0, dist_loss=0,
-                ))
+                mb_stats = AttrDict(dict(rnn_dist=0))
                 with_summaries = self._should_write_summaries(self.train_step)
                 mb_loss = 0.0
 
@@ -542,6 +547,7 @@ class AgentPPO(Agent):
                         write_output = memory_write.repeat(1, self.cfg.mem_size)
                         write_output = write_output.reshape(memory_cells.shape)
 
+                        # noinspection PyTypeChecker
                         new_memories = (1.0 - mem_actions) * memory_cells + mem_actions * write_output
                         memory = new_memories.reshape(memory.shape[0], self.cfg.mem_size * self.cfg.mem_feature)
 
@@ -576,12 +582,16 @@ class AgentPPO(Agent):
 
                 prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
+                old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
+                kl_old = action_distribution.kl_divergence(old_action_distribution).mean()
+                kl_penalty = self.kl_coeff * kl_old
+
                 dist_loss /= recurrence
 
                 if self.env_steps < 1e5:
                     loss = kl_prior  # pretrain action distributions to match prior
                 else:
-                    loss = policy_loss + value_loss + prior_loss + dist_loss
+                    loss = policy_loss + value_loss + prior_loss + kl_penalty + dist_loss
 
                 mb_loss += loss
 
@@ -593,6 +603,8 @@ class AgentPPO(Agent):
                     mb_stats.prior_loss = prior_loss
                     mb_stats.dist_loss = dist_loss
                     mb_stats.rnn_dist /= recurrence
+                    mb_stats.kl_old = kl_old
+                    mb_stats.kl_coeff = self.kl_coeff
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -623,6 +635,13 @@ class AgentPPO(Agent):
                     mb_stats.grad_norm = grad_norm
 
                     self._report_train_summaries(mb_stats)
+
+        # adjust KL-penalty coefficient if KL divergence at the end of training is high
+        if kl_old > self.cfg.target_kl:
+            self.kl_coeff *= 1.5
+        elif kl_old < self.cfg.target_kl / 2:
+            self.kl_coeff /= 1.5
+        self.kl_coeff = max(self.kl_coeff, 1e-6)
 
     def _learn_loop(self, multi_env):
         """Main training loop."""

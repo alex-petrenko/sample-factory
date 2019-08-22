@@ -71,12 +71,17 @@ class CategoricalActionDistribution(Categorical):
 
         self.log_prior_probs = self.prior_probs.log()
 
-    def kl_prior(self):
+    def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
-
-        kl = probs * (self.logits - self.log_prior_probs)
+        kl = probs * (self.logits - other_log_probs)
         kl = kl.sum(dim=-1)
         return kl
+
+    def kl_prior(self):
+        return self._kl(self.log_prior_probs)
+
+    def kl_divergence(self, other):
+        return self._kl(other.logits)
 
     def dbg_print(self):
         dbg_info = dict(
@@ -161,6 +166,17 @@ class TupleActionDistribution:
 
     def kl_prior(self):
         kls = [d.kl_prior().unsqueeze(dim=1) for d in self.distributions]
+        kls = torch.cat(kls, dim=1)
+        kl = kls.sum(dim=1)
+        return kl
+
+    def kl_divergence(self, other):
+        kls = [
+            d.kl_divergence(other_d).unsqueeze(dim=1)
+            for d, other_d
+            in zip(self.distributions, other.distributions)
+        ]
+
         kls = torch.cat(kls, dim=1)
         kl = kls.sum(dim=1)
         return kl

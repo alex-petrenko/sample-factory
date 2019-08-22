@@ -28,3 +28,6 @@ class TestMemCategorical(TestCase):
         self.assertEqual(list(kl_2.shape), [3])
 
         self.assertGreater(kl_2[0].item(), kl_1[0].item())
+
+        kl_3 = distr.kl_divergence(distr)
+        self.assertEqual(kl_3.cpu().tolist(), [0, 0, 0])
