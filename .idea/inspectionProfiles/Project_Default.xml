@@ -104,6 +104,7 @@
           <option value="torch.FloatTensor" />
           <option value="float.backward" />
           <option value="object.tolist" />
+          <option value="torch.optim.RMSprop" />
         </list>
       </option>
     </inspection_tool>

@@ -359,12 +359,15 @@ class AgentPPO(Agent):
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.cfg)
         self.actor_critic.to(self.device)
 
-        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
+        # self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
+        # self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate)
+        self.optimizer = torch.optim.SGD(self.actor_critic.parameters(), cfg.learning_rate)
 
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
         self.kl_coeff = self.cfg.initial_kl_coeff
         self.last_batch_kl_divergence = 0.0
+        self.last_batch_value_delta = 0.0
 
         env.close()
 
@@ -487,12 +490,12 @@ class AgentPPO(Agent):
         # TODO: backprop into initial memory vector?
 
         kl_old = 0.0
+        value_delta = 0.0
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(rnn_dist=0))
                 with_summaries = self._should_write_summaries(self.train_step)
-                mb_loss = 0.0
 
                 # current minibatch consisting of short trajectory segments with length == recurrence
                 mb = buffer.get_minibatch(indices)
@@ -569,14 +572,28 @@ class AgentPPO(Agent):
                     action_distribution.dbg_print()
 
                 ratio = torch.exp(action_distribution.log_prob(mb.actions) - mb.log_prob_actions)  # pi / pi_old
-                clipped_advantages = torch.clamp(ratio, 1.0 / clip_ratio, clip_ratio) * mb.advantages
-                policy_loss = -torch.min(ratio * mb.advantages, clipped_advantages).mean()
+                ratio_mean = torch.abs(1.0 - ratio).mean()
+                ratio_min = ratio.min()
+                ratio_max = ratio.max()
+
+                ratios_greater = (ratio > clip_ratio).float()
+                ratios_smaller = (ratio < clip_ratio).float()
+                ratios_clipped = ratios_greater + ratios_smaller
+                ratios_not_clipped = 1.0 - ratios_clipped
+                fraction_clipped = ratios_clipped.mean()
+
+                policy_loss = -(ratio * mb.advantages * ratios_not_clipped).mean()
+
+                # clipped_advantages = torch.clamp(ratio, 1.0 / clip_ratio, clip_ratio) * mb.advantages
+                # policy_loss = -torch.min(ratio * mb.advantages, clipped_advantages).mean()
 
                 value_clipped = mb.values + torch.clamp(result.values - mb.values, -clip_value, clip_value)
                 value_original_loss = (result.values - mb.returns).pow(2)
                 value_clipped_loss = (value_clipped - mb.returns).pow(2)
                 value_loss = torch.max(value_original_loss, value_clipped_loss).mean()
                 value_loss *= self.cfg.value_loss_coeff
+                value_delta = torch.abs(result.values - mb.values).mean()
+                value_delta_max = torch.abs(result.values - mb.values).max()
 
                 entropy = action_distribution.entropy().mean()
                 kl_prior = action_distribution.kl_prior().mean()
@@ -586,21 +603,24 @@ class AgentPPO(Agent):
                 old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
                 kl_old = action_distribution.kl_divergence(old_action_distribution).mean()
 
+                # kl_old_max = action_distribution.kl_divergence(old_action_distribution).max()
                 # kl_reverse = old_action_distribution.kl_divergence(action_distribution).mean()
-                # log.debug('KL-divergence from old policy distribution is %f (reverse %f)', kl_old, kl_reverse)
+                # log.debug('KL-divergence from old policy distribution is %f (max %f, reverse %f), value delta: %f (max %f)', kl_old, kl_old_max, kl_reverse, value_delta, value_delta_max)
+                # log.debug(
+                #     'Policy Loss: %.6f, PPO ratio mean %.3f, min %.3f, max %.3f, fraction clipped: %.5f', policy_loss, ratio_mean, ratio_min, ratio_max, fraction_clipped,
+                # )
 
                 kl_penalty = self.kl_coeff * kl_old
 
                 dist_loss /= recurrence
 
-                if self.env_steps < 1e5:
+                if self.env_steps < 0:  # TODO
                     loss = kl_prior  # pretrain action distributions to match prior
                 else:
                     loss = policy_loss + value_loss + prior_loss + kl_penalty + dist_loss
 
-                mb_loss += loss
-
                 if with_summaries:
+                    mb_stats.loss = loss
                     mb_stats.value = result.values.mean()
                     mb_stats.entropy = entropy
                     mb_stats.kl_prior = kl_prior
@@ -610,6 +630,7 @@ class AgentPPO(Agent):
                     mb_stats.rnn_dist /= recurrence
                     mb_stats.kl_coeff = self.kl_coeff
                     mb_stats.kl_old = self.last_batch_kl_divergence
+                    mb_stats.value_delta = self.last_batch_value_delta
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -622,7 +643,9 @@ class AgentPPO(Agent):
 
                 # update the weights
                 self.optimizer.zero_grad()
-                mb_loss.backward()
+                loss.backward()
+                max_grad_back = self.actor_critic._modules['dist_linear'].weight.grad.max()
+                log.debug('max grad back: %.6f', max_grad_back)
                 torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
                 self.optimizer.step()
 
@@ -630,8 +653,6 @@ class AgentPPO(Agent):
 
                 # collect and report summaries
                 if with_summaries:
-                    mb_stats.loss = mb_loss
-
                     grad_norm = sum(
                         p.grad.data.norm(2).item() ** 2
                         for p in self.actor_critic.parameters()
@@ -647,7 +668,9 @@ class AgentPPO(Agent):
         elif kl_old < self.cfg.target_kl / 2:
             self.kl_coeff /= 1.5
         self.kl_coeff = max(self.kl_coeff, 1e-6)
+
         self.last_batch_kl_divergence = kl_old
+        self.last_batch_value_delta = value_delta
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
