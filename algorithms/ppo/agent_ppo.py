@@ -326,8 +326,14 @@ class AgentPPO(Agent):
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
+        p.add_argument(
+            '--prior_loss_coeff', default=0.0005, type=float,
+            help=('Coefficient for the exploration component of the loss function. Typically its entropy maximization,'
+                  'but here we use KL-divergence between our policy and a prior.'
+                  'Prior is uniform distribution by default, and this is numerically equivalent to maximizing entropy'
+                  'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
+        )
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
-        p.add_argument('--entropy_loss_coeff', default=0.0005, type=float, help='Entropy coefficient')
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
         p.add_argument('--max_grad_norm', default=10.0, type=float, help='Max L2 norm of the gradient vector')
@@ -471,34 +477,13 @@ class AgentPPO(Agent):
         clip_value = self.cfg.ppo_clip_value
         recurrence = self.cfg.recurrence
 
-        # t1 = torch.ones([2, 3], requires_grad=True)
-        # t2 = torch.ones([2, 3], requires_grad=False)
-        # t3 = torch.cat((t1, t2), dim=1)
-        # loss_t = t3.sum()
-        # print(t3)
-        # opti_t = torch.optim.Adam([t1, t2], lr=0.01)
-        # opti_t.zero_grad()
-        # loss_t.backward()
-        # opti_t.step()
-        #
-        # g1 = torch.ones([2, 15], requires_grad=False)
-        # g2 = torch.ones([2, 5], requires_grad=True)
-        # g1[:, 5:10] = g2
-        # g1[:, 6:11] = g2
-        # loss_g = g1.sum()
-        # opti_g = torch.optim.Adam([g2], lr=0.01)
-        # opti_g.zero_grad()
-        # loss_g.backward()
-        # opti_g.step()
-        # pass
-
         # TODO: backprop into initial memory vector?
         empty_memory = torch.zeros(self.cfg.mem_size * self.cfg.mem_feature, device=self.device, requires_grad=False)
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(
-                    value=0, entropy=0, value_loss=0, entropy_loss=0, rnn_dist=0, dist_loss=0,
+                    value=0, entropy=0, kl_prior=0, value_loss=0, prior_loss=0, rnn_dist=0, dist_loss=0,
                 ))
                 with_summaries = self._should_write_summaries(self.train_step)
                 mb_loss = 0.0
@@ -582,6 +567,8 @@ class AgentPPO(Agent):
                 result = self.actor_critic.forward_tail(core_outputs)
 
                 action_distribution = result.action_distribution
+                if batch_num == 0:
+                    action_distribution.dbg_print()
 
                 ratio = torch.exp(action_distribution.log_prob(mb.actions) - mb.log_prob_actions)  # pi / pi_old
                 clipped_advantages = torch.clamp(ratio, 1.0 / clip_ratio, clip_ratio) * mb.advantages
@@ -594,18 +581,25 @@ class AgentPPO(Agent):
                 value_loss *= self.cfg.value_loss_coeff
 
                 entropy = action_distribution.entropy().mean()
-                entropy_loss = self.cfg.entropy_loss_coeff * -entropy
+                kl_prior = action_distribution.kl_prior().mean()
+
+                prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
                 dist_loss /= recurrence
 
-                loss = policy_loss + value_loss + entropy_loss + dist_loss
+                if self.env_steps < 1e5:
+                    loss = kl_prior  # pretrain action distributions to match prior
+                else:
+                    loss = policy_loss + value_loss + prior_loss + dist_loss
+
                 mb_loss += loss
 
                 if with_summaries:
                     mb_stats.value = result.values.mean()
                     mb_stats.entropy = entropy
+                    mb_stats.kl_prior = kl_prior
                     mb_stats.value_loss = value_loss
-                    mb_stats.entropy_loss = entropy_loss
+                    mb_stats.prior_loss = prior_loss
                     mb_stats.dist_loss = dist_loss
                     mb_stats.rnn_dist /= recurrence
 
@@ -633,6 +627,7 @@ class AgentPPO(Agent):
                     grad_norm = sum(
                         p.grad.data.norm(2).item() ** 2
                         for p in self.actor_critic.parameters()
+                        if p.grad is not None
                     ) ** 0.5
                     mb_stats.grad_norm = grad_norm
 

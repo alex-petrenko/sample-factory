@@ -168,7 +168,7 @@ class Agent:
 
     def _should_write_summaries(self, step):
         summaries_every = self.summary_rate_decay.at(step)
-        return (step + 1) % summaries_every == 0
+        return step % summaries_every == 0
 
     def _maybe_print(self, avg_rewards, avg_length, fps, t):
         log.info('<====== Step %d, env step %.2fM ======>', self.train_step, self.env_steps / 1e6)

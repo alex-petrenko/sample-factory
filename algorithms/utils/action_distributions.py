@@ -3,7 +3,8 @@ import torch
 from torch.nn import functional
 from torch.distributions import Categorical
 
-from algorithms.memento.mem_wrapper import MemActionSpace, MemCategorical
+from algorithms.memento.mem_wrapper import MemActionSpace
+from utils.utils import log, AttrDict
 
 
 def calc_num_logits(action_space):
@@ -26,11 +27,9 @@ def get_action_distribution(action_space, raw_logits):
     assert calc_num_logits(action_space) == raw_logits.shape[-1]
 
     if isinstance(action_space, MemActionSpace):
-        log_probabilities = functional.log_softmax(raw_logits, dim=1)
-        return MemCategorical(logits=log_probabilities, prior_probs=action_space.prior_probs)
+        return CategoricalActionDistribution(raw_logits, prior_probs=action_space.prior_probs)
     if isinstance(action_space, gym.spaces.Discrete):
-        log_probabilities = functional.log_softmax(raw_logits, dim=1)
-        return Categorical(logits=log_probabilities)
+        return CategoricalActionDistribution(raw_logits)
     elif isinstance(action_space, gym.spaces.Tuple):
         return TupleActionDistribution(action_space, logits_flat=raw_logits)
     else:
@@ -44,6 +43,55 @@ def sample_actions_log_probs(distribution):
         actions = distribution.sample()
         log_prob_actions = distribution.log_prob(actions)
         return actions, log_prob_actions
+
+
+# noinspection PyAbstractClass
+class CategoricalActionDistribution(Categorical):
+    """
+    A thin wrapper on top of standard PyTorch categorical, with some functionality added.
+
+    """
+
+    def __init__(self, raw_logits, prior_probs=None):
+        """
+        Ctor.
+        :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
+        """
+        log_probabilities = functional.log_softmax(raw_logits, dim=1)
+        super().__init__(logits=log_probabilities)
+
+        num_categories = raw_logits.shape[-1]
+
+        if prior_probs is None:
+            # use uniform prior by default
+            self.prior_probs = torch.empty(num_categories, device=raw_logits.device)
+            self.prior_probs.fill_(1.0 / num_categories)
+        else:
+            self.prior_probs = torch.tensor(prior_probs, device=raw_logits.device)
+
+        self.log_prior_probs = self.prior_probs.log()
+
+    def kl_prior(self):
+        probs, log_probs = self.probs, self.logits
+
+        kl = probs * (self.logits - self.log_prior_probs)
+        kl = kl.sum(dim=-1)
+        return kl
+
+    def dbg_print(self):
+        dbg_info = dict(
+            entropy=self.entropy().mean(),
+            kl_prior=self.kl_prior().mean(),
+            min_logit=self.logits.min(),
+            max_logit=self.logits.max(),
+            min_prob=self.probs.min(),
+            max_prob=self.probs.max(),
+        )
+
+        msg = ''
+        for key, value in dbg_info.items():
+            msg += f'{key}={value.cpu().item():.3f} '
+        log.debug(msg)
 
 
 class TupleActionDistribution:
@@ -110,3 +158,13 @@ class TupleActionDistribution:
         entropies = torch.cat(entropies, dim=1)
         entropy = entropies.sum(dim=1)
         return entropy
+
+    def kl_prior(self):
+        kls = [d.kl_prior().unsqueeze(dim=1) for d in self.distributions]
+        kls = torch.cat(kls, dim=1)
+        kl = kls.sum(dim=1)
+        return kl
+
+    def dbg_print(self):
+        for d in self.distributions:
+            d.dbg_print()

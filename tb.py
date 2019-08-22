@@ -49,7 +49,7 @@ def main():
         f'--logdir={train_dirs} '
         f'--reload_interval={args.reload_interval} '
         f'--max_reload_threads=4 '
-        f'--samples_per_plugin="scalars=100"'
+        f'--samples_per_plugin="scalars=200"'
     )
 
     if args.quiet:
@@ -64,8 +64,6 @@ def main():
         print('Kill current tensorboard process', p.pid, '...')
         kill(p.pid)
         print('Restarting tensorboard', num_restarts, '...')
-
-    return 0
 
 
 if __name__ == '__main__':

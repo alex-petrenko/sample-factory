@@ -16,23 +16,6 @@ class MemActionSpace(Discrete):
         assert n == len(self.prior_probs)
 
 
-# noinspection PyAbstractClass
-class MemCategorical(Categorical):
-    def __init__(self, logits, prior_probs):
-        super().__init__(logits=logits)
-        self.prior_probs = torch.tensor(prior_probs, device=logits.device)
-
-    def entropy(self):
-        """Actually return KL-divergence between this distribution and the prior."""
-        probs = self.probs
-        prob_ratios = probs / self.prior_probs
-        kl = probs * torch.log(prob_ratios)
-        kl = kl.sum(dim=-1)
-
-        # negate, because increasing entropy in this case is the same as decreasing KL-divergence
-        return -kl
-
-
 def split_env_and_memory_actions(actions, memory_size):
     num_memory_actions = memory_size
     env_actions = actions[:-num_memory_actions]

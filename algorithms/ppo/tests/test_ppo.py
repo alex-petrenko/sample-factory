@@ -13,9 +13,13 @@ class TestPPO(TestCase):
     def ppo_run(self, recurrence):
         test_name = self.__class__.__name__
 
-        argv = ['--env=doom_basic', f'--experiment={test_name}', '--algo=PPO']
+        argv = [
+            '--env=doom_basic',
+            f'--experiment={test_name}',
+            '--algo=PPO',
+            f'--experiments_root={test_name}',
+        ]
         cfg = parse_args(argv)
-        cfg.experiments_root = test_name
         cfg.num_envs = 16
         cfg.train_for_steps = 60
         cfg.initial_save_rate = 20
