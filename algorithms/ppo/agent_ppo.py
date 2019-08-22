@@ -478,7 +478,7 @@ class AgentPPO(Agent):
         recurrence = self.cfg.recurrence
 
         # TODO: backprop into initial memory vector?
-        empty_memory = torch.zeros(self.cfg.mem_size * self.cfg.mem_feature, device=self.device, requires_grad=False)
+        empty_memory = torch.zeros(self.cfg.mem_feature, device=self.device, requires_grad=False)
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
@@ -533,29 +533,20 @@ class AgentPPO(Agent):
                     dones = mb.dones[timestep_indices]
 
                     if self.cfg.mem_size > 0:
-                        new_memories = []
-                        cell_size = self.cfg.mem_feature
-                        for traj_i, action in enumerate(behavior_policy_actions.cpu().numpy()):
-                            if dones[traj_i]:
-                                new_memories.append(empty_memory)
-                                continue
+                        mem_actions = behavior_policy_actions[:, -self.cfg.mem_size:]
+                        mem_actions = torch.unsqueeze(mem_actions, dim=-1)
+                        mem_actions = mem_actions.float()
 
-                            _, memory_action = split_env_and_memory_actions(action, self.cfg.mem_size)
+                        memory_cells = memory.reshape((memory.shape[0], self.cfg.mem_size, self.cfg.mem_feature))
 
-                            new_memory = []
+                        write_output = memory_write.repeat(1, self.cfg.mem_size)
+                        write_output = write_output.reshape(memory_cells.shape)
 
-                            for cell_i, memory_cell_action in enumerate(memory_action):
-                                if memory_cell_action == 0:
-                                    # noop action - leave memory intact
-                                    new_memory.append(memory[traj_i][cell_i * cell_size:(cell_i + 1) * cell_size])
-                                else:
-                                    # write action, update memory cell value
-                                    new_memory.append(memory_write[traj_i])
+                        new_memories = (1.0 - mem_actions) * memory_cells + mem_actions * write_output
+                        memory = new_memories.reshape(memory.shape[0], self.cfg.mem_size * self.cfg.mem_feature)
 
-                            new_memory = torch.cat(new_memory, dim=0)
-                            new_memories.append(new_memory)
-
-                        memory = torch.stack(new_memories, dim=0)
+                        zero_if_done = torch.unsqueeze(1.0 - dones.float(), dim=-1)
+                        memory = memory * zero_if_done
 
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                 # which is the same shape as the minibatch
@@ -567,7 +558,7 @@ class AgentPPO(Agent):
                 result = self.actor_critic.forward_tail(core_outputs)
 
                 action_distribution = result.action_distribution
-                if batch_num == 0:
+                if batch_num == 0 and epoch == 0:
                     action_distribution.dbg_print()
 
                 ratio = torch.exp(action_distribution.log_prob(mb.actions) - mb.log_prob_actions)  # pi / pi_old
