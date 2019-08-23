@@ -1,27 +1,23 @@
-env: doom_dwango5_bots_hybrid
-run: CUSTOM_APPO
+env: doom_dwango5_bots_experimental
+run: CUSTOM_PPO
 config:
     lr: 0.0001
     lambda: 0.95
-    gamma: 0.99
     kl_coeff: 0.5
     clip_rewards: False
     clip_param: 0.1
+    vf_clip_param: 0.1
     entropy_coeff: 0.0005
-    train_batch_size: 1024
+    train_batch_size: 4096
     sample_batch_size: 32
+    sgd_minibatch_size: 1024
     num_sgd_iter: 4
-    num_workers: 18
+    num_workers: 16
     num_envs_per_worker: 8
     batch_mode: truncate_episodes
     observation_filter: NoFilter
+    vf_share_layers: true
     num_gpus: 1
-
-    num_data_loader_buffers: 1
-    minibatch_buffer_size: 1
-    replay_proportion: 0.0
-    replay_buffer_num_slots: 0
-
     model:
         custom_model: vizdoom_vision_model
         conv_filters: [
@@ -42,4 +38,4 @@ config:
         zero_mean: False
 
     env_config:
-        skip_frames: 4
+        skip_frames: 2
