@@ -359,8 +359,8 @@ class AgentPPO(Agent):
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.cfg)
         self.actor_critic.to(self.device)
 
-        # self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
-        self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-1, momentum=0)
+        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
+        # self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-4, momentum=0.0)
         # self.optimizer = torch.optim.SGD(self.actor_critic.parameters(), cfg.learning_rate)
 
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
@@ -647,8 +647,14 @@ class AgentPPO(Agent):
                 # update the weights
                 self.optimizer.zero_grad()
                 loss.backward()
-                max_grad_back = self.actor_critic._modules['dist_linear'].weight.grad.max()
-                log.debug('max grad back: %.6f', max_grad_back)
+
+                max_grad = max(
+                    p.grad.max()
+                    for p in self.actor_critic.parameters()
+                    if p.grad is not None
+                )
+                log.debug('max grad back: %.6f', max_grad)
+
                 torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
                 self.optimizer.step()
 

@@ -1,0 +1,4 @@
+config:
+    num_sgd_iter:
+        grid_search: [1, 4, 8]
+

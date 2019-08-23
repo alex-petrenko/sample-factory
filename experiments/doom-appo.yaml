@@ -17,7 +17,7 @@ config:
     num_gpus: 1
 
     num_data_loader_buffers: 1
-    minibatch_buffer_size: 2
+    minibatch_buffer_size: 1
     replay_proportion: 0.0
     replay_buffer_num_slots: 0
 

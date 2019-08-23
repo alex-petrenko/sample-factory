@@ -3,7 +3,7 @@ from runner.run_many import run
 
 _params = ParamGrid([
     ('use_rnn', ['False']),
-    ('recurrence', [1, 16]),
+    ('recurrence', [1]),
     ('ppo_epochs', [1, 4, 8]),
 ])
 
@@ -13,6 +13,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('doom_battle_torch_v16_fs4_rms', experiments=[_experiment], pause_between_experiments=10, use_gpus=3, experiments_per_gpu=2, max_parallel=6)
+gridsearch = RunDescription('doom_battle_torch_v16_fs4_rms', experiments=[_experiment], pause_between_experiments=10, use_gpus=2, experiments_per_gpu=2, max_parallel=6)
 
 run(gridsearch)
