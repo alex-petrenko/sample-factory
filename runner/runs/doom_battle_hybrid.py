@@ -8,11 +8,11 @@ _params = ParamGrid([
 ])
 
 _experiment = Experiment(
-    'battle_v15_fs4_sgd',
+    'battle_v16_fs4_rms',
     'python -m train_pytorch --env=doom_battle_hybrid --train_for_seconds=360000 --algo=PPO',
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('doom_battle_torch_v15_fs4_sgd', experiments=[_experiment], pause_between_experiments=10, use_gpus=3, experiments_per_gpu=2, max_parallel=6)
+gridsearch = RunDescription('doom_battle_torch_v16_fs4_rms', experiments=[_experiment], pause_between_experiments=10, use_gpus=3, experiments_per_gpu=2, max_parallel=6)
 
 run(gridsearch)
