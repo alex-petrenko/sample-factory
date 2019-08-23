@@ -360,8 +360,8 @@ class AgentPPO(Agent):
         self.actor_critic.to(self.device)
 
         # self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
-        # self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate)
-        self.optimizer = torch.optim.SGD(self.actor_critic.parameters(), cfg.learning_rate)
+        self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-1, momentum=0)
+        # self.optimizer = torch.optim.SGD(self.actor_critic.parameters(), cfg.learning_rate)
 
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
@@ -582,6 +582,7 @@ class AgentPPO(Agent):
                 is_ratio_too_small = (ratio < 1.0 / clip_ratio).float()
                 is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
                 is_ratio_not_clipped = 1.0 - is_ratio_clipped
+                total_non_clipped = torch.sum(is_ratio_not_clipped).float()
                 fraction_clipped = is_ratio_clipped.mean()
 
                 policy_loss = -(ratio * mb.advantages * is_ratio_not_clipped).mean()
@@ -606,7 +607,7 @@ class AgentPPO(Agent):
                 # kl_reverse = old_action_distribution.kl_divergence(action_distribution).mean()
                 # log.debug('KL-divergence from old policy distribution is %f (max %f, reverse %f), value delta: %f (max %f)', kl_old, kl_old_max, kl_reverse, value_delta, value_delta_max)
                 # log.debug(
-                #     'Policy Loss: %.6f, PPO ratio mean %.3f, min %.3f, max %.3f, fraction clipped: %.5f', policy_loss, ratio_mean, ratio_min, ratio_max, fraction_clipped,
+                #     'Policy Loss: %.6f, PPO ratio mean %.3f, min %.3f, max %.3f, fraction clipped: %.5f, total_not_clipped %.2f', policy_loss, ratio_mean, ratio_min, ratio_max, fraction_clipped, total_non_clipped,
                 # )
 
                 kl_penalty = self.kl_coeff * kl_old
