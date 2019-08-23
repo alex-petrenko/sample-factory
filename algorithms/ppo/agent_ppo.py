@@ -368,6 +368,7 @@ class AgentPPO(Agent):
         self.kl_coeff = self.cfg.initial_kl_coeff
         self.last_batch_kl_divergence = 0.0
         self.last_batch_value_delta = 0.0
+        self.last_batch_fraction_clipped = 0.0
 
         env.close()
 
@@ -491,6 +492,7 @@ class AgentPPO(Agent):
 
         kl_old = 0.0
         value_delta = 0.0
+        fraction_clipped = 0.0
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
@@ -576,16 +578,13 @@ class AgentPPO(Agent):
                 ratio_min = ratio.min()
                 ratio_max = ratio.max()
 
-                ratios_greater = (ratio > clip_ratio).float()
-                ratios_smaller = (ratio < clip_ratio).float()
-                ratios_clipped = ratios_greater + ratios_smaller
-                ratios_not_clipped = 1.0 - ratios_clipped
-                fraction_clipped = ratios_clipped.mean()
+                is_ratio_too_big = (ratio > clip_ratio).float()
+                is_ratio_too_small = (ratio < 1.0 / clip_ratio).float()
+                is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
+                is_ratio_not_clipped = 1.0 - is_ratio_clipped
+                fraction_clipped = is_ratio_clipped.mean()
 
-                policy_loss = -(ratio * mb.advantages * ratios_not_clipped).mean()
-
-                # clipped_advantages = torch.clamp(ratio, 1.0 / clip_ratio, clip_ratio) * mb.advantages
-                # policy_loss = -torch.min(ratio * mb.advantages, clipped_advantages).mean()
+                policy_loss = -(ratio * mb.advantages * is_ratio_not_clipped).mean()
 
                 value_clipped = mb.values + torch.clamp(result.values - mb.values, -clip_value, clip_value)
                 value_original_loss = (result.values - mb.returns).pow(2)
@@ -629,8 +628,11 @@ class AgentPPO(Agent):
                     mb_stats.dist_loss = dist_loss
                     mb_stats.rnn_dist /= recurrence
                     mb_stats.kl_coeff = self.kl_coeff
-                    mb_stats.kl_old = self.last_batch_kl_divergence
-                    mb_stats.value_delta = self.last_batch_value_delta
+
+                    # we want this statistic for the last batch of the last epoch
+                    mb_stats.last_batch_fraction_clipped = self.last_batch_fraction_clipped
+                    mb_stats.last_batch_kl_old = self.last_batch_kl_divergence
+                    mb_stats.last_batch_value_delta = self.last_batch_value_delta
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -671,6 +673,7 @@ class AgentPPO(Agent):
 
         self.last_batch_kl_divergence = kl_old
         self.last_batch_value_delta = value_delta
+        self.last_batch_fraction_clipped = fraction_clipped
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
