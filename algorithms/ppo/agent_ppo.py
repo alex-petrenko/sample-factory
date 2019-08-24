@@ -323,7 +323,7 @@ class AgentPPO(Agent):
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
-        p.add_argument('--target_kl', default=0.01, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
+        p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
@@ -578,8 +578,12 @@ class AgentPPO(Agent):
                 ratio_min = ratio.min()
                 ratio_max = ratio.max()
 
-                is_ratio_too_big = (ratio > clip_ratio).float()
-                is_ratio_too_small = (ratio < 1.0 / clip_ratio).float()
+                adv_positive = (mb.advantages > 0.0).float()
+                is_ratio_too_big = (ratio > clip_ratio).float() * adv_positive
+
+                adv_negative = (mb.advantages < 0.0).float()
+                is_ratio_too_small = (ratio < (1.0 / clip_ratio)).float() * adv_negative
+
                 is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
                 is_ratio_not_clipped = 1.0 - is_ratio_clipped
                 total_non_clipped = torch.sum(is_ratio_not_clipped).float()
