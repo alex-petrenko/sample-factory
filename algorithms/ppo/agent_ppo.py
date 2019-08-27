@@ -320,6 +320,7 @@ class AgentPPO(Agent):
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
+        p.add_argument('--new_clip', default=False, type=str2bool, help='Apply clipping to min(p, 1-p)')
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
@@ -573,16 +574,29 @@ class AgentPPO(Agent):
                 if batch_num == 0 and epoch == 0:
                     action_distribution.dbg_print()
 
-                ratio = torch.exp(action_distribution.log_prob(mb.actions) - mb.log_prob_actions)  # pi / pi_old
+                log_prob_actions = action_distribution.log_prob(mb.actions)
+                ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
                 ratio_mean = torch.abs(1.0 - ratio).mean()
                 ratio_min = ratio.min()
                 ratio_max = ratio.max()
 
+                p_old = torch.exp(mb.log_prob_actions)
+
+                if self.cfg.new_clip:
+                    positive_clip = torch.min(p_old * clip_ratio, 1.0 - (1.0 - p_old) / clip_ratio)
+                    positive_clip_ratio = torch.exp(torch.log(positive_clip) - mb.log_prob_actions)
+
+                    negative_clip = torch.max(p_old / clip_ratio, 1.0 - (1.0 - p_old) * clip_ratio)
+                    negative_clip_ratio = torch.exp(torch.log(negative_clip) - mb.log_prob_actions)
+                else:
+                    positive_clip_ratio = clip_ratio
+                    negative_clip_ratio = 1.0 / clip_ratio
+
                 adv_positive = (mb.advantages > 0.0).float()
-                is_ratio_too_big = (ratio > clip_ratio).float() * adv_positive
+                is_ratio_too_big = (ratio > positive_clip_ratio).float() * adv_positive
 
                 adv_negative = (mb.advantages < 0.0).float()
-                is_ratio_too_small = (ratio < (1.0 / clip_ratio)).float() * adv_negative
+                is_ratio_too_small = (ratio < negative_clip_ratio).float() * adv_negative
 
                 is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
                 is_ratio_not_clipped = 1.0 - is_ratio_clipped
@@ -633,6 +647,7 @@ class AgentPPO(Agent):
                     mb_stats.dist_loss = dist_loss
                     mb_stats.rnn_dist /= recurrence
                     mb_stats.kl_coeff = self.kl_coeff
+                    mb_stats.max_abs_logprob = torch.abs(mb.action_logits).max()
 
                     # we want this statistic for the last batch of the last epoch
                     mb_stats.last_batch_fraction_clipped = self.last_batch_fraction_clipped
