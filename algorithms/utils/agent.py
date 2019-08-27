@@ -11,6 +11,7 @@ import time
 from os.path import join
 
 import torch
+import numpy as np
 from tensorboardX import SummaryWriter
 
 from utils.decay import LinearDecay
@@ -26,6 +27,8 @@ class Agent:
     @classmethod
     def add_cli_args(cls, parser):
         p = parser
+
+        p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value. Use random seed by default')
 
         p.add_argument('--initial_save_rate', default=500, type=int, help='Save model every N steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=5, type=int, help='Number of model checkpoints to keep')
@@ -51,6 +54,11 @@ class Agent:
 
     def __init__(self, cfg):
         self.cfg = cfg
+
+        if self.cfg.seed is not None:
+            log.info('Settings fixed seed %d', self.cfg.seed)
+            torch.manual_seed(self.cfg.seed)
+            np.random.seed(self.cfg.seed)
 
         self.device = torch.device('cuda')
 

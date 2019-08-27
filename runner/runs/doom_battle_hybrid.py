@@ -10,7 +10,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'battle_v18_fs4_clip',
-    'python -m train_pytorch --env=doom_battle_hybrid --train_for_seconds=360000 --algo=PPO',
+    'python -m train_pytorch --env=doom_battle_hybrid --train_for_seconds=360000 --algo=PPO --seed=42',
     _params.generate_params(randomize=False),
 )
 
