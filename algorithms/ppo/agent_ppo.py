@@ -667,12 +667,12 @@ class AgentPPO(Agent):
                 self.optimizer.zero_grad()
                 loss.backward()
 
-                max_grad = max(
-                    p.grad.max()
-                    for p in self.actor_critic.parameters()
-                    if p.grad is not None
-                )
-                log.debug('max grad back: %.6f', max_grad)
+                # max_grad = max(
+                #     p.grad.max()
+                #     for p in self.actor_critic.parameters()
+                #     if p.grad is not None
+                # )
+                # log.debug('max grad back: %.6f', max_grad)
 
                 torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
                 self.optimizer.step()
