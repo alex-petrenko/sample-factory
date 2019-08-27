@@ -321,6 +321,7 @@ class AgentPPO(Agent):
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--new_clip', default=False, type=str2bool, help='Apply clipping to min(p, 1-p)')
+        p.add_argument('--leaky_ppo', default=0.0, type=float, help='Leaky clipped objective instead of constant. Default: standard PPO objective')
         p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
@@ -598,12 +599,18 @@ class AgentPPO(Agent):
                 adv_negative = (mb.advantages < 0.0).float()
                 is_ratio_too_small = (ratio < negative_clip_ratio).float() * adv_negative
 
+                clipping = adv_positive * positive_clip_ratio + adv_negative * negative_clip_ratio
+
                 is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
                 is_ratio_not_clipped = 1.0 - is_ratio_clipped
                 total_non_clipped = torch.sum(is_ratio_not_clipped).float()
                 fraction_clipped = is_ratio_clipped.mean()
 
-                policy_loss = -(ratio * mb.advantages * is_ratio_not_clipped).mean()
+                objective = ratio * mb.advantages
+                leak = self.cfg.leaky_ppo
+                objective_clipped = -leak * ratio * mb.advantages + clipping * mb.advantages * (1.0 + leak)
+
+                policy_loss = -(objective * is_ratio_not_clipped + objective_clipped * is_ratio_clipped).mean()
 
                 value_clipped = mb.values + torch.clamp(result.values - mb.values, -clip_value, clip_value)
                 value_original_loss = (result.values - mb.returns).pow(2)
