@@ -347,7 +347,6 @@ class AgentPPO(Agent):
         )
         p.add_argument('--initial_kl_coeff', default=0.01, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
-        p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
         # EXPERIMENTAL: modified PPO objectives
         p.add_argument('--new_clip', default=False, type=str2bool, help='Apply clipping to min(p, 1-p)')
@@ -356,6 +355,9 @@ class AgentPPO(Agent):
         # EXPERIMENTAL: external memory
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
         p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
+
+        # EXPERIMENTAL: trying to stabilize the distribution of hidden states
+        p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
