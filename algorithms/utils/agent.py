@@ -28,7 +28,7 @@ class Agent:
     def add_cli_args(cls, parser):
         p = parser
 
-        p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value. Use random seed by default')
+        p.add_argument('--seed', default=42, type=int, help='Set a fixed seed value')
 
         p.add_argument('--initial_save_rate', default=500, type=int, help='Save model every N steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=5, type=int, help='Number of model checkpoints to keep')

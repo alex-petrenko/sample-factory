@@ -85,7 +85,7 @@ class Experiment:
 
     def generate_experiments(self):
         """Yields tuples of (cmd, experiment_name)"""
-        for params in self.params:
+        for experiment_idx, params in enumerate(self.params):
             cmd_tokens = [self.cmd]
             experiment_name_tokens = [self.base_name]
 
@@ -106,7 +106,7 @@ class Experiment:
                 experiment_name_token = f'{abbr}_{value}'
                 experiment_name_tokens.append(experiment_name_token)
 
-            experiment_name = '_'.join(experiment_name_tokens)
+            experiment_name = f'{experiment_idx:02d}_' + '_'.join(experiment_name_tokens)
 
             cmd_tokens.append(f'--experiment {experiment_name}')
             param_str = ' '.join(cmd_tokens)

@@ -93,9 +93,18 @@ class ExperienceBuffer:
         # calculate discounted returns and GAE
         self.advantages, self.returns = calculate_gae(self.rewards, self.dones, values, gamma, gae_lambda)
 
+        adv_mean = self.advantages.mean()
+        adv_std = self.advantages.std()
+        adv_max, adv_min = self.advantages.max(), self.advantages.min()
+        adv_max_abs = max(adv_max, abs(adv_min))
+        log.info(
+            'Adv mean %.3f std %.3f, min %.3f, max %.3f, max abs %.3f',
+            adv_mean, adv_std, adv_min, adv_max, adv_max_abs,
+        )
+
         # normalize advantages if needed
         if normalize_advantage:
-            self.advantages = (self.advantages - self.advantages.mean()) / max(1e-4, self.advantages.std())
+            self.advantages = (self.advantages - adv_mean) / max(1e-2, adv_std)
 
         # values vector has one extra last value that we don't need
         self.values = self.values[:-1]
@@ -320,16 +329,14 @@ class AgentPPO(Agent):
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
-        p.add_argument('--new_clip', default=False, type=str2bool, help='Apply clipping to min(p, 1-p)')
-        p.add_argument('--leaky_ppo', default=0.0, type=float, help='Leaky clipped objective instead of constant. Default: standard PPO objective')
-        p.add_argument('--ppo_clip_value', default=0.1, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
+        p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
         p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
-        p.add_argument('--max_grad_norm', default=10.0, type=float, help='Max L2 norm of the gradient vector')
+        p.add_argument('--max_grad_norm', default=20.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
         p.add_argument(
@@ -342,7 +349,11 @@ class AgentPPO(Agent):
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
-        # external memory
+        # EXPERIMENTAL: modified PPO objectives
+        p.add_argument('--new_clip', default=False, type=str2bool, help='Apply clipping to min(p, 1-p)')
+        p.add_argument('--leaky_ppo', default=0.0, type=float, help='Leaky clipped objective instead of constant. Default: standard PPO objective')
+
+        # EXPERIMENTAL: external memory
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
         p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
 
