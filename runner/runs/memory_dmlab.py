@@ -5,15 +5,16 @@ _params = ParamGrid([
     ('env', ['dmlab_nonmatch', 'dmlab_watermaze']),
     ('recurrence', [64]),
     ('use_rnn', [True, False]),
-    ('ppo_epochs', [2, 4]),
+    ('ppo_epochs', [4]),
+    ('mem_size', [4, 0]),
 ])
 
 _experiment = Experiment(
-    'mem_dmlab_v20',
-    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=64 --train_for_env_steps=1000000000',
+    'mem_dmlab_v21',
+    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=64 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.005',
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('mem_dmlab_v20', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
+gridsearch = RunDescription('mem_dmlab_v21', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
 
 run(gridsearch)
