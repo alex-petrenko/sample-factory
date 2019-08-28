@@ -14,6 +14,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('mem_minigrid_v20', experiments=[_experiment], pause_between_experiments=5, use_gpus=2, experiments_per_gpu=4, max_parallel=8)
+gridsearch = RunDescription('mem_minigrid_v20', experiments=[_experiment], pause_between_experiments=5, use_gpus=3, experiments_per_gpu=4, max_parallel=12)
 
 run(gridsearch)
