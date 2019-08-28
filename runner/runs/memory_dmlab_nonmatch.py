@@ -2,7 +2,7 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.run_many import run
 
 _params = ParamGrid([
-    ('env', ['dmlab_nonmatch', 'dmlab_watermaze']),
+    ('env', ['dmlab_nonmatch']),
     ('recurrence', [64]),
     ('use_rnn', [True, False]),
     ('ppo_epochs', [4]),
@@ -16,6 +16,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('mem_dmlab_v21', experiments=[_experiment], pause_between_experiments=15, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
+gridsearch = RunDescription('mem_dmlab_v21_nm', experiments=[_experiment], pause_between_experiments=15, use_gpus=4, experiments_per_gpu=1, max_parallel=4)
 
 run(gridsearch)
