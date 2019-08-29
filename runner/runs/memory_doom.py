@@ -15,6 +15,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('mem_doom_v21', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
-
-run(gridsearch)
+RUN_DESCRIPTION = RunDescription('mem_doom_v21', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
