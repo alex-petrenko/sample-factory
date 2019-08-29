@@ -41,7 +41,8 @@ def run_slurm(run_description, workdir):
     for sbatch_file in sbatch_files:
         cmd = f'sbatch -p gpu --gres=gpu:1 -c 14 --parsable {sbatch_file}'
         log.info('Executing %s...', cmd)
-        process = Popen(cmd, stdout=PIPE)
+        cmd_tokens = cmd.split()
+        process = Popen(cmd_tokens, stdout=PIPE)
         output, err = process.communicate()
         exit_code = process.wait()
         log.info('Output: %s, err: %s, exit code: %r', output, err, exit_code)
