@@ -30,8 +30,8 @@ class Agent:
 
         p.add_argument('--seed', default=42, type=int, help='Set a fixed seed value')
 
-        p.add_argument('--initial_save_rate', default=500, type=int, help='Save model every N steps in the beginning of training')
-        p.add_argument('--keep_checkpoints', default=5, type=int, help='Number of model checkpoints to keep')
+        p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N steps in the beginning of training')
+        p.add_argument('--keep_checkpoints', default=4, type=int, help='Number of model checkpoints to keep')
 
         p.add_argument('--stats_episodes', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 
@@ -47,6 +47,12 @@ class Agent:
 
         # RL
         p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')
+        p.add_argument(
+            '--reward_scale', default=1.0, type=float,
+            help=('Multiply all rewards but this factor before feeding into RL algorithm.'
+                  'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
+                  'Loss values become too high which requires a smaller learning rate, etc.'),
+        )
 
         # policy size and configuration
         p.add_argument('--encoder', default='convnet_simple', type=str, help='Type of the policy head (e.g. convolutional encoder)')

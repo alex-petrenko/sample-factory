@@ -32,6 +32,7 @@ class _MultiEnvWorker:
 
         self.make_env_func = make_env_func
         self.env_indices = env_indices
+        self.timestep = 0
 
         if use_multiprocessing:
             self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
@@ -141,6 +142,7 @@ class _MultiEnvWorker:
                 # Collect obs, reward, done, and info
                 prediction_start = time.time()
                 results = [env.step(action) for env, action in zip(envs, actions)]
+                self.timestep += 1
 
                 # pack results per-env
                 results = np.split(np.array(results), len(real_envs))

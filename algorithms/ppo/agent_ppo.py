@@ -336,7 +336,7 @@ class AgentPPO(Agent):
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
-        p.add_argument('--max_grad_norm', default=20.0, type=float, help='Max L2 norm of the gradient vector')
+        p.add_argument('--max_grad_norm', default=2.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
         p.add_argument(
@@ -374,7 +374,7 @@ class AgentPPO(Agent):
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.cfg)
         self.actor_critic.to(self.device)
 
-        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate)
+        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-3)
         # self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-4, momentum=0.0)
         # self.optimizer = torch.optim.SGD(self.actor_critic.parameters(), cfg.learning_rate)
 
@@ -753,6 +753,7 @@ class AgentPPO(Agent):
                         # wait for all the workers to complete an environment step
                         with timing.add_time('env_step'):
                             new_obs, rewards, dones, infos = multi_env.step(actions)
+                            rewards *= self.cfg.reward_scale
 
                         self._update_memory(actions, res.memory_write, dones)
 

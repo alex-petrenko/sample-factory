@@ -71,6 +71,7 @@ def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_
         multi_env.reset()
 
     next_print = print_step = 10000
+
     with t.timeit('experience'):
         while frames < total_num_frames:
             _, rew, done, info = multi_env.step([multi_env.action_space.sample()] * num_envs)
