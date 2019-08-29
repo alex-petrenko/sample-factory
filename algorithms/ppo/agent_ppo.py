@@ -753,7 +753,7 @@ class AgentPPO(Agent):
                         # wait for all the workers to complete an environment step
                         with timing.add_time('env_step'):
                             new_obs, rewards, dones, infos = multi_env.step(actions)
-                            rewards *= self.cfg.reward_scale
+                            rewards = np.asarray(rewards, dtype=np.float32) * self.cfg.reward_scale
 
                         self._update_memory(actions, res.memory_write, dones)
 
