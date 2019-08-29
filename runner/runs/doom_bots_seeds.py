@@ -1,5 +1,5 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_many import run
+from runner.run_processes import run
 
 _params = ParamGrid([
     ('seed', [42, 42, 42, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]),

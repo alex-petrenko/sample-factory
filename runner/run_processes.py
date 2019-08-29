@@ -83,6 +83,8 @@ def run(run_description):
                 processes_per_gpu[process.gpu_id].remove(process.proc_cmd)
                 process.process_logfile.close()
                 log.info('Process %r finished with code %r', process.proc_cmd, process.returncode)
+                if process.returncode != 0:
+                    log.error('WARNING: RETURN CODE IS %r', process.returncode)
 
         processes = remaining_processes
         time.sleep(0.1)

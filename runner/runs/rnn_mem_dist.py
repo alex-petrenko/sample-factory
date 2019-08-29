@@ -1,5 +1,5 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_many import run
+from runner.run_processes import run
 
 _params = ParamGrid([
     ('rnn_dist_loss_coeff', [0.000, 0.01, 0.1]),

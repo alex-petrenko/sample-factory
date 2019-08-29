@@ -1,5 +1,5 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_many import run
+from runner.run_processes import run
 
 _params = ParamGrid([
     #('env', ['MiniGrid-MemoryS9-v0', 'MiniGrid-MemoryS17Random-v0', 'MiniGrid-RedBlueDoors-8x8-v0']),

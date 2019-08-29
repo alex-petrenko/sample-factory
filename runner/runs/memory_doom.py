@@ -1,5 +1,5 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_many import run
+from runner.run_processes import run
 
 _params = ParamGrid([
     ('env', ['doom_two_colors_easy', 'doom_two_colors_easy_no_input']),
@@ -11,7 +11,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'mem_doom_v21',
-    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=64 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.005',
+    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=64 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.01',
     _params.generate_params(randomize=False),
 )
 

@@ -1,5 +1,5 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_many import run
+from runner.run_processes import run
 
 _params = ParamGrid([
     ('env', ['doom_basic']),
@@ -15,6 +15,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('doom_sanity_v19', experiments=[_experiment], pause_between_experiments=5, use_gpus=2, experiments_per_gpu=2, max_parallel=4)
+run_description = RunDescription('doom_sanity_v19', experiments=[_experiment], pause_between_experiments=5, use_gpus=2, experiments_per_gpu=2, max_parallel=4)
 
-run(gridsearch)
+run(run_description)

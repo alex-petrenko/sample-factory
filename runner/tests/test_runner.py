@@ -7,7 +7,7 @@ import numpy as np
 from unittest import TestCase
 
 from runner.run_description import ParamGrid, ParamList, Experiment, RunDescription
-from runner.run_many import run
+from runner.run_processes import run
 from utils.utils import experiments_dir
 
 
