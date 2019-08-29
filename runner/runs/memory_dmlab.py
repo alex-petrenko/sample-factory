@@ -1,10 +1,8 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('env', ['dmlab_nonmatch']),
     ('use_rnn', [True, False]),
     ('mem_size', [4, 0]),
-    ('reward_scale', [0.1]),
 ])
 
 cmd = 'python -m train_pytorch --algo=PPO --rollout=64 --recurrence=32 --num_envs=96 --num_workers=96 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.005 '
@@ -21,4 +19,4 @@ _experiment_wm = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('mem_dmlab_v23', experiments=[_experiment_nm, _experiment_wm])
+RUN_DESCRIPTION = RunDescription('mem_dmlab_v24', experiments=[_experiment_nm, _experiment_wm])
