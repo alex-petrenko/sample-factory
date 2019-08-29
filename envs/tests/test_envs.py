@@ -60,11 +60,12 @@ def test_env_performance(make_env, env_type, verbose=False):
     env.close()
 
 
-def test_multi_env_performance(make_env, env_type, num_envs, num_workers):
+def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=30000):
     t = Timing()
+    frames = 0
+
     with t.timeit('init'):
         multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
-        total_num_frames, frames = 30000, 0
 
     with t.timeit('first_reset'):
         multi_env.reset()
@@ -152,10 +153,10 @@ class TestDmlab(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):
-        return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_watermaze'))
+        return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'))
 
-    def skip_test_dmlab_performance(self):
+    def test_dmlab_performance(self):
         test_env_performance(self.make_env, 'dmlab')
 
-    def skip_test_dmlab_performance_multi(self):
-        test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64)
+    def test_dmlab_performance_multi(self):
+        test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(1e6))
