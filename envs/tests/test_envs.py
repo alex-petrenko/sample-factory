@@ -159,4 +159,4 @@ class TestDmlab(TestCase):
         test_env_performance(self.make_env, 'dmlab')
 
     def test_dmlab_performance_multi(self):
-        test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(1e6))
+        test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(3e5))
