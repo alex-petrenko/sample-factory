@@ -3,16 +3,14 @@ from runner.run_processes import run
 
 _params = ParamGrid([
     ('env', ['doom_two_colors_easy', 'doom_two_colors_easy_no_input']),
-    ('recurrence', [64]),
     ('use_rnn', [True, False]),
-    ('ppo_epochs', [4]),
     ('mem_size', [4, 0]),
 ])
 
 _experiment = Experiment(
-    'mem_doom_v21',
-    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=64 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.01',
+    'mem_doom',
+    'python -m train_pytorch --algo=PPO --rollout=64 --recurrence=32 --num_envs=96 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.005',
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('mem_doom_v21', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
+RUN_DESCRIPTION = RunDescription('mem_doom_v23', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)

@@ -1,16 +1,14 @@
 from gym.spaces import Discrete
 
 from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
-    doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental
+    doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental, doom_action_space_basic
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
-from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
-
 
 DOOM_W = 128
 DOOM_H = 72
@@ -65,28 +63,22 @@ DOOM_ENVS = [
 
     DoomSpec(
         'doom_two_colors_easy', 'two_colors_easy.cfg',
-        Discrete(5),  # idle, left, right, forward, backward
+        doom_action_space_basic(),
         extra_wrappers=[
             (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
-            (DoomGatheringRewardShaping, {}),
         ]
     ),
 
     DoomSpec(
         'doom_two_colors_easy_no_input', 'two_colors_easy.cfg',
-        Discrete(5),  # idle, left, right, forward, backward
-        extra_wrappers=[
-            (DoomGatheringRewardShaping, {}),
-        ]
+        doom_action_space_basic(),
+        extra_wrappers=[],
     ),
 
     DoomSpec(
         'doom_two_colors_hard', 'two_colors_hard.cfg',
-        Discrete(5),  # idle, left, right, forward, backward
-        extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}),
-            (DoomGatheringRewardShaping, {}),
-        ]
+        doom_action_space_basic(),
+        extra_wrappers=[],
     ),
 
     DoomSpec('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
