@@ -73,15 +73,24 @@ class CategoricalActionDistribution(Categorical):
 
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
-        kl = probs * (self.logits - other_log_probs)
+        kl = probs * (log_probs - other_log_probs)
         kl = kl.sum(dim=-1)
         return kl
 
+    def _kl_inverse(self, other_log_probs):
+        probs, log_probs = self.probs, self.logits
+        kl = torch.exp(other_log_probs) * (other_log_probs - log_probs)
+        kl = kl.sum(dim=-1)
+        return kl
+
+    def _kl_symmetric(self, other_log_probs):
+        return 0.5 * (self._kl(other_log_probs) + self._kl_inverse(other_log_probs))
+
     def kl_prior(self):
-        return self._kl(self.log_prior_probs)
+        return self._kl_symmetric(self.log_prior_probs)
 
     def kl_divergence(self, other):
-        return self._kl(other.logits)
+        return self._kl_symmetric(other.logits)
 
     def dbg_print(self):
         dbg_info = dict(

@@ -15,13 +15,10 @@ class DoomGatheringRewardShaping(gym.Wrapper):
         curr_health = info.get('HEALTH', 0.0)
         reward = 0.0
 
-        # min health threshold for which to give reward
-        threshold = 10.0
-
         if self._prev_health is not None:
             delta = curr_health - self._prev_health
-            if abs(delta) > threshold:
-                reward = 1.0 if delta > 0 else -1
+            if delta > 0.0:
+                reward = 1.0
 
         self._prev_health = curr_health
         return reward
