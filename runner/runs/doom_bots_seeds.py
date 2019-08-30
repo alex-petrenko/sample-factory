@@ -2,7 +2,9 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.run_processes import run
 
 _params = ParamGrid([
-    ('seed', [42, 42, 42, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]),
+    ('ppo_clip_ratio', [1.1, 1.3]),
+    ('ppo_epochs', [1, 2, 4]),
+    ('recurrence', [16, 32]),
 ])
 
 _experiment = Experiment(
