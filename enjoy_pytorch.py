@@ -13,7 +13,12 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg = load_from_checkpoint(cfg)
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
+    if render_action_repeat is None:
+        log.warning('Not using action repeat!')
+        render_action_repeat = 1
+
     cfg.env_frameskip = 1  # for evaluation
+    cfg.num_envs = 1
 
     if cfg.record_to is not None:
         cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
@@ -42,7 +47,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
         episode_reward = 0
 
         while True:
-            actions, rnn_states = agent.best_action([obs], [done], rnn_states, deterministic=False)
+            actions, rnn_states, res = agent.best_action([obs], [done], rnn_states, deterministic=False)
 
             for _ in range(render_action_repeat):
                 if not cfg.no_render:
@@ -60,6 +65,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                 obs, rew, done, _ = env.step(actions[0])
                 episode_reward += rew
                 num_frames += 1
+
+                agent._update_memory(actions, res.memory_write, [done])
 
                 if done:
                     log.info('Episode finished at %d frames', num_frames)

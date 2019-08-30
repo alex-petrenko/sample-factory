@@ -6,4 +6,5 @@ def minigrid_override_defaults(env, parser):
         obs_subtract_mean=4.0,
         obs_scale=8.0,
         prior_loss_coeff=0.005,
+        env_frameskip=1,
     )

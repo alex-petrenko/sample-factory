@@ -7,6 +7,7 @@ from torch import nn
 from torch.nn import functional
 
 from algorithms.memento.mem_wrapper import MemWrapper, split_env_and_memory_actions
+from algorithms.memento.obs_mem_wrapper import ObsMemWrapper
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, sample_actions_log_probs
 from algorithms.utils.agent import TrainStatus, Agent
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
@@ -185,6 +186,9 @@ class ActorCritic(nn.Module):
 
         self.head_out_size = self.conv_out_size
 
+        if 'obs_mem' in obs_shape:
+            self.head_out_size += self.conv_out_size
+
         self.measurements_head = None
         if 'measurements' in obs_shape:
             self.measurements_head = nn.Sequential(
@@ -227,23 +231,17 @@ class ActorCritic(nn.Module):
         self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
 
         self.apply(self.initialize_weights)
-        self.apply_gain()
 
         self.train()
-
-    def apply_gain(self):
-        # TODO: do we need this??
-        # relu_gain = nn.init.calculate_gain('relu')
-        # for i in range(len(self.conv_head)):
-        #     if isinstance(self.conv_head[i], nn.Conv2d):
-        #         self.conv_head[i].weight.data.mul_(relu_gain)
-        #
-        # self.linear1.weight.data.mul_(relu_gain)
-        pass
 
     def forward_head(self, obs_dict):
         x = self.conv_head(obs_dict.obs)
         x = x.view(-1, self.conv_out_size)
+
+        if self.cfg.obs_mem:
+            obs_mem = self.conv_head(obs_dict.obs_mem)
+            obs_mem = obs_mem.view(-1, self.conv_out_size)
+            x = torch.cat((x, obs_mem), dim=1)
 
         if self.measurements_head is not None:
             measurements = self.measurements_head(obs_dict.measurements)
@@ -356,6 +354,8 @@ class AgentPPO(Agent):
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
         p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
 
+        p.add_argument('--obs_mem', default=False, type=str2bool, help='Observation-based memory')
+
         # EXPERIMENTAL: trying to stabilize the distribution of hidden states
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
@@ -364,8 +364,13 @@ class AgentPPO(Agent):
 
         def make_env(env_config):
             env_ = make_env_func(env_config)
+
+            if cfg.obs_mem:
+                env_ = ObsMemWrapper(env_)
+
             if cfg.mem_size > 0:
                 env_ = MemWrapper(env_, cfg.mem_size, cfg.mem_feature)
+
             return env_
 
         self.make_env_func = make_env
@@ -429,6 +434,8 @@ class AgentPPO(Agent):
 
         if abs(mean) > EPS and abs(scale - 1.0) > EPS:
             obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
+            if self.cfg.obs_mem:
+                obs_dict.obs_mem = (obs_dict.obs_mem - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
 
         return obs_dict
 
@@ -471,7 +478,7 @@ class AgentPPO(Agent):
 
             res = self.actor_critic(observations, rnn_states, masks)
             actions = self._preprocess_actions(res)
-            return actions, res.rnn_states
+            return actions, res.rnn_states, res
 
     # noinspection PyTypeChecker
     def _get_masks(self, dones):

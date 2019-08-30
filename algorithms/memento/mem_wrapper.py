@@ -54,11 +54,22 @@ class MemWrapper(gym.core.Wrapper):
         else:
             self.action_space = gym.spaces.Tuple([env.action_space] + memory_action_spaces)
 
+        self.last_mem_actions = None
+
+    def render(self, mode='human', **kwargs):
+        self.env.render(mode, **kwargs)
+
+        if self.last_mem_actions is not None:
+            for i, mem_action in enumerate(self.last_mem_actions):
+                if mem_action > 0:
+                    log.warning('Write to memory cell %d', i)
+
     def reset(self):
         return self.env.reset()
 
     def step(self, actions):
         env_actions, memory_actions = split_env_and_memory_actions(actions, self.mem_size)
+        self.last_mem_actions = memory_actions
 
         if len(env_actions) == 1:
             env_actions = env_actions[0]
