@@ -153,7 +153,7 @@ def make_doom_env_impl(
     env = MultiplayerStatsWrapper(env)
 
     if num_bots > 0:
-        bot_difficulty = cfg.initial_bot_difficulty if 'initial_bot_difficulty' in cfg else None
+        bot_difficulty = cfg.start_bot_difficulty if 'start_bot_difficulty' in cfg else None
         env = BotDifficultyWrapper(env, bot_difficulty)
 
     if custom_resolution is None:

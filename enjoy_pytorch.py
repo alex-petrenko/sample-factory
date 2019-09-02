@@ -16,6 +16,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     if render_action_repeat is None:
         log.warning('Not using action repeat!')
         render_action_repeat = 1
+    log.debug('Using action repeat %d during evaluation', render_action_repeat)
 
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
