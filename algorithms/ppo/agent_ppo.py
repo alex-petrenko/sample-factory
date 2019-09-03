@@ -387,8 +387,9 @@ class AgentPPO(Agent):
 
         self.kl_coeff = self.cfg.initial_kl_coeff
         self.last_batch_kl_divergence = 0.0
-        self.last_batch_value_delta = 0.0
+        self.last_batch_value_delta = self.last_batch_value_delta_max = 0.0
         self.last_batch_fraction_clipped = 0.0
+        self.last_batch_rnn_dist = 0.0
 
         env.close()
 
@@ -486,13 +487,15 @@ class AgentPPO(Agent):
         masks = torch.unsqueeze(masks, dim=1)
         return masks.float()
 
-    def _minibatch_indices(self, experience_size):
+    def _minibatch_indices(self, experience_size, shuffle=True):
         assert self.cfg.rollout % self.cfg.recurrence == 0
         assert experience_size % self.cfg.batch_size == 0
 
         # indices that will start the mini-trajectories from the same episode (for bptt)
         indices = np.arange(0, experience_size, self.cfg.recurrence)
-        indices = np.random.permutation(indices)
+
+        if shuffle:
+            indices = np.random.permutation(indices)
 
         # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
         indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
@@ -504,17 +507,72 @@ class AgentPPO(Agent):
         minibatches = np.split(indices, num_minibatches)
         return minibatches
 
+    def _policy_loss(self, action_distribution, mb, clip_ratio):
+        log_prob_actions = action_distribution.log_prob(mb.actions)
+        ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
+
+        # ratio_mean = torch.abs(1.0 - ratio).mean()
+        # ratio_min = ratio.min()
+        # ratio_max = ratio.max()
+
+        p_old = torch.exp(mb.log_prob_actions)
+
+        if self.cfg.new_clip:
+            positive_clip = torch.min(p_old * clip_ratio, 1.0 - (1.0 - p_old) / clip_ratio)
+            positive_clip_ratio = torch.exp(torch.log(positive_clip) - mb.log_prob_actions)
+
+            negative_clip = torch.max(p_old / clip_ratio, 1.0 - (1.0 - p_old) * clip_ratio)
+            negative_clip_ratio = torch.exp(torch.log(negative_clip) - mb.log_prob_actions)
+        else:
+            positive_clip_ratio = clip_ratio
+            negative_clip_ratio = 1.0 / clip_ratio
+
+        is_adv_positive = (mb.advantages > 0.0).float()
+        is_ratio_too_big = (ratio > positive_clip_ratio).float() * is_adv_positive
+
+        is_adv_negative = (mb.advantages < 0.0).float()
+        is_ratio_too_small = (ratio < negative_clip_ratio).float() * is_adv_negative
+
+        clipping = is_adv_positive * positive_clip_ratio + is_adv_negative * negative_clip_ratio
+
+        is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
+        is_ratio_not_clipped = 1.0 - is_ratio_clipped
+
+        # total_non_clipped = torch.sum(is_ratio_not_clipped).float()
+        fraction_clipped = is_ratio_clipped.mean()
+
+        objective = ratio * mb.advantages
+        leak = self.cfg.leaky_ppo
+        objective_clipped = -leak * ratio * mb.advantages + clipping * mb.advantages * (1.0 + leak)
+
+        policy_loss = -(objective * is_ratio_not_clipped + objective_clipped * is_ratio_clipped).mean()
+
+        return policy_loss, ratio, fraction_clipped
+
+    def _value_loss(self, new_values, mb, clip_value):
+        value_clipped = mb.values + torch.clamp(new_values - mb.values, -clip_value, clip_value)
+        value_original_loss = (new_values - mb.returns).pow(2)
+        value_clipped_loss = (value_clipped - mb.returns).pow(2)
+        value_loss = torch.max(value_original_loss, value_clipped_loss).mean()
+        value_loss *= self.cfg.value_loss_coeff
+        value_delta = torch.abs(new_values - mb.values).mean()
+        value_delta_max = torch.abs(new_values - mb.values).max()
+
+        return value_loss, value_delta, value_delta_max
+
     # noinspection PyUnresolvedReferences
     def _train(self, buffer):
         clip_ratio = self.cfg.ppo_clip_ratio
         clip_value = self.cfg.ppo_clip_value
         recurrence = self.cfg.recurrence
 
-        # TODO: backprop into initial memory vector?
-
         kl_old = 0.0
-        value_delta = 0.0
+        value_delta = value_delta_max = 0.0
         fraction_clipped = 0.0
+        rnn_dist = 0.0
+
+        old_actor_critic = copy.deepcopy(self.actor_critic)
+        new_rnn_states = np.zeros([len(buffer) + 1, self.cfg.hidden_size], dtype=np.float32)
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
@@ -540,7 +598,7 @@ class AgentPPO(Agent):
 
                 core_outputs = []
 
-                dist_loss = 0.0
+                rnn_dist = 0.0
 
                 for i in range(recurrence):
                     # indices of head outputs corresponding to the current timestep
@@ -549,10 +607,8 @@ class AgentPPO(Agent):
                     if self.cfg.rnn_dist_loss_coeff > EPS:
                         dist = (rnn_states - mb.rnn_states[timestep_indices]).pow(2)
                         dist = torch.sum(dist, dim=1)
-                        dist = torch.sqrt(dist + EPS)
                         dist = dist.mean()
-                        mb_stats.rnn_dist += dist
-                        dist_loss += self.cfg.rnn_dist_loss_coeff * dist
+                        rnn_dist += dist
 
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
@@ -564,6 +620,10 @@ class AgentPPO(Agent):
 
                     behavior_policy_actions = mb.actions[timestep_indices]
                     dones = mb.dones[timestep_indices]
+
+                    next_step_indices = indices[timestep_indices]
+                    next_step_indices = next_step_indices + 1
+                    new_rnn_states[next_step_indices] = rnn_states.detach().cpu().numpy()
 
                     if self.cfg.mem_size > 0:
                         mem_actions = behavior_policy_actions[:, -self.cfg.mem_size:]
@@ -592,53 +652,11 @@ class AgentPPO(Agent):
                 result = self.actor_critic.forward_tail(core_outputs)
 
                 action_distribution = result.action_distribution
-                if batch_num == 0 and epoch == 0:
-                    action_distribution.dbg_print()
+                # if batch_num == 0 and epoch == 0:
+                #     action_distribution.dbg_print()
 
-                log_prob_actions = action_distribution.log_prob(mb.actions)
-                ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
-                ratio_mean = torch.abs(1.0 - ratio).mean()
-                ratio_min = ratio.min()
-                ratio_max = ratio.max()
-
-                p_old = torch.exp(mb.log_prob_actions)
-
-                if self.cfg.new_clip:
-                    positive_clip = torch.min(p_old * clip_ratio, 1.0 - (1.0 - p_old) / clip_ratio)
-                    positive_clip_ratio = torch.exp(torch.log(positive_clip) - mb.log_prob_actions)
-
-                    negative_clip = torch.max(p_old / clip_ratio, 1.0 - (1.0 - p_old) * clip_ratio)
-                    negative_clip_ratio = torch.exp(torch.log(negative_clip) - mb.log_prob_actions)
-                else:
-                    positive_clip_ratio = clip_ratio
-                    negative_clip_ratio = 1.0 / clip_ratio
-
-                adv_positive = (mb.advantages > 0.0).float()
-                is_ratio_too_big = (ratio > positive_clip_ratio).float() * adv_positive
-
-                adv_negative = (mb.advantages < 0.0).float()
-                is_ratio_too_small = (ratio < negative_clip_ratio).float() * adv_negative
-
-                clipping = adv_positive * positive_clip_ratio + adv_negative * negative_clip_ratio
-
-                is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
-                is_ratio_not_clipped = 1.0 - is_ratio_clipped
-                total_non_clipped = torch.sum(is_ratio_not_clipped).float()
-                fraction_clipped = is_ratio_clipped.mean()
-
-                objective = ratio * mb.advantages
-                leak = self.cfg.leaky_ppo
-                objective_clipped = -leak * ratio * mb.advantages + clipping * mb.advantages * (1.0 + leak)
-
-                policy_loss = -(objective * is_ratio_not_clipped + objective_clipped * is_ratio_clipped).mean()
-
-                value_clipped = mb.values + torch.clamp(result.values - mb.values, -clip_value, clip_value)
-                value_original_loss = (result.values - mb.returns).pow(2)
-                value_clipped_loss = (value_clipped - mb.returns).pow(2)
-                value_loss = torch.max(value_original_loss, value_clipped_loss).mean()
-                value_loss *= self.cfg.value_loss_coeff
-                value_delta = torch.abs(result.values - mb.values).mean()
-                value_delta_max = torch.abs(result.values - mb.values).max()
+                policy_loss, ratio, fraction_clipped = self._policy_loss(action_distribution, mb, clip_ratio)
+                value_loss, value_delta, value_delta_max = self._value_loss(result.values, mb, clip_value)
 
                 entropy = action_distribution.entropy().mean()
                 kl_prior = action_distribution.kl_prior().mean()
@@ -657,12 +675,10 @@ class AgentPPO(Agent):
 
                 kl_penalty = self.kl_coeff * kl_old
 
-                dist_loss /= recurrence
+                rnn_dist /= recurrence
+                dist_loss = self.cfg.rnn_dist_loss_coeff * rnn_dist
 
-                if self.env_steps < 0:  # TODO
-                    loss = kl_prior  # pretrain action distributions to match prior
-                else:
-                    loss = policy_loss + value_loss + prior_loss + kl_penalty + dist_loss
+                loss = policy_loss + value_loss + prior_loss + kl_penalty + dist_loss
 
                 if with_summaries:
                     mb_stats.loss = loss
@@ -672,7 +688,6 @@ class AgentPPO(Agent):
                     mb_stats.value_loss = value_loss
                     mb_stats.prior_loss = prior_loss
                     mb_stats.dist_loss = dist_loss
-                    mb_stats.rnn_dist /= recurrence
                     mb_stats.kl_coeff = self.kl_coeff
                     mb_stats.max_abs_logprob = torch.abs(mb.action_logits).max()
 
@@ -680,6 +695,8 @@ class AgentPPO(Agent):
                     mb_stats.last_batch_fraction_clipped = self.last_batch_fraction_clipped
                     mb_stats.last_batch_kl_old = self.last_batch_kl_divergence
                     mb_stats.last_batch_value_delta = self.last_batch_value_delta
+                    mb_stats.last_batch_value_delta_max = self.last_batch_value_delta_max
+                    mb_stats.last_batch_rnn_dist = self.last_batch_rnn_dist
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -726,7 +743,55 @@ class AgentPPO(Agent):
 
         self.last_batch_kl_divergence = kl_old
         self.last_batch_value_delta = value_delta
+        self.last_batch_value_delta_max = value_delta_max
         self.last_batch_fraction_clipped = fraction_clipped
+        self.last_batch_rnn_dist = rnn_dist
+
+        self._calculate_policy_divergence(buffer, old_actor_critic, buffer.rnn_states.detach().cpu().numpy())
+        self._calculate_policy_divergence(buffer, old_actor_critic, new_rnn_states)
+        self._calculate_policy_divergence(buffer, self.actor_critic, buffer.rnn_states.detach().cpu().numpy())
+        self._calculate_policy_divergence(buffer, self.actor_critic, new_rnn_states)
+
+    def _calculate_policy_divergence(self, buffer, actor_critic, rnn_states):
+        """EXPERIMENTAL."""
+        clip_ratio = self.cfg.ppo_clip_ratio
+        recurrence = self.cfg.recurrence
+
+        indices = self._minibatch_indices(len(buffer), shuffle=False)[0]
+        mb = buffer.get_minibatch(indices)
+        head_outputs = actor_critic.forward_head(mb.obs)
+
+        core_outputs = []
+        for i in range(recurrence):
+            # indices of head outputs corresponding to the current timestep
+            timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+
+            # calculate policy head outside of recurrent loop
+            step_head_outputs = head_outputs[timestep_indices]
+            masks = mb.masks[timestep_indices]
+            curr_rnn_states = torch.from_numpy(rnn_states[indices[timestep_indices]]).to(self.device)
+
+            core_output, _, _ = actor_critic.forward_core(
+                step_head_outputs, curr_rnn_states, masks, None,
+            )
+            core_outputs.append(core_output)
+
+        # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
+        # which is the same shape as the minibatch
+        core_outputs = torch.stack(core_outputs)
+        core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
+        assert core_outputs.shape[0] == head_outputs.shape[0]
+
+        # calculate policy tail outside of recurrent loop
+        result = actor_critic.forward_tail(core_outputs)
+        action_distribution = result.action_distribution
+
+        policy_loss, ratio, fraction_clipped = self._policy_loss(action_distribution, mb, clip_ratio)
+
+        old_action_distribution = get_action_distribution(actor_critic.action_space, mb.action_logits)
+        kl_old = action_distribution.kl_divergence(old_action_distribution).mean()
+
+        log.info('fraction_clipped: %.3f, kl_old: %.6f, min_ratio: %.3f, max_ratio: %.3f', fraction_clipped.item(), kl_old.item(), ratio.min().item(), ratio.max().item())
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
