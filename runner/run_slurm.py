@@ -1,5 +1,6 @@
 """Run many experiments with SLURM: hyperparameter sweeps, etc."""
 import os
+import time
 from os.path import join
 from subprocess import Popen, PIPE
 
@@ -49,6 +50,8 @@ def run_slurm(run_description, workdir):
 
         job_id = int(output)
         job_ids.append(str(job_id))
+
+        time.sleep(0.5)
 
     tail_cmd = f'tail -f {workdir}/*.out'
     log.info('Monitor log files using\n\n\t %s \n\n', tail_cmd)

@@ -359,6 +359,9 @@ class AgentPPO(Agent):
         # EXPERIMENTAL: trying to stabilize the distribution of hidden states
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
+        # EXPERIMENTAL: hidden state clipping
+        p.add_argument('--clip_hidden_states', default=100.0, type=float, help='Clip absolute change in hidden state dimensions. Default (100.0) means do not clip')
+
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
 
@@ -390,6 +393,7 @@ class AgentPPO(Agent):
         self.last_batch_value_delta = self.last_batch_value_delta_max = 0.0
         self.last_batch_fraction_clipped = 0.0
         self.last_batch_rnn_dist = 0.0
+        self.last_batch_hidden_clipped = 0.0
 
         env.close()
 
@@ -560,6 +564,21 @@ class AgentPPO(Agent):
 
         return value_loss, value_delta, value_delta_max
 
+    def _clip_hidden_states(self, new_hidden_states, old_hidden_states, epoch, timestep):
+        clip = self.cfg.clip_hidden_states
+        delta = new_hidden_states - old_hidden_states
+        clipped = (delta.abs() > clip).float()
+        not_clipped = 1.0 - clipped
+
+        mean_num_clipped = clipped.mean()
+        # if epoch == self.cfg.ppo_epochs - 1 and timestep > self.cfg.recurrence / 2:
+        #     log.info('Mean num clipped at %d:%d is %.3f', epoch, timestep, mean_num_clipped.item())
+
+        clipped_delta = torch.clamp(delta, -clip, clip)
+        clipped_states = old_hidden_states + clipped_delta
+        result = clipped * clipped_states + not_clipped * new_hidden_states
+        return result, mean_num_clipped
+
     # noinspection PyUnresolvedReferences
     def _train(self, buffer):
         clip_ratio = self.cfg.ppo_clip_ratio
@@ -570,9 +589,10 @@ class AgentPPO(Agent):
         value_delta = value_delta_max = 0.0
         fraction_clipped = 0.0
         rnn_dist = 0.0
+        hidden_clipped = 0.0
 
         old_actor_critic = copy.deepcopy(self.actor_critic)
-        new_rnn_states = np.zeros([len(buffer) + 1, self.cfg.hidden_size], dtype=np.float32)
+        new_rnn_states = np.zeros_like(buffer.rnn_states.detach().cpu().numpy())
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
@@ -610,6 +630,11 @@ class AgentPPO(Agent):
                         dist = dist.mean()
                         rnn_dist += dist
 
+                    rnn_states, hidden_clipped = self._clip_hidden_states(
+                        rnn_states, mb.rnn_states[timestep_indices], epoch, i,
+                    )
+                    new_rnn_states[indices[timestep_indices]] = rnn_states.detach().cpu().numpy()
+
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
 
@@ -621,11 +646,8 @@ class AgentPPO(Agent):
                     behavior_policy_actions = mb.actions[timestep_indices]
                     dones = mb.dones[timestep_indices]
 
-                    next_step_indices = indices[timestep_indices]
-                    next_step_indices = next_step_indices + 1
-                    new_rnn_states[next_step_indices] = rnn_states.detach().cpu().numpy()
-
                     if self.cfg.mem_size > 0:
+                        # EXPERIMENTAL: external memory
                         mem_actions = behavior_policy_actions[:, -self.cfg.mem_size:]
                         mem_actions = torch.unsqueeze(mem_actions, dim=-1)
                         mem_actions = mem_actions.float()
@@ -697,6 +719,7 @@ class AgentPPO(Agent):
                     mb_stats.last_batch_value_delta = self.last_batch_value_delta
                     mb_stats.last_batch_value_delta_max = self.last_batch_value_delta_max
                     mb_stats.last_batch_rnn_dist = self.last_batch_rnn_dist
+                    mb_stats.last_batch_hidden_clipped = self.last_batch_hidden_clipped
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -746,7 +769,9 @@ class AgentPPO(Agent):
         self.last_batch_value_delta_max = value_delta_max
         self.last_batch_fraction_clipped = fraction_clipped
         self.last_batch_rnn_dist = rnn_dist
+        self.last_batch_hidden_clipped = hidden_clipped
 
+        # EXPERIMENTAL - measure avg policy divergence under old and new hidden state distribution
         self._calculate_policy_divergence(buffer, old_actor_critic, buffer.rnn_states.detach().cpu().numpy())
         self._calculate_policy_divergence(buffer, old_actor_critic, new_rnn_states)
         self._calculate_policy_divergence(buffer, self.actor_critic, buffer.rnn_states.detach().cpu().numpy())
