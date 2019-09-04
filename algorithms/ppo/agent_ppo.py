@@ -343,7 +343,7 @@ class AgentPPO(Agent):
                   'By default prior is a uniform distribution, and this is numerically equivalent to maximizing entropy.'
                   'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
         )
-        p.add_argument('--initial_kl_coeff', default=0.01, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
+        p.add_argument('--initial_kl_coeff', default=0.0001, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # EXPERIMENTAL: modified PPO objectives
@@ -361,6 +361,7 @@ class AgentPPO(Agent):
 
         # EXPERIMENTAL: hidden state clipping
         p.add_argument('--clip_hidden_states', default=100.0, type=float, help='Clip absolute change in hidden state dimensions. Default (100.0) means do not clip')
+        p.add_argument('--hidden_states_clip_global', default=True, type=str2bool, help='Clip the absolute global change in hidden state vector, rather than individual components')
 
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
@@ -567,16 +568,33 @@ class AgentPPO(Agent):
     def _clip_hidden_states(self, new_hidden_states, old_hidden_states, epoch, timestep):
         clip = self.cfg.clip_hidden_states
         delta = new_hidden_states - old_hidden_states
-        clipped = (delta.abs() > clip).float()
-        not_clipped = 1.0 - clipped
 
-        mean_num_clipped = clipped.mean()
-        # if epoch == self.cfg.ppo_epochs - 1 and timestep > self.cfg.recurrence / 2:
-        #     log.info('Mean num clipped at %d:%d is %.3f', epoch, timestep, mean_num_clipped.item())
+        if self.cfg.hidden_states_clip_global:
+            delta_norm = delta.pow(2)
+            delta_norm = torch.sum(delta_norm, dim=-1)
+            delta_norm = torch.sqrt(delta_norm)
 
-        clipped_delta = torch.clamp(delta, -clip, clip)
-        clipped_states = old_hidden_states + clipped_delta
-        result = clipped * clipped_states + not_clipped * new_hidden_states
+            clipped = (delta_norm > clip).float()
+            not_clipped = 1.0 - clipped
+            mean_num_clipped = clipped.mean()
+
+            scale = clip / (delta_norm + EPS)
+            scale = scale.unsqueeze(dim=-1)
+
+            clipped = clipped.unsqueeze(dim=-1)
+            not_clipped = not_clipped.unsqueeze(dim=-1)
+
+            result = clipped * (scale * delta + old_hidden_states) + not_clipped * new_hidden_states
+        else:
+            clipped = (delta.abs() > clip).float()
+            not_clipped = 1.0 - clipped
+
+            mean_num_clipped = clipped.mean()
+
+            clipped_delta = torch.clamp(delta, -clip, clip)
+            clipped_states = old_hidden_states + clipped_delta
+            result = clipped * clipped_states + not_clipped * new_hidden_states
+
         return result, mean_num_clipped
 
     # noinspection PyUnresolvedReferences
