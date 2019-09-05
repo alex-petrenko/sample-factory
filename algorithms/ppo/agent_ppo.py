@@ -318,6 +318,8 @@ class AgentPPO(Agent):
         p = parser
         super().add_cli_args(p)
 
+        p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
+
         p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting')
 
         p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
@@ -381,12 +383,10 @@ class AgentPPO(Agent):
         self.make_env_func = make_env
         env = self.make_env_func(None)  # we need the env to query observation shape, number of actions, etc.
 
-        self.actor_critic = ActorCritic(env.observation_space, env.action_space, self.cfg)
+        self.actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
         self.actor_critic.to(self.device)
 
-        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-3)
-        # self.optimizer = torch.optim.RMSprop(self.actor_critic.parameters(), cfg.learning_rate, eps=1e-4, momentum=0.0)
-        # self.optimizer = torch.optim.SGD(self.actor_critic.parameters(), cfg.learning_rate)
+        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate, eps=cfg.adam_eps)
 
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
