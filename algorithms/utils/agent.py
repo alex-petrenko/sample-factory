@@ -53,6 +53,7 @@ class Agent:
                   'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
                   'Loss values become too high which requires a smaller learning rate, etc.'),
         )
+        p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
 
         # policy size and configuration
         p.add_argument('--encoder', default='convnet_simple', type=str, help='Type of the policy head (e.g. convolutional encoder)')

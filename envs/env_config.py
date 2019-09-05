@@ -8,6 +8,9 @@ def env_override_defaults(env, parser):
     elif env.startswith('dmlab'):
         from envs.dmlab.dmlab_params import dmlab_override_defaults
         dmlab_override_defaults(env, parser)
+    elif env.startswith('atari'):
+        from envs.atari.atari_params import atari_override_defaults
+        atari_override_defaults(env, parser)
 
 
 def add_env_args(env, parser):

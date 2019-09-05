@@ -7,9 +7,9 @@ def create_env(env, **kwargs):
     elif env.startswith('MiniGrid'):
         from envs.minigrid.minigrid_utils import make_minigrid_env
         env = make_minigrid_env(env, **kwargs)
-    # elif env.startswith('atari_'):
-    #     from utils.envs.atari.atari_utils import make_atari_env, atari_env_by_name
-    #     return make_atari_env(atari_env_by_name(env), **kwargs)
+    elif env.startswith('atari_'):
+        from envs.atari.atari_utils import make_atari_env
+        return make_atari_env(env, **kwargs)
     elif env.startswith('dmlab_'):
         from envs.dmlab.dmlab_utils import make_dmlab_env
         return make_dmlab_env(env, **kwargs)

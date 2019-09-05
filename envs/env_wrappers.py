@@ -55,23 +55,13 @@ def has_image_observations(observation_space):
     return len(observation_space.shape) >= 2
 
 
-def wrap_env(env, stack_past_frames):
-    if not has_image_observations(main_observation_space(env)):
-        # vector observations
-        env = NormalizeWrapper(env)
-
-    env = StackFramesWrapper(env, stack_past_frames)
-
-    return env
-
-
 class StackFramesWrapper(gym.core.Wrapper):
     """
     Gym env wrapper to stack multiple frames.
     Useful for training feed-forward agents on dynamic games.
     """
 
-    def __init__(self, env, stack_past_frames):
+    def __init__(self, env, stack_past_frames, channel_config='HWC'):
         super(StackFramesWrapper, self).__init__(env)
         if len(env.observation_space.shape) not in [1, 2]:
             raise Exception('Stack frames works with vector observations and 2D single channel images')
@@ -80,8 +70,14 @@ class StackFramesWrapper(gym.core.Wrapper):
 
         self._image_obs = has_image_observations(env.observation_space)
 
+        self.channel_config = channel_config
         if self._image_obs:
-            new_obs_space_shape = env.observation_space.shape + (stack_past_frames,)
+            if self.channel_config == 'CHW':
+                new_obs_space_shape = (stack_past_frames,) + env.observation_space.shape
+            elif self.channel_config == 'HWC':
+                new_obs_space_shape = env.observation_space.shape + (stack_past_frames,)
+            else:
+                raise Exception(f'Unknown channel config {self.channel_config}')
         else:
             new_obs_space_shape = list(env.observation_space.shape)
             new_obs_space_shape[0] *= stack_past_frames
@@ -95,7 +91,15 @@ class StackFramesWrapper(gym.core.Wrapper):
 
     def _render_stacked_frames(self):
         if self._image_obs:
-            return np.transpose(numpy_all_the_way(self._frames), axes=[1, 2, 0])
+            # stack past frames along first dimension
+            img = numpy_all_the_way(self._frames)
+
+            if self.channel_config == 'CHW':
+                return img
+            elif self.channel_config == 'HWC':
+                return np.transpose(img, axes=[1, 2, 0])
+            else:
+                raise Exception(f'Unknown channel config {self.channel_config}')
         else:
             return np.array(self._frames).flatten()
 
@@ -141,8 +145,8 @@ class SkipFramesWrapper(gym.core.Wrapper):
 class SkipAndStackFramesWrapper(StackFramesWrapper):
     """Wrapper for action repeat + stack multiple frames to capture dynamics."""
 
-    def __init__(self, env, skip_frames=4, stack_frames=3):
-        super(SkipAndStackFramesWrapper, self).__init__(env, stack_past_frames=stack_frames)
+    def __init__(self, env, skip_frames=4, stack_frames=4, channel_config='HWC'):
+        super().__init__(env, stack_past_frames=stack_frames, channel_config=channel_config)
         self._skip_frames = skip_frames
 
     def step(self, action):

@@ -1,4 +1,5 @@
 import copy
+import math
 import time
 
 import numpy as np
@@ -154,8 +155,17 @@ class ActorCritic(nn.Module):
         def nonlinearity():
             return nn.ELU(inplace=True)
 
+        obs_shape = AttrDict()
+        if hasattr(obs_space, 'spaces'):
+            for key, space in obs_space.spaces.items():
+                obs_shape[key] = space.shape
+        else:
+            obs_shape.obs = obs_space.shape
+        input_ch = obs_shape.obs[0]
+        log.debug('Num input channels: %d', input_ch)
+
         if cfg.encoder == 'convnet_simple':
-            conv_filters = [[3, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
+            conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
         elif cfg.encoder == 'minigrid_convnet_tiny':
             conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
         else:
@@ -173,14 +183,6 @@ class ActorCritic(nn.Module):
                 raise NotImplementedError(f'Layer {layer} not supported!')
 
         self.conv_head = nn.Sequential(*conv_layers)
-
-        obs_shape = AttrDict()
-        if hasattr(obs_space, 'spaces'):
-            for key, space in obs_space.spaces.items():
-                obs_shape[key] = space.shape
-        else:
-            obs_shape.obs = obs_space.shape
-
         self.conv_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
         log.debug('Convolutional layer output size: %r', self.conv_out_size)
 
@@ -220,7 +222,7 @@ class ActorCritic(nn.Module):
             self.core = nn.GRUCell(fc_output_size, self.hidden_size)
         else:
             self.core = nn.Sequential(
-                nn.Linear(fc_output_size, cfg.hidden_size),
+                nn.Linear(fc_output_size, self.hidden_size),
                 nonlinearity(),
             )
 
@@ -256,7 +258,7 @@ class ActorCritic(nn.Module):
             memory = self.mem_head(memory)
             head_output = torch.cat((head_output, memory), dim=1)
 
-        if self.cfg.use_rnn == 1:
+        if self.cfg.use_rnn:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
         else:
             x = self.core(head_output)
@@ -318,18 +320,18 @@ class AgentPPO(Agent):
 
         p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting')
 
-        p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
+        p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-        p.add_argument('--num_envs', default=128, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
+        p.add_argument('--num_envs', default=96, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
         p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-        p.add_argument('--recurrence', default=16, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
+        p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
-        p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
+        p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
         p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
@@ -353,14 +355,13 @@ class AgentPPO(Agent):
         # EXPERIMENTAL: external memory
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
         p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
-
         p.add_argument('--obs_mem', default=False, type=str2bool, help='Observation-based memory')
 
         # EXPERIMENTAL: trying to stabilize the distribution of hidden states
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
         # EXPERIMENTAL: hidden state clipping
-        p.add_argument('--clip_hidden_states', default=100.0, type=float, help='Clip absolute change in hidden state dimensions. Default (100.0) means do not clip')
+        p.add_argument('--clip_hidden_states', default=math.inf, type=float, help='Clip absolute change in hidden state dimensions. Default (inf) means do not clip')
         p.add_argument('--hidden_states_clip_global', default=True, type=str2bool, help='Clip the absolute global change in hidden state vector, rather than individual components')
 
     def __init__(self, make_env_func, cfg):
@@ -567,6 +568,10 @@ class AgentPPO(Agent):
 
     def _clip_hidden_states(self, new_hidden_states, old_hidden_states, epoch, timestep):
         clip = self.cfg.clip_hidden_states
+        if math.isinf(clip):
+            # no clipping
+            return new_hidden_states, 0.0
+
         delta = new_hidden_states - old_hidden_states
 
         if self.cfg.hidden_states_clip_global:
@@ -642,6 +647,7 @@ class AgentPPO(Agent):
                     # indices of head outputs corresponding to the current timestep
                     timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
 
+                    # EXPERIMENTAL: additional loss for difference in hidden states
                     if self.cfg.rnn_dist_loss_coeff > EPS:
                         dist = (rnn_states - mb.rnn_states[timestep_indices]).pow(2)
                         dist = torch.sum(dist, dim=1)
@@ -869,6 +875,7 @@ class AgentPPO(Agent):
                         with timing.add_time('env_step'):
                             new_obs, rewards, dones, infos = multi_env.step(actions)
                             rewards = np.asarray(rewards, dtype=np.float32) * self.cfg.reward_scale
+                            rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
 
                         self._update_memory(actions, res.memory_write, dones)
 
