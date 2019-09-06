@@ -64,6 +64,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                     env.render()
 
                 obs, rew, done, _ = env.step(actions[0])
+
                 episode_reward += rew
                 num_frames += 1
 

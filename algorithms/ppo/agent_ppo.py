@@ -363,6 +363,7 @@ class AgentPPO(Agent):
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
         # EXPERIMENTAL: hidden state clipping
+        p.add_argument('--should_clip_hidden_states', default=False, type=str2bool, help='Whether we should clip RNN hidden states or not')
         p.add_argument('--clip_hidden_states', default=math.inf, type=float, help='Clip absolute change in hidden state dimensions. Default (inf) means do not clip')
         p.add_argument('--hidden_states_clip_global', default=True, type=str2bool, help='Clip the absolute global change in hidden state vector, rather than individual components')
 
@@ -567,11 +568,10 @@ class AgentPPO(Agent):
         return value_loss, value_delta, value_delta_max
 
     def _clip_hidden_states(self, new_hidden_states, old_hidden_states, epoch, timestep):
-        clip = self.cfg.clip_hidden_states
-        if math.isinf(clip):
-            # no clipping
+        if not self.cfg.should_clip_hidden_states:
             return new_hidden_states, 0.0
 
+        clip = self.cfg.clip_hidden_states
         delta = new_hidden_states - old_hidden_states
 
         if self.cfg.hidden_states_clip_global:
