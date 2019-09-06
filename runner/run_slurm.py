@@ -40,7 +40,8 @@ def run_slurm(run_description, workdir):
 
     job_ids = []
     for sbatch_file in sbatch_files:
-        cmd = f'sbatch -p gpu --gres=gpu:1 -c 14 --parsable --output {workdir}/{sbatch_file}-slurm-%j.out {sbatch_file}'
+        sbatch_fname = os.path.basename(sbatch_file)
+        cmd = f'sbatch -p gpu --gres=gpu:1 -c 14 --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}'
         log.info('Executing %s...', cmd)
         cmd_tokens = cmd.split()
         process = Popen(cmd_tokens, stdout=PIPE)
