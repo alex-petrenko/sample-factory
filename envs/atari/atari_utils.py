@@ -17,7 +17,7 @@ ATARI_ENVS = [
     AtariSpec('atari_montezuma', 'MontezumaRevengeNoFrameskip-v4', default_timeout=18000),
 
     AtariSpec('atari_pong', 'PongNoFrameskip-v4'),
-    AtariSpec('atari_qbert', 'QBertNoFrameskip-v4'),
+    AtariSpec('atari_qbert', 'QbertNoFrameskip-v4'),
     AtariSpec('atari_breakout', 'BreakoutNoFrameskip-v4'),
     AtariSpec('atari_spaceinvaders', 'SpaceInvadersNoFrameskip-v4'),
 
