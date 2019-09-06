@@ -285,7 +285,6 @@ class ActorCritic(nn.Module):
             action_distribution=dist,
             values=values,
         ))
-
         return result
 
     def forward(self, obs_dict, rnn_states, masks):
@@ -575,15 +574,17 @@ class AgentPPO(Agent):
         delta = new_hidden_states - old_hidden_states
 
         if self.cfg.hidden_states_clip_global:
+            eps_ = 1e-5
+
             delta_norm = delta.pow(2)
             delta_norm = torch.sum(delta_norm, dim=-1)
-            delta_norm = torch.sqrt(delta_norm)
+            delta_norm = torch.sqrt(delta_norm + eps_)
 
             clipped = (delta_norm > clip).float()
             not_clipped = 1.0 - clipped
             mean_num_clipped = clipped.mean()
 
-            scale = clip / (delta_norm + EPS)
+            scale = clip / (delta_norm + eps_)
             scale = scale.unsqueeze(dim=-1)
 
             clipped = clipped.unsqueeze(dim=-1)
