@@ -7,7 +7,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'atari_ff',
-    'python -m train_pytorch --train_for_seconds=360000 --algo=PPO --train_for_env_steps=200000000 --recurrence=1 --use_rnn=False --ppo_epochs=4',
+    'python -m train_pytorch --train_for_seconds=360000 --algo=PPO --train_for_env_steps=200000000 --recurrence=1 --use_rnn=False --ppo_epochs=10',
     _params.generate_params(randomize=False),
 )
 

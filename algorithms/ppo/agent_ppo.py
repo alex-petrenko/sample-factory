@@ -579,6 +579,7 @@ class AgentPPO(Agent):
             delta_norm = delta.pow(2)
             delta_norm = torch.sum(delta_norm, dim=-1)
             delta_norm = torch.sqrt(delta_norm + eps_)
+            # log.info('delta norm max %.3f min %.3f', delta_norm.max().item(), delta_norm.min().item())
 
             clipped = (delta_norm > clip).float()
             not_clipped = 1.0 - clipped
@@ -616,7 +617,7 @@ class AgentPPO(Agent):
         hidden_clipped = 0.0
 
         old_actor_critic = copy.deepcopy(self.actor_critic)
-        new_rnn_states = np.zeros_like(buffer.rnn_states.detach().cpu().numpy())
+        new_rnn_states = buffer.rnn_states.detach().cpu().numpy()
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
