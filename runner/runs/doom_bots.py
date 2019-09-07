@@ -2,9 +2,10 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.run_processes import run
 
 _params = ParamGrid([
-    ('ppo_clip_ratio', [1.1, 1.3]),
-    ('ppo_epochs', [1, 2, 4]),
-    ('recurrence', [16, 32]),
+    ('seed', [42, 43]),
+    ('ppo_epochs', [1, 4]),
+    ('recurrence', [32]),
+    ('kl_coeff_large', [50.0, 0.0]),
 ])
 
 _experiment = Experiment(
@@ -13,4 +14,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_bots_v27_fs2_seeds', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_bots_v34_fs2_kl', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
