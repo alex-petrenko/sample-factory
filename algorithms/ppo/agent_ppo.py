@@ -571,7 +571,7 @@ class AgentPPO(Agent):
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(rnn_dist=0))
-                with_summaries = self._should_write_summaries(self.train_step)
+                with_summaries = self._should_write_summaries()
 
                 # current minibatch consisting of short trajectory segments with length == recurrence
                 mb = buffer.get_minibatch(indices)

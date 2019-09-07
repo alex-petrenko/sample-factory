@@ -76,7 +76,8 @@ class Agent:
 
         self.best_avg_reward = math.nan
 
-        self.summary_rate_decay = LinearDecay([(0, 200), (1000000, 2000), (10000000, 10000)])
+        self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)])
+        self.last_summary_written = -1e9
         self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
 
         summary_dir = summaries_dir(experiment_dir(cfg=self.cfg))
@@ -181,9 +182,9 @@ class Agent:
         with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
-    def _should_write_summaries(self, step):
-        summaries_every = self.summary_rate_decay.at(step)
-        return step % summaries_every == 0
+    def _should_write_summaries(self):
+        summaries_every = self.summary_rate_decay.at(self.train_step)
+        return self.train_step - self.last_summary_written > summaries_every
 
     def _maybe_print(self, avg_rewards, avg_length, fps, t):
         log.info('<====== Step %d, env step %.2fM ======>', self.train_step, self.env_steps / 1e6)
@@ -209,6 +210,7 @@ class Agent:
     def _report_train_summaries(self, stats):
         for key, scalar in stats.items():
             self.writer.add_scalar(f'train/{key}', scalar, self.env_steps)
+        self.last_summary_written = self.train_step
 
     def _report_basic_summaries(self, fps, avg_reward, avg_length):
         self.writer.add_scalar('0_aux/fps', fps, self.env_steps)
