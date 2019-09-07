@@ -347,6 +347,7 @@ class AgentPPO(Agent):
                   'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
         )
         p.add_argument('--initial_kl_coeff', default=0.0001, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
+        p.add_argument('--kl_coeff_large', default=50.0, type=float, help='Loss coefficient for the quadratic KL term')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # EXPERIMENTAL: modified PPO objectives
@@ -360,11 +361,6 @@ class AgentPPO(Agent):
 
         # EXPERIMENTAL: trying to stabilize the distribution of hidden states
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
-
-        # EXPERIMENTAL: hidden state clipping
-        p.add_argument('--should_clip_hidden_states', default=False, type=str2bool, help='Whether we should clip RNN hidden states or not')
-        p.add_argument('--clip_hidden_states', default=math.inf, type=float, help='Clip absolute change in hidden state dimensions. Default (inf) means do not clip')
-        p.add_argument('--hidden_states_clip_global', default=True, type=str2bool, help='Clip the absolute global change in hidden state vector, rather than individual components')
 
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
@@ -391,11 +387,9 @@ class AgentPPO(Agent):
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
         self.kl_coeff = self.cfg.initial_kl_coeff
-        self.last_batch_kl_divergence = 0.0
-        self.last_batch_value_delta = self.last_batch_value_delta_max = 0.0
-        self.last_batch_fraction_clipped = 0.0
-        self.last_batch_rnn_dist = 0.0
-        self.last_batch_hidden_clipped = 0.0
+
+        # some stats we measure in the end of the last training epoch
+        self.last_batch_stats = AttrDict()
 
         env.close()
 
@@ -517,10 +511,6 @@ class AgentPPO(Agent):
         log_prob_actions = action_distribution.log_prob(mb.actions)
         ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
-        # ratio_mean = torch.abs(1.0 - ratio).mean()
-        # ratio_min = ratio.min()
-        # ratio_max = ratio.max()
-
         p_old = torch.exp(mb.log_prob_actions)
 
         if self.cfg.new_clip:
@@ -566,58 +556,17 @@ class AgentPPO(Agent):
 
         return value_loss, value_delta, value_delta_max
 
-    def _clip_hidden_states(self, new_hidden_states, old_hidden_states, epoch, timestep):
-        if not self.cfg.should_clip_hidden_states:
-            return new_hidden_states, 0.0
-
-        clip = self.cfg.clip_hidden_states
-        delta = new_hidden_states - old_hidden_states
-
-        if self.cfg.hidden_states_clip_global:
-            eps_ = 1e-5
-
-            delta_norm = delta.pow(2)
-            delta_norm = torch.sum(delta_norm, dim=-1)
-            delta_norm = torch.sqrt(delta_norm + eps_)
-            # log.info('delta norm max %.3f min %.3f', delta_norm.max().item(), delta_norm.min().item())
-
-            clipped = (delta_norm > clip).float()
-            not_clipped = 1.0 - clipped
-            mean_num_clipped = clipped.mean()
-
-            scale = clip / (delta_norm + eps_)
-            scale = scale.unsqueeze(dim=-1)
-
-            clipped = clipped.unsqueeze(dim=-1)
-            not_clipped = not_clipped.unsqueeze(dim=-1)
-
-            result = clipped * (scale * delta + old_hidden_states) + not_clipped * new_hidden_states
-        else:
-            clipped = (delta.abs() > clip).float()
-            not_clipped = 1.0 - clipped
-
-            mean_num_clipped = clipped.mean()
-
-            clipped_delta = torch.clamp(delta, -clip, clip)
-            clipped_states = old_hidden_states + clipped_delta
-            result = clipped * clipped_states + not_clipped * new_hidden_states
-
-        return result, mean_num_clipped
-
     # noinspection PyUnresolvedReferences
     def _train(self, buffer):
         clip_ratio = self.cfg.ppo_clip_ratio
         clip_value = self.cfg.ppo_clip_value
         recurrence = self.cfg.recurrence
 
-        kl_old = 0.0
+        kl_old_mean = kl_old_max = 0.0
         value_delta = value_delta_max = 0.0
         fraction_clipped = 0.0
         rnn_dist = 0.0
-        hidden_clipped = 0.0
-
-        old_actor_critic = copy.deepcopy(self.actor_critic)
-        new_rnn_states = buffer.rnn_states.detach().cpu().numpy()
+        ratio_mean = ratio_min = ratio_max = 0.0
 
         for epoch in range(self.cfg.ppo_epochs):
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
@@ -655,11 +604,6 @@ class AgentPPO(Agent):
                         dist = torch.sum(dist, dim=1)
                         dist = dist.mean()
                         rnn_dist += dist
-
-                    rnn_states, hidden_clipped = self._clip_hidden_states(
-                        rnn_states, mb.rnn_states[timestep_indices], epoch, i,
-                    )
-                    new_rnn_states[indices[timestep_indices]] = rnn_states.detach().cpu().numpy()
 
                     step_head_outputs = head_outputs[timestep_indices]
                     masks = mb.masks[timestep_indices]
@@ -704,6 +648,10 @@ class AgentPPO(Agent):
                 #     action_distribution.dbg_print()
 
                 policy_loss, ratio, fraction_clipped = self._policy_loss(action_distribution, mb, clip_ratio)
+                ratio_mean = torch.abs(1.0 - ratio).mean()
+                ratio_min = ratio.min()
+                ratio_max = ratio.max()
+
                 value_loss, value_delta, value_delta_max = self._value_loss(result.values, mb, clip_value)
 
                 entropy = action_distribution.entropy().mean()
@@ -712,16 +660,19 @@ class AgentPPO(Agent):
                 prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
                 old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
-                kl_old = action_distribution.kl_divergence(old_action_distribution).mean()
 
-                # kl_old_max = action_distribution.kl_divergence(old_action_distribution).max()
-                # kl_reverse = old_action_distribution.kl_divergence(action_distribution).mean()
-                # log.debug('KL-divergence from old policy distribution is %f (max %f, reverse %f), value delta: %f (max %f)', kl_old, kl_old_max, kl_reverse, value_delta, value_delta_max)
-                # log.debug(
-                #     'Policy Loss: %.6f, PPO ratio mean %.3f, min %.3f, max %.3f, fraction clipped: %.5f, total_not_clipped %.2f', policy_loss, ratio_mean, ratio_min, ratio_max, fraction_clipped, total_non_clipped,
-                # )
+                # small KL penalty for being different to the behavior policy
+                kl_old = action_distribution.kl_divergence(old_action_distribution)
+                kl_old_mean = kl_old.mean()
+                kl_old_max = kl_old.max()
+                kl_penalty_mean = self.kl_coeff * kl_old_mean
 
-                kl_penalty = self.kl_coeff * kl_old
+                # larger KL penalty for distributions that exceed target_kl
+                clipped_kl = (kl_old - self.cfg.target_kl).clamp(min=0.0)
+                kl_penalty_clipped = clipped_kl.pow(2).mean()
+                kl_penalty_clipped = self.cfg.kl_coeff_large * kl_penalty_clipped
+
+                kl_penalty = kl_penalty_mean + kl_penalty_clipped
 
                 rnn_dist /= recurrence
                 dist_loss = self.cfg.rnn_dist_loss_coeff * rnn_dist
@@ -737,15 +688,13 @@ class AgentPPO(Agent):
                     mb_stats.prior_loss = prior_loss
                     mb_stats.dist_loss = dist_loss
                     mb_stats.kl_coeff = self.kl_coeff
+                    mb_stats.kl_penalty_mean = kl_penalty_mean
+                    mb_stats.kl_penalty_clipped = kl_penalty_clipped
                     mb_stats.max_abs_logprob = torch.abs(mb.action_logits).max()
 
                     # we want this statistic for the last batch of the last epoch
-                    mb_stats.last_batch_fraction_clipped = self.last_batch_fraction_clipped
-                    mb_stats.last_batch_kl_old = self.last_batch_kl_divergence
-                    mb_stats.last_batch_value_delta = self.last_batch_value_delta
-                    mb_stats.last_batch_value_delta_max = self.last_batch_value_delta_max
-                    mb_stats.last_batch_rnn_dist = self.last_batch_rnn_dist
-                    mb_stats.last_batch_hidden_clipped = self.last_batch_hidden_clipped
+                    for key, value in self.last_batch_stats.items():
+                        mb_stats[key] = value
 
                 if epoch == 0 and batch_num == 0 and self.train_step < 1000:
                     # we've done no training steps yet, so all ratios should be equal to 1.0 exactly
@@ -784,65 +733,21 @@ class AgentPPO(Agent):
                     self._report_train_summaries(mb_stats)
 
         # adjust KL-penalty coefficient if KL divergence at the end of training is high
-        if kl_old > self.cfg.target_kl:
+        if kl_old_mean > self.cfg.target_kl:
             self.kl_coeff *= 1.5
-        elif kl_old < self.cfg.target_kl / 2:
+        elif kl_old_mean < self.cfg.target_kl / 2:
             self.kl_coeff /= 1.5
         self.kl_coeff = max(self.kl_coeff, 1e-6)
 
-        self.last_batch_kl_divergence = kl_old
-        self.last_batch_value_delta = value_delta
-        self.last_batch_value_delta_max = value_delta_max
-        self.last_batch_fraction_clipped = fraction_clipped
-        self.last_batch_rnn_dist = rnn_dist
-        self.last_batch_hidden_clipped = hidden_clipped
-
-        # EXPERIMENTAL - measure avg policy divergence under old and new hidden state distribution
-        self._calculate_policy_divergence(buffer, old_actor_critic, buffer.rnn_states.detach().cpu().numpy())
-        self._calculate_policy_divergence(buffer, old_actor_critic, new_rnn_states)
-        self._calculate_policy_divergence(buffer, self.actor_critic, buffer.rnn_states.detach().cpu().numpy())
-        self._calculate_policy_divergence(buffer, self.actor_critic, new_rnn_states)
-
-    def _calculate_policy_divergence(self, buffer, actor_critic, rnn_states):
-        """EXPERIMENTAL."""
-        clip_ratio = self.cfg.ppo_clip_ratio
-        recurrence = self.cfg.recurrence
-
-        indices = self._minibatch_indices(len(buffer), shuffle=False)[0]
-        mb = buffer.get_minibatch(indices)
-        head_outputs = actor_critic.forward_head(mb.obs)
-
-        core_outputs = []
-        for i in range(recurrence):
-            # indices of head outputs corresponding to the current timestep
-            timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
-
-            # calculate policy head outside of recurrent loop
-            step_head_outputs = head_outputs[timestep_indices]
-            masks = mb.masks[timestep_indices]
-            curr_rnn_states = torch.from_numpy(rnn_states[indices[timestep_indices]]).to(self.device)
-
-            core_output, _, _ = actor_critic.forward_core(
-                step_head_outputs, curr_rnn_states, masks, None,
-            )
-            core_outputs.append(core_output)
-
-        # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
-        # which is the same shape as the minibatch
-        core_outputs = torch.stack(core_outputs)
-        core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
-        assert core_outputs.shape[0] == head_outputs.shape[0]
-
-        # calculate policy tail outside of recurrent loop
-        result = actor_critic.forward_tail(core_outputs)
-        action_distribution = result.action_distribution
-
-        policy_loss, ratio, fraction_clipped = self._policy_loss(action_distribution, mb, clip_ratio)
-
-        old_action_distribution = get_action_distribution(actor_critic.action_space, mb.action_logits)
-        kl_old = action_distribution.kl_divergence(old_action_distribution).mean()
-
-        log.info('fraction_clipped: %.3f, kl_old: %.6f, min_ratio: %.3f, max_ratio: %.3f', fraction_clipped.item(), kl_old.item(), ratio.min().item(), ratio.max().item())
+        self.last_batch_stats.kl_divergence = kl_old_mean
+        self.last_batch_stats.kl_max = kl_old_max
+        self.last_batch_stats.value_delta = value_delta
+        self.last_batch_stats.value_delta_max = value_delta_max
+        self.last_batch_stats.fraction_clipped = fraction_clipped
+        self.last_batch_stats.rnn_dist = rnn_dist
+        self.last_batch_stats.ratio_mean = ratio_mean
+        self.last_batch_stats.ratio_min = ratio_min
+        self.last_batch_stats.ratio_max = ratio_max
 
     def _learn_loop(self, multi_env):
         """Main training loop."""

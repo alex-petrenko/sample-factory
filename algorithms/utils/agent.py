@@ -76,7 +76,7 @@ class Agent:
 
         self.best_avg_reward = math.nan
 
-        self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)], staircase=100)
+        self.summary_rate_decay = LinearDecay([(0, 200), (1000000, 2000), (10000000, 10000)])
         self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
 
         summary_dir = summaries_dir(experiment_dir(cfg=self.cfg))

@@ -7,10 +7,10 @@ _params = ParamGrid([
 ])
 
 _experiment = Experiment(
-    'doom_sanity_v31',
+    'doom_sanity',
     'python -m train_pytorch --train_for_seconds=240 --algo=PPO --ppo_epochs=4 --recurrence=1 --use_rnn=False',
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_sanity_v31', experiments=[_experiment], pause_between_experiments=5, use_gpus=2, experiments_per_gpu=2, max_parallel=4)
+RUN_DESCRIPTION = RunDescription('doom_sanity_v34', experiments=[_experiment], pause_between_experiments=5, use_gpus=2, experiments_per_gpu=2, max_parallel=4)
 
