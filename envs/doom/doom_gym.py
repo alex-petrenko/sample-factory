@@ -493,8 +493,6 @@ class VizdoomEnv(gym.Env):
                         #     'dmg:', info['DAMAGECOUNT'],
                         # )
 
-                        print('HP:', info.get('HEALTH', -100.0))
-
                     time_since_last_render = time.time() - last_render_time
                     time_wait = time_between_frames - time_since_last_render
 

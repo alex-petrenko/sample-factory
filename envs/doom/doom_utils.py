@@ -5,6 +5,7 @@ from envs.doom.action_space import doom_action_space, doom_action_space_no_weap,
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
+from envs.doom.wrappers.exploration import ExplorationWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
 from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
@@ -106,6 +107,21 @@ DOOM_ENVS = [
         doom_action_space_experimental(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
+        extra_wrappers=[
+            # (DoomAdditionalInputAndRewards, {}), (ExplorationWrapper, {}),
+            (DoomAdditionalInputAndRewards, {}),
+        ]
+    ),
+
+    DoomSpec(
+        'doom_dwango5_bots_exploration',
+        'dwango5_dm_continuous_weap.cfg',
+        doom_action_space_experimental(),
+        1.0, int(1e9),
+        num_agents=1, num_bots=7,
+        extra_wrappers=[
+            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}), (ExplorationWrapper, {}),
+        ]
     ),
 ]
 

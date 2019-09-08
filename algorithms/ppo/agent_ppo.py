@@ -445,6 +445,11 @@ class AgentPPO(Agent):
         actions = actor_critic_output.actions.cpu().numpy()
         return actions
 
+    def _add_intrinsic_rewards(self, rewards, infos):
+        intrinsic_rewards = [info.get('intrinsic_reward', 0.0) for info in infos]
+        updated_rewards = rewards + np.asarray(intrinsic_rewards)
+        return updated_rewards
+
     def _update_memory(self, actions, memory_write, dones):
         if memory_write is None:
             assert self.cfg.mem_size == 0
@@ -783,6 +788,7 @@ class AgentPPO(Agent):
                             new_obs, rewards, dones, infos = multi_env.step(actions)
                             rewards = np.asarray(rewards, dtype=np.float32) * self.cfg.reward_scale
                             rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
+                            rewards = self._add_intrinsic_rewards(rewards, infos)
 
                         self._update_memory(actions, res.memory_write, dones)
 
