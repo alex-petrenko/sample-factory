@@ -37,7 +37,7 @@ class ExplorationWrapper(gym.Wrapper):
 
         if is_new_landmark:
             self.landmarks.appendleft((x, y, angle))
-            reward += 1.0
+            reward += 0.1
             # log.debug('New landmark %.3f %.3f %.3f rew %.3f, num %d', x, y, angle, reward, len(self.landmarks))
 
         while len(self.landmarks) >= self.landmarks.maxlen:

@@ -78,39 +78,11 @@ DOOM_ENVS = [
     DoomSpec('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
 
     DoomSpec(
-        'doom_dwango5_bots',
-        'dwango5_dm.cfg',
-        doom_action_space_discrete(),
-        1.0, int(1e9),
-        num_agents=1, num_bots=7,
-    ),
-
-    DoomSpec(
-        'doom_dwango5_bots_continuous',
-        'dwango5_dm_continuous.cfg',
-        doom_action_space(),
-        1.0, int(1e9),
-        num_agents=1, num_bots=7,
-    ),
-
-    DoomSpec(
-        'doom_dwango5_bots_hybrid',
-        'dwango5_dm_continuous.cfg',
-        doom_action_space_hybrid(),
-        1.0, int(1e9),
-        num_agents=1, num_bots=7,
-    ),
-
-    DoomSpec(
         'doom_dwango5_bots_experimental',
         'dwango5_dm_continuous_weap.cfg',
         doom_action_space_experimental(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
-        extra_wrappers=[
-            # (DoomAdditionalInputAndRewards, {}), (ExplorationWrapper, {}),
-            (DoomAdditionalInputAndRewards, {}),
-        ]
     ),
 
     DoomSpec(
@@ -122,6 +94,15 @@ DOOM_ENVS = [
         extra_wrappers=[
             (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}), (ExplorationWrapper, {}),
         ]
+    ),
+
+    DoomSpec(
+        'doom_dwango5_bots_expl_reward',
+        'dwango5_dm_continuous_weap.cfg',
+        doom_action_space_experimental(),
+        1.0, int(1e9),
+        num_agents=1, num_bots=7,
+        extra_wrappers=[(DoomAdditionalInputAndRewards, {}), (ExplorationWrapper, {})],
     ),
 ]
 
