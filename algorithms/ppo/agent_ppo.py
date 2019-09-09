@@ -347,7 +347,7 @@ class AgentPPO(Agent):
                   'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
         )
         p.add_argument('--initial_kl_coeff', default=0.0001, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
-        p.add_argument('--kl_coeff_large', default=50.0, type=float, help='Loss coefficient for the quadratic KL term')
+        p.add_argument('--kl_coeff_large', default=0.0, type=float, help='Loss coefficient for the quadratic KL term')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # EXPERIMENTAL: modified PPO objectives

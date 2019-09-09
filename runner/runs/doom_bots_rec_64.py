@@ -3,8 +3,8 @@ from runner.run_processes import run
 
 _params = ParamGrid([
     ('seed', [42, 43]),
-    ('ppo_epochs', [1, 4]),
-    ('recurrence', [32]),
+    ('ppo_epochs', [1]),
+    ('recurrence', [32, 64]),
 ])
 
 _experiment = Experiment(
@@ -13,4 +13,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_bots_v35_fs2_kl001', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_bots_v35_fs2_rec', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
