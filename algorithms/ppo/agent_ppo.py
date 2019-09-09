@@ -23,19 +23,21 @@ class ExperienceBuffer:
         self.action_logits = None
         self.masks = self.rnn_states = None
         self.advantages = self.returns = None
+        self.prior_logits = None
 
     def reset(self):
         self.obs, self.actions, self.log_prob_actions, self.rewards, self.dones, self.values = [], [], [], [], [], []
         self.action_logits = []
         self.masks, self.rnn_states = [], []
         self.advantages, self.returns = [], []
+        self.prior_logits = []
 
     def _add_args(self, args):
         for arg_name, arg_value in args.items():
             if arg_name in self.__dict__ and arg_value is not None:
                 self.__dict__[arg_name].append(arg_value)
 
-    def add(self, obs, actions, action_logits, log_prob_actions, values, masks, rnn_states, rewards, dones):
+    def add(self, obs, actions, action_logits, log_prob_actions, values, masks, rnn_states, rewards, dones, prior_logits):
         """Argument names should match names of corresponding buffers."""
         args = copy.copy(locals())
         self._add_args(args)
@@ -362,6 +364,9 @@ class AgentPPO(Agent):
         # EXPERIMENTAL: trying to stabilize the distribution of hidden states
         p.add_argument('--rnn_dist_loss_coeff', default=0.0, type=float, help='Penalty for the difference in hidden state values, compared to the behavioral policy')
 
+        # EXPERIMENTAL: learned exploration prior
+        p.add_argument('--learned_prior', default=None, type=str, help='Path to checkpoint with a prior policy')
+
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
 
@@ -391,7 +396,28 @@ class AgentPPO(Agent):
         # some stats we measure in the end of the last training epoch
         self.last_batch_stats = AttrDict()
 
+        # EXPERIMENTAL: prior policy
+        if self.cfg.learned_prior is None:
+            self.learned_prior = None
+        else:
+            self.learned_prior = ActorCritic(env.observation_space, env.action_space, cfg)
+            self.learned_prior.to(self.device)
+
         env.close()
+
+    def initialize(self):
+        super().initialize()
+
+        # EXPERIMENTAL: loading prior policy
+        if self.cfg.learned_prior is not None:
+            log.debug('Loading prior policy from %s...', self.cfg.learned_prior)
+
+            checkpoint_dict = self._load_checkpoint(self.cfg.learned_prior)
+            if checkpoint_dict is None:
+                raise Exception('Could not load prior policy from checkpoint!')
+            else:
+                log.debug('Loading prior model from checkpoint')
+                self.learned_prior.load_state_dict(checkpoint_dict['model'])
 
     def _load_state(self, checkpoint_dict):
         super()._load_state(checkpoint_dict)
@@ -445,7 +471,8 @@ class AgentPPO(Agent):
         actions = actor_critic_output.actions.cpu().numpy()
         return actions
 
-    def _add_intrinsic_rewards(self, rewards, infos):
+    @staticmethod
+    def _add_intrinsic_rewards(rewards, infos):
         intrinsic_rewards = [info.get('intrinsic_reward', 0.0) for info in infos]
         updated_rewards = rewards + np.asarray(intrinsic_rewards)
         return updated_rewards
@@ -660,7 +687,15 @@ class AgentPPO(Agent):
                 value_loss, value_delta, value_delta_max = self._value_loss(result.values, mb, clip_value)
 
                 entropy = action_distribution.entropy().mean()
-                kl_prior = action_distribution.kl_prior().mean()
+
+                if self.learned_prior is None:
+                    kl_prior = action_distribution.kl_prior().mean()
+                else:
+                    # EXPERIMENTAL
+                    prior_action_distribution = get_action_distribution(
+                        self.actor_critic.action_space, mb.prior_logits, mask=[0, 1, 4, 5],
+                    )
+                    kl_prior = action_distribution.kl_divergence(prior_action_distribution).mean()
 
                 prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
@@ -765,8 +800,11 @@ class AgentPPO(Agent):
         dones = [True] * self.cfg.num_envs
 
         rnn_states = torch.zeros(self.cfg.num_envs)
+        prior_rnn_states = None
         if self.cfg.use_rnn:
             rnn_states = torch.zeros(self.cfg.num_envs, self.cfg.hidden_size).to(self.device)
+            if self.learned_prior is not None:
+                prior_rnn_states = torch.zeros(self.cfg.num_envs, self.cfg.hidden_size).to(self.device)
 
         while not self._should_end_training():
             timing = Timing()
@@ -782,6 +820,14 @@ class AgentPPO(Agent):
                         masks = self._get_masks(dones)
                         res = self.actor_critic(observations, rnn_states, masks)
                         actions = self._preprocess_actions(res)
+
+                        # EXPERIMENTAL
+                        if self.learned_prior is None:
+                            prior_logits = res.action_logits  # to avoid handling None case
+                        else:
+                            prior_res = self.learned_prior(observations, prior_rnn_states, masks)
+                            prior_logits = prior_res.action_logits
+                            prior_rnn_states = prior_res.rnn_states
 
                         # wait for all the workers to complete an environment step
                         with timing.add_time('env_step'):
@@ -799,12 +845,13 @@ class AgentPPO(Agent):
                             res.values,
                             masks, rnn_states,
                             rewards, dones,
+                            prior_logits,
                         )
 
                         with timing.add_time('obs'):
                             observations = self._preprocess_observations(new_obs)
-                        rnn_states = res.rnn_states
 
+                        rnn_states = res.rnn_states
                         num_steps += num_env_steps(infos)
 
                     # last step values are required for TD-return calculation

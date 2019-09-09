@@ -17,7 +17,7 @@ def calc_num_logits(action_space):
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
 
 
-def get_action_distribution(action_space, raw_logits):
+def get_action_distribution(action_space, raw_logits, mask=None):
     """
     Create the distribution object based on provided action space and unprocessed logits.
     :param action_space: Gym action space object
@@ -31,7 +31,7 @@ def get_action_distribution(action_space, raw_logits):
     if isinstance(action_space, gym.spaces.Discrete):
         return CategoricalActionDistribution(raw_logits)
     elif isinstance(action_space, gym.spaces.Tuple):
-        return TupleActionDistribution(action_space, logits_flat=raw_logits)
+        return TupleActionDistribution(action_space, logits_flat=raw_logits, mask=mask)
     else:
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
 
@@ -125,12 +125,18 @@ class TupleActionDistribution:
 
     """
 
-    def __init__(self, action_space, logits_flat):
+    def __init__(self, action_space, logits_flat, mask):
         self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
         assert len(self.split_logits) == len(action_space.spaces)
 
-        self.distributions = [get_action_distribution(s, l) for s, l in zip(action_space.spaces, self.split_logits)]
+        self.distributions = []
+        for i, space in enumerate(action_space.spaces):
+            if mask is None or i in mask:
+                self.distributions.append(get_action_distribution(space, self.split_logits[i]))
+            else:
+                random_logits = torch.ones_like(self.split_logits[i])
+                self.distributions.append(get_action_distribution(space, random_logits))
 
     @staticmethod
     def _flatten_actions(list_of_action_batches):

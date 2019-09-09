@@ -84,18 +84,11 @@ class Agent:
         self.writer = SummaryWriter(summary_dir, flush_secs=10)
 
     def initialize(self):
-        checkpoints = self._get_checkpoints()
-        if len(checkpoints) <= 0:
-            log.warning('No checkpoints found in %s. Starting from scratch!', experiment_dir(cfg=self.cfg))
+        checkpoint_dict = self._load_checkpoint(self._checkpoint_dir())
+        if checkpoint_dict is None:
+            log.debug('Did not load from checkpoint, starting from scratch!')
         else:
-            latest_checkpoint = checkpoints[-1]
-            log.warning('Loading state from checkpoint %s...', latest_checkpoint)
-
-            if str(self.device) == 'cuda':  # the checkpoint will try to load onto the GPU storage unless specified
-                checkpoint_dict = torch.load(latest_checkpoint)
-            else:
-                checkpoint_dict = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
-
+            log.debug('Loading model from checkpoint')
             self._load_state(checkpoint_dict)
 
         log.debug('Experiment parameters:')
@@ -138,12 +131,29 @@ class Agent:
         if (self.train_step + 1) % save_every == 0 or self.train_step <= 1:
             self._save()
 
+    def _load_checkpoint(self, checkpoints_dir):
+        checkpoints = self._get_checkpoints(checkpoints_dir)
+        if len(checkpoints) <= 0:
+            log.warning('No checkpoints found in %s', experiment_dir(cfg=self.cfg))
+            return None
+        else:
+            latest_checkpoint = checkpoints[-1]
+            log.warning('Loading state from checkpoint %s...', latest_checkpoint)
+
+            if str(self.device) == 'cuda':  # the checkpoint will try to load onto the GPU storage unless specified
+                checkpoint_dict = torch.load(latest_checkpoint)
+            else:
+                checkpoint_dict = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
+
+            return checkpoint_dict
+
     def _checkpoint_dir(self):
         checkpoint_dir = join(experiment_dir(cfg=self.cfg), 'checkpoint')
         return ensure_dir_exists(checkpoint_dir)
 
-    def _get_checkpoints(self):
-        checkpoints = glob.glob(join(self._checkpoint_dir(), 'checkpoint_*'))
+    @staticmethod
+    def _get_checkpoints(checkpoints_dir):
+        checkpoints = glob.glob(join(checkpoints_dir, 'checkpoint_*'))
         return sorted(checkpoints)
 
     def _get_checkpoint_dict(self):
@@ -163,8 +173,8 @@ class Agent:
         log.info('Saving %s...', filepath)
         torch.save(checkpoint, filepath)
 
-        while len(self._get_checkpoints()) > self.cfg.keep_checkpoints:
-            oldest_checkpoint = self._get_checkpoints()[0]
+        while len(self._get_checkpoints(self._checkpoint_dir())) > self.cfg.keep_checkpoints:
+            oldest_checkpoint = self._get_checkpoints(self._checkpoint_dir())[0]
             if os.path.isfile(oldest_checkpoint):
                 log.debug('Removing %s', oldest_checkpoint)
                 os.remove(oldest_checkpoint)
