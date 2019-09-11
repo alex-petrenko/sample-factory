@@ -367,6 +367,9 @@ class AgentPPO(Agent):
         # EXPERIMENTAL: learned exploration prior
         p.add_argument('--learned_prior', default=None, type=str, help='Path to checkpoint with a prior policy')
 
+        # EXPERIMENTAL:
+        p.add_argument('--adaptive_lr', default=False, type=str2bool, help='Change learning rate based on PPO clipping statistics')
+
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
 
@@ -392,6 +395,7 @@ class AgentPPO(Agent):
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
         self.kl_coeff = self.cfg.initial_kl_coeff
+        self.adaptive_lr = self.cfg.learning_rate
 
         # some stats we measure in the end of the last training epoch
         self.last_batch_stats = AttrDict()
@@ -423,6 +427,7 @@ class AgentPPO(Agent):
         super()._load_state(checkpoint_dict)
 
         self.kl_coeff = checkpoint_dict['kl_coeff']
+        self.adaptive_lr = checkpoint_dict['adaptive_lr']
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
 
@@ -430,6 +435,7 @@ class AgentPPO(Agent):
         checkpoint = super()._get_checkpoint_dict()
         checkpoint.update({
             'kl_coeff': self.kl_coeff,
+            'adaptive_lr': self.adaptive_lr,
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         })
@@ -731,6 +737,7 @@ class AgentPPO(Agent):
                     mb_stats.kl_penalty_mean = kl_penalty_mean
                     mb_stats.kl_penalty_clipped = kl_penalty_clipped
                     mb_stats.max_abs_logprob = torch.abs(mb.action_logits).max()
+                    mb_stats.adaptive_lr = self.adaptive_lr
 
                     # we want this statistic for the last batch of the last epoch
                     for key, value in self.last_batch_stats.items():
@@ -788,6 +795,19 @@ class AgentPPO(Agent):
         self.last_batch_stats.ratio_mean = ratio_mean
         self.last_batch_stats.ratio_min = ratio_min
         self.last_batch_stats.ratio_max = ratio_max
+
+        if self.cfg.adaptive_lr:
+            if ratio_max > 2.0 or ratio_min < 0.5:
+                self.adaptive_lr *= 0.9
+            elif ratio_max < 1.5 and ratio_min > 0.66:
+                self.adaptive_lr /= 0.99
+
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.adaptive_lr
+                log.info(
+                    'Adaptive learning rate is %.7f, max ratio: %.3f, min ratio: %.3f',
+                    param_group['lr'], ratio_max, ratio_min,
+                )
 
     def _learn_loop(self, multi_env):
         """Main training loop."""

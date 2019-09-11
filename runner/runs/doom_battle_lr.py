@@ -1,10 +1,8 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_processes import run
 
 _params = ParamGrid([
-    ('ppo_clip_ratio', [1.1, 1.3]),
-    ('ppo_epochs', [1, 2, 4]),
-    ('recurrence', [16, 32]),
+    ('ppo_epochs', [1, 2, 4, 8]),
+    ('adaptive_lr', ['True', 'False']),
 ])
 
 _experiment = Experiment(
@@ -13,6 +11,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_battle_torch_v27_fs4', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_battle_v37_fs4_lr', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
 
 
