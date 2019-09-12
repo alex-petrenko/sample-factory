@@ -320,6 +320,8 @@ class AgentPPO(Agent):
         super().add_cli_args(p)
 
         p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
+        p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
+        p.add_argument('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
 
         p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting')
 
@@ -390,7 +392,9 @@ class AgentPPO(Agent):
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
         self.actor_critic.to(self.device)
 
-        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), cfg.learning_rate, eps=cfg.adam_eps)
+        self.optimizer = torch.optim.Adam(
+            self.actor_critic.parameters(), cfg.learning_rate, betas=(cfg.adam_beta1, cfg.adam_beta2), eps=cfg.adam_eps,
+        )
 
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
@@ -808,6 +812,11 @@ class AgentPPO(Agent):
                     'Adaptive learning rate is %.7f, max ratio: %.3f, min ratio: %.3f',
                     param_group['lr'], ratio_max, ratio_min,
                 )
+
+        ratio_90_th = np.percentile(ratio.detach().cpu().numpy(), 90)
+        ratio_95_th = np.percentile(ratio.detach().cpu().numpy(), 95)
+        ratio_99_th = np.percentile(ratio.detach().cpu().numpy(), 99)
+        log.info('Ratio 90, 95, 99: %.3f, %.3f, %.3f, %.3f', ratio_90_th, ratio_95_th, ratio_99_th, ratio_max)
 
     def _learn_loop(self, multi_env):
         """Main training loop."""
