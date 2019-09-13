@@ -2,9 +2,8 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.run_processes import run
 
 _params = ParamGrid([
-    ('seed', [42]),
-    ('ppo_epochs', [1]),
-    ('adam_beta1', [0.5, 0.75, 0.9, 0.95]),
+    ('ppo_epochs', [1, 2, 4]),
+    ('early_stopping', ['True', 'False']),
 ])
 
 _experiment = Experiment(
@@ -13,4 +12,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_bots_v38_fs2_beta', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_bots_v39_fs2_stopping', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)

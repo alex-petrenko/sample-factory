@@ -3,7 +3,7 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 _params = ParamGrid([
     ('env', ['atari_breakout', 'atari_spaceinvaders', 'atari_qbert', 'atari_mspacman']),
     ('ppo_epochs', [10]),
-    ('adaptive_lr', ['True', 'False']),
+    ('early_stopping', ['True', 'False']),
 ])
 
 _experiment = Experiment(
@@ -12,4 +12,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('atari_v37_lr', experiments=[_experiment], pause_between_experiments=10, use_gpus=2, experiments_per_gpu=2, max_parallel=4)
+RUN_DESCRIPTION = RunDescription('atari_v39_stopping', experiments=[_experiment], pause_between_experiments=10, use_gpus=2, experiments_per_gpu=2, max_parallel=4)

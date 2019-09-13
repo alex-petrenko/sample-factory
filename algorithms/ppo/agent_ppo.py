@@ -338,6 +338,7 @@ class AgentPPO(Agent):
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
         p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
+        p.add_argument('--early_stopping', default=False, type=str2bool, help='Early stop training on the experience batch when KL-divergence is too high')
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
@@ -369,9 +370,6 @@ class AgentPPO(Agent):
         # EXPERIMENTAL: learned exploration prior
         p.add_argument('--learned_prior', default=None, type=str, help='Path to checkpoint with a prior policy')
 
-        # EXPERIMENTAL:
-        p.add_argument('--adaptive_lr', default=False, type=str2bool, help='Change learning rate based on PPO clipping statistics')
-
     def __init__(self, make_env_func, cfg):
         super().__init__(cfg)
 
@@ -399,7 +397,6 @@ class AgentPPO(Agent):
         self.memory = np.zeros([cfg.num_envs, cfg.mem_size, cfg.mem_feature], dtype=np.float32)
 
         self.kl_coeff = self.cfg.initial_kl_coeff
-        self.adaptive_lr = self.cfg.learning_rate
 
         # some stats we measure in the end of the last training epoch
         self.last_batch_stats = AttrDict()
@@ -431,7 +428,6 @@ class AgentPPO(Agent):
         super()._load_state(checkpoint_dict)
 
         self.kl_coeff = checkpoint_dict['kl_coeff']
-        self.adaptive_lr = checkpoint_dict['adaptive_lr']
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
 
@@ -439,7 +435,6 @@ class AgentPPO(Agent):
         checkpoint = super()._get_checkpoint_dict()
         checkpoint.update({
             'kl_coeff': self.kl_coeff,
-            'adaptive_lr': self.adaptive_lr,
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         })
@@ -610,7 +605,13 @@ class AgentPPO(Agent):
         rnn_dist = 0.0
         ratio_mean = ratio_min = ratio_max = 0.0
 
+        early_stopping = False
+        num_sgd_steps = 0
+
         for epoch in range(self.cfg.ppo_epochs):
+            if early_stopping:
+                break
+
             for batch_num, indices in enumerate(self._minibatch_indices(len(buffer))):
                 mb_stats = AttrDict(dict(rnn_dist=0))
                 with_summaries = self._should_write_summaries()
@@ -741,7 +742,6 @@ class AgentPPO(Agent):
                     mb_stats.kl_penalty_mean = kl_penalty_mean
                     mb_stats.kl_penalty_clipped = kl_penalty_clipped
                     mb_stats.max_abs_logprob = torch.abs(mb.action_logits).max()
-                    mb_stats.adaptive_lr = self.adaptive_lr
 
                     # we want this statistic for the last batch of the last epoch
                     for key, value in self.last_batch_stats.items():
@@ -769,6 +769,7 @@ class AgentPPO(Agent):
 
                 torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
                 self.optimizer.step()
+                num_sgd_steps += 1
 
                 self._after_optimizer_step()
 
@@ -782,6 +783,17 @@ class AgentPPO(Agent):
                     mb_stats.grad_norm = grad_norm
 
                     self._report_train_summaries(mb_stats)
+
+                if self.cfg.early_stopping:
+                    kl_99_th = np.percentile(kl_old.detach().cpu().numpy(), 99)
+                    value_delta_99th = np.percentile(value_delta.detach().cpu().numpy(), 99)
+                    if kl_99_th > self.cfg.target_kl * 5 or value_delta_99th > self.cfg.ppo_clip_value * 5:
+                        log.info(
+                            'Early stopping due to KL %.3f or value delta %.3f, epoch %d, step %d',
+                            kl_99_th, value_delta_99th, epoch, num_sgd_steps,
+                        )
+                        early_stopping = True
+                        break
 
         # adjust KL-penalty coefficient if KL divergence at the end of training is high
         if kl_old_mean > self.cfg.target_kl:
@@ -799,24 +811,19 @@ class AgentPPO(Agent):
         self.last_batch_stats.ratio_mean = ratio_mean
         self.last_batch_stats.ratio_min = ratio_min
         self.last_batch_stats.ratio_max = ratio_max
+        self.last_batch_stats.num_sgd_steps = num_sgd_steps
 
-        if self.cfg.adaptive_lr:
-            if ratio_max > 2.0 or ratio_min < 0.5:
-                self.adaptive_lr *= 0.9
-            elif ratio_max < 1.5 and ratio_min > 0.66:
-                self.adaptive_lr /= 0.99
-
-            for param_group in self.optimizer.param_groups:
-                param_group['lr'] = self.adaptive_lr
-                log.info(
-                    'Adaptive learning rate is %.7f, max ratio: %.3f, min ratio: %.3f',
-                    param_group['lr'], ratio_max, ratio_min,
-                )
-
+        # diagnostics: TODO delete later!
         ratio_90_th = np.percentile(ratio.detach().cpu().numpy(), 90)
         ratio_95_th = np.percentile(ratio.detach().cpu().numpy(), 95)
         ratio_99_th = np.percentile(ratio.detach().cpu().numpy(), 99)
-        log.info('Ratio 90, 95, 99: %.3f, %.3f, %.3f, %.3f', ratio_90_th, ratio_95_th, ratio_99_th, ratio_max)
+        kl_90_th = np.percentile(kl_old.detach().cpu().numpy(), 90)
+        kl_95_th = np.percentile(kl_old.detach().cpu().numpy(), 95)
+        kl_99_th = np.percentile(kl_old.detach().cpu().numpy(), 99)
+        value_delta_99th = np.percentile(value_delta.detach().cpu().numpy(), 99)
+        log.info('Ratio 90, 95, 99, max: %.3f, %.3f, %.3f, %.3f', ratio_90_th, ratio_95_th, ratio_99_th, ratio_max)
+        log.info('KL 90, 95, 99, max: %.3f, %.3f, %.3f, %.3f', kl_90_th, kl_95_th, kl_99_th, kl_old_max)
+        log.info('Value delta 99, max: %.3f, %.3f', value_delta_99th, value_delta_max)
 
     def _learn_loop(self, multi_env):
         """Main training loop."""

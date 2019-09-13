@@ -2,7 +2,7 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('ppo_epochs', [1, 2, 4, 8]),
-    ('adaptive_lr', ['True', 'False']),
+    ('early_stopping', ['True', 'False']),
 ])
 
 _experiment = Experiment(
@@ -11,6 +11,6 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_battle_v37_fs4_lr', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_battle_v39_fs4_stopping', experiments=[_experiment], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
 
 
