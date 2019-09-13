@@ -71,5 +71,32 @@ python -m enjoy_rllib ~/ray_results/test-appo/CUSTOM_APPO_doom_battle_hybrid_0_2
 
 ```
 python -m train_pytorch --env=doom_basic --experiment=doom-test-ppo --recurrence=16
-python -m enjoy_pytorch --env=doom_basic --experiment=doom-test-ppo --recurrence=16 --fps=100
+python -m enjoy_pytorch --env=doom_basic --experiment=doom-test-ppo --fps=100
 ```
+
+
+## Working with external memory
+
+Start an experiment with Minigrid environment that requires memory:
+
+```
+python -m train_pytorch --algo=PPO --train_for_env_steps=300000000 --env MiniGrid-MemoryS7-v0 --use_rnn False --mem_size 4 --experiment test_memory_minigrid
+python -m enjoy_pytorch --algo=PPO --env MiniGrid-MemoryS7-v0 --experiment test_memory_minigrid --fps=3
+```
+
+Start an experiment with VizDoom environment that requires memory:
+
+```
+python -m train_pytorch --algo=PPO --train_for_env_steps=1000000000 --prior_loss_coeff=0.005 --reward_scale=0.5 --env doom_two_colors_easy --use_rnn True --mem_size 4 --experiment test_memory_doom
+python -m enjoy_pytorch --algo=PPO --env doom_two_colors_easy --experiment test_memory_doom --fps=35
+
+```
+
+Run a gridsearch:
+
+```
+python -m runner.run --run=memory_minigrid --runner=processes
+```
+
+Multuple pre-maid gridsearch configurations can be found in the repo (memory_minigrid.py, memory_doom.py)
+Modify these files to change the algorithm parameters, as well as runner parameters (e.g. number of GPUs)

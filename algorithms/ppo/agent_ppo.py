@@ -336,7 +336,7 @@ class AgentPPO(Agent):
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
-        p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
+        p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
         p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
         p.add_argument('--early_stopping', default=False, type=str2bool, help='Early stop training on the experience batch when KL-divergence is too high')
 

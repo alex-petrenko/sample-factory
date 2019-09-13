@@ -7,9 +7,9 @@ _params = ParamGrid([
 ])
 
 _experiment = Experiment(
-    'mem_minigrid_v22',
-    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=96 --recurrence=16 --train_for_env_steps=200000000 --prior_loss_coeff=0.005',
+    'mem_minigrid',
+    'python -m train_pytorch --algo=PPO --train_for_env_steps=300000000',
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('mem_minigrid_v22', experiments=[_experiment], pause_between_experiments=5, use_gpus=3, experiments_per_gpu=4, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('mem_minigrid_v39', experiments=[_experiment], pause_between_experiments=5, use_gpus=2, experiments_per_gpu=4, max_parallel=8)
