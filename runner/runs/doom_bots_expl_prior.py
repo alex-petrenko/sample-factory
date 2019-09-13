@@ -23,4 +23,4 @@ _experiment_prior = Experiment(
     _params_prior.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_bots_v36_fs2_prior', experiments=[_experiment_no_prior, _experiment_prior], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_bots_v39_fs2_prior', experiments=[_experiment_no_prior, _experiment_prior], pause_between_experiments=10, use_gpus=6, experiments_per_gpu=2, max_parallel=12)
