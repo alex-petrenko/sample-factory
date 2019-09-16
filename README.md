@@ -70,8 +70,8 @@ python -m enjoy_rllib ~/ray_results/test-appo/CUSTOM_APPO_doom_battle_hybrid_0_2
 ## Working with PyTorch implementation
 
 ```
-python -m train_pytorch --env=doom_basic --experiment=doom-test-ppo --recurrence=16
-python -m enjoy_pytorch --env=doom_basic --experiment=doom-test-ppo --fps=100
+python -m train_pytorch --algo=PPO --env=doom_basic --experiment=doom-test-ppo --recurrence=16
+python -m enjoy_pytorch --algo=PPO --env=doom_basic --experiment=doom-test-ppo --fps=100
 ```
 
 
