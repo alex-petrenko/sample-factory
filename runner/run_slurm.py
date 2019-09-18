@@ -15,7 +15,7 @@ SBATCH_TEMPLATE = (
 )
 
 
-def run_slurm(run_description, workdir):
+def run_slurm(run_description, workdir, pause_between):
     experiments = run_description.experiments
 
     log.info('Starting processes with base cmds: %r', [e.cmd for e in experiments])
@@ -52,7 +52,7 @@ def run_slurm(run_description, workdir):
         job_id = int(output)
         job_ids.append(str(job_id))
 
-        time.sleep(2)
+        time.sleep(pause_between)
 
     tail_cmd = f'tail -f {workdir}/*.out'
     log.info('Monitor log files using\n\n\t %s \n\n', tail_cmd)

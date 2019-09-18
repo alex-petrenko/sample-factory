@@ -8,6 +8,8 @@ def parse_args():
     parser.add_argument('--run', default=None, type=str, help='Name of the python script that describes the run, e.g. doom_battle_hybrid')
     parser.add_argument('--runner', default='processes', choices=['processes', 'slurm'])
     parser.add_argument('--workdir', default=None, type=str, help='Optional workdir. Used by slurm runner to store logfiles etc.')
+    parser.add_argument('--pause_between', default=10, type=int, help='Pause in seconds between processes')
+
     args = parser.parse_args()
     return args
 
@@ -23,7 +25,7 @@ def main():
         run(run_description)
     elif args.runner == 'slurm':
         from runner.run_slurm import run_slurm
-        run_slurm(run_description, args.workdir)
+        run_slurm(run_description, args.workdir, args.pause_between)
 
 
 if __name__ == '__main__':
