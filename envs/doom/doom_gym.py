@@ -463,6 +463,8 @@ class VizdoomEnv(gym.Env):
             last_render_time = time.time()
             time_between_frames = 1.0 / 35.0
 
+            total_rew = 0.0
+
             while not doom.game.is_episode_finished() and not doom._terminate:
                 num_actions = 14  # hardcoded here for simplicity
                 turn_delta_action_idx = num_actions - 1
@@ -479,7 +481,9 @@ class VizdoomEnv(gym.Env):
 
                 for frame in range(skip_frames):
                     doom._actions_flattened = actions
-                    env.step(actions)
+                    _, rew, _, _ = env.step(actions)
+                    total_rew += rew
+                    log.info('Reward: %.3f, total: %.3f', rew, total_rew)
                     state = doom.game.get_state()
 
                     verbose = True

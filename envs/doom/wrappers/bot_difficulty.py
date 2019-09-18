@@ -17,6 +17,11 @@ class BotDifficultyWrapper(gym.Wrapper):
 
         log.info('Starting with bot difficulty %d', self._curr_difficulty)
 
+        self._adaptive_curriculum = True
+        if initial_difficulty == self._max_difficulty:
+            log.debug('Starting at max difficulty, disable adaptive skill curriculum')
+            self._adaptive_curriculum = False
+
     def _analyze_standings(self, info):
         if 'FINAL_PLACE' in info:
             final_place = info['FINAL_PLACE']
@@ -46,7 +51,7 @@ class BotDifficultyWrapper(gym.Wrapper):
         if obs is None:
             return obs, reward, done, info
 
-        if done:
+        if done and self._adaptive_curriculum:
             self._analyze_standings(info)
         info['BOT_DIFFICULTY'] = self._curr_difficulty
         return obs, reward, done, info

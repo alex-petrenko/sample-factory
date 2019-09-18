@@ -20,6 +20,7 @@ class DoomSpec:
     def __init__(
             self, name, env_spec_file, action_space, reward_scaling=1.0, default_timeout=int(1e9),
             num_agents=1, num_bots=0,
+            respawn_delay=0,
             extra_wrappers=None,
     ):
         self.name = name
@@ -33,6 +34,8 @@ class DoomSpec:
 
         # CLI arguments override this (see enjoy_rllib.py)
         self.num_bots = num_bots
+
+        self.respawn_delay = respawn_delay
 
         # expect list of tuples (wrapper_cls, wrapper_kwargs)
         self.extra_wrappers = self._extra_wrappers_or_default(extra_wrappers)
@@ -112,6 +115,17 @@ DOOM_ENVS = [
         1.0, int(1e9),
         num_agents=6, num_bots=2,
     ),
+
+    DoomSpec(
+        'doom_dwango5_multi_v2',
+        'dwango5_dm_continuous_weap.cfg',
+        doom_action_space_experimental(),
+        1.0, int(1e9),
+        num_agents=6, num_bots=2, respawn_delay=2,
+        extra_wrappers=[
+            (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
+        ]
+    ),
 ]
 
 
@@ -149,6 +163,7 @@ def make_doom_env_impl(
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=skip_frames,
             async_mode=async_mode,
+            respawn_delay=doom_spec.respawn_delay,
         )
 
     record_to = cfg.record_to if 'record_to' in cfg else None

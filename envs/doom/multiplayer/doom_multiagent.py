@@ -6,7 +6,8 @@ from envs.doom.doom_gym import VizdoomEnv
 from utils.network import is_udp_port_available
 from utils.utils import log
 
-BASE_UDP_PORT = 50300
+
+DEFAULT_UDP_PORT = 50300
 
 
 def find_available_port(start_port, increment=1000):
@@ -25,6 +26,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             config_file,
             player_id, num_agents, max_num_players, num_bots,
             skip_frames, async_mode=False,
+            respawn_delay=0,
             record_to=None):
         super().__init__(
             action_space,
@@ -57,6 +59,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.bot_difficulty_mean = self.bot_difficulty_std = None
         self.hardest_bot = 100
         self.easiest_bot = 10
+        self.respawn_delay = respawn_delay
 
         self.is_multiplayer = True
         self.init_info = None
@@ -70,7 +73,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             return
 
         self._create_doom_game(mode)
-        port = self.init_info['port']
+        port = DEFAULT_UDP_PORT if self.init_info is None else self.init_info.get('port')
 
         if self._is_server():
             log.info('Using port %d on host...', port)
@@ -89,7 +92,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_respawnprotect 1 '  # Players will be invulnerable for two second after spawning.
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
-                '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
+                f'+viz_respawn_delay {self.respawn_delay} '  # Sets delay between respanws (in seconds).
                 '+viz_connect_timeout 10 '  # In seconds
             )
 
@@ -102,7 +105,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
+            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 6')
         else:
             # Join existing game.
             self.game.add_game_args(
@@ -113,7 +116,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
+            self.game.add_game_args(f'+name AI{self.player_id} +colorset 3')
 
         self.game.init()
 
@@ -148,7 +151,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     else:
                         bot_name = ''
 
-                    # log.info('Adding bot %d %s', i, bot_name)
+                    log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot{bot_name}')
                 else:
                     # add random bots according to the desired difficulty
@@ -157,7 +160,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     diff = max(self.easiest_bot, diff)
                     diff = min(self.hardest_bot, diff)
                     bot_name = self._random_bot(diff, used_bots)
-                    # log.info('Adding bot %d %s', i, bot_name)
+                    log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot {bot_name}')
 
         self.timestep = 0

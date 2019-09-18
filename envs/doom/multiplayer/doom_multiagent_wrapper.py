@@ -9,7 +9,7 @@ import numpy as np
 
 from algorithms.utils.multi_env import MultiEnv, MsgType
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
-from envs.doom.multiplayer.doom_multiagent import find_available_port, BASE_UDP_PORT
+from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log, kill
 
 
@@ -38,7 +38,6 @@ def init_multiplayer_env(make_env_func, player_id, env_config, init_info=None):
         env.unwrapped.init_info = init_info
 
     env.seed(env.unwrapped.worker_index * 1000 + env.unwrapped.vector_index * 10 + player_id)
-    env.reset()
     return env
 
 

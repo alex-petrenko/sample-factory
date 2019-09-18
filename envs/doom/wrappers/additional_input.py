@@ -12,7 +12,27 @@ from utils.utils import log
 class DoomAdditionalInputAndRewards(gym.Wrapper):
     """Add game variables to the observation space + reward shaping."""
 
-    def __init__(self, env, with_reward_shaping=True):
+    # game variables to use for reward shaping
+    # plus corresponding reward values for positive and negative delta (per unit)
+    _reward_shaping_0 = {
+        'FRAGCOUNT': (+1, -1.5),
+        'DEATHCOUNT': (-0.75, +0.75),
+        'HITCOUNT': (+0.01, -0.01),
+        'DAMAGECOUNT': (+0.003, -0.003),
+
+        'HEALTH': (+0.005, -0.003),
+        'ARMOR': (+0.005, -0.001),
+    }
+
+    _reward_shaping_1 = copy.deepcopy(_reward_shaping_0)
+    _reward_shaping_1.update({
+        'DEATHCOUNT': (-1.0, +1),
+        'HEALTH': (+0.005, -0.005),
+    })
+
+    _reward_shaping = [_reward_shaping_0, _reward_shaping_1]
+
+    def __init__(self, env, with_reward_shaping=True, reward_shaping_version=0):
         super().__init__(env)
         current_obs_space = self.observation_space
 
@@ -35,17 +55,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             ),
         })
 
-        # game variables to use for reward shaping
-        # plus corresponding reward values for positive and negative delta (per unit)
-        self.reward_shaping_vars = {
-            'FRAGCOUNT': (+1, -1.5),
-            'DEATHCOUNT': (-0.75, +0.75),
-            'HITCOUNT': (+0.01, -0.01),
-            'DAMAGECOUNT': (+0.003, -0.003),
-
-            'HEALTH': (+0.005, -0.003),
-            'ARMOR': (+0.005, -0.001),
-        }
+        self.reward_shaping_vars = self._reward_shaping[reward_shaping_version]
 
         # without this we reward using BFG and shotguns too much
         self.reward_delta_limits = {'DAMAGECOUNT': 200, 'HITCOUNT': 5}
