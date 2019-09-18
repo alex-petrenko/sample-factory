@@ -205,7 +205,7 @@ class MultiAgentEnv:
                         time.sleep(0.1)
 
                 for i, worker in enumerate(self.workers):
-                    worker.result_queue.get(timeout=30)
+                    worker.result_queue.get(timeout=10)
                     worker.result_queue.task_done()
                     worker.task_queue.join()
             except Exception as exc:
