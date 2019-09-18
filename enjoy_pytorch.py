@@ -71,6 +71,10 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
         while True:
             actions, rnn_states, res = agent.best_action(obs, done, rnn_states, deterministic=False)
+            if is_multiagent:
+                actions = unbatch_multiagent_data(actions, env.num_agents)
+            else:
+                actions = actions[0]
 
             for _ in range(render_action_repeat):
                 if not cfg.no_render:
@@ -84,11 +88,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                     last_render_start = time.time()
                     env.render()
-
-                if is_multiagent:
-                    actions = unbatch_multiagent_data(actions, env.num_agents)
-                else:
-                    actions = actions[0]
 
                 obs, rew, done, _ = env.step(actions)
                 if is_multiagent:
@@ -104,7 +103,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                 agent._update_memory(actions, res.memory_write, done)
 
-                if done:
+                if all(done):
                     log.info('Episode finished at %d frames', num_frames)
                     break
 

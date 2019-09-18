@@ -9,7 +9,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'bots_multi_fs2',
-    'python -m train_pytorch --env=doom_dwango5_multi --train_for_seconds=360000 --algo=PPO --gamma=0.995 --env_frameskip=2 --use_rnn=True --rollout=64 --num_envs=96 --reward_scale=0.5',
+    'python -m train_pytorch --env=doom_dwango5_multi --train_for_seconds=360000 --algo=PPO --gamma=0.995 --env_frameskip=2 --use_rnn=True --rollout=64 --num_envs=96 --reward_scale=0.5 --start_bot_difficulty=150',
     _params.generate_params(randomize=False),
 )
 

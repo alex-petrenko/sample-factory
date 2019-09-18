@@ -9,7 +9,8 @@ import numpy as np
 
 from algorithms.utils.multi_env import MultiEnv, MsgType
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
-from utils.utils import log
+from envs.doom.multiplayer.doom_multiagent import find_available_port, BASE_UDP_PORT
+from utils.utils import log, kill
 
 
 def safe_get(q, timeout=1e6, msg='Queue timeout'):
@@ -18,14 +19,14 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
         try:
             return q.get(timeout=timeout)
         except Empty:
-            log.exception(msg)
+            log.warning(msg)
 
 
 class TaskType(Enum):
     INIT, TERMINATE, RESET, STEP, STEP_UPDATE, INFO = range(6)
 
 
-def init_multiplayer_env(make_env_func, player_id, env_config):
+def init_multiplayer_env(make_env_func, player_id, env_config, init_info=None):
     env = make_env_func(player_id=player_id)
 
     if env_config is not None and 'worker_index' in env_config:
@@ -33,7 +34,11 @@ def init_multiplayer_env(make_env_func, player_id, env_config):
     if env_config is not None and 'vector_index' in env_config:
         env.unwrapped.vector_index = env_config.vector_index
 
+    if init_info is not None:
+        env.unwrapped.init_info = init_info
+
     env.seed(env.unwrapped.worker_index * 1000 + env.unwrapped.vector_index * 10 + player_id)
+    env.reset()
     return env
 
 
@@ -47,9 +52,9 @@ class MultiAgentEnvWorker:
         self.process = Process(target=self.start, daemon=True)
         self.process.start()
 
-    def _init(self):
-        log.info('Initializing env for player %d...', self.player_id)
-        env = init_multiplayer_env(self.make_env_func, self.player_id, self.env_config)
+    def _init(self, init_info):
+        log.info('Initializing env for player %d, init_info: %r...', self.player_id, init_info)
+        env = init_multiplayer_env(self.make_env_func, self.player_id, self.env_config, init_info)
         return env
 
     def _terminate(self, env):
@@ -72,11 +77,12 @@ class MultiAgentEnvWorker:
         env = None
 
         while True:
-            action, task_type = safe_get(self.task_queue)
+            data, task_type = safe_get(self.task_queue)
 
             if task_type == TaskType.INIT:
                 log.debug('Init task received %d', self.player_id)
-                env = self._init()
+                env = self._init(data)
+                self.result_queue.put(None)  # signal we're done
                 self.task_queue.task_done()
                 log.debug('Init task done %d', self.player_id)
                 continue
@@ -92,6 +98,7 @@ class MultiAgentEnvWorker:
                 results = self._get_info(env)
             elif task_type == TaskType.STEP or task_type == TaskType.STEP_UPDATE:
                 # collect obs, reward, done, and info
+                action = data
                 env.unwrapped.update_state = task_type == TaskType.STEP_UPDATE
                 results = env.step(action)
             else:
@@ -112,6 +119,8 @@ class MultiAgentEnv:
         self.observation_space = env.observation_space
         env.close()
 
+        self.make_env_func = make_env_func
+
         self.safe_init = env_config is not None and env_config.get('safe_init', True)
         self.safe_init = False  # override
 
@@ -122,7 +131,7 @@ class MultiAgentEnv:
             log.info('Done sleeping at %d', env_config.worker_index)
 
         self.env_config = env_config
-        self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_agents)]
+        self.workers = None
 
         # only needed when rendering
         self.enable_rendering = False
@@ -148,20 +157,19 @@ class MultiAgentEnv:
 
         assert len(data) == self.num_agents
 
-        for i, worker in enumerate(self.workers[1:], start=1):
+        for i, worker in enumerate(self.workers):
             worker.task_queue.put((data[str(i)], task_type))
-        self.workers[0].task_queue.put((data[str(0)], task_type))
 
         result_dicts = None
         for i, worker in enumerate(self.workers):
-            worker.task_queue.join()
             results = safe_get(
                 worker.result_queue,
-                timeout=0.04 if timeout is None else timeout,
+                timeout=0.2 if timeout is None else timeout,
                 msg=f'Takes a surprisingly long time to process task {task_type}, retry...',
             )
 
             worker.result_queue.task_done()
+            worker.task_queue.join()
 
             if not isinstance(results, (tuple, list)):
                 results = [results]
@@ -178,15 +186,36 @@ class MultiAgentEnv:
         if self.initialized:
             return
 
-        for worker in self.workers:
-            worker.task_queue.put((None, TaskType.INIT))
-            if self.safe_init:
-                time.sleep(1.0)  # just in case
-            else:
-                time.sleep(0.25)
+        num_attempts = 20
+        for attempt in range(num_attempts):
+            self.workers = [
+                MultiAgentEnvWorker(i, self.make_env_func, self.env_config) for i in range(self.num_agents)
+            ]
 
-        for worker in self.workers:
-            worker.task_queue.join()
+            try:
+                port = find_available_port(BASE_UDP_PORT + self.env_config.worker_index, increment=100)
+                log.debug('Using port %d', port)
+                init_info = dict(port=port)
+
+                for i, worker in enumerate(self.workers):
+                    worker.task_queue.put((init_info, TaskType.INIT))
+                    if self.safe_init:
+                        time.sleep(1.0)  # just in case
+                    else:
+                        time.sleep(0.1)
+
+                for i, worker in enumerate(self.workers):
+                    worker.result_queue.get(timeout=10)
+                    worker.result_queue.task_done()
+                    worker.task_queue.join()
+            except Exception as exc:
+                for worker in self.workers:
+                    log.info('Killing process %r', worker.process.pid)
+                    kill(worker.process.pid)
+                del self.workers
+                log.warning('Could not initialize env, try again! Error: %r', exc)
+            else:
+                break
 
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
         self.initialized = True
@@ -233,13 +262,13 @@ class MultiAgentEnv:
         cv2.waitKey(1)
 
     def close(self):
-        log.info('Stopping multi env...')
-
-        for worker in self.workers:
-            worker.task_queue.put((None, TaskType.TERMINATE))
-            time.sleep(0.1)
-        for worker in self.workers:
-            worker.process.join()
+        if self.workers is not None:
+            log.info('Stopping multi env...')
+            for worker in self.workers:
+                worker.task_queue.put((None, TaskType.TERMINATE))
+                time.sleep(0.1)
+            for worker in self.workers:
+                worker.process.join()
 
     def seed(self, seed=None):
         """Does not really make sense for the wrapper. Individual envs will be uniquely seeded on init."""
@@ -273,6 +302,11 @@ class MultiAgentEnvAggregator(MultiEnv):
             self.num_agents = tmp_env.num_agents
         else:
             raise Exception('Expected multi-agent environment')
+
+        global BASE_UDP_PORT
+        BASE_UDP_PORT = find_available_port(BASE_UDP_PORT)
+        time.sleep(1)
+        log.debug('Default UDP port changed to %r', BASE_UDP_PORT)
 
         super().__init__(num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing)
 

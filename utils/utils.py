@@ -142,6 +142,13 @@ def memory_consumption_mb():
     return process.memory_info().rss / (1024 * 1024)
 
 
+def kill(proc_pid):
+    process = psutil.Process(proc_pid)
+    for proc in process.children(recursive=True):
+        proc.kill()
+    process.kill()
+
+
 # working with filesystem
 
 def ensure_dir_exists(path):

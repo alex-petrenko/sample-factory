@@ -3,7 +3,19 @@ import copy
 import numpy as np
 
 from envs.doom.doom_gym import VizdoomEnv
+from utils.network import is_udp_port_available
 from utils.utils import log
+
+BASE_UDP_PORT = 50300
+
+
+def find_available_port(start_port, increment=1000):
+    port = start_port
+    while port < 65535 and not is_udp_port_available(port):
+        port += increment
+
+    log.debug('Port %r is available', port)
+    return port
 
 
 class VizdoomEnvMultiplayer(VizdoomEnv):
@@ -47,6 +59,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.easiest_bot = 10
 
         self.is_multiplayer = True
+        self.init_info = None
 
     def _is_server(self):
         return self.player_id == 0
@@ -57,12 +70,13 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             return
 
         self._create_doom_game(mode)
-
-        # make sure not to use more than 10 envs per worker
-        port = 50300 + self.worker_index * 100 + self.vector_index
-        log.info('Using port %d...', port)
+        port = self.init_info['port']
 
         if self._is_server():
+            log.info('Using port %d on host...', port)
+            if not is_udp_port_available(port):
+                raise Exception('Port %r unavailable', port)
+
             # This process will function as a host for a multiplayer game with this many players (including the host).
             # It will wait for other machines to connect using the -join parameter and then
             # start the game when everyone is connected.
@@ -76,7 +90,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
                 '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
-                '+viz_connect_timeout 120 '  # In seconds
+                '+viz_connect_timeout 20 '  # In seconds
             )
 
             # Additional commands:
@@ -93,7 +107,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Join existing game.
             self.game.add_game_args(
                 f'-join 127.0.0.1:{port} '  # Connect to a host for a multiplayer game.
-                '+viz_connect_timeout 120 '
+                '+viz_connect_timeout 10 '
             )
 
             # Name your agent and select color

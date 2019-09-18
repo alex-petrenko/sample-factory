@@ -15,12 +15,7 @@ import subprocess
 
 from os.path import join
 
-
-def kill(proc_pid):
-    process = psutil.Process(proc_pid)
-    for proc in process.children(recursive=True):
-        proc.kill()
-    process.kill()
+from utils.utils import kill
 
 
 def main():
