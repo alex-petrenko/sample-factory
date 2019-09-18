@@ -1,11 +1,13 @@
 import time
+from collections import OrderedDict
 from enum import Enum
 from multiprocessing import Process, JoinableQueue
 from queue import Empty
 
 import cv2
-from ray.rllib import MultiAgentEnv
+import numpy as np
 
+from algorithms.utils.multi_env import MultiEnv, MsgType
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from utils.utils import log
 
@@ -73,8 +75,10 @@ class MultiAgentEnvWorker:
             action, task_type = safe_get(self.task_queue)
 
             if task_type == TaskType.INIT:
+                log.debug('Init task received %d', self.player_id)
                 env = self._init()
                 self.task_queue.task_done()
+                log.debug('Init task done %d', self.player_id)
                 continue
 
             if task_type == TaskType.TERMINATE:
@@ -97,9 +101,10 @@ class MultiAgentEnvWorker:
             self.task_queue.task_done()
 
 
-class VizdoomMultiAgentEnv(MultiAgentEnv):
+class MultiAgentEnv:
     def __init__(self, num_agents, make_env_func, env_config, skip_frames):
         self.num_agents = num_agents
+        log.debug('Multi agent env, num agents: %d', self.num_agents)
         self.skip_frames = skip_frames  # number of frames to skip (1 = no skip)
 
         env = make_env_func(player_id=-1)  # temporary env just to query observation_space and stuff
@@ -116,6 +121,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
             time.sleep(sleep_seconds)
             log.info('Done sleeping at %d', env_config.worker_index)
 
+        self.env_config = env_config
         self.workers = [MultiAgentEnvWorker(i, make_env_func, env_config) for i in range(num_agents)]
 
         # only needed when rendering
@@ -161,7 +167,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
                 results = [results]
 
             if result_dicts is None:
-                result_dicts = tuple({} for _ in results)
+                result_dicts = tuple(OrderedDict() for _ in results)
 
             for j, r in enumerate(results):
                 result_dicts[j][str(i)] = r
@@ -182,7 +188,7 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
         for worker in self.workers:
             worker.task_queue.join()
 
-        log.info('%d agent workers initialized!', len(self.workers))
+        log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
         self.initialized = True
 
     def info(self):
@@ -234,3 +240,89 @@ class VizdoomMultiAgentEnv(MultiAgentEnv):
             time.sleep(0.1)
         for worker in self.workers:
             worker.process.join()
+
+    def seed(self, seed=None):
+        """Does not really make sense for the wrapper. Individual envs will be uniquely seeded on init."""
+        pass
+
+
+def unbatch_multiagent_data(x, num_agents):
+    unbatched = dict()
+    for i in range(num_agents):
+        unbatched[str(i)] = x[i]
+    return unbatched
+
+
+def flatten_multiagent_data(x, num_agents):
+    x_flattened = []
+    for x_env in x:
+        for i in range(num_agents):
+            x_flattened.append(x_env[str(i)])
+
+    return x_flattened
+
+
+class MultiAgentEnvAggregator(MultiEnv):
+    """
+    Vectorized wrapper for multi-agent envs. This is for a special usecase where all agents (policies) are the same,
+    and therefore each agent in a multi-env can be treated as a separate env.
+    """
+    def __init__(self, num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing=True):
+        tmp_env = make_env_func(None)
+        if hasattr(tmp_env, 'num_agents'):
+            self.num_agents = tmp_env.num_agents
+        else:
+            raise Exception('Expected multi-agent environment')
+
+        super().__init__(num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing)
+
+    def _num_actors(self):
+        return self.num_envs * self.num_agents
+
+    def _preprocess_data(self, data):
+        """Each multi-agent environment expects a dict, with one action per agent."""
+        if data is None:
+            data = [None] * self.num_agents * self.num_envs
+
+        assert len(data) == self.num_agents * self.num_envs
+        data = np.split(np.array(data), self.num_envs)
+
+        data_dicts = []
+        for env_data in data:
+            env_dict = OrderedDict()
+            for idx, agent_data in enumerate(env_data):
+                env_dict[str(idx)] = agent_data
+
+            data_dicts.append(env_dict)
+
+        assert len(data_dicts) == self.num_envs
+
+        data = np.split(np.array(data_dicts), self.num_workers)
+        assert len(data) == self.num_workers
+        return data
+
+    def info(self):
+        infos = super().info()
+        return self._flatten(infos)
+
+    def reset(self):
+        observations = super().reset()
+        return self._flatten(observations)
+
+    def step(self, actions, reset=None):
+        if reset is None:
+            results = self.await_tasks(actions, MsgType.STEP_REAL)
+        else:
+            results = self.await_tasks(list(zip(actions, reset)), MsgType.STEP_REAL_RESET)
+        observations, rewards, dones, infos = zip(*results)
+
+        observations = self._flatten(observations)
+        rewards = self._flatten(rewards)
+        dones = self._flatten(dones)
+        infos = self._flatten(infos)
+
+        self._update_stats(rewards, dones, infos)
+        return observations, rewards, dones, infos
+
+    def _flatten(self, x):
+        return flatten_multiagent_data(x, self.num_agents)

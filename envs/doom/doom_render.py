@@ -5,7 +5,7 @@ import numpy as np
 def concat_grid(obs):
     obs = [cvt_doom_obs(o) for o in obs]
 
-    max_horizontal = 4
+    max_horizontal = 3
     horizontal = min(max_horizontal, len(obs))
 
     while len(obs) % horizontal != 0:
@@ -24,7 +24,11 @@ def concat_grid(obs):
 
 
 def cvt_doom_obs(obs):
-    w, h = 400, 225
+    w, h = 800, 450
+    if obs.shape[0] <= 4:
+        # channels first
+        obs = np.transpose(obs, (1, 2, 0))
+
     obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
     obs = cv2.resize(obs, (w, h))
     return obs

@@ -14,7 +14,7 @@ from utils.utils import log, AttrDict
 
 
 def default_doom_cfg():
-    return default_cfg(env='doom_basic')
+    return default_cfg(env='doom_env')
 
 
 def test_env_performance(make_env, env_type, verbose=False):

@@ -1,6 +1,7 @@
 import copy
 import math
 import time
+from collections import OrderedDict
 
 import numpy as np
 import torch
@@ -13,6 +14,7 @@ from algorithms.utils.action_distributions import calc_num_logits, get_action_di
 from algorithms.utils.agent import TrainStatus, Agent
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
 from algorithms.utils.multi_env import MultiEnv
+from envs.env_utils import create_multi_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict, str2bool
 
@@ -445,7 +447,7 @@ class AgentPPO(Agent):
             return observations
 
         obs_dict = AttrDict()
-        if isinstance(observations[0], dict):
+        if isinstance(observations[0], (dict, OrderedDict)):
             for key in observations[0].keys():
                 if not isinstance(observations[0][key], str):
                     obs_dict[key] = [o[key] for o in observations]
@@ -918,7 +920,7 @@ class AgentPPO(Agent):
         status = TrainStatus.SUCCESS
         multi_env = None
         try:
-            multi_env = MultiEnv(
+            multi_env = create_multi_env(
                 self.cfg.num_envs,
                 self.cfg.num_workers,
                 make_env_func=self.make_env_func,

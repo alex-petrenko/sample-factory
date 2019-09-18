@@ -4,7 +4,7 @@
     <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
       <option name="ignoredPackages">
         <value>
-          <list size="78">
+          <list size="79">
             <item index="0" class="java.lang.String" itemvalue="traitlets" />
             <item index="1" class="java.lang.String" itemvalue="absl-py" />
             <item index="2" class="java.lang.String" itemvalue="protobuf" />
@@ -83,6 +83,7 @@
             <item index="75" class="java.lang.String" itemvalue="pytz" />
             <item index="76" class="java.lang.String" itemvalue="setproctitle" />
             <item index="77" class="java.lang.String" itemvalue="Pillow" />
+            <item index="78" class="java.lang.String" itemvalue="torch" />
           </list>
         </value>
       </option>

@@ -43,6 +43,9 @@ class BotDifficultyWrapper(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
+        if obs is None:
+            return obs, reward, done, info
+
         if done:
             self._analyze_standings(info)
         info['BOT_DIFFICULTY'] = self._curr_difficulty

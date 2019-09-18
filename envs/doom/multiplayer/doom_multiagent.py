@@ -59,7 +59,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self._create_doom_game(mode)
 
         # make sure not to use more than 10 envs per worker
-        port = 50300 + self.worker_index * 100 + self.vector_index + 7
+        port = 50300 + self.worker_index * 100 + self.vector_index
         log.info('Using port %d...', port)
 
         if self._is_server():
@@ -76,7 +76,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
                 '+viz_respawn_delay 0 '  # Sets delay between respanws (in seconds).
-                '+viz_connect_timeout 999 '  # In seconds
+                '+viz_connect_timeout 120 '  # In seconds
             )
 
             # Additional commands:
@@ -93,7 +93,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Join existing game.
             self.game.add_game_args(
                 f'-join 127.0.0.1:{port} '  # Connect to a host for a multiplayer game.
-                '+viz_connect_timeout 999 '
+                '+viz_connect_timeout 120 '
             )
 
             # Name your agent and select color
@@ -103,7 +103,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         self.game.init()
 
-        log.info('Initialized w:%d v:%d', self.worker_index, self.vector_index)
+        log.info('Initialized w:%d v:%d player:%d', self.worker_index, self.vector_index, self.player_id)
         self.initialized = True
 
     def _random_bot(self, difficulty, used_bots):

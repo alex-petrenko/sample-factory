@@ -2,7 +2,8 @@ import time
 from multiprocessing import Process
 from unittest import TestCase
 
-from envs.doom.doom_utils import make_doom_multiplayer_env, doom_env_by_name
+from envs.doom.doom_utils import make_doom_env
+from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnvAggregator
 from envs.tests.test_envs import default_doom_cfg
 from utils.utils import log, AttrDict
 
@@ -10,9 +11,11 @@ from utils.utils import log, AttrDict
 class TestDoom(TestCase):
     @staticmethod
     def make_standard_dm(env_config):
-        return make_doom_multiplayer_env(
-            doom_env_by_name('doom_dm'), cfg=default_doom_cfg(), env_config=env_config,
-        )
+        cfg = default_doom_cfg()
+        cfg.env_frameskip = 2
+        env = make_doom_env('doom_dwango5_multi', cfg=cfg, env_config=env_config)
+        env.skip_frames = cfg.env_frameskip
+        return env
 
     @staticmethod
     def doom_multiagent(make_multi_env, worker_index, num_steps=1000):
@@ -48,8 +51,7 @@ class TestDoom(TestCase):
     def test_doom_multiagent(self):
         self.doom_multiagent(self.make_standard_dm, worker_index=0)
 
-    # fails often when one or two clients can't connect (TODO!)
-    def skipped_test_doom_multiagent_parallel(self):
+    def test_doom_multiagent_parallel(self):
         num_workers = 16
         workers = []
 
@@ -58,6 +60,41 @@ class TestDoom(TestCase):
             worker = Process(target=self.doom_multiagent, args=(self.make_standard_dm, i, 200))
             worker.start()
             workers.append(worker)
+            time.sleep(0.01)
 
         for i in range(num_workers):
             workers[i].join()
+
+    def test_doom_multiagent_multi_env(self):
+        agents_per_env = 6
+        num_envs = 16
+        num_workers = 16
+
+        skip_frames = 2  # hardcoded
+
+        multi_env = MultiAgentEnvAggregator(
+            num_envs=num_envs,
+            num_workers=num_workers,
+            make_env_func=self.make_standard_dm,
+            stats_episodes=10,
+            use_multiprocessing=True,
+        )
+
+        obs = multi_env.reset()
+        actions = [multi_env.action_space.sample()] * (agents_per_env * num_envs)
+        obs, rew, done, info = multi_env.step(actions)
+        log.info('Rewards: %r', rew)
+
+        start = time.time()
+        num_steps = 300
+        for i in range(num_steps):
+            obs, rew, done, info = multi_env.step(actions)
+            if i % 50 == 0:
+                log.debug('Steps %d, rew: %r', i, rew)
+
+        took = time.time() - start
+        log.debug('Took %.3f sec to run %d steps, steps/sec: %.1f', took, num_steps, num_steps / took)
+        log.debug('Observations fps: %.1f', num_steps * multi_env.num_agents * num_envs / took)
+        log.debug('Environment fps: %.1f', num_steps * multi_env.num_agents * num_envs * skip_frames / took)
+
+        log.info('Done!')

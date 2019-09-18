@@ -1,7 +1,7 @@
 from gym.spaces import Discrete
 
 from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
-    doom_action_space_hybrid, doom_action_space_hybrid_no_weap, doom_action_space_experimental, doom_action_space_basic
+    doom_action_space_hybrid_no_weap, doom_action_space_experimental, doom_action_space_basic
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
@@ -104,6 +104,14 @@ DOOM_ENVS = [
         num_agents=1, num_bots=7,
         extra_wrappers=[(DoomAdditionalInputAndRewards, {}), (ExplorationWrapper, {})],
     ),
+
+    DoomSpec(
+        'doom_dwango5_multi',
+        'dwango5_dm_continuous_weap.cfg',
+        doom_action_space_experimental(),
+        1.0, int(1e9),
+        num_agents=6, num_bots=2,
+    ),
 ]
 
 
@@ -144,7 +152,13 @@ def make_doom_env_impl(
         )
 
     record_to = cfg.record_to if 'record_to' in cfg else None
-    if record_to is not None:
+    should_record = False
+    if env_config is None:
+        should_record = True
+    elif env_config.worker_index == 0 and env_config.vector_index == 0 and player_id == 0:
+        should_record = True
+
+    if record_to is not None and should_record:
         env = RecordingWrapper(env, record_to)
 
     env = MultiplayerStatsWrapper(env)
@@ -188,6 +202,8 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
 
     if cfg.num_bots < 0:
         num_bots = doom_spec.num_bots
+    else:
+        num_bots = cfg.num_bots
 
     num_agents = doom_spec.num_agents if cfg.num_agents <= 0 else cfg.num_agents
     max_num_players = num_agents + cfg.num_humans
@@ -200,14 +216,15 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
             cfg=cfg,
             player_id=player_id, num_agents=num_agents, max_num_players=max_num_players, num_bots=num_bots,
             skip_frames=1 if is_multiagent else skip_frames,  # multi-agent skipped frames are handled by the wrapper
+            env_config=env_config,
             **kwargs,
         )
 
     if is_multiagent:
         # create a wrapper that treats multiple game instances as a single multi-agent environment
 
-        from envs.doom.multiplayer.doom_multiagent_wrapper import VizdoomMultiAgentEnv
-        env = VizdoomMultiAgentEnv(
+        from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
+        env = MultiAgentEnv(
             num_agents=num_agents,
             make_env_func=make_env_func,
             env_config=env_config,
