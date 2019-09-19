@@ -13,4 +13,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_bots_multi_v2_v41_fs2', experiments=[_experiment], pause_between_experiments=10, use_gpus=1, experiments_per_gpu=2, max_parallel=12)
+RUN_DESCRIPTION = RunDescription('doom_bots_multi_v2_v41_fs2', experiments=[_experiment], pause_between_experiments=10, use_gpus=2, experiments_per_gpu=2, max_parallel=4)

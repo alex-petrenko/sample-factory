@@ -54,6 +54,7 @@ class MultiAgentEnvWorker:
     def _init(self, init_info):
         log.info('Initializing env for player %d, init_info: %r...', self.player_id, init_info)
         env = init_multiplayer_env(self.make_env_func, self.player_id, self.env_config, init_info)
+        env.reset()
         return env
 
     def _terminate(self, env):
@@ -192,7 +193,7 @@ class MultiAgentEnv:
             ]
 
             try:
-                port = find_available_port(BASE_UDP_PORT + self.env_config.worker_index, increment=100)
+                port = find_available_port(DEFAULT_UDP_PORT + self.env_config.worker_index, increment=100)
                 log.debug('Using port %d', port)
                 init_info = dict(port=port)
 
@@ -302,10 +303,10 @@ class MultiAgentEnvAggregator(MultiEnv):
         else:
             raise Exception('Expected multi-agent environment')
 
-        global BASE_UDP_PORT
-        BASE_UDP_PORT = find_available_port(BASE_UDP_PORT)
+        global DEFAULT_UDP_PORT
+        DEFAULT_UDP_PORT = find_available_port(DEFAULT_UDP_PORT)
         time.sleep(1)
-        log.debug('Default UDP port changed to %r', BASE_UDP_PORT)
+        log.debug('Default UDP port changed to %r', DEFAULT_UDP_PORT)
 
         super().__init__(num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing)
 
