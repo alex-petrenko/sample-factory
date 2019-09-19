@@ -1,3 +1,4 @@
+import sys
 import time
 from collections import OrderedDict
 from enum import Enum
@@ -186,7 +187,8 @@ class MultiAgentEnv:
         if self.initialized:
             return
 
-        num_attempts = 20
+        num_attempts = 25
+        attempt = 0
         for attempt in range(num_attempts):
             self.workers = [
                 MultiAgentEnvWorker(i, self.make_env_func, self.env_config) for i in range(self.num_agents)
@@ -205,7 +207,7 @@ class MultiAgentEnv:
                         time.sleep(0.1)
 
                 for i, worker in enumerate(self.workers):
-                    worker.result_queue.get(timeout=10)
+                    worker.result_queue.get(timeout=5)
                     worker.result_queue.task_done()
                     worker.task_queue.join()
             except Exception as exc:
@@ -214,10 +216,16 @@ class MultiAgentEnv:
                     kill(worker.process.pid)
                 del self.workers
                 log.warning('Could not initialize env, try again! Error: %r', exc)
+                time.sleep(1)
             else:
                 break
 
+        if attempt >= num_attempts:
+            log.error('Could not initialize env even after %d attempts. Fail!', attempt)
+            sys.exit(1)
+
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
+        log.debug('Took %d attempts!\n', attempt + 1)
         self.initialized = True
 
     def info(self):
@@ -263,7 +271,7 @@ class MultiAgentEnv:
 
     def close(self):
         if self.workers is not None:
-            log.info('Stopping multi env...')
+            log.info('Stopping multiagent env %d...', self.env_config.worker_index)
             for worker in self.workers:
                 worker.task_queue.put((None, TaskType.TERMINATE))
                 time.sleep(0.1)

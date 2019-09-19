@@ -327,7 +327,7 @@ class MultiEnv:
         return observations, rewards, dones
 
     def close(self):
-        log.info('Stopping multi env...')
+        log.info('Stopping multi env wrapper...')
 
         for worker in self.workers:
             worker.task_queue.put((None, MsgType.TERMINATE))

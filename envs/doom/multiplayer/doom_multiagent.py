@@ -1,4 +1,5 @@
 import copy
+import sys
 
 import numpy as np
 
@@ -93,7 +94,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
                 '+sv_nocrouch 1 '  # Disables crouching.
                 f'+viz_respawn_delay {self.respawn_delay} '  # Sets delay between respanws (in seconds).
-                '+viz_connect_timeout 10 '  # In seconds
+                '+viz_connect_timeout 4 '  # In seconds
             )
 
             # Additional commands:
@@ -110,7 +111,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Join existing game.
             self.game.add_game_args(
                 f'-join 127.0.0.1:{port} '  # Connect to a host for a multiplayer game.
-                '+viz_connect_timeout 10 '
+                '+viz_connect_timeout 4 '
             )
 
             # Name your agent and select color
@@ -118,7 +119,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
             self.game.add_game_args(f'+name AI{self.player_id} +colorset 3')
 
-        self.game.init()
+        try:
+            self.game.init()
+        except Exception as exc:
+            log.warning('game.init() threw exception. Terminate process')
+            sys.exit(1)
 
         log.info('Initialized w:%d v:%d player:%d', self.worker_index, self.vector_index, self.player_id)
         self.initialized = True

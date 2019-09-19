@@ -97,4 +97,5 @@ class TestDoom(TestCase):
         log.debug('Observations fps: %.1f', num_steps * multi_env.num_agents * num_envs / took)
         log.debug('Environment fps: %.1f', num_steps * multi_env.num_agents * num_envs * skip_frames / took)
 
+        multi_env.close()
         log.info('Done!')
