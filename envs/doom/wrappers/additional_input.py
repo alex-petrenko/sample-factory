@@ -37,6 +37,7 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
         current_obs_space = self.observation_space
 
         self.with_reward_shaping = with_reward_shaping
+        self.reward_shaping_version = reward_shaping_version
 
         self.num_weapons = 10
 
@@ -131,7 +132,17 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
             # skip reward calculation
             return obs_dict, shaping_reward
 
-        if not done:
+        was_dead = True if self._prev_info is None else self._prev_info.get('DEAD')
+        is_alive = not info.get('DEAD')
+
+        just_respawned = False
+        if was_dead and is_alive:
+            just_respawned = True
+            # log.debug('Just respawned!')
+
+        skip_reward_on_respawn = just_respawned and self.reward_shaping_version == 1
+
+        if not done and not skip_reward_on_respawn:
             for var_name, rewards in self.reward_shaping_vars.items():
                 if var_name not in self._prev_vars:
                     continue

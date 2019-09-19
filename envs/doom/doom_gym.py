@@ -482,8 +482,10 @@ class VizdoomEnv(gym.Env):
                 for frame in range(skip_frames):
                     doom._actions_flattened = actions
                     _, rew, _, _ = env.step(actions)
-                    total_rew += rew
-                    log.info('Reward: %.3f, total: %.3f', rew, total_rew)
+                    new_total_rew = total_rew + rew
+                    if new_total_rew != total_rew:
+                        log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
+                    total_rew = new_total_rew
                     state = doom.game.get_state()
 
                     verbose = True
