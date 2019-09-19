@@ -26,7 +26,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
 
     _reward_shaping_1 = copy.deepcopy(_reward_shaping_0)
     _reward_shaping_1.update({
-        'DEATHCOUNT': (-1.0, +1),
+        'FRAGCOUNT': (+1, 0),
+        'DEATHCOUNT': (-1, +1),
         'HEALTH': (+0.005, -0.005),
     })
 
