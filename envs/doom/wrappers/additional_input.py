@@ -17,9 +17,6 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
     _reward_shaping_0 = {
         'FRAGCOUNT': (+1, -1.5),
         'DEATHCOUNT': (-0.75, +0.75),
-        'HITCOUNT': (+0.01, -0.01),
-        'DAMAGECOUNT': (+0.003, -0.003),
-
         'HEALTH': (+0.005, -0.003),
         'ARMOR': (+0.005, -0.001),
     }
@@ -28,6 +25,8 @@ class DoomAdditionalInputAndRewards(gym.Wrapper):
     _reward_shaping_1.update({
         'FRAGCOUNT': (+1, 0),
         'DEATHCOUNT': (-1, +1),
+        'HITCOUNT': (0, 0),
+        'DAMAGECOUNT': (+0.005, -0.005),
         'HEALTH': (+0.005, -0.005),
     })
 
