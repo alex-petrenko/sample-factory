@@ -2,9 +2,8 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.run_processes import run
 
 _params = ParamGrid([
-    ('ppo_epochs', [1]),
-    ('batch_size', [1024]),
-    ('learning_rate', [1e-4, 2e-4, 4e-4]),
+    ('ppo_epochs', [1, 2]),
+    ('early_stopping', ['True', 'False']),
 ])
 
 _experiment = Experiment(
