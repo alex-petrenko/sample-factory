@@ -40,6 +40,7 @@ def key_to_action_default(key):
         Key.alt: 6,
         Key.ctrl: 11,
         Key.shift: 12,
+        Key.space: 13,
         Key.right: 'turn_right',
         Key.left: 'turn_left',
     }
@@ -122,6 +123,8 @@ class VizdoomEnv(gym.Env):
 
         self._num_episodes = 0
 
+        self.mode = 'algo'
+
         self.seed()
 
     def seed(self, seed=None):
@@ -159,12 +162,12 @@ class VizdoomEnv(gym.Env):
 
         self._set_game_mode(mode)
 
-    def _ensure_initialized(self, mode='algo'):
+    def _ensure_initialized(self):
         if self.initialized:
             # Doom env already initialized!
             return
 
-        self._create_doom_game(mode)
+        self._create_doom_game(self.mode)
 
         # (optional) top-down view provided by the game engine
         if self.show_automap:
@@ -225,8 +228,8 @@ class VizdoomEnv(gym.Env):
     def demo_name(episode_idx):
         return f'ep_{episode_idx}_rec.lmp'
 
-    def reset(self, mode='algo'):
-        self._ensure_initialized(mode)
+    def reset(self):
+        self._ensure_initialized()
 
         if self.record_to is None or self.is_multiplayer:
             # no demo recording (default)
@@ -444,7 +447,7 @@ class VizdoomEnv(gym.Env):
 
     # noinspection PyProtectedMember
     @staticmethod
-    def play_human_mode(env, skip_frames=1, num_episodes=3):
+    def play_human_mode(env, skip_frames=1, num_episodes=3, num_actions=None):
         from pynput.keyboard import Listener
 
         doom = env.unwrapped
@@ -459,14 +462,15 @@ class VizdoomEnv(gym.Env):
         listener_thread.start()
 
         for episode in range(num_episodes):
-            doom.reset('human')
+            doom.mode = 'human'
+            env.reset()
             last_render_time = time.time()
             time_between_frames = 1.0 / 35.0
 
             total_rew = 0.0
 
             while not doom.game.is_episode_finished() and not doom._terminate:
-                num_actions = 14  # hardcoded here for simplicity
+                num_actions = 14 if num_actions is None else num_actions
                 turn_delta_action_idx = num_actions - 1
 
                 actions = [0] * num_actions
@@ -482,6 +486,7 @@ class VizdoomEnv(gym.Env):
                 for frame in range(skip_frames):
                     doom._actions_flattened = actions
                     _, rew, _, _ = env.step(actions)
+
                     new_total_rew = total_rew + rew
                     if new_total_rew != total_rew:
                         log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
@@ -525,7 +530,8 @@ class VizdoomEnv(gym.Env):
     @staticmethod
     def replay(env, rec_path):
         doom = env.unwrapped
-        doom._ensure_initialized('replay')
+        doom.mode = 'replay'
+        doom._ensure_initialized()
         doom.game.replay_episode(rec_path)
 
         episode_reward = 0

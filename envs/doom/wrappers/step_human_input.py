@@ -11,13 +11,15 @@ class StepHumanInput(gym.Wrapper):
         super(StepHumanInput, self).__init__(env)
 
     def reset(self):
-        self.unwrapped._ensure_initialized('human')
+        self.unwrapped.mode = 'human'
+        self.unwrapped._ensure_initialized()
         return self.env.reset()
 
     def step(self, action):
         del action  # we actually ignore action and take input from keyboard
 
-        self.unwrapped._ensure_initialized('human')
+        self.unwrapped.mode = 'human'
+        self.unwrapped._ensure_initialized()
 
         doom_env = self.unwrapped
         doom_env.game.advance_action()

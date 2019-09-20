@@ -126,6 +126,28 @@ DOOM_ENVS = [
             (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
         ]
     ),
+
+    DoomSpec(
+        'doom_ssl2_duel',
+        'ssl2.cfg',
+        doom_action_space_experimental(with_use=True),
+        1.0, int(1e9),
+        num_agents=2, num_bots=0, respawn_delay=2,
+        extra_wrappers=[
+            (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
+        ]
+    ),
+
+    DoomSpec(
+        'doom_freedm',
+        'freedm.cfg',
+        doom_action_space_experimental(with_use=True),
+        1.0, int(1e9),
+        num_agents=6, num_bots=2, respawn_delay=2,
+        extra_wrappers=[
+            (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
+        ]
+    ),
 ]
 
 

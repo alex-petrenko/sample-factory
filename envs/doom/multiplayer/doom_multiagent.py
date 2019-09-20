@@ -68,12 +68,12 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
     def _is_server(self):
         return self.player_id == 0
 
-    def _ensure_initialized(self, mode='algo'):
+    def _ensure_initialized(self):
         if self.initialized:
             # Doom env already initialized!
             return
 
-        self._create_doom_game(mode)
+        self._create_doom_game(self.mode)
         port = DEFAULT_UDP_PORT if self.init_info is None else self.init_info.get('port')
 
         if self._is_server():
@@ -136,8 +136,8 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 used_bots.append(bot_name)
                 return bot_name
 
-    def reset(self, mode='algo'):
-        obs = super().reset(mode)
+    def reset(self):
+        obs = super().reset()
 
         if self._is_server() and self.num_bots > 0:
             self.game.send_game_command('removebots')
@@ -156,7 +156,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     else:
                         bot_name = ''
 
-                    # log.info('Adding bot %d %s', i, bot_name)
+                    log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot{bot_name}')
                 else:
                     # add random bots according to the desired difficulty
@@ -165,7 +165,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     diff = max(self.easiest_bot, diff)
                     diff = min(self.hardest_bot, diff)
                     bot_name = self._random_bot(diff, used_bots)
-                    # log.info('Adding bot %d %s', i, bot_name)
+                    log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot {bot_name}')
 
         self.timestep = 0

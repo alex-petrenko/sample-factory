@@ -106,7 +106,7 @@ def doom_action_space_discrete_no_weap():
     ))
 
 
-def doom_action_space_experimental():
+def doom_action_space_experimental(with_use=False):
     """
         MOVE_FORWARD
         MOVE_BACKWARD
@@ -123,11 +123,16 @@ def doom_action_space_experimental():
         SPEED
         TURN_LEFT_RIGHT_DELTA
     """
-    return gym.spaces.Tuple((
+    spaces = [
         Discrete(3),  # noop, forward, backward
         Discrete(3),  # noop, move right, move left
         Discrete(8),  # noop, select weapons 1-7
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
-        Discretized(21, min_action=-12.5, max_action=12.5),  # turning using discretized continuous control
-    ))
+    ]
+    if with_use:
+        spaces.append(Discrete(2))  # noop, use
+
+    spaces.append(Discretized(21, min_action=-12.5, max_action=12.5))  # turning using discretized continuous control
+
+    return gym.spaces.Tuple(spaces)
