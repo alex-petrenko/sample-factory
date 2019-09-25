@@ -1,5 +1,4 @@
 import copy
-import math
 import time
 from collections import OrderedDict
 
@@ -13,7 +12,6 @@ from algorithms.memento.obs_mem_wrapper import ObsMemWrapper
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, sample_actions_log_probs
 from algorithms.utils.agent import TrainStatus, Agent
 from algorithms.utils.algo_utils import calculate_gae, num_env_steps, EPS
-from algorithms.utils.multi_env import MultiEnv
 from envs.env_utils import create_multi_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict, str2bool
@@ -291,8 +289,12 @@ class ActorCritic(nn.Module):
         ))
         return result
 
-    def forward(self, obs_dict, rnn_states, masks):
+    def forward(self, obs_dict, rnn_states, masks=None):
         x = self.forward_head(obs_dict)
+
+        if masks is None:
+            masks = torch.ones([x.shape[0], 1]).to(x.device)
+
         x, new_rnn_states, memory_write = self.forward_core(x, rnn_states, masks, obs_dict.get('memory', None))
         result = self.forward_tail(x)
         result.rnn_states = new_rnn_states

@@ -24,7 +24,7 @@ def concat_grid(obs):
 
 
 def cvt_doom_obs(obs):
-    w, h = 800, 450
+    w, h = 1200, 675
     if obs.shape[0] <= 4:
         # channels first
         obs = np.transpose(obs, (1, 2, 0))

@@ -3,7 +3,6 @@ import json
 import os
 import sys
 
-from algorithms.ppo.agent_ppo import AgentPPO
 from algorithms.utils.agent import Agent
 from algorithms.utils.evaluation_config import add_eval_args
 from envs.env_config import add_env_args, env_override_defaults
@@ -14,7 +13,11 @@ def get_algo_class(algo):
     algo_class = Agent
 
     if algo == 'PPO':
+        from algorithms.ppo.agent_ppo import AgentPPO
         algo_class = AgentPPO
+    elif algo == 'APPO':
+        from algorithms.appo.appo import APPO
+        algo_class = APPO
     else:
         log.warning('Algorithm %s is not supported', algo)
 

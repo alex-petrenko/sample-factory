@@ -142,10 +142,10 @@ class MultiAgentEnv:
 
     def await_tasks(self, data, task_type, timeout=None):
         """
-        Task result is always a tuple of dicts, e.g.:
+        Task result is always a tuple of lists, e.g.:
         (
-            {'0': 0th_agent_obs, '1': 1st_agent_obs, ... ,
-            {'0': 0th_agent_reward, '1': 1st_agent_obs, ... ,
+            [0th_agent_obs, 1st_agent_obs, ... ],
+            [0th_agent_reward, 1st_agent_reward, ... ],
             ...
         )
 
@@ -154,14 +154,14 @@ class MultiAgentEnv:
 
         """
         if data is None:
-            data = {str(i): None for i in range(self.num_agents)}
+            data = [None] * self.num_agents
 
         assert len(data) == self.num_agents
 
         for i, worker in enumerate(self.workers):
-            worker.task_queue.put((data[str(i)], task_type))
+            worker.task_queue.put((data[i], task_type))
 
-        result_dicts = None
+        result_lists = None
         for i, worker in enumerate(self.workers):
             results = safe_get(
                 worker.result_queue,
@@ -175,13 +175,13 @@ class MultiAgentEnv:
             if not isinstance(results, (tuple, list)):
                 results = [results]
 
-            if result_dicts is None:
-                result_dicts = tuple(OrderedDict() for _ in results)
+            if result_lists is None:
+                result_lists = tuple([] for _ in results)
 
             for j, r in enumerate(results):
-                result_dicts[j][str(i)] = r
+                result_lists[j].append(r)
 
-        return result_dicts
+        return result_lists
 
     def _ensure_initialized(self):
         if self.initialized:
@@ -244,7 +244,6 @@ class MultiAgentEnv:
         for frame in range(self.skip_frames - 1):
             self.await_tasks(actions, TaskType.STEP)
         obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
-        dones['__all__'] = all(dones.values())
 
         if self.enable_rendering:
             self.last_obs = obs
@@ -260,11 +259,11 @@ class MultiAgentEnv:
 
         render_multiagent = True
         if render_multiagent:
-            obs_display = [o['obs'] for o in self.last_obs.values()]
+            obs_display = [o['obs'] for o in self.last_obs]
             obs_grid = concat_grid(obs_display)
             cv2.imshow('vizdoom', obs_grid)
         else:
-            obs_display = self.last_obs['0']['obs']
+            obs_display = self.last_obs[0]['obs']
             cv2.imshow('vizdoom', cvt_doom_obs(obs_display))
 
         cv2.waitKey(1)
@@ -283,22 +282,6 @@ class MultiAgentEnv:
         pass
 
 
-def unbatch_multiagent_data(x, num_agents):
-    unbatched = dict()
-    for i in range(num_agents):
-        unbatched[str(i)] = x[i]
-    return unbatched
-
-
-def flatten_multiagent_data(x, num_agents):
-    x_flattened = []
-    for x_env in x:
-        for i in range(num_agents):
-            x_flattened.append(x_env[str(i)])
-
-    return x_flattened
-
-
 class MultiAgentEnvAggregator(MultiEnv):
     """
     Vectorized wrapper for multi-agent envs. This is for a special usecase where all agents (policies) are the same,
@@ -313,8 +296,8 @@ class MultiAgentEnvAggregator(MultiEnv):
 
         global DEFAULT_UDP_PORT
         DEFAULT_UDP_PORT = find_available_port(DEFAULT_UDP_PORT)
-        time.sleep(1)
         log.debug('Default UDP port changed to %r', DEFAULT_UDP_PORT)
+        time.sleep(0.1)
 
         super().__init__(num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing)
 
@@ -327,29 +310,9 @@ class MultiAgentEnvAggregator(MultiEnv):
             data = [None] * self.num_agents * self.num_envs
 
         assert len(data) == self.num_agents * self.num_envs
-        data = np.split(np.array(data), self.num_envs)
-
-        data_dicts = []
-        for env_data in data:
-            env_dict = OrderedDict()
-            for idx, agent_data in enumerate(env_data):
-                env_dict[str(idx)] = agent_data
-
-            data_dicts.append(env_dict)
-
-        assert len(data_dicts) == self.num_envs
-
-        data = np.split(np.array(data_dicts), self.num_workers)
+        data = np.split(np.array(data), self.num_workers)
         assert len(data) == self.num_workers
         return data
-
-    def info(self):
-        infos = super().info()
-        return self._flatten(infos)
-
-    def reset(self):
-        observations = super().reset()
-        return self._flatten(observations)
 
     def step(self, actions, reset=None):
         if reset is None:
@@ -358,13 +321,5 @@ class MultiAgentEnvAggregator(MultiEnv):
             results = self.await_tasks(list(zip(actions, reset)), MsgType.STEP_REAL_RESET)
         observations, rewards, dones, infos = zip(*results)
 
-        observations = self._flatten(observations)
-        rewards = self._flatten(rewards)
-        dones = self._flatten(dones)
-        infos = self._flatten(infos)
-
         self._update_stats(rewards, dones, infos)
         return observations, rewards, dones, infos
-
-    def _flatten(self, x):
-        return flatten_multiagent_data(x, self.num_agents)

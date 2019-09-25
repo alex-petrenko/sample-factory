@@ -6,8 +6,8 @@ import cv2
 import numpy as np
 
 from algorithms.utils.arguments import parse_args, get_algo_class, load_from_checkpoint
+from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
-from envs.doom.multiplayer.doom_multiagent_wrapper import flatten_multiagent_data, unbatch_multiagent_data
 from utils.utils import log, AttrDict
 
 
@@ -50,6 +50,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     env.seed(0)
 
     is_multiagent = hasattr(env, 'num_agents') and env.num_agents > 1
+    if not is_multiagent:
+        env = MultiAgentWrapper(env)
 
     episode_rewards = []
     num_frames = 0
@@ -60,9 +62,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
         return max_num_frames is not None and frames > max_num_frames
 
     for _ in range(max_num_episodes):
-        obs = [env.reset()]
-        if is_multiagent:
-            obs = flatten_multiagent_data(obs, env.num_agents)
+        obs = env.reset()
 
         done = [False] * len(obs)
 
@@ -71,10 +71,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
         while True:
             actions, rnn_states, res = agent.best_action(obs, done, rnn_states, deterministic=False)
-            if is_multiagent:
-                actions = unbatch_multiagent_data(actions, env.num_agents)
-            else:
-                actions = actions[0]
 
             for _ in range(render_action_repeat):
                 if not cfg.no_render:
@@ -90,15 +86,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                     env.render()
 
                 obs, rew, done, _ = env.step(actions)
-                if is_multiagent:
-                    obs = flatten_multiagent_data([obs], env.num_agents)
-                    rew = np.mean(flatten_multiagent_data([rew], env.num_agents))
-                    done = flatten_multiagent_data([done], env.num_agents)
-                else:
-                    obs = [obs]
-                    done = [done]
 
-                episode_reward += rew
+                episode_reward += np.mean(rew)
                 num_frames += 1
 
                 agent._update_memory(actions, res.memory_write, done)
