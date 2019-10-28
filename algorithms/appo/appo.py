@@ -6,10 +6,14 @@ from collections import OrderedDict
 import ray
 import torch
 import numpy as np
+
+from torch import nn
+from torch.nn import functional
 from tensorboardX import SummaryWriter
 
-from algorithms.ppo.agent_ppo import ActorCritic
-from algorithms.utils.algo_utils import EPS, num_env_steps
+from algorithms.ppo.agent_ppo import calc_num_elements
+from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
+from algorithms.utils.algo_utils import num_env_steps, EPS
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
 from utils.timing import Timing
@@ -87,24 +91,206 @@ class Learner:
         self.cfg = cfg
 
 
+class ActorCritic(nn.Module):
+    def __init__(self, obs_space, action_space, cfg):
+        super().__init__()
+
+        self.cfg = cfg
+        self.action_space = action_space
+
+        def nonlinearity():
+            return nn.ELU(inplace=True)
+
+        obs_shape = AttrDict()
+        if hasattr(obs_space, 'spaces'):
+            for key, space in obs_space.spaces.items():
+                obs_shape[key] = space.shape
+        else:
+            obs_shape.obs = obs_space.shape
+        input_ch = obs_shape.obs[0]
+        log.debug('Num input channels: %d', input_ch)
+
+        if cfg.encoder == 'convnet_simple':
+            conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
+        elif cfg.encoder == 'minigrid_convnet_tiny':
+            conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
+        else:
+            raise NotImplementedError(f'Unknown encoder {cfg.encoder}')
+
+        conv_layers = []
+        for layer in conv_filters:
+            if layer == 'maxpool_2x2':
+                conv_layers.append(nn.MaxPool2d((2, 2)))
+            elif isinstance(layer, (list, tuple)):
+                inp_ch, out_ch, filter_size, stride = layer
+                conv_layers.append(nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride))
+                conv_layers.append(nonlinearity())
+            else:
+                raise NotImplementedError(f'Layer {layer} not supported!')
+
+        self.conv_head = nn.Sequential(*conv_layers)
+        self.conv_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        log.debug('Convolutional layer output size: %r', self.conv_out_size)
+
+        self.head_out_size = self.conv_out_size
+
+        if 'obs_mem' in obs_shape:
+            self.head_out_size += self.conv_out_size
+
+        self.measurements_head = None
+        if 'measurements' in obs_shape:
+            self.measurements_head = nn.Sequential(
+                nn.Linear(obs_shape.measurements[0], 128),
+                nonlinearity(),
+                nn.Linear(128, 128),
+                nonlinearity(),
+            )
+            measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
+            self.head_out_size += measurements_out_size
+
+        log.debug('Policy head output size: %r', self.head_out_size)
+
+        self.hidden_size = cfg.hidden_size
+        self.linear1 = nn.Linear(self.head_out_size, self.hidden_size)
+
+        fc_output_size = self.hidden_size
+
+        self.mem_head = None
+        if cfg.mem_size > 0:
+            mem_out_size = 128
+            self.mem_head = nn.Sequential(
+                nn.Linear(cfg.mem_size * cfg.mem_feature, mem_out_size),
+                nonlinearity(),
+            )
+            fc_output_size += mem_out_size
+
+        if cfg.use_rnn:
+            self.core = nn.GRUCell(fc_output_size, self.hidden_size)
+        else:
+            self.core = nn.Sequential(
+                nn.Linear(fc_output_size, self.hidden_size),
+                nonlinearity(),
+            )
+
+        if cfg.mem_size > 0:
+            self.memory_write = nn.Linear(self.hidden_size, cfg.mem_feature)
+
+        self.critic_linear = nn.Linear(self.hidden_size, 1)
+        self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
+
+        self.apply(self.initialize_weights)
+
+        self.train()
+
+    def forward_head(self, obs_dict):
+        mean = self.cfg.obs_subtract_mean
+        scale = self.cfg.obs_scale
+
+        if abs(mean) > EPS and abs(scale - 1.0) > EPS:
+            obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
+
+        x = self.conv_head(obs_dict.obs)
+        x = x.view(-1, self.conv_out_size)
+
+        if self.cfg.obs_mem:
+            obs_mem = self.conv_head(obs_dict.obs_mem)
+            obs_mem = obs_mem.view(-1, self.conv_out_size)
+            x = torch.cat((x, obs_mem), dim=1)
+
+        if self.measurements_head is not None:
+            measurements = self.measurements_head(obs_dict.measurements)
+            x = torch.cat((x, measurements), dim=1)
+
+        x = self.linear1(x)
+        x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
+        return x
+
+    def forward_core(self, head_output, rnn_states, masks, memory):
+        if self.mem_head is not None:
+            memory = self.mem_head(memory)
+            head_output = torch.cat((head_output, memory), dim=1)
+
+        if self.cfg.use_rnn:
+            x = new_rnn_states = self.core(head_output, rnn_states * masks)
+        else:
+            x = self.core(head_output)
+            new_rnn_states = torch.zeros(x.shape[0])
+
+        memory_write = None
+        if self.cfg.mem_size > 0:
+            memory_write = self.memory_write(x)
+
+        return x, new_rnn_states, memory_write
+
+    def forward_tail(self, core_output):
+        values = self.critic_linear(core_output)
+        action_logits = self.dist_linear(core_output)
+        dist = get_action_distribution(self.action_space, raw_logits=action_logits)
+
+        # for complex action spaces it is faster to do these together
+        actions, log_prob_actions = sample_actions_log_probs(dist)
+
+        result = AttrDict(dict(
+            actions=actions,
+            action_logits=action_logits,
+            log_prob_actions=log_prob_actions,
+            action_distribution=dist,
+            values=values,
+        ))
+        return result
+
+    def forward(self, obs_dict, rnn_states, masks=None):
+        x = self.forward_head(obs_dict)
+
+        if masks is None:
+            masks = torch.ones([x.shape[0], 1]).to(x.device)
+
+        x, new_rnn_states, memory_write = self.forward_core(x, rnn_states, masks, obs_dict.get('memory', None))
+        result = self.forward_tail(x)
+        result.rnn_states = new_rnn_states
+        result.memory_write = memory_write
+        return result
+
+    @staticmethod
+    def initialize_weights(layer):
+        if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
+            nn.init.orthogonal_(layer.weight.data, gain=1)
+            layer.bias.data.fill_(0)
+        elif type(layer) == nn.GRUCell:
+            nn.init.orthogonal_(layer.weight_ih, gain=1)
+            nn.init.orthogonal_(layer.weight_hh, gain=1)
+            layer.bias_ih.data.fill_(0)
+            layer.bias_hh.data.fill_(0)
+        else:
+            pass
+
+
 class AgentAPPO(Agent):
     def __init__(self, cfg, env):
         super().__init__(cfg)
 
+        # TODO
         torch.set_num_threads(1)
         self.device = 'cpu'
+        # self.device = torch.device('cuda')
 
         # initialize the Torch module
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
         self.actor_critic.to(self.device)
 
         self.observations = None
+        self.obs_dict = None
+
         self.rnn_states = None
         self.policy_output = None
 
         self.trajectories = None
 
     def preprocess_observations(self, observations):
+        """
+        Unpack dict observations.
+        That is, convert a list of dicts into a dict of lists (numpy arrays).
+        """
         if len(observations) <= 0:
             return observations
 
@@ -117,24 +303,21 @@ class AgentAPPO(Agent):
             # handle flat observations also as dict
             obs_dict.obs = observations
 
-        mean = self.cfg.obs_subtract_mean
-        scale = self.cfg.obs_scale
+        for key, x in obs_dict.items():
+            obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
-        # TODO: convert to numpy?!
-        # TODO: do the preprocessing later to avoid sharing float buffers!
-        if abs(mean) > EPS and abs(scale - 1.0) > EPS:
-            obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
-
-        self.observations = obs_dict
+        self.observations = observations
+        self.obs_dict = obs_dict
 
     def reset_rnn_states(self):
-        self.rnn_states = torch.zeros(self.observations.shape[0], self.cfg.hidden_size).to(self.device)
+        batch_size = len(self.obs_dict.obs)
+        self.rnn_states = torch.zeros(batch_size, self.cfg.hidden_size).to(self.device)
 
     def step(self):
         if self.rnn_states is None:
             self.reset_rnn_states()
 
-        self.policy_output = self.actor_critic(self.observations, self.rnn_states)
+        self.policy_output = self.actor_critic(self.obs_dict, self.rnn_states)
         return self.policy_output
 
     def _trajectory_add_args(self, args):
@@ -142,7 +325,10 @@ class AgentAPPO(Agent):
             if arg_value is None:
                 continue
 
-            for i, x in enumerate(arg_value.items()):
+            if isinstance(arg_value, torch.Tensor):
+                arg_value = arg_value.cpu().numpy()
+
+            for i, x in enumerate(arg_value):
                 if arg_name not in self.trajectories[i]:
                     self.trajectories[i][arg_name] = [x]
                 else:
@@ -152,6 +338,7 @@ class AgentAPPO(Agent):
             self, obs, rnn_states, actions, action_logits, log_prob_actions, values, rewards, dones,
     ):
         args = copy.copy(locals())
+        del args['self']  # only args passed to the function without "self"
         self._trajectory_add_args(args)
 
     def update_trajectories(self, rewards, dones):
@@ -167,15 +354,28 @@ class AgentAPPO(Agent):
         )
 
     def calculate_next_values(self):
-        next_values = self.actor_critic(self.observations, self.rnn_states).values
+        next_values = self.actor_critic(self.obs_dict, self.rnn_states).values
+        next_values = next_values.cpu().numpy()
         for t, v in zip(self.trajectories, next_values):
             t['values'].append(v)
 
 
 @ray.remote
+class TestActor:
+    def __init__(self):
+        pass
+
+
+@ray.remote
+# @ray.remote(num_gpus=0.01)
 class ActorWorker:
     def __init__(self, worker_index, cfg):
         self.cfg = cfg
+
+        # auxiliary fields for the manager process
+        self.rollout_stats = None
+        self.trajectories = None
+        self.is_free = True
 
         def make_env_func(env_config_):
             return create_env(cfg.env, cfg=cfg, env_config=env_config_)
@@ -188,7 +388,7 @@ class ActorWorker:
         if not hasattr(self.env, 'num_agents'):
             self.env = MultiAgentWrapper(self.env)
 
-        torch.set_num_threads(1)
+        # torch.set_num_threads(1)
 
         self.policies = dict()
         self.policy_actor_map = dict()
@@ -211,6 +411,7 @@ class ActorWorker:
         self.preprocess_observations(initial_observations)
 
         self.trajectory_counter = 0
+        self.episode_rewards = np.zeros(self.num_agents)
 
     def update_parameters(self, state_dict):
         log.info('Loading new parameters on worker %d', self.worker_index)
@@ -245,9 +446,10 @@ class ActorWorker:
                 continue
 
             policy_outputs = self.policies[policy_id].step()
+            actions = policy_outputs.actions.cpu().numpy()
 
             for i, agent_index in enumerate(actors):
-                policy_action = policy_outputs[i].actions.cpu().numpy()
+                policy_action = actions[i]
                 actions[agent_index] = policy_action
 
         return actions
@@ -266,51 +468,75 @@ class ActorWorker:
             if len(actors) > 0:
                 self.policies[policy_id].calculate_next_values()
 
+    def process_rewards(self, rewards):
+        rewards = np.asarray(rewards, dtype=np.float32)
+        self.episode_rewards += rewards
+
+        rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
+        rewards = rewards * self.cfg.reward_scale
+        return rewards
+
+    def process_episode_rewards(self, episode_rewards):
+        policy_episode_rewards = dict()
+        for policy_id, actors in self.policy_actor_map.items():
+            if len(actors) > 0:
+                policy_episode_rewards[policy_id] = episode_rewards[actors]
+
+        return policy_episode_rewards
+
     def finalize_trajectories(self):
         trajectories = dict()
 
-        for policy_id, policy in self.policies.values():
+        for policy_id, policy in self.policies.items():
             if policy.trajectories is not None and len(policy.trajectories) > 0:
                 trajectories[policy_id] = []
 
                 for t in policy.trajectories:
-                    t_id = f'{self.worker_index}_{self.trajectory_counter}'
+                    t_id = f'{self.worker_index}_{self.trajectory_counter}_{policy_id}'
                     trajectories[policy_id].append((t_id, t))
+                    self.trajectory_counter += 1
 
                 policy.trajectories = None
 
         # TODO: calculate GAE?
         return trajectories
 
+    @ray.method(num_return_vals=2)
     def generate_rollout(self):
         timing = Timing()
-        num_steps = 0
+        rollout_step = num_steps = 0
+
+        rollout_stats = dict(worker_index=self.worker_index)
 
         with torch.no_grad():
             for rollout_step in range(self.cfg.rollout):
-                actions = self.policy_step()
+                with timing.add_time('generate_actions'):
+                    actions = self.policy_step()
 
                 # wait for all the workers to complete an environment step
                 with timing.add_time('env_step'):
                     new_obs, rewards, dones, infos = self.env.step(actions)
 
-                rewards = np.asarray(rewards, dtype=np.float32)
-                rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
-                rewards = rewards * self.cfg.reward_scale
-
+                rewards = self.process_rewards(rewards)
                 self.update_trajectories(rewards, dones)
 
                 self.preprocess_observations(new_obs)
                 self.update_rnn_states(dones)
 
                 num_steps += num_env_steps(infos)
-                if all(self.dones):
+                if all(dones):
+                    rollout_stats['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
                     break
 
             self.calculate_next_values()
 
             trajectories = self.finalize_trajectories()
-            return trajectories
+
+            rollout_stats['num_steps'] = num_steps
+            rollout_stats['length'] = rollout_step + 1
+            rollout_stats['timing'] = dict(timing)
+
+            return rollout_stats, trajectories
 
     def close(self):
         self.env.close()
@@ -375,20 +601,44 @@ class APPO(Algorithm):
 
     def initialize(self):
         if not ray.is_initialized():
-            ray.init(local_mode=True)
+            ray.init(local_mode=False)  # TODO
 
     def finalize(self):
         ray.shutdown()
+
+    @staticmethod
+    def start_rollout(worker):
+        rollout_stats, trajectories = worker.generate_rollout.remote()
+        worker.rollout_stats = rollout_stats
+        worker.trajectories = trajectories
 
     def learn(self):
         self.workers = [
             ActorWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)
         ]
 
-        rollouts = [w.generate_rollout.remote() for w in self.workers]
-        ready_rollouts = []
+        for w in self.workers:
+            self.start_rollout(w)
 
-        while len(rollouts) > 0:
-            ready_rollouts, rollouts = ray.wait(rollouts, num_returns=1, timeout=0.01)
+        start_fps = time.time()
+        num_frames_fps = 0
 
-        log.info('Ready rollouts: %d', len(ready_rollouts))
+        while True:
+            # TODO: stopping condition
+
+            ready, remaining = ray.wait([w.rollout_stats for w in self.workers], num_returns=1, timeout=0.01)
+
+            for rollout_stats in ready:
+                rollout_stats = ray.get(rollout_stats)
+                worker_index = rollout_stats['worker_index']
+                rollout_timing = rollout_stats['timing']
+
+                num_frames_fps += rollout_stats['num_steps']
+                log.debug('Worker %d finished rollout, timing %r', worker_index, rollout_timing)
+                self.start_rollout(self.workers[worker_index])
+
+            now = time.time()
+            if now - start_fps >= 1.0:
+                log.debug('Frames is %d, FPS is %.1f', num_frames_fps, num_frames_fps / (now - start_fps))
+                start_fps = time.time()
+                num_frames_fps = 0

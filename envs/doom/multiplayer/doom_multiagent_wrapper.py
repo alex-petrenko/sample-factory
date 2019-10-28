@@ -1,6 +1,5 @@
 import sys
 import time
-from collections import OrderedDict
 from enum import Enum
 from multiprocessing import Process, JoinableQueue
 from queue import Empty
@@ -244,6 +243,8 @@ class MultiAgentEnv:
         for frame in range(self.skip_frames - 1):
             self.await_tasks(actions, TaskType.STEP)
         obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
+        for info in infos:
+            info['num_frames'] = self.skip_frames
 
         if self.enable_rendering:
             self.last_obs = obs
@@ -310,7 +311,9 @@ class MultiAgentEnvAggregator(MultiEnv):
             data = [None] * self.num_agents * self.num_envs
 
         assert len(data) == self.num_agents * self.num_envs
-        data = np.split(np.array(data), self.num_workers)
+        data = np.array(data)
+        data = np.reshape(data, [self.num_envs, self.num_agents] + list(data.shape[1:]))
+        data = np.split(data, self.num_workers)
         assert len(data) == self.num_workers
         return data
 
@@ -319,6 +322,8 @@ class MultiAgentEnvAggregator(MultiEnv):
             results = self.await_tasks(actions, MsgType.STEP_REAL)
         else:
             results = self.await_tasks(list(zip(actions, reset)), MsgType.STEP_REAL_RESET)
+
+        log.info('After await tasks')
         observations, rewards, dones, infos = zip(*results)
 
         self._update_stats(rewards, dones, infos)

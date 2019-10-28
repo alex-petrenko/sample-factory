@@ -13,7 +13,7 @@ class TestDoom(TestCase):
     def make_standard_dm(env_config):
         cfg = default_doom_cfg()
         cfg.env_frameskip = 2
-        env = make_doom_env('doom_dwango5_multi', cfg=cfg, env_config=env_config)
+        env = make_doom_env('doom_freedm', cfg=cfg, env_config=env_config)
         env.skip_frames = cfg.env_frameskip
         return env
 
@@ -28,16 +28,16 @@ class TestDoom(TestCase):
         start = time.time()
 
         for i in range(num_steps):
-            actions = {key: multi_env.action_space.sample() for key in obs.keys()}
+            actions = [multi_env.action_space.sample()] * len(obs)
             obs, rew, dones, infos = multi_env.step(actions)
 
             if visualize:
                 multi_env.render()
 
-            if i % 100 == 0 or any(dones.values()):
+            if i % 100 == 0 or any(dones):
                 log.info('Rew %r done %r info %r', rew, dones, infos)
 
-            if dones['__all__']:
+            if all(dones):
                 multi_env.reset()
 
         took = time.time() - start
@@ -67,8 +67,8 @@ class TestDoom(TestCase):
 
     def test_doom_multiagent_multi_env(self):
         agents_per_env = 6
-        num_envs = 16
-        num_workers = 16
+        num_envs = 2
+        num_workers = 2
 
         skip_frames = 2  # hardcoded
 
@@ -79,8 +79,10 @@ class TestDoom(TestCase):
             stats_episodes=10,
             use_multiprocessing=True,
         )
+        log.info('Before reset...')
+        multi_env.reset()
+        log.info('After reset...')
 
-        obs = multi_env.reset()
         actions = [multi_env.action_space.sample()] * (agents_per_env * num_envs)
         obs, rew, done, info = multi_env.step(actions)
         log.info('Rewards: %r', rew)

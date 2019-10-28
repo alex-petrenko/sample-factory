@@ -85,7 +85,7 @@ DOOM_ENVS = [
         'dwango5_dm_continuous_weap.cfg',
         doom_action_space_experimental(),
         1.0, int(1e9),
-        num_agents=1, num_bots=7,
+        num_agents=1, num_bots=0,
     ),
 
     DoomSpec(

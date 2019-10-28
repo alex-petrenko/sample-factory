@@ -6,7 +6,6 @@ from unittest import TestCase
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.arguments import default_cfg
 from algorithms.utils.multi_env import MultiEnv
-from envs.dmlab.dmlab_utils import make_dmlab_env
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.doom_utils import make_doom_env
 from utils.timing import Timing
@@ -154,6 +153,7 @@ class TestDmlab(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):
+        from envs.dmlab.dmlab_utils import make_dmlab_env
         return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'))
 
     def test_dmlab_performance(self):

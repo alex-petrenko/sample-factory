@@ -1,3 +1,5 @@
+import time
+
 import ray
 
 
@@ -45,5 +47,43 @@ y = 11
 object_id = ray.put(y)
 
 print(ray.get(object_id))
+
+
+print('Test...')
+
+
+@ray.remote
+class TestActor:
+    def __init__(self):
+        self.a = []
+        self.ready = False
+
+    def sum(self, x):
+        self.a.append(x)
+        while len(self.a) < 10:
+            time.sleep(0.01)
+        print('Collected 10 items', self.a)
+
+
+@ray.remote
+class Worker:
+    def __init__(self, worker_id):
+        self.id = worker_id
+
+    def task(self, test_actor_):
+        print('Calling sum for', self.id)
+        task_id = test_actor_.sum.remote(self.id)
+        print('Waiting for', task_id)
+        ray.get(task_id)
+        print('Task finished for', self.id)
+
+
+workers = [Worker.remote(i) for i in range(3)]
+test_actor = TestActor.remote()
+
+
+for w in workers:
+    w.task.remote(test_actor)
+
 
 ray.shutdown()

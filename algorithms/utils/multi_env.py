@@ -158,7 +158,7 @@ class _MultiEnvWorker:
                     for i, result in enumerate(results):
                         obs, reward, done, info = result[0]
 
-                        if self.is_multiagent and done['__all__']:
+                        if self.is_multiagent and all(done):
                             is_done = True
                         elif not self.is_multiagent and done:
                             is_done = True
