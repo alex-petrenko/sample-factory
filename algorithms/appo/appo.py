@@ -1,7 +1,7 @@
 import copy
 import math
 import time
-from collections import OrderedDict
+from collections import OrderedDict, deque
 
 import ray
 import torch
@@ -313,6 +313,12 @@ class AgentAPPO(Agent):
         batch_size = len(self.obs_dict.obs)
         self.rnn_states = torch.zeros(batch_size, self.cfg.hidden_size).to(self.device)
 
+    def update_rnn_states(self, dones):
+        if all(dones):
+            self.reset_rnn_states()
+        else:
+            self.rnn_states = self.policy_output.rnn_states
+
     def step(self):
         if self.rnn_states is None:
             self.reset_rnn_states()
@@ -360,17 +366,16 @@ class AgentAPPO(Agent):
             t['values'].append(v)
 
 
-@ray.remote
-class TestActor:
-    def __init__(self):
-        pass
-
-
-@ray.remote
-# @ray.remote(num_gpus=0.01)
+@ray.remote(num_cpus=0.5)
+# @ray.remote(num_gpus=0.01`)
+# @ray.remote
 class ActorWorker:
     def __init__(self, worker_index, cfg):
+        log.info('Initializing worker %d', worker_index)
+
         self.cfg = cfg
+
+        self.with_training = True # TODO: test mode
 
         # auxiliary fields for the manager process
         self.rollout_stats = None
@@ -387,8 +392,6 @@ class ActorWorker:
 
         if not hasattr(self.env, 'num_agents'):
             self.env = MultiAgentWrapper(self.env)
-
-        # torch.set_num_threads(1)
 
         self.policies = dict()
         self.policy_actor_map = dict()
@@ -434,8 +437,7 @@ class ActorWorker:
         for policy_id, actors in self.policy_actor_map.items():
             if len(actors) > 0:
                 policy_dones = np.asarray(dones)[actors]
-                if all(policy_dones):
-                    self.policies[policy_id].reset_rnn_states()
+                self.policies[policy_id].update_rnn_states(policy_dones)
 
     def policy_step(self):
         actions = [None] * self.num_agents
@@ -504,39 +506,46 @@ class ActorWorker:
     @ray.method(num_return_vals=2)
     def generate_rollout(self):
         timing = Timing()
+        trajectories = None
+        actions = None
+
         rollout_step = num_steps = 0
 
         rollout_stats = dict(worker_index=self.worker_index)
 
-        with torch.no_grad():
-            for rollout_step in range(self.cfg.rollout):
-                with timing.add_time('generate_actions'):
-                    actions = self.policy_step()
+        with timing.timeit('rollout'):
+            with torch.no_grad():
+                for rollout_step in range(self.cfg.rollout):
+                    with timing.add_time('generate_actions'):
+                        if self.with_training or actions is None:
+                            actions = self.policy_step()
 
-                # wait for all the workers to complete an environment step
-                with timing.add_time('env_step'):
-                    new_obs, rewards, dones, infos = self.env.step(actions)
+                    # wait for all the workers to complete an environment step
+                    with timing.add_time('env_step'):
+                        new_obs, rewards, dones, infos = self.env.step(actions)
 
-                rewards = self.process_rewards(rewards)
-                self.update_trajectories(rewards, dones)
+                    if self.with_training:
+                        with timing.add_time('overhead'):
+                            rewards = self.process_rewards(rewards)
+                            self.update_trajectories(rewards, dones)
+                            self.preprocess_observations(new_obs)
+                            self.update_rnn_states(dones)
 
-                self.preprocess_observations(new_obs)
-                self.update_rnn_states(dones)
+                    num_steps += num_env_steps(infos)
+                    if all(dones):
+                        rollout_stats['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
+                        break
 
-                num_steps += num_env_steps(infos)
-                if all(dones):
-                    rollout_stats['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
-                    break
+                if self.with_training:
+                    with timing.timeit('finalize'):
+                        self.calculate_next_values()
+                        trajectories = self.finalize_trajectories()
 
-            self.calculate_next_values()
+        rollout_stats['num_steps'] = num_steps
+        rollout_stats['length'] = rollout_step + 1
+        rollout_stats['timing'] = dict(timing)
 
-            trajectories = self.finalize_trajectories()
-
-            rollout_stats['num_steps'] = num_steps
-            rollout_stats['length'] = rollout_step + 1
-            rollout_stats['timing'] = dict(timing)
-
-            return rollout_stats, trajectories
+        return rollout_stats, trajectories
 
     def close(self):
         self.env.close()
@@ -620,25 +629,31 @@ class APPO(Algorithm):
         for w in self.workers:
             self.start_rollout(w)
 
-        start_fps = time.time()
-        num_frames_fps = 0
+        fps_stats = deque([], maxlen=10)
+        last_fps_report = time.time()
+        num_frames = 0
+        fps_stats.append((time.time(), num_frames))
+        last_timing = {}
 
         while True:
             # TODO: stopping condition
 
-            ready, remaining = ray.wait([w.rollout_stats for w in self.workers], num_returns=1, timeout=0.01)
+            ready, remaining = ray.wait([w.rollout_stats for w in self.workers], num_returns=1, timeout=0.1)
 
             for rollout_stats in ready:
                 rollout_stats = ray.get(rollout_stats)
                 worker_index = rollout_stats['worker_index']
                 rollout_timing = rollout_stats['timing']
+                last_timing = Timing(rollout_timing)
 
-                num_frames_fps += rollout_stats['num_steps']
-                log.debug('Worker %d finished rollout, timing %r', worker_index, rollout_timing)
+                num_frames += rollout_stats['num_steps']
                 self.start_rollout(self.workers[worker_index])
 
             now = time.time()
-            if now - start_fps >= 1.0:
-                log.debug('Frames is %d, FPS is %.1f', num_frames_fps, num_frames_fps / (now - start_fps))
-                start_fps = time.time()
-                num_frames_fps = 0
+            if now - last_fps_report > 1.0:
+                past_moment, past_frames = fps_stats[0]
+                fps = (num_frames - past_frames) / (now - past_moment)
+                log.info('Fps in the last %.1f sec is %.1f', now - past_moment, fps)
+                log.debug('Rollout timing %s', last_timing)
+                fps_stats.append((now, num_frames))
+                last_fps_report = time.time()

@@ -36,5 +36,5 @@ class Timing(AttrDict):
     def __str__(self):
         s = ''
         for key, value in self.items():
-            s += f'{key}: {value:.3f}, '
+            s += f'{key}: {value:.4f}, '
         return s

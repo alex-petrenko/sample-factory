@@ -20,4 +20,6 @@ class MultiAgentWrapper(Wrapper):
     def step(self, action):
         action = action[0]
         obs, rew, done, info = self.env.step(action)
+        if done:
+            obs = self.env.reset()
         return [obs], [rew], [done], [info]

@@ -91,7 +91,7 @@ class TestDoom(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env_singleplayer(env_config):
-        return make_doom_env('doom_battle_tuple_actions', cfg=default_doom_cfg(), env_config=env_config)
+        return make_doom_env('doom_battle_hybrid', cfg=default_doom_cfg(), env_config=env_config)
 
     @staticmethod
     def make_env_bots(env_config):
