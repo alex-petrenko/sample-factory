@@ -2,7 +2,8 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('seed', [42, 42]),
-    ('ppo_epochs', [1, 2]),
+    ('ppo_epochs', [1]),
+    ('rollout', [64, 128]),
     ('use_rnn', ['True', 'False']),
 ])
 

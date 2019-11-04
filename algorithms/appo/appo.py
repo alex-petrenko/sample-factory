@@ -367,7 +367,7 @@ class AgentAPPO(Agent):
 
 
 @ray.remote(num_cpus=0.5)
-# @ray.remote(num_gpus=0.01`)
+# @ray.remote(num_gpus=0.01)
 # @ray.remote
 class ActorWorker:
     def __init__(self, worker_index, cfg):
@@ -375,12 +375,11 @@ class ActorWorker:
 
         self.cfg = cfg
 
-        self.with_training = True # TODO: test mode
+        self.with_training = True  # TODO: test mode
+        self.tmp_actions = None
 
-        # auxiliary fields for the manager process
-        self.rollout_stats = None
-        self.trajectories = None
-        self.is_free = True
+        # auxiliary fields for the driver process
+        self.rollout = None
 
         def make_env_func(env_config_):
             return create_env(cfg.env, cfg=cfg, env_config=env_config_)
@@ -486,16 +485,17 @@ class ActorWorker:
 
         return policy_episode_rewards
 
-    def finalize_trajectories(self):
-        trajectories = dict()
+    def finalize_trajectories(self, length, timing):
+        trajectories = []
 
         for policy_id, policy in self.policies.items():
             if policy.trajectories is not None and len(policy.trajectories) > 0:
-                trajectories[policy_id] = []
-
                 for t in policy.trajectories:
                     t_id = f'{self.worker_index}_{self.trajectory_counter}_{policy_id}'
-                    trajectories[policy_id].append((t_id, t))
+                    with timing.add_time('store_traj'):
+                        t_obj_id = ray.put(t)
+                    traj_dict = dict(t_id=t_id, length=length, policy_id=policy_id, t=t_obj_id)
+                    trajectories.append(traj_dict)
                     self.trajectory_counter += 1
 
                 policy.trajectories = None
@@ -503,15 +503,13 @@ class ActorWorker:
         # TODO: calculate GAE?
         return trajectories
 
-    @ray.method(num_return_vals=2)
     def generate_rollout(self):
         timing = Timing()
-        trajectories = None
-        actions = None
+        actions = self.tmp_actions
 
         rollout_step = num_steps = 0
 
-        rollout_stats = dict(worker_index=self.worker_index)
+        rollout = dict(worker_index=self.worker_index)
 
         with timing.timeit('rollout'):
             with torch.no_grad():
@@ -519,6 +517,7 @@ class ActorWorker:
                     with timing.add_time('generate_actions'):
                         if self.with_training or actions is None:
                             actions = self.policy_step()
+                            self.tmp_actions = actions  # TODO: remove
 
                     # wait for all the workers to complete an environment step
                     with timing.add_time('env_step'):
@@ -533,19 +532,18 @@ class ActorWorker:
 
                     num_steps += num_env_steps(infos)
                     if all(dones):
-                        rollout_stats['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
+                        rollout['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
                         break
 
                 if self.with_training:
                     with timing.timeit('finalize'):
                         self.calculate_next_values()
-                        trajectories = self.finalize_trajectories()
+                        rollout['trajectories'] = self.finalize_trajectories(rollout_step + 1, timing)
 
-        rollout_stats['num_steps'] = num_steps
-        rollout_stats['length'] = rollout_step + 1
-        rollout_stats['timing'] = dict(timing)
+        rollout['num_steps'] = num_steps
+        rollout['timing'] = dict(timing)
 
-        return rollout_stats, trajectories
+        return rollout
 
     def close(self):
         self.env.close()
@@ -607,6 +605,7 @@ class APPO(Algorithm):
         super().__init__(cfg)
 
         self.workers = None
+        self.trajectories = dict()
 
     def initialize(self):
         if not ray.is_initialized():
@@ -617,9 +616,17 @@ class APPO(Algorithm):
 
     @staticmethod
     def start_rollout(worker):
-        rollout_stats, trajectories = worker.generate_rollout.remote()
-        worker.rollout_stats = rollout_stats
-        worker.trajectories = trajectories
+        rollout = worker.generate_rollout.remote()
+        worker.rollout = rollout
+
+    def save_trajectories(self, rollout):
+        rollout_trajectories = rollout['trajectories']
+        for t in rollout_trajectories:
+            policy_id = t['policy_id']
+            if policy_id not in self.trajectories:
+                self.trajectories[policy_id] = dict(length=0, traj=[])
+            self.trajectories[policy_id]['length'] += t['length']
+            self.trajectories[policy_id]['traj'].append(t['t'])
 
     def learn(self):
         self.workers = [
@@ -638,15 +645,17 @@ class APPO(Algorithm):
         while True:
             # TODO: stopping condition
 
-            ready, remaining = ray.wait([w.rollout_stats for w in self.workers], num_returns=1, timeout=0.1)
+            ready, remaining = ray.wait([w.rollout for w in self.workers], num_returns=1, timeout=0.1)
 
-            for rollout_stats in ready:
-                rollout_stats = ray.get(rollout_stats)
-                worker_index = rollout_stats['worker_index']
-                rollout_timing = rollout_stats['timing']
+            for rollout in ready:
+                rollout = ray.get(rollout)
+                worker_index = rollout['worker_index']
+                rollout_timing = rollout['timing']
                 last_timing = Timing(rollout_timing)
 
-                num_frames += rollout_stats['num_steps']
+                self.save_trajectories(rollout)
+
+                num_frames += rollout['num_steps']
                 self.start_rollout(self.workers[worker_index])
 
             now = time.time()
