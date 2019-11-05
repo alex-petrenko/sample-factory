@@ -99,7 +99,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
             if all(done) or max_frames_reached(num_frames):
                 break
 
-        env.render()
+        if not cfg.no_render:
+            env.render()
         time.sleep(0.01)
 
         episode_rewards.append(episode_reward)
