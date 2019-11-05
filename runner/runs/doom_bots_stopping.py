@@ -3,7 +3,7 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 _params = ParamGrid([
     ('seed', [42, 42]),
     ('ppo_epochs', [1]),
-    ('rollout', [64, 128]),
+    ('gamma', [0.995, 0.998]),
     ('use_rnn', ['True', 'False']),
 ])
 
