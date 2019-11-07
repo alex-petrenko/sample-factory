@@ -378,9 +378,6 @@ class ActorWorker:
         self.with_training = True  # TODO: test mode
         self.tmp_actions = None
 
-        # auxiliary fields for the driver process
-        self.rollout = None
-
         def make_env_func(env_config_):
             return create_env(cfg.env, cfg=cfg, env_config=env_config_)
 
@@ -395,9 +392,8 @@ class ActorWorker:
         self.policies = dict()
         self.policy_actor_map = dict()
         for policy_id in range(self.cfg.num_policies):
-            policy_name = f'policy_{policy_id}'
-            self.policies[policy_name] = AgentAPPO(self.cfg, self.env)
-            self.policy_actor_map[policy_name] = []
+            self.policies[policy_id] = AgentAPPO(self.cfg, self.env)
+            self.policy_actor_map[policy_id] = []
 
         # number of simultaneous agents in the environment
         self.num_agents = self.env.num_agents
@@ -549,8 +545,25 @@ class ActorWorker:
         self.env.close()
 
 
+@ray.remote(num_gpus=0.5)
+class GpuWorker:
+    def __init__(self, worker_index, cfg):
+        log.info('Initializing GPU worker %d', worker_index)
+
+        self.cfg = cfg
+        self.worker_index = worker_index
+        self.with_training = True  # TODO: test mode
+
+    def train(self, policy_id, training_data):
+        # TODO: pass the latest parameters too!
+        # TODO: return updated parameters after training!
+        return dict(policy_id=policy_id, worker_index=self.worker_index, weights=None)
+
+
 class APPO(Algorithm):
     """Async PPO."""
+
+    TASK_ROLLOUT, TASK_TRAIN = range(2)
 
     @classmethod
     def add_cli_args(cls, parser):
@@ -595,6 +608,8 @@ class APPO(Algorithm):
 
         # APPO-specific
         p.add_argument('--num_policies', default=8, type=int, help='Number of policies to train jointly')
+        p.add_argument('--num_learners', default=2, type=int, help='Number of GPU learners')
+        p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
 
         # EXPERIMENTAL: external memory
         p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
@@ -605,7 +620,17 @@ class APPO(Algorithm):
         super().__init__(cfg)
 
         self.workers = None
+        self.gpu_workers = None
+        self.tasks = dict()
         self.trajectories = dict()
+        self.currently_training = set()
+
+        self.last_timing = dict()
+        self.num_frames = 0
+        self.last_fps_report = time.time()
+
+        self.fps_stats = deque([], maxlen=5)
+        self.fps_stats.append((time.time(), self.num_frames))
 
     def initialize(self):
         if not ray.is_initialized():
@@ -614,9 +639,72 @@ class APPO(Algorithm):
     def finalize(self):
         ray.shutdown()
 
-    @staticmethod
-    def start_rollout(worker):
+    def init_workers(self):
+        self.workers = [ActorWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)]
+        for w in self.workers:
+            w.rollout = None
+
+        self.gpu_workers = [GpuWorker.remote(i, self.cfg) for i in range(self.cfg.num_learners)]
+        for gpu_w in self.gpu_workers:
+            gpu_w.active_task = None
+
+    def process_task_result(self, task_result):
+        task_type = self.tasks[task_result]
+        if task_type == APPO.TASK_ROLLOUT:
+            self.process_rollout(task_result)
+        elif task_type == APPO.TASK_TRAIN:
+            self.process_train(task_result)
+        else:
+            raise Exception(f'Unknown task {task_type}')
+
+        del self.tasks[task_result]
+
+    def process_rollout(self, rollout):
+        rollout = ray.get(rollout)
+        rollout_timing = rollout['timing']
+        self.last_timing = Timing(rollout_timing)
+
+        self.save_trajectories(rollout)
+        self.num_frames += rollout['num_steps']  # total collected experience
+
+        worker_index = rollout['worker_index']
+        self.workers[worker_index].rollout = None
+
+    def process_train(self, train_result):
+        train_result = ray.get(train_result)
+        policy_id = train_result['policy_id']
+        worker_index = train_result['worker_index']
+
+        # TODO: update the latest weights for the policy
+        # TODO: increment policy version
+        log.info('Finished training for policy %d', policy_id)
+
+        self.gpu_workers[worker_index].active_task = None
+        self.currently_training.remove(policy_id)
+
+    def collect_new_experience(self):
+        if self.need_more_experience():
+            for w in self.workers:
+                if w.rollout is None:  # free worker
+                    self.start_rollout(w)
+
+    def need_more_experience(self):
+        for policy_id in range(self.cfg.num_policies):
+            if policy_id not in self.trajectories:
+                return True
+
+            traj_data = self.trajectories[policy_id]
+            traj_len = sum(traj_data['traj_len'])
+            if traj_len < self.cfg.macro_batch:
+                return True
+
+        log.warning('Reached maximum amount of experience! Actors are idle')
+        return False
+
+    def start_rollout(self, worker):
+        assert worker.rollout is None  # free worker
         rollout = worker.generate_rollout.remote()
+        self.tasks[rollout] = APPO.TASK_ROLLOUT
         worker.rollout = rollout
 
     def save_trajectories(self, rollout):
@@ -624,45 +712,70 @@ class APPO(Algorithm):
         for t in rollout_trajectories:
             policy_id = t['policy_id']
             if policy_id not in self.trajectories:
-                self.trajectories[policy_id] = dict(length=0, traj=[])
-            self.trajectories[policy_id]['length'] += t['length']
+                self.trajectories[policy_id] = dict(traj=[], traj_len=[])
             self.trajectories[policy_id]['traj'].append(t['t'])
+            self.trajectories[policy_id]['traj_len'].append(t['length'])
+
+    def process_experience(self):
+        free_gpu_workers = [w for w in self.gpu_workers if w.active_task is None]
+
+        for policy_id, traj_data in self.trajectories.items():
+            length = sum(traj_data['traj_len'])
+            if length < self.cfg.macro_batch:
+                continue
+
+            # enough experience for the policy to start training
+            if len(free_gpu_workers) < 1:
+                # always leave at least one GPU worker for action computation
+                break
+
+            gpu_worker = free_gpu_workers.pop()
+            self.train(policy_id, gpu_worker)
+
+    def train(self, policy_id, gpu_worker):
+        """Train policy `policy_id` on given GPU worker."""
+        traj_data = self.trajectories[policy_id]
+        total_len = 0
+        num_segments = 0
+        for t, t_len in zip(traj_data['traj'], traj_data['traj_len']):
+            total_len += t_len
+            num_segments += 1
+            if total_len >= self.cfg.macro_batch:
+                break
+
+        training_data = traj_data['traj'][:num_segments]
+
+        # leave remaining data to train later
+        self.trajectories[policy_id]['traj'] = traj_data['traj'][num_segments:]
+        self.trajectories[policy_id]['traj_len'] = traj_data['traj_len'][num_segments:]
+
+        # TODO: pass latest policy parameters
+        train_task = gpu_worker.train.remote(policy_id, training_data)
+        self.tasks[train_task] = APPO.TASK_TRAIN
+        self.currently_training.add(policy_id)
+        gpu_worker.active_task = train_task
+
+    def print_stats(self):
+        now = time.time()
+        if now - self.last_fps_report < 1.0:
+            return
+
+        past_moment, past_frames = self.fps_stats[0]
+        fps = (self.num_frames - past_frames) / (now - past_moment)
+        log.info('Fps in the last %.1f sec is %.1f', now - past_moment, fps)
+        log.debug('Rollout timing %s', self.last_timing)
+        self.fps_stats.append((now, self.num_frames))
+        self.last_fps_report = time.time()
 
     def learn(self):
-        self.workers = [
-            ActorWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)
-        ]
+        self.init_workers()
 
-        for w in self.workers:
-            self.start_rollout(w)
+        while True:  # TODO: stopping condition
+            finished, _ = ray.wait(list(self.tasks.keys()), num_returns=10, timeout=0.01)
+            for task in finished:
+                self.process_task_result(task)
 
-        fps_stats = deque([], maxlen=10)
-        last_fps_report = time.time()
-        num_frames = 0
-        fps_stats.append((time.time(), num_frames))
-        last_timing = {}
+            self.process_experience()
+            self.collect_new_experience()
 
-        while True:
-            # TODO: stopping condition
-
-            ready, remaining = ray.wait([w.rollout for w in self.workers], num_returns=1, timeout=0.1)
-
-            for rollout in ready:
-                rollout = ray.get(rollout)
-                worker_index = rollout['worker_index']
-                rollout_timing = rollout['timing']
-                last_timing = Timing(rollout_timing)
-
-                self.save_trajectories(rollout)
-
-                num_frames += rollout['num_steps']
-                self.start_rollout(self.workers[worker_index])
-
-            now = time.time()
-            if now - last_fps_report > 1.0:
-                past_moment, past_frames = fps_stats[0]
-                fps = (num_frames - past_frames) / (now - past_moment)
-                log.info('Fps in the last %.1f sec is %.1f', now - past_moment, fps)
-                log.debug('Rollout timing %s', last_timing)
-                fps_stats.append((now, num_frames))
-                last_fps_report = time.time()
+            self.print_stats()

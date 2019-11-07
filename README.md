@@ -28,7 +28,7 @@ This list might not be entirely comprehensive, maybe on a clean system you need 
 
 5) Clone the repo: `git clone https://github.com/alex-petrenko/doom-neurobot.git`
 
-6) Install python dependencies: `pip install -r requirements`
+6) Install python dependencies: `pip install -r requirements.txt`
 
 7) Currently a custom version of Ray is used that is installed via "dev-setup" procedure (from here: https://ray.readthedocs.io/en/latest/rllib-dev.html#development-install)
 
