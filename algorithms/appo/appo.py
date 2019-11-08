@@ -77,20 +77,6 @@ class Algorithm:
         self.writer = SummaryWriter(summary_dir, flush_secs=10)
 
 
-class Agent:
-    """Entity responsible for acting in the environment, e.g. collecting rollouts."""
-
-    def __init__(self, cfg):
-        self.cfg = cfg
-
-
-class Learner:
-    """Entity responsible for learning from experience."""
-
-    def __init__(self, cfg):
-        self.cfg = cfg
-
-
 class ActorCritic(nn.Module):
     def __init__(self, obs_space, action_space, cfg):
         super().__init__()
@@ -265,9 +251,9 @@ class ActorCritic(nn.Module):
             pass
 
 
-class AgentAPPO(Agent):
+class AgentAPPO:
     def __init__(self, cfg, env):
-        super().__init__(cfg)
+        self.cfg = cfg
 
         # TODO
         torch.set_num_threads(1)
@@ -277,6 +263,35 @@ class AgentAPPO(Agent):
         # initialize the Torch module
         self.actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
         self.actor_critic.to(self.device)
+
+        self.observations = None
+        self.obs_dict = None
+
+        self.rnn_states = None
+        self.policy_output = None
+
+        self.trajectories = None
+
+    # TODO: actual forward pass on GPU worker
+    # def step(self):
+    #     if self.rnn_states is None:
+    #         self.reset_rnn_states()
+    #
+    #     self.policy_output = self.actor_critic(self.obs_dict, self.rnn_states)
+    #     return self.policy_output
+
+    def calculate_next_values(self):
+        next_values = self.actor_critic(self.obs_dict, self.rnn_states).values
+        next_values = next_values.cpu().numpy()
+        for t, v in zip(self.trajectories, next_values):
+            t['values'].append(v)
+
+
+class PolicyState:
+    """Holds the state of the policy acting in the environment, but does not actually calculate actions."""
+
+    def __init__(self, cfg):
+        self.cfg = cfg
 
         self.observations = None
         self.obs_dict = None
@@ -303,28 +318,29 @@ class AgentAPPO(Agent):
             # handle flat observations also as dict
             obs_dict.obs = observations
 
-        for key, x in obs_dict.items():
-            obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
+        # TODO! do this on the GPU worker?
+        # for key, x in obs_dict.items():
+        #     obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
         self.observations = observations
         self.obs_dict = obs_dict
 
+    def get_policy_input(self):
+        if self.rnn_states is None:
+            self.reset_rnn_states()
+
+        policy_input = dict(obs=self.obs_dict, rnn_states=self.rnn_states)
+        return ray.put(policy_input)
+
     def reset_rnn_states(self):
         batch_size = len(self.obs_dict.obs)
-        self.rnn_states = torch.zeros(batch_size, self.cfg.hidden_size).to(self.device)
+        self.rnn_states = np.zeros(batch_size, self.cfg.hidden_size)
 
     def update_rnn_states(self, dones):
         if all(dones):
             self.reset_rnn_states()
         else:
             self.rnn_states = self.policy_output.rnn_states
-
-    def step(self):
-        if self.rnn_states is None:
-            self.reset_rnn_states()
-
-        self.policy_output = self.actor_critic(self.obs_dict, self.rnn_states)
-        return self.policy_output
 
     def _trajectory_add_args(self, args):
         for arg_name, arg_value in args.items():
@@ -348,6 +364,7 @@ class AgentAPPO(Agent):
         self._trajectory_add_args(args)
 
     def update_trajectories(self, rewards, dones):
+        """Add latest experience collected by the policy to the trajectory."""
         if self.trajectories is None:
             self.trajectories = [dict() for _ in range(len(rewards))]
 
@@ -359,16 +376,8 @@ class AgentAPPO(Agent):
             rewards, dones,
         )
 
-    def calculate_next_values(self):
-        next_values = self.actor_critic(self.obs_dict, self.rnn_states).values
-        next_values = next_values.cpu().numpy()
-        for t, v in zip(self.trajectories, next_values):
-            t['values'].append(v)
-
 
 @ray.remote(num_cpus=0.5)
-# @ray.remote(num_gpus=0.01)
-# @ray.remote
 class ActorWorker:
     def __init__(self, worker_index, cfg):
         log.info('Initializing worker %d', worker_index)
@@ -392,17 +401,15 @@ class ActorWorker:
         self.policies = dict()
         self.policy_actor_map = dict()
         for policy_id in range(self.cfg.num_policies):
-            self.policies[policy_id] = AgentAPPO(self.cfg, self.env)
+            self.policies[policy_id] = PolicyState(self.cfg)
             self.policy_actor_map[policy_id] = []
 
         # number of simultaneous agents in the environment
         self.num_agents = self.env.num_agents
 
         # default actor-policy map (can be changed during training)
-        self.actor_policy_map = []
         default_policy_id = list(self.policies.keys())[0]
         for agent_id in range(self.num_agents):
-            self.actor_policy_map.append(default_policy_id)
             self.policy_actor_map[default_policy_id].append(agent_id)
 
         initial_observations = self.env.reset()
@@ -410,6 +417,8 @@ class ActorWorker:
 
         self.trajectory_counter = 0
         self.episode_rewards = np.zeros(self.num_agents)
+        self.timing = Timing()
+        self.rollout_step = self.num_steps = 0
 
     def update_parameters(self, state_dict):
         log.info('Loading new parameters on worker %d', self.worker_index)
@@ -428,13 +437,24 @@ class ActorWorker:
 
             self.policies[policy_id].preprocess_observations(policy_obs)
 
+    def get_policy_inputs(self):
+        policy_inputs = dict()
+        for policy_id, actors in self.policy_actor_map.items():
+            if len(actors) <= 0:
+                # this policy does not participate in the current rollout
+                continue
+
+            policy_inputs[policy_id] = self.policies[policy_id].get_policy_input()
+
+        return policy_inputs
+
     def update_rnn_states(self, dones):
         for policy_id, actors in self.policy_actor_map.items():
             if len(actors) > 0:
                 policy_dones = np.asarray(dones)[actors]
                 self.policies[policy_id].update_rnn_states(policy_dones)
 
-    def policy_step(self):
+    def policy_step(self, policy_outputs):
         actions = [None] * self.num_agents
 
         for policy_id, actors in self.policy_actor_map.items():
@@ -442,8 +462,9 @@ class ActorWorker:
                 # this policy does not participate in the current rollout
                 continue
 
-            policy_outputs = self.policies[policy_id].step()
-            actions = policy_outputs.actions.cpu().numpy()
+            policy_output = policy_outputs[policy_id]
+            self.policies[policy_id].policy_output = policy_output
+            actions = policy_outputs.actions.cpu().numpy()  # TODO: check torch vs numpy
 
             for i, agent_index in enumerate(actors):
                 policy_action = actions[i]
@@ -459,11 +480,6 @@ class ActorWorker:
             policy_rewards = np.asarray(rewards)[actors]
             policy_dones = np.asarray(dones)[actors]
             self.policies[policy_id].update_trajectories(policy_rewards, policy_dones)
-
-    def calculate_next_values(self):
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) > 0:
-                self.policies[policy_id].calculate_next_values()
 
     def process_rewards(self, rewards):
         rewards = np.asarray(rewards, dtype=np.float32)
@@ -499,47 +515,51 @@ class ActorWorker:
         # TODO: calculate GAE?
         return trajectories
 
-    def generate_rollout(self):
-        timing = Timing()
-        actions = self.tmp_actions
+    def start_new_rollout(self):
+        self.timing = Timing()
+        self.rollout_step = self.num_steps = 0
 
-        rollout_step = num_steps = 0
+        policy_inputs = self.get_policy_inputs()
 
-        rollout = dict(worker_index=self.worker_index)
+        return dict(
+            worker_index=self.worker_index,
+            complete_rollout=False,
+            policy_inputs=policy_inputs,
+        )
 
-        with timing.timeit('rollout'):
-            with torch.no_grad():
-                for rollout_step in range(self.cfg.rollout):
-                    with timing.add_time('generate_actions'):
-                        if self.with_training or actions is None:
-                            actions = self.policy_step()
-                            self.tmp_actions = actions  # TODO: remove
+    def advance_rollout(self, policy_outputs):
+        """Do a step in the actual environment."""
+        actions = self.policy_step(policy_outputs)
 
-                    # wait for all the workers to complete an environment step
-                    with timing.add_time('env_step'):
-                        new_obs, rewards, dones, infos = self.env.step(actions)
+        with self.timing.add_time('env_step'):
+            new_obs, rewards, dones, infos = self.env.step(actions)
 
-                    if self.with_training:
-                        with timing.add_time('overhead'):
-                            rewards = self.process_rewards(rewards)
-                            self.update_trajectories(rewards, dones)
-                            self.preprocess_observations(new_obs)
-                            self.update_rnn_states(dones)
+        if self.with_training:
+            with self.timing.add_time('overhead'):
+                rewards = self.process_rewards(rewards)
+                self.update_trajectories(rewards, dones)
+                self.preprocess_observations(new_obs)
+                self.update_rnn_states(dones)
 
-                    num_steps += num_env_steps(infos)
-                    if all(dones):
-                        rollout['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
-                        break
+        self.num_steps += num_env_steps(infos)
+        self.rollout_step += 1
 
-                if self.with_training:
-                    with timing.timeit('finalize'):
-                        self.calculate_next_values()
-                        rollout['trajectories'] = self.finalize_trajectories(rollout_step + 1, timing)
+        complete_rollout = all(dones) or self.rollout_step >= self.cfg.rollout
+        result = dict(
+            worker_index=self.worker_index,
+            complete_rollout=complete_rollout,
+            policy_inputs=self.get_policy_inputs(),
+        )
 
-        rollout['num_steps'] = num_steps
-        rollout['timing'] = dict(timing)
+        if all(dones):
+            result['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
 
-        return rollout
+        if complete_rollout:
+            result['trajectories'] = self.finalize_trajectories(self.rollout_step, self.timing)
+            result['num_steps'] = self.num_steps
+            result['timing'] = self.timing
+
+        return result
 
     def close(self):
         self.env.close()
@@ -554,6 +574,9 @@ class GpuWorker:
         self.worker_index = worker_index
         self.with_training = True  # TODO: test mode
 
+    def policy_step(self, policy_inputs):
+        return None
+
     def train(self, policy_id, training_data):
         # TODO: pass the latest parameters too!
         # TODO: return updated parameters after training!
@@ -563,7 +586,7 @@ class GpuWorker:
 class APPO(Algorithm):
     """Async PPO."""
 
-    TASK_ROLLOUT, TASK_TRAIN = range(2)
+    TASK_ROLLOUT, TASK_POLICY_STEP, TASK_TRAIN = range(3)
 
     @classmethod
     def add_cli_args(cls, parser):
@@ -625,6 +648,9 @@ class APPO(Algorithm):
         self.trajectories = dict()
         self.currently_training = set()
 
+        self.policy_inputs = [[] for _ in range(self.cfg.num_policies)]
+        self.policy_outputs = [di]
+
         self.last_timing = dict()
         self.num_frames = 0
         self.last_fps_report = time.time()
@@ -642,16 +668,24 @@ class APPO(Algorithm):
     def init_workers(self):
         self.workers = [ActorWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)]
         for w in self.workers:
-            w.rollout = None
+            self.start_new_rollout(w)
 
         self.gpu_workers = [GpuWorker.remote(i, self.cfg) for i in range(self.cfg.num_learners)]
         for gpu_w in self.gpu_workers:
             gpu_w.active_task = None
 
+    def start_new_rollout(self, worker):
+        assert worker.rollout is None  # free worker
+        rollout = worker.generate_rollout.remote()
+        self.tasks[rollout] = APPO.TASK_ROLLOUT
+        worker.rollout = rollout
+
     def process_task_result(self, task_result):
         task_type = self.tasks[task_result]
         if task_type == APPO.TASK_ROLLOUT:
             self.process_rollout(task_result)
+        elif task_type == APPO.TASK_POLICY_STEP:
+            self.process_policy_step(task_result)
         elif task_type == APPO.TASK_TRAIN:
             self.process_train(task_result)
         else:
@@ -659,16 +693,27 @@ class APPO(Algorithm):
 
         del self.tasks[task_result]
 
-    def process_rollout(self, rollout):
-        rollout = ray.get(rollout)
-        rollout_timing = rollout['timing']
-        self.last_timing = Timing(rollout_timing)
+    def process_rollout(self, result):
+        result = ray.get(result)
 
-        self.save_trajectories(rollout)
-        self.num_frames += rollout['num_steps']  # total collected experience
+        step_policy_inputs = result['policy_inputs']
+        worker_index = result['worker_index']
+        for policy_id, inputs in step_policy_inputs.items():
+            self.policy_inputs[policy_id].append((worker_index, step_policy_inputs))
 
-        worker_index = rollout['worker_index']
+        if result['complete_rollout']:
+            rollout_timing = result['timing']
+            self.last_timing = Timing(rollout_timing)
+
+            self.save_trajectories(result)
+            self.num_frames += result['num_steps']  # total collected experience
+
+        worker_index = result['worker_index']
         self.workers[worker_index].rollout = None
+
+    def process_policy_step(self, result):
+        result = ray.get(result)
+
 
     def process_train(self, train_result):
         train_result = ray.get(train_result)
@@ -681,31 +726,6 @@ class APPO(Algorithm):
 
         self.gpu_workers[worker_index].active_task = None
         self.currently_training.remove(policy_id)
-
-    def collect_new_experience(self):
-        if self.need_more_experience():
-            for w in self.workers:
-                if w.rollout is None:  # free worker
-                    self.start_rollout(w)
-
-    def need_more_experience(self):
-        for policy_id in range(self.cfg.num_policies):
-            if policy_id not in self.trajectories:
-                return True
-
-            traj_data = self.trajectories[policy_id]
-            traj_len = sum(traj_data['traj_len'])
-            if traj_len < self.cfg.macro_batch:
-                return True
-
-        log.warning('Reached maximum amount of experience! Actors are idle')
-        return False
-
-    def start_rollout(self, worker):
-        assert worker.rollout is None  # free worker
-        rollout = worker.generate_rollout.remote()
-        self.tasks[rollout] = APPO.TASK_ROLLOUT
-        worker.rollout = rollout
 
     def save_trajectories(self, rollout):
         rollout_trajectories = rollout['trajectories']
@@ -722,6 +742,8 @@ class APPO(Algorithm):
         for policy_id, traj_data in self.trajectories.items():
             length = sum(traj_data['traj_len'])
             if length < self.cfg.macro_batch:
+                continue
+            if policy_id in self.currently_training:
                 continue
 
             # enough experience for the policy to start training
@@ -752,8 +774,48 @@ class APPO(Algorithm):
         # TODO: pass latest policy parameters
         train_task = gpu_worker.train.remote(policy_id, training_data)
         self.tasks[train_task] = APPO.TASK_TRAIN
+
+        assert policy_id not in self.currently_training
         self.currently_training.add(policy_id)
         gpu_worker.active_task = train_task
+
+    def compute_policy_steps(self):
+        free_gpu_workers = [w for w in self.gpu_workers if w.active_task is None]
+
+        while len(free_gpu_workers) > 0:
+            gpu_worker = free_gpu_workers.pop()
+            self.compute_policies_worker(gpu_worker)
+
+    def compute_policies_worker(self, gpu_worker):
+        policy_with_most_data = -1
+        max_num_inputs = 0
+
+        # find the policy with the most experience collected so far
+        for policy_id, policy_inputs in enumerate(self.policy_inputs):
+            if len(policy_inputs) > max_num_inputs:
+                policy_with_most_data = policy_id
+                max_num_inputs = len(policy_inputs)
+
+        if max_num_inputs <= 0:
+            # no new experience from the policies
+            return
+
+        task = gpu_worker.policy_step.remote(self.policy_inputs[policy_with_most_data])
+        self.tasks[task] = APPO.TASK_POLICY_STEP
+        gpu_worker.active_task = task
+
+    # def need_more_experience(self):
+    #     for policy_id in range(self.cfg.num_policies):
+    #         if policy_id not in self.trajectories:
+    #             return True
+    #
+    #         traj_data = self.trajectories[policy_id]
+    #         traj_len = sum(traj_data['traj_len'])
+    #         if traj_len < self.cfg.macro_batch:
+    #             return True
+    #
+    #     log.warning('Reached maximum amount of experience! Actors are idle')
+    #     return False
 
     def print_stats(self):
         now = time.time()
@@ -771,11 +833,11 @@ class APPO(Algorithm):
         self.init_workers()
 
         while True:  # TODO: stopping condition
-            finished, _ = ray.wait(list(self.tasks.keys()), num_returns=10, timeout=0.01)
+            finished, _ = ray.wait(list(self.tasks.keys()), num_returns=1, timeout=0.01)
             for task in finished:
                 self.process_task_result(task)
 
             self.process_experience()
-            self.collect_new_experience()
+            self.compute_policy_steps()
 
             self.print_stats()
