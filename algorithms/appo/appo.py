@@ -120,9 +120,6 @@ class ActorCritic(nn.Module):
 
         self.head_out_size = self.conv_out_size
 
-        if 'obs_mem' in obs_shape:
-            self.head_out_size += self.conv_out_size
-
         self.measurements_head = None
         if 'measurements' in obs_shape:
             self.measurements_head = nn.Sequential(
@@ -141,15 +138,6 @@ class ActorCritic(nn.Module):
 
         fc_output_size = self.hidden_size
 
-        self.mem_head = None
-        if cfg.mem_size > 0:
-            mem_out_size = 128
-            self.mem_head = nn.Sequential(
-                nn.Linear(cfg.mem_size * cfg.mem_feature, mem_out_size),
-                nonlinearity(),
-            )
-            fc_output_size += mem_out_size
-
         if cfg.use_rnn:
             self.core = nn.GRUCell(fc_output_size, self.hidden_size)
         else:
@@ -157,9 +145,6 @@ class ActorCritic(nn.Module):
                 nn.Linear(fc_output_size, self.hidden_size),
                 nonlinearity(),
             )
-
-        if cfg.mem_size > 0:
-            self.memory_write = nn.Linear(self.hidden_size, cfg.mem_feature)
 
         self.critic_linear = nn.Linear(self.hidden_size, 1)
         self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
@@ -178,11 +163,6 @@ class ActorCritic(nn.Module):
         x = self.conv_head(obs_dict.obs)
         x = x.view(-1, self.conv_out_size)
 
-        if self.cfg.obs_mem:
-            obs_mem = self.conv_head(obs_dict.obs_mem)
-            obs_mem = obs_mem.view(-1, self.conv_out_size)
-            x = torch.cat((x, obs_mem), dim=1)
-
         if self.measurements_head is not None:
             measurements = self.measurements_head(obs_dict.measurements)
             x = torch.cat((x, measurements), dim=1)
@@ -191,36 +171,27 @@ class ActorCritic(nn.Module):
         x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
         return x
 
-    def forward_core(self, head_output, rnn_states, masks, memory):
-        if self.mem_head is not None:
-            memory = self.mem_head(memory)
-            head_output = torch.cat((head_output, memory), dim=1)
-
+    def forward_core(self, head_output, rnn_states, masks):
         if self.cfg.use_rnn:
             x = new_rnn_states = self.core(head_output, rnn_states * masks)
         else:
             x = self.core(head_output)
             new_rnn_states = torch.zeros(x.shape[0])
 
-        memory_write = None
-        if self.cfg.mem_size > 0:
-            memory_write = self.memory_write(x)
-
-        return x, new_rnn_states, memory_write
+        return x, new_rnn_states
 
     def forward_tail(self, core_output):
         values = self.critic_linear(core_output)
         action_logits = self.dist_linear(core_output)
         dist = get_action_distribution(self.action_space, raw_logits=action_logits)
 
-        # for complex action spaces it is faster to do these together
+        # for non-trivial action spaces it is faster to do these together
         actions, log_prob_actions = sample_actions_log_probs(dist)
 
         result = AttrDict(dict(
             actions=actions,
             action_logits=action_logits,
             log_prob_actions=log_prob_actions,
-            action_distribution=dist,
             values=values,
         ))
         return result
@@ -231,10 +202,9 @@ class ActorCritic(nn.Module):
         if masks is None:
             masks = torch.ones([x.shape[0], 1]).to(x.device)
 
-        x, new_rnn_states, memory_write = self.forward_core(x, rnn_states, masks, obs_dict.get('memory', None))
+        x, new_rnn_states = self.forward_core(x, rnn_states, masks)
         result = self.forward_tail(x)
         result.rnn_states = new_rnn_states
-        result.memory_write = memory_write
         return result
 
     @staticmethod
@@ -294,46 +264,21 @@ class PolicyState:
         self.cfg = cfg
 
         self.observations = None
-        self.obs_dict = None
 
         self.rnn_states = None
         self.policy_output = None
 
         self.trajectories = None
 
-    def preprocess_observations(self, observations):
-        """
-        Unpack dict observations.
-        That is, convert a list of dicts into a dict of lists (numpy arrays).
-        """
-        if len(observations) <= 0:
-            return observations
-
-        obs_dict = AttrDict()
-        if isinstance(observations[0], (dict, OrderedDict)):
-            for key in observations[0].keys():
-                if not isinstance(observations[0][key], str):
-                    obs_dict[key] = [o[key] for o in observations]
-        else:
-            # handle flat observations also as dict
-            obs_dict.obs = observations
-
-        # TODO! do this on the GPU worker?
-        # for key, x in obs_dict.items():
-        #     obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
-
-        self.observations = observations
-        self.obs_dict = obs_dict
-
     def get_policy_input(self):
         if self.rnn_states is None:
             self.reset_rnn_states()
 
-        policy_input = dict(obs=self.obs_dict, rnn_states=self.rnn_states)
+        policy_input = dict(obs=self.observations, rnn_states=self.rnn_states)
         return ray.put(policy_input)
 
     def reset_rnn_states(self):
-        batch_size = len(self.obs_dict.obs)
+        batch_size = len(self.observations)
         self.rnn_states = np.zeros((batch_size, self.cfg.hidden_size), dtype=np.float32)
 
     def update_rnn_states(self, dones):
@@ -377,7 +322,7 @@ class PolicyState:
         )
 
 
-@ray.remote(num_cpus=0.5)
+@ray.remote
 class ActorWorker:
     def __init__(self, worker_index, cfg):
         log.info('Initializing worker %d', worker_index)
@@ -413,7 +358,7 @@ class ActorWorker:
             self.policy_actor_map[default_policy_id].append(agent_id)
 
         initial_observations = self.env.reset()
-        self.preprocess_observations(initial_observations)
+        self.store_observations(initial_observations)
 
         self.trajectory_counter = 0
         self.episode_rewards = np.zeros(self.num_agents)
@@ -424,7 +369,7 @@ class ActorWorker:
         log.info('Loading new parameters on worker %d', self.worker_index)
         self.agent.actor_critic.load_state_dict(state_dict['model'])
 
-    def preprocess_observations(self, obs):
+    def store_observations(self, obs):
         """Obs is a list with the size = num_agents."""
         for policy_id, actors in self.policy_actor_map.items():
             if len(actors) <= 0:
@@ -435,7 +380,7 @@ class ActorWorker:
             for actor_id in actors:
                 policy_obs.append(obs[actor_id])
 
-            self.policies[policy_id].preprocess_observations(policy_obs)
+            self.policies[policy_id].observations = policy_obs
 
     def get_policy_inputs(self):
         policy_inputs = dict()
@@ -454,7 +399,7 @@ class ActorWorker:
                 policy_dones = np.asarray(dones)[actors]
                 self.policies[policy_id].update_rnn_states(policy_dones)
 
-    def policy_step(self, policy_outputs):
+    def parse_policy_outputs(self, policy_outputs):
         actions = [None] * self.num_agents
 
         for policy_id, actors in self.policy_actor_map.items():
@@ -462,13 +407,13 @@ class ActorWorker:
                 # this policy does not participate in the current rollout
                 continue
 
-            policy_output = policy_outputs[policy_id]
+            policy_output = AttrDict(policy_outputs[policy_id])
+            # policy_output = AttrDict(ray.get(policy_outputs[policy_id]))
             self.policies[policy_id].policy_output = policy_output
-            actions = policy_outputs.actions.cpu().numpy()  # TODO: check torch vs numpy
+            policy_actions = policy_output.actions
 
             for i, agent_index in enumerate(actors):
-                policy_action = actions[i]
-                actions[agent_index] = policy_action
+                actions[agent_index] = policy_actions[i]
 
         return actions
 
@@ -531,7 +476,7 @@ class ActorWorker:
 
     def advance_rollout(self, policy_outputs):
         """Do a step in the actual environment."""
-        actions = self.policy_step(policy_outputs)
+        actions = self.parse_policy_outputs(policy_outputs)
 
         with self.timing.add_time('env_step'):
             new_obs, rewards, dones, infos = self.env.step(actions)
@@ -540,7 +485,7 @@ class ActorWorker:
             with self.timing.add_time('overhead'):
                 rewards = self.process_rewards(rewards)
                 self.update_trajectories(rewards, dones)
-                self.preprocess_observations(new_obs)
+                self.store_observations(new_obs)
                 self.update_rnn_states(dones)
 
         self.num_steps += num_env_steps(infos)
@@ -573,6 +518,8 @@ class GpuWorker:
     def __init__(self, worker_index, cfg):
         log.info('Initializing GPU worker %d', worker_index)
 
+        self.cache = None  # TODO
+
         self.cfg = cfg
         self.worker_index = worker_index
         self.with_training = True  # TODO: test mode
@@ -590,19 +537,69 @@ class GpuWorker:
 
         env.close()
 
-    def policy_step(self, policy_id_obj, policy_id, policy_inputs):
-        log.info('Policy id: %d', ray.get(policy_id_obj))
+    def policy_step(self, policy_id, policy_inputs):
+        timing = Timing()
+        with timing.timeit('policy_step'):
+            observations, rnn_states = [], []
+            num_obs_per_actor = []
+            for input_data in policy_inputs:
+                actor_index, policy_input = input_data
+                policy_input = ray.get(policy_input)
 
-        actor_critic = self.actor_critic[policy_id]
-        policy_outputs = dict()
+                obs = policy_input['obs']
+                observations.extend(obs)
+                num_obs_per_actor.append((actor_index, len(obs)))
+                rnn_states.append(policy_input['rnn_states'])
 
-        for input_data in policy_inputs:
-            actor_index, policy_input = input_data
-            policy_input = ray.get(policy_input)
-            policy_outputs[actor_index] = None  # TODO: calculate the actual output
+            obs_dict = AttrDict()
+            if isinstance(observations[0], (dict, OrderedDict)):
+                for key in observations[0].keys():
+                    if not isinstance(observations[0][key], str):
+                        obs_dict[key] = [o[key] for o in observations]
+            else:
+                # handle flat observations also as dict
+                obs_dict.obs = observations
 
-        # policy_input = dict(obs=self.obs_dict, rnn_states=self.rnn_states)
+            with torch.no_grad():
+                for key, x in obs_dict.items():
+                    obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
+                rnn_states = np.concatenate(rnn_states)
+                rnn_states = torch.from_numpy(rnn_states).to(self.device).float()
+
+                if self.cache is not None:
+                    outputs_per_actor = dict()
+                    for actor_index, num_obs in num_obs_per_actor:
+                        outputs_per_actor[actor_index] = self.cache
+                else:
+                    actor_critic = self.actor_critic[policy_id]
+
+                    log.info(
+                        'Forward pass for policy %d, num observations in a batch %d, GPU worker %d',
+                        policy_id, rnn_states.shape[0], self.worker_index,
+                    )
+
+                    with timing.timeit('forward'):
+                        policy_outputs = actor_critic(obs_dict, rnn_states)
+
+                    for key, value in policy_outputs.items():
+                        policy_outputs[key] = value.cpu().numpy()
+
+                    with timing.timeit('postprocess'):
+                        output_idx = 0
+                        outputs_per_actor = dict()
+                        for actor_index, num_obs in num_obs_per_actor:
+                            outputs_per_actor[actor_index] = dict()
+                            for key, value in policy_outputs.items():
+                                outputs_per_actor[actor_index][key] = value[output_idx:output_idx + num_obs]
+
+                            outputs_per_actor[actor_index] = outputs_per_actor[actor_index]
+                            self.cache = None  # outputs_per_actor[actor_index]
+                            output_idx += num_obs
+
+        log.debug('GPU worker timing %s', timing)
+
+        return dict(gpu_worker_index=self.worker_index, policy_id=policy_id, outputs_per_actor=outputs_per_actor)
 
     def train(self, policy_id, training_data):
         # TODO: pass the latest parameters too!
@@ -658,13 +655,8 @@ class APPO(Algorithm):
 
         # APPO-specific
         p.add_argument('--num_policies', default=8, type=int, help='Number of policies to train jointly')
-        p.add_argument('--num_learners', default=2, type=int, help='Number of GPU learners')
+        p.add_argument('--num_learners', default=1, type=int, help='Number of GPU learners')
         p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
-
-        # EXPERIMENTAL: external memory
-        p.add_argument('--mem_size', default=0, type=int, help='Number of external memory cells')
-        p.add_argument('--mem_feature', default=64, type=int, help='Size of the memory cell (dimensionality)')
-        p.add_argument('--obs_mem', default=False, type=str2bool, help='Observation-based memory')
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -687,7 +679,7 @@ class APPO(Algorithm):
 
     def initialize(self):
         if not ray.is_initialized():
-            ray.init(local_mode=True)  # TODO
+            ray.init(local_mode=False)
 
     def finalize(self):
         ray.shutdown()
@@ -735,17 +727,19 @@ class APPO(Algorithm):
             self.save_trajectories(result)
             self.num_frames += result['num_steps']  # total collected experience
 
-        worker_index = result['worker_index']#TODO remove
         self.workers[worker_index].rollout = None
 
     def process_policy_step(self, result):
-        policy_outputs = ray.get(result)
+        policy_output_res = ray.get(result)
+        gpu_worker_index = policy_output_res['gpu_worker_index']
+        policy_id = policy_output_res['policy_id']
+        outputs_per_actor = policy_output_res['outputs_per_actor']
 
-        for worker_index, policy_output in policy_outputs.items():
-            policy_id, policy_output_obj = policy_output
+        # distribute calculated policy outputs among corresponding CPU actors
+        for worker_index, policy_output_obj in outputs_per_actor.items():
             self.policy_outputs[worker_index][policy_id] = policy_output_obj
 
-            if all([o is not None for o in self.policy_outputs[worker_index]]):
+            if all([o is not None for o in self.policy_outputs[worker_index].values()]):
                 # finished calculating policy outputs for this worker
                 worker = self.workers[worker_index]
                 assert worker.rollout is None  # free worker
@@ -754,16 +748,18 @@ class APPO(Algorithm):
                 worker.rollout = rollout
                 self.policy_outputs[worker_index] = dict()  # delete old policy outputs
 
+        self.gpu_workers[gpu_worker_index].active_task = None
+
     def process_train(self, train_result):
         train_result = ray.get(train_result)
         policy_id = train_result['policy_id']
-        worker_index = train_result['worker_index']
+        gpu_worker_index = train_result['worker_index']
 
         # TODO: update the latest weights for the policy
         # TODO: increment policy version
         log.info('Finished training for policy %d', policy_id)
 
-        self.gpu_workers[worker_index].active_task = None
+        self.gpu_workers[gpu_worker_index].active_task = None
         self.currently_training.remove(policy_id)
 
     def save_trajectories(self, rollout):
@@ -845,8 +841,8 @@ class APPO(Algorithm):
             return None
 
         selected_policy = policy_with_most_data
-        selected_policy_obj = ray.put(selected_policy)
-        task = gpu_worker.policy_step.remote(selected_policy_obj, selected_policy, self.policy_inputs[selected_policy])
+        task = gpu_worker.policy_step.remote(selected_policy, self.policy_inputs[selected_policy])
+        self.policy_inputs[selected_policy] = []
         return task
 
     def print_stats(self):
@@ -865,7 +861,13 @@ class APPO(Algorithm):
         self.init_workers()
 
         while True:  # TODO: stopping condition
-            finished, _ = ray.wait(list(self.tasks.keys()), num_returns=1, timeout=0.01)
+            tasks = list(self.tasks.keys())
+            finished, _ = ray.wait(tasks, num_returns=min(len(tasks), 100), timeout=1.0)
+            # log.info('%d tasks completed', len(finished))
+
+            free_W = [w for w in self.workers if w.rollout is None]
+            log.info('Free workers %d', len(free_W))
+
             for task in finished:
                 self.process_task_result(task)
 
