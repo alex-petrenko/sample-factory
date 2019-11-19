@@ -17,7 +17,15 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
         try:
             return q.get(timeout=timeout)
         except Empty:
-            log.exception(msg)
+            log.info('Queue timed out (%s), timeout %.3f', msg, timeout)
+
+
+def empty_queue(q):
+    while True:
+        try:
+            q.get(timeout=0.1)
+        except Empty:
+            break
 
 
 class MsgType(Enum):

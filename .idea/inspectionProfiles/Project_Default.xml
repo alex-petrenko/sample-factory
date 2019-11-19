@@ -108,6 +108,7 @@
           <option value="float.backward" />
           <option value="object.tolist" />
           <option value="torch.optim.RMSprop" />
+          <option value="ray.pyarrow_files.pyarrow.*" />
         </list>
       </option>
     </inspection_tool>

@@ -103,7 +103,7 @@ def run(args, config):
 
     ray.init(local_mode=local_mode)
 
-    cls = get_agent_class(args.run)
+    cls = get_agent_class(args._run)
     agent = cls(env=args.env, config=config)
     agent.restore(args.checkpoint)
     num_steps = int(1e9)
@@ -288,7 +288,7 @@ def main():
 
     bot_difficulty = args.bot_difficulty
 
-    record_to = join(args.record_to, f'{config["env"]}_{args.run}')
+    record_to = join(args.record_to, f'{config["env"]}_{args._run}')
 
     custom_resolution = args.custom_res
 

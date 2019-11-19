@@ -15,6 +15,9 @@ from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrap
 DOOM_W = 128
 DOOM_H = 72
 
+# DOOM_W = 84
+# DOOM_H = 84
+
 
 class DoomSpec:
     def __init__(
@@ -206,6 +209,7 @@ def make_doom_env_impl(
 
     if custom_resolution is None:
         env = SetResolutionWrapper(env, '256x144')  # default (wide aspect ratio)
+        # env = SetResolutionWrapper(env, '160x120')  # default (wide aspect ratio)
     else:
         assert custom_resolution in resolutions
         env = SetResolutionWrapper(env, custom_resolution)

@@ -323,7 +323,7 @@ class PolicyState:
 
 
 @ray.remote
-class ActorWorker:
+class CpuWorker:
     def __init__(self, worker_index, cfg):
         log.info('Initializing worker %d', worker_index)
 
@@ -661,7 +661,7 @@ class APPO(Algorithm):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        self.workers = None
+        self.cpu_workers = None
         self.gpu_workers = None
         self.tasks = dict()
         self.trajectories = dict()
@@ -685,8 +685,8 @@ class APPO(Algorithm):
         ray.shutdown()
 
     def init_workers(self):
-        self.workers = [ActorWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)]
-        for w in self.workers:
+        self.cpu_workers = [CpuWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)]
+        for w in self.cpu_workers:
             self.start_new_rollout(w)
 
         self.gpu_workers = [GpuWorker.remote(i, self.cfg) for i in range(self.cfg.num_learners)]
@@ -727,7 +727,7 @@ class APPO(Algorithm):
             self.save_trajectories(result)
             self.num_frames += result['num_steps']  # total collected experience
 
-        self.workers[worker_index].rollout = None
+        self.cpu_workers[worker_index].rollout = None
 
     def process_policy_step(self, result):
         policy_output_res = ray.get(result)
@@ -741,7 +741,7 @@ class APPO(Algorithm):
 
             if all([o is not None for o in self.policy_outputs[worker_index].values()]):
                 # finished calculating policy outputs for this worker
-                worker = self.workers[worker_index]
+                worker = self.cpu_workers[worker_index]
                 assert worker.rollout is None  # free worker
                 rollout = worker.advance_rollout.remote(self.policy_outputs[worker_index])
                 self.tasks[rollout] = APPO.TASK_ROLLOUT
@@ -865,7 +865,7 @@ class APPO(Algorithm):
             finished, _ = ray.wait(tasks, num_returns=min(len(tasks), 100), timeout=1.0)
             # log.info('%d tasks completed', len(finished))
 
-            free_W = [w for w in self.workers if w.rollout is None]
+            free_W = [w for w in self.cpu_workers if w.rollout is None]
             log.info('Free workers %d', len(free_W))
 
             for task in finished:
