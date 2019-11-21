@@ -1,20 +1,26 @@
 import copy
 import math
+import random
+import select
 import time
 from collections import OrderedDict, deque
+from enum import Enum
+from multiprocessing import JoinableQueue, Process
 
-import ray
-import torch
 import numpy as np
-
+import ray
+import ray.pyarrow_files.pyarrow as pa
+import torch
+from ray.pyarrow_files.pyarrow import plasma
+from tensorboardX import SummaryWriter
 from torch import nn
 from torch.nn import functional
-from tensorboardX import SummaryWriter
 
 from algorithms.ppo.agent_ppo import calc_num_elements
 from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
 from algorithms.utils.algo_utils import num_env_steps, EPS
 from algorithms.utils.multi_agent import MultiAgentWrapper
+from algorithms.utils.multi_env import safe_get, empty_queue
 from envs.create_env import create_env
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, AttrDict, log, str2bool
@@ -221,396 +227,579 @@ class ActorCritic(nn.Module):
             pass
 
 
-class AgentAPPO:
-    def __init__(self, cfg, env):
+def make_env_func(cfg, env_config):
+    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
+    if not hasattr(env, 'num_agents'):
+        env = MultiAgentWrapper(env)
+    return env
+
+
+class ActorState:
+    """State of a single actor in an environment."""
+
+    def __init__(self, cfg, worker_idx, split_idx, agent_idx):
         self.cfg = cfg
+        self.worker_idx = worker_idx
+        self.split_idx = split_idx
+        self.agent_idx = agent_idx
 
-        # TODO
-        torch.set_num_threads(1)
-        self.device = 'cpu'
-        # self.device = torch.device('cuda')
+        self.curr_policy_id = self._sample_random_policy()
+        self.rnn_state = self._reset_rnn_state()
+        self.last_obs = None
 
-        # initialize the Torch module
-        self.actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
-        self.actor_critic.to(self.device)
+        self.trajectory = dict()
+        self.episode_reward = 0
+        self.env_steps = 0
 
-        self.observations = None
-        self.obs_dict = None
+    def _sample_random_policy(self):
+        return random.randint(0, self.cfg.num_policies - 1)
 
-        self.rnn_states = None
-        self.policy_output = None
+    def _reset_rnn_state(self):
+        return np.zeros([self.cfg.hidden_size], dtype=np.float32)
 
-        self.trajectories = None
-
-    # TODO: actual forward pass on GPU worker
-    # def step(self):
-    #     if self.rnn_states is None:
-    #         self.reset_rnn_states()
-    #
-    #     self.policy_output = self.actor_critic(self.obs_dict, self.rnn_states)
-    #     return self.policy_output
-
-    def calculate_next_values(self):
-        next_values = self.actor_critic(self.obs_dict, self.rnn_states).values
-        next_values = next_values.cpu().numpy()
-        for t, v in zip(self.trajectories, next_values):
-            t['values'].append(v)
-
-
-class PolicyState:
-    """Holds the state of the policy acting in the environment, but does not actually calculate actions."""
-
-    def __init__(self, cfg):
-        self.cfg = cfg
-
-        self.observations = None
-
-        self.rnn_states = None
-        self.policy_output = None
-
-        self.trajectories = None
-
-    def get_policy_input(self):
-        if self.rnn_states is None:
-            self.reset_rnn_states()
-
-        policy_input = dict(obs=self.observations, rnn_states=self.rnn_states)
-        return ray.put(policy_input)
-
-    def reset_rnn_states(self):
-        batch_size = len(self.observations)
-        self.rnn_states = np.zeros((batch_size, self.cfg.hidden_size), dtype=np.float32)
-
-    def update_rnn_states(self, dones):
-        if all(dones):
-            self.reset_rnn_states()
-        else:
-            self.rnn_states = self.policy_output.rnn_states
-
-    def _trajectory_add_args(self, args):
-        for arg_name, arg_value in args.items():
+    def _trajectory_add_args(self, **kwargs):
+        for arg_name, arg_value in kwargs.items():
             if arg_value is None:
                 continue
 
-            if isinstance(arg_value, torch.Tensor):
-                arg_value = arg_value.cpu().numpy()
+            if arg_name not in self.trajectory:
+                self.trajectory[arg_name] = [arg_value]
+            else:
+                self.trajectory[arg_name].append(arg_value)
 
-            for i, x in enumerate(arg_value):
-                if arg_name not in self.trajectories[i]:
-                    self.trajectories[i][arg_name] = [x]
-                else:
-                    self.trajectories[i][arg_name].append(x)
+    def trajectory_add_policy_inputs(self, obs, rnn_states):
+        self._trajectory_add_args(obs=obs, rnn_states=rnn_states)
 
-    def _trajectory_add_attributes(
-            self, obs, rnn_states, actions, action_logits, log_prob_actions, values, rewards, dones,
-    ):
+    def trajectory_add_env_step(self, rewards, dones, info):
+        self._trajectory_add_args(rewards=rewards, dones=dones)
+        self.env_steps += num_env_steps([info])
+
+    def trajectory_add_policy_step(self, actions, action_logits, log_prob_actions, values):
         args = copy.copy(locals())
         del args['self']  # only args passed to the function without "self"
-        self._trajectory_add_args(args)
+        self._trajectory_add_args(**args)
 
-    def update_trajectories(self, rewards, dones):
-        """Add latest experience collected by the policy to the trajectory."""
-        if self.trajectories is None:
-            self.trajectories = [dict() for _ in range(len(rewards))]
+    def trajectory_len(self):
+        return len(self.trajectory['obs']) if 'obs' in self.trajectory else 0
 
-        res = self.policy_output
+    def finalize_trajectory(self, done, plasma_client, serialization_context):
+        if not done and self.trajectory_len() < self.cfg.rollout:
+            return None
 
-        self._trajectory_add_attributes(
-            self.observations, self.rnn_states,
-            res.actions, res.action_logits, res.log_prob_actions, res.values,
-            rewards, dones,
+        t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.agent_idx}'
+        traj_serialized = plasma_client.put(self.trajectory, None, serialization_context=serialization_context)
+        traj_dict = dict(
+            t_id=t_id, length=self.trajectory_len(), env_steps=self.env_steps, policy_id=self.curr_policy_id,
+            t=traj_serialized,
         )
 
+        self.trajectory = dict()
+        self.episode_reward = 0
+        self.env_steps = 0
+        self.curr_policy_id = self._sample_random_policy()
 
-@ray.remote
-class CpuWorker:
-    def __init__(self, worker_index, cfg):
-        log.info('Initializing worker %d', worker_index)
+        return traj_dict
 
+    def update_rnn_state(self, new_rnn_state, done):
+        if done:
+            self.rnn_state = self._reset_rnn_state()
+        else:
+            self.rnn_state = new_rnn_state
+
+        return self.rnn_state
+
+
+class VectorEnvRunner:
+    def __init__(self, cfg, num_envs, worker_idx, split_idx, plasma_store_name):
         self.cfg = cfg
 
-        self.with_training = True  # TODO: test mode
-        self.tmp_actions = None
+        self.num_envs = num_envs
+        self.worker_idx = worker_idx
+        self.split_idx = split_idx
 
-        def make_env_func(env_config_):
-            return create_env(cfg.env, cfg=cfg, env_config=env_config_)
+        self.num_agents = -1  # queried from env
 
-        self.worker_index = worker_index
-        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0})
+        self.envs, self.actor_states, self.episode_rewards = [], [], []
 
-        self.env = make_env_func(env_config)
+        self.plasma_client = plasma.connect(plasma_store_name)
+        self.serialization_context = pa.default_serialization_context()
 
-        if not hasattr(self.env, 'num_agents'):
-            self.env = MultiAgentWrapper(self.env)
+    def init(self):
+        for env_i in range(self.num_envs):
+            vector_idx = self.split_idx * self.num_envs + env_i
+            env_config = AttrDict({'worker_index': self.worker_idx, 'vector_index': vector_idx})
+            env = make_env_func(self.cfg, env_config=env_config)
 
-        self.policies = dict()
-        self.policy_actor_map = dict()
-        for policy_id in range(self.cfg.num_policies):
-            self.policies[policy_id] = PolicyState(self.cfg)
-            self.policy_actor_map[policy_id] = []
+            if not hasattr(env, 'num_agents'):
+                env = MultiAgentWrapper(env)
+            self.num_agents = env.num_agents
 
-        # number of simultaneous agents in the environment
-        self.num_agents = self.env.num_agents
+            env.seed(self.worker_idx * 1000 + env_i)
+            self.envs.append(env)
 
-        # default actor-policy map (can be changed during training)
-        default_policy_id = list(self.policies.keys())[0]
-        for agent_id in range(self.num_agents):
-            self.policy_actor_map[default_policy_id].append(agent_id)
+            actor_states_env, episode_rewards_env = [], []
+            for agent_idx in range(self.num_agents):
+                actor_state = ActorState(self.cfg, env_i, self.split_idx, agent_idx)
+                actor_states_env.append(actor_state)
+                episode_rewards_env.append(0.0)
 
-        initial_observations = self.env.reset()
-        self.store_observations(initial_observations)
+            self.actor_states.append(actor_states_env)
+            self.episode_rewards.append(episode_rewards_env)
 
-        self.trajectory_counter = 0
-        self.episode_rewards = np.zeros(self.num_agents)
-        self.timing = Timing()
-        self.rollout_step = self.num_steps = 0
+    def _parse_policy_outputs(self, policy_outputs):
+        actions = np.empty((self.num_envs, self.num_agents), dtype=object)
+        new_rnn_states = np.empty((self.num_envs, self.num_agents), dtype=object)
 
-    def update_parameters(self, state_dict):
-        log.info('Loading new parameters on worker %d', self.worker_index)
-        self.agent.actor_critic.load_state_dict(state_dict['model'])
+        for policy_id, policy_output_obj in policy_outputs.items():
+            # deserialized = self.plasma_client.get(
+            #     policy_output_obj, -1, serialization_context=self.serialization_context,
+            # )
+            deserialized = policy_output_obj
+            policy_outputs[policy_id] = deserialized
 
-    def store_observations(self, obs):
-        """Obs is a list with the size = num_agents."""
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) <= 0:
-                # this policy does not participate in the current rollout
-                continue
+        actors_per_policy = [0 for _ in range(self.cfg.num_policies)]
+        for env_i in range(len(self.envs)):
+            for agent_i in range(self.num_agents):
+                policy_id = self.actor_states[env_i][agent_i].curr_policy_id
+                outputs = AttrDict(policy_outputs[policy_id])
 
-            policy_obs = []
-            for actor_id in actors:
-                policy_obs.append(obs[actor_id])
+                i = actors_per_policy[policy_id]
+                actors_per_policy[policy_id] += 1
 
-            self.policies[policy_id].observations = policy_obs
+                actions[env_i][agent_i] = outputs.actions[i]
+                new_rnn_states[env_i][agent_i] = outputs.rnn_states[i]
 
-    def get_policy_inputs(self):
-        policy_inputs = dict()
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) <= 0:
-                # this policy does not participate in the current rollout
-                continue
+                self.actor_states[env_i][agent_i].trajectory_add_policy_step(
+                    outputs.actions[i],
+                    outputs.action_logits[i],
+                    outputs.log_prob_actions[i],
+                    outputs.values[i],
+                )
 
-            policy_inputs[policy_id] = self.policies[policy_id].get_policy_input()
+        return actions, new_rnn_states
 
-        return policy_inputs
+    def _process_rewards(self, rewards, env_i):
+        for agent_i, r in enumerate(rewards):
+            self.actor_states[env_i][agent_i].episode_reward += r
 
-    def update_rnn_states(self, dones):
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) > 0:
-                policy_dones = np.asarray(dones)[actors]
-                self.policies[policy_id].update_rnn_states(policy_dones)
-
-    def parse_policy_outputs(self, policy_outputs):
-        actions = [None] * self.num_agents
-
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) <= 0:
-                # this policy does not participate in the current rollout
-                continue
-
-            policy_output = AttrDict(policy_outputs[policy_id])
-            # policy_output = AttrDict(ray.get(policy_outputs[policy_id]))
-            self.policies[policy_id].policy_output = policy_output
-            policy_actions = policy_output.actions
-
-            for i, agent_index in enumerate(actors):
-                actions[agent_index] = policy_actions[i]
-
-        return actions
-
-    def update_trajectories(self, rewards, dones):
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) <= 0:
-                continue
-
-            policy_rewards = np.asarray(rewards)[actors]
-            policy_dones = np.asarray(dones)[actors]
-            self.policies[policy_id].update_trajectories(policy_rewards, policy_dones)
-
-    def process_rewards(self, rewards):
         rewards = np.asarray(rewards, dtype=np.float32)
-        self.episode_rewards += rewards
-
         rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
         rewards = rewards * self.cfg.reward_scale
         return rewards
 
-    def process_episode_rewards(self, episode_rewards):
-        policy_episode_rewards = dict()
-        for policy_id, actors in self.policy_actor_map.items():
-            if len(actors) > 0:
-                policy_episode_rewards[policy_id] = episode_rewards[actors]
+    def _save_env_step(self, rewards, dones, infos, env_i):
+        for agent_i in range(self.num_agents):
+            self.actor_states[env_i][agent_i].trajectory_add_env_step(rewards[agent_i], dones[agent_i], infos[agent_i])
 
-        return policy_episode_rewards
+    def _save_policy_inputs(self, new_obs, new_rnn_states, dones, env_i):
+        for agent_i in range(self.num_agents):
+            actor_state = self.actor_states[env_i][agent_i]
+            new_rnn_state = actor_state.update_rnn_state(new_rnn_states[agent_i], dones[agent_i])
+            actor_state.trajectory_add_policy_inputs(new_obs[agent_i], new_rnn_state)
+            actor_state.last_obs = new_obs[agent_i]
 
-    def finalize_trajectories(self, length, timing):
-        trajectories = []
+    def _finalize_trajectories(self, dones, env_i):
+        complete_rollouts = []
+        for agent_i in range(self.num_agents):
+            actor_state = self.actor_states[env_i][agent_i]
+            complete_rollout = actor_state.finalize_trajectory(
+                dones[agent_i], self.plasma_client, self.serialization_context,
+            )
+            if complete_rollout is not None:
+                complete_rollouts.append(complete_rollout)
 
-        for policy_id, policy in self.policies.items():
-            if policy.trajectories is not None and len(policy.trajectories) > 0:
-                for t in policy.trajectories:
-                    t_id = f'{self.worker_index}_{self.trajectory_counter}_{policy_id}'
-                    with timing.add_time('store_traj'):
-                        t_obj_id = ray.put(t)
-                    traj_dict = dict(t_id=t_id, length=length, policy_id=policy_id, t=t_obj_id)
-                    trajectories.append(traj_dict)
-                    self.trajectory_counter += 1
+        return complete_rollouts
 
-                policy.trajectories = None
+    def _format_policy_inputs(self):
+        policy_inputs = dict()
+        policy_num_inputs = [0 for _ in range(self.cfg.num_policies)]
 
-        # TODO: calculate GAE?
-        return trajectories
+        for env_i in range(self.num_envs):
+            for agent_i in range(self.num_agents):
+                actor_state = self.actor_states[env_i][agent_i]
+                policy_id = actor_state.curr_policy_id
 
-    def rollout_reset(self):
-        self.timing = Timing()
-        self.rollout_step = self.num_steps = 0
+                if policy_id not in policy_inputs:
+                    policy_inputs[policy_id] = dict(obs=[actor_state.last_obs], rnn_states=[actor_state.rnn_state])
+                else:
+                    policy_inputs[policy_id]['obs'].append(actor_state.last_obs)
+                    policy_inputs[policy_id]['rnn_states'].append(actor_state.rnn_state)
+                policy_num_inputs[policy_id] += 1
 
-    def start_new_rollout(self):
-        self.rollout_reset()
-        policy_inputs = self.get_policy_inputs()
-
-        return dict(
-            worker_index=self.worker_index,
-            complete_rollout=False,
-            policy_inputs=policy_inputs,
-        )
-
-    def advance_rollout(self, policy_outputs):
-        """Do a step in the actual environment."""
-        actions = self.parse_policy_outputs(policy_outputs)
-
-        with self.timing.add_time('env_step'):
-            new_obs, rewards, dones, infos = self.env.step(actions)
-
-        if self.with_training:
-            with self.timing.add_time('overhead'):
-                rewards = self.process_rewards(rewards)
-                self.update_trajectories(rewards, dones)
-                self.store_observations(new_obs)
-                self.update_rnn_states(dones)
-
-        self.num_steps += num_env_steps(infos)
-        self.rollout_step += 1
-
-        complete_rollout = all(dones) or self.rollout_step >= self.cfg.rollout
-        result = dict(
-            worker_index=self.worker_index,
-            complete_rollout=complete_rollout,
-            policy_inputs=self.get_policy_inputs(),
-        )
-
-        if all(dones):
-            result['episode_rewards'] = self.process_episode_rewards(self.episode_rewards)
-
-        if complete_rollout:
-            result['trajectories'] = self.finalize_trajectories(self.rollout_step, self.timing)
-            result['num_steps'] = self.num_steps
-            result['timing'] = self.timing
-            self.rollout_reset()
-
-        return result
-
-    def close(self):
-        self.env.close()
-
-
-@ray.remote(num_gpus=0.5)
-class GpuWorker:
-    def __init__(self, worker_index, cfg):
-        log.info('Initializing GPU worker %d', worker_index)
-
-        self.cache = None  # TODO
-
-        self.cfg = cfg
-        self.worker_index = worker_index
-        self.with_training = True  # TODO: test mode
-
-        env = create_env(cfg.env, cfg=cfg, env_config=None)
-
-        torch.set_num_threads(1)
-        self.device = torch.device('cuda')
-
-        # initialize the Torch modules
-        self.actor_critic = dict()
-        for policy_id in range(self.cfg.num_policies):
-            self.actor_critic[policy_id] = ActorCritic(env.observation_space, env.action_space, cfg)
-            self.actor_critic[policy_id].to(self.device)
-
-        env.close()
-
-    def policy_step(self, policy_id, policy_inputs):
-        timing = Timing()
-        with timing.timeit('policy_step'):
-            observations, rnn_states = [], []
-            num_obs_per_actor = []
-            for input_data in policy_inputs:
-                actor_index, policy_input = input_data
-                policy_input = ray.get(policy_input)
-
-                obs = policy_input['obs']
-                observations.extend(obs)
-                num_obs_per_actor.append((actor_index, len(obs)))
-                rnn_states.append(policy_input['rnn_states'])
-
-            obs_dict = AttrDict()
+        for policy_id, policy_input in policy_inputs.items():
+            obs_dict = dict()
+            observations = policy_input['obs']
             if isinstance(observations[0], (dict, OrderedDict)):
                 for key in observations[0].keys():
                     if not isinstance(observations[0][key], str):
                         obs_dict[key] = [o[key] for o in observations]
             else:
                 # handle flat observations also as dict
-                obs_dict.obs = observations
+                obs_dict['obs'] = observations
 
-            with torch.no_grad():
-                for key, x in obs_dict.items():
-                    obs_dict[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
+            for key, x in obs_dict.items():
+                obs_dict[key] = np.stack(x)
 
-                rnn_states = np.concatenate(rnn_states)
-                rnn_states = torch.from_numpy(rnn_states).to(self.device).float()
+            policy_input['obs'] = obs_dict
+            policy_input_serialized = self.plasma_client.put(
+                policy_input, None, serialization_context=self.serialization_context,
+            )
+            policy_inputs[policy_id] = (policy_num_inputs[policy_id], policy_input_serialized)
 
-                if self.cache is not None:
-                    outputs_per_actor = dict()
-                    for actor_index, num_obs in num_obs_per_actor:
-                        outputs_per_actor[actor_index] = self.cache
-                else:
-                    actor_critic = self.actor_critic[policy_id]
+        return policy_inputs
 
-                    log.info(
-                        'Forward pass for policy %d, num observations in a batch %d, GPU worker %d',
-                        policy_id, rnn_states.shape[0], self.worker_index,
+    def reset(self):
+        for env_i, e in enumerate(self.envs):
+            observations = e.reset()
+            for agent_i, obs in enumerate(observations):
+                actor_state = self.actor_states[env_i][agent_i]
+                actor_state.trajectory_add_policy_inputs(obs, actor_state.rnn_state)
+                actor_state.last_obs = obs
+
+        policy_inputs = self._format_policy_inputs()
+        return policy_inputs
+
+    def advance_rollouts(self, policy_outputs, timing):
+        with timing.time_avg('parse_policy_outputs'):
+            actions, new_rnn_states = self._parse_policy_outputs(policy_outputs)
+
+        complete_rollouts = []
+        for env_i, e in enumerate(self.envs):
+            with timing.add_time('env_step'):
+                new_obs, rewards, dones, infos = e.step(actions[env_i])
+
+            with timing.add_time('overhead'):
+                rewards = self._process_rewards(rewards, env_i)
+                self._save_env_step(rewards, dones, infos, env_i)
+
+                with timing.add_time('finalize'):
+                    complete_rollouts.extend(self._finalize_trajectories(dones, env_i))
+
+                self._save_policy_inputs(new_obs, new_rnn_states[env_i], dones, env_i)
+
+        with timing.add_time('format_output'):
+            policy_inputs = self._format_policy_inputs()
+
+        return policy_inputs, complete_rollouts
+
+    def close(self):
+        for e in self.envs:
+            e.close()
+
+
+class TaskType(Enum):
+    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP = range(5)
+
+
+class CpuWorker:
+    """
+    Works with an array (vector) of environments that is processes in portions.
+    Simple case, env vector is split into two parts:
+    1. Do an environment step in the 1st half of the vector (envs 1..N/2)
+    2. Send observations to a queue for action generation elsewhere (e.g. on a GPU worker)
+    3. Immediately start processing second half of the vector (envs N/2+1..N)
+    4. By the time second half is processed, actions for the 1st half should be ready. Immediately start processing
+    the 1st half of the vector again.
+
+    As a result, if action generation is fast enough, this env runner should be busy 100% of the time
+    calculating env steps, without waiting for actions.
+    This is somewhat similar to double-buffered rendering in computer graphics.
+
+    """
+
+    def __init__(self, cfg, obs_space, action_space, worker_idx=0, plasma_store_name=None):
+        self.cfg = cfg
+        self.obs_space = obs_space
+        self.action_space = action_space
+
+        self.worker_idx = worker_idx
+
+        self.plasma_store_name = plasma_store_name
+        self.is_multiagent = False
+
+        self.vector_size = cfg.num_envs_per_worker
+        self.num_splits = cfg.worker_num_splits
+        assert self.vector_size >= self.num_splits
+        assert self.vector_size % self.num_splits == 0, 'Vector size should be divisible by num_splits'
+
+        # self.env_vectors, self.actor_states, self.episode_rewards = None, None, None
+        self.env_runners = None
+
+        self.plasma_client = None
+        self.serialization_context = None
+
+        self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
+        self.process = Process(target=self._run, daemon=True)
+
+        self.process.start()
+
+    def _init(self):
+        log.info('Initializing envs for env runner %d...', self.worker_idx)
+
+        self.env_runners = []
+        for split_idx in range(self.num_splits):
+            env_runner = VectorEnvRunner(
+                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.plasma_store_name,
+            )
+            env_runner.init()
+            self.env_runners.append(env_runner)
+
+    def _terminate(self):
+        for env_runner in self.env_runners:
+            env_runner.close()
+
+    def _handle_reset(self):
+        policy_inputs = []
+        for env_runner in self.env_runners:
+            policy_inputs.append(env_runner.reset())
+
+        result = dict(splits=list(range(self.num_splits)), policy_inputs=policy_inputs)
+        return result
+
+    def _advance_rollouts(self, data, timing):
+        split_idx, policy_outputs = data
+        policy_inputs, complete_rollouts = self.env_runners[split_idx].advance_rollouts(policy_outputs, timing)
+        return dict(split_idx=split_idx, policy_inputs=policy_inputs, complete_rollouts=complete_rollouts)
+
+    def _run(self):
+        log.info('Initializing vector env runner %d...', self.worker_idx)
+
+        timing = Timing()
+        initialized = False
+
+        while True:
+            with timing.add_time('waiting'):
+                timeout = 1 if initialized else 1e3
+                task_type, data = safe_get(self.task_queue, timeout=timeout)
+
+            if task_type == TaskType.INIT:
+                self._init()
+                self.task_queue.task_done()
+                continue
+
+            if task_type == TaskType.TERMINATE:
+                self._terminate()
+                self.task_queue.task_done()
+                break
+
+            # handling actual workload
+            if task_type == TaskType.RESET:
+                with timing.add_time('reset'):
+                    result = self._handle_reset()
+            else:
+                if 'work' not in timing:
+                    timing.waiting = 0  # measure waiting only after real work has started
+
+                with timing.add_time('work'):
+                    with timing.time_avg('one_step'):
+                        result = self._advance_rollouts(data, timing)
+
+            result['worker_idx'] = self.worker_idx
+            result['task_type'] = task_type
+
+            self.result_queue.put(result)
+            self.task_queue.task_done()
+
+        if self.worker_idx <= 1:
+            log.info('Env runner %d: timing %s', self.worker_idx, timing)
+
+    def await_task(self, task_type, split_idx, data=None):
+        """Submit a task and block until it's completed."""
+
+        self.task_queue.put((task_type, split_idx, data))
+        self.task_queue.join()
+
+        results = safe_get(self.result_queue)
+        self.result_queue.task_done()
+
+        return results
+
+    def init(self):
+        self.task_queue.put((TaskType.INIT, None))
+        self.task_queue.join()
+        log.info('Env runner %d initialzed...', self.worker_idx)
+
+    def reset(self):
+        results = []
+        for split in range(self.num_splits):
+            _, result = self.await_task(TaskType.RESET, split)
+            results.append(result)
+        return results
+
+    def request_reset(self):
+        self.task_queue.put((TaskType.RESET, None))
+
+    def request_step(self, split, actions):
+        data = (split, actions)
+        self.task_queue.put((TaskType.ROLLOUT_STEP, data))
+
+    def close(self):
+        self.task_queue.put((TaskType.TERMINATE, None))
+
+    def join(self):
+        empty_queue(self.result_queue)
+        self.process.join(timeout=2.0)
+
+
+class GpuWorker:
+    def __init__(self, worker_idx, cfg, obs_space, action_space, plasma_store_name):
+        log.info('Initializing GPU worker %d', worker_idx)
+
+        self.worker_idx = worker_idx
+        self.cfg = cfg
+
+        self.num_tasks = 0
+
+        self.obs_space = obs_space
+        self.action_space = action_space
+
+        self.plasma_store_name = plasma_store_name
+        self.plasma_client = None
+        self.serialization_context = None
+
+        self.device = None
+        self.actor_critic = None
+
+        self.num_requests = 0
+
+        self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
+        self.process = Process(target=self._run, daemon=True)
+        self.process.start()
+
+    def _should_log(self):
+        log_rate = 50
+        return self.num_requests % log_rate == 0
+
+    def _init(self):
+        self.result_queue.put(None)
+        log.info('GPU worker %d initialized', self.worker_idx)
+
+    def _terminate(self):
+        del self.actor_critic
+        del self.device
+
+    def _handle_policy_step(self, data, timing):
+        policy_id, requests = data
+
+        self.num_requests += 1
+        with timing.add_time('policy_step'):
+            with timing.add_time('deserialize'):
+                observations = AttrDict()
+                rnn_states = []
+                num_obs_per_actor = []
+
+                for request in requests:
+                    actor_idx, split_idx, num_inputs, policy_input = request
+                    policy_input = self.plasma_client.get(
+                        policy_input, -1, serialization_context=self.serialization_context,
                     )
 
-                    with timing.timeit('forward'):
-                        policy_outputs = actor_critic(obs_dict, rnn_states)
+                    obs = policy_input['obs']
+                    for key, x in obs.items():
+                        if key in observations:
+                            observations[key].append(x)
+                        else:
+                            observations[key] = [x]
 
+                    rnn_states.append(policy_input['rnn_states'])
+                    num_obs_per_actor.append((actor_idx, split_idx, num_inputs))
+
+            with torch.no_grad():
+                with timing.add_time('to_device'):
+                    for key, x in observations.items():
+                        observations[key] = torch.from_numpy(np.concatenate(x)).to(self.device).float()
+
+                    rnn_states = np.concatenate(rnn_states)
+                    rnn_states = torch.from_numpy(rnn_states).to(self.device).float()
+
+                # if self._should_log():
+                #     log.info(
+                #         'Forward pass for policy %d, num observations in a batch %d, GPU worker %d',
+                #         policy_id, rnn_states.shape[0], self.worker_idx,
+                #     )
+
+                with timing.add_time('forward'):
+                    actor_critic = self.actor_critic[policy_id]
+                    policy_outputs = actor_critic(observations, rnn_states)
+
+                with timing.add_time('postprocess'):
                     for key, value in policy_outputs.items():
                         policy_outputs[key] = value.cpu().numpy()
 
-                    with timing.timeit('postprocess'):
-                        output_idx = 0
-                        outputs_per_actor = dict()
-                        for actor_index, num_obs in num_obs_per_actor:
-                            outputs_per_actor[actor_index] = dict()
-                            for key, value in policy_outputs.items():
-                                outputs_per_actor[actor_index][key] = value[output_idx:output_idx + num_obs]
+                    output_idx = 0
+                    outputs_per_actor = dict()
+                    for actor_index, split_idx, num_obs in num_obs_per_actor:
+                        outputs = dict()
+                        for key, value in policy_outputs.items():
+                            outputs[key] = value[output_idx:output_idx + num_obs]
 
-                            outputs_per_actor[actor_index] = outputs_per_actor[actor_index]
-                            self.cache = None  # outputs_per_actor[actor_index]
-                            output_idx += num_obs
+                        with timing.add_time('serialize'):
+                            # outputs_per_actor[(actor_index, split_idx)] = self.plasma_client.put(
+                            #     outputs, None, serialization_context=self.serialization_context,
+                            # )
+                            outputs_per_actor[(actor_index, split_idx)] = outputs
+                        output_idx += num_obs
 
-        log.debug('GPU worker timing %s', timing)
+            with timing.timeit('result'):
+                self.result_queue.put(dict(
+                    task_type=TaskType.POLICY_STEP, policy_id=policy_id, outputs_per_actor=outputs_per_actor,
+                    gpu_worker_idx=self.worker_idx,
+                ))
 
-        return dict(gpu_worker_index=self.worker_index, policy_id=policy_id, outputs_per_actor=outputs_per_actor)
+    def _run(self):
+        timing = Timing()
 
-    def train(self, policy_id, training_data):
-        # TODO: pass the latest parameters too!
-        # TODO: return updated parameters after training!
-        return dict(policy_id=policy_id, worker_index=self.worker_index, weights=None)
+        with timing.timeit('init'):
+            self.plasma_client = plasma.connect(self.plasma_store_name)
+            self.serialization_context = pa.default_serialization_context()
+
+            # initialize the Torch modules
+            self.device = torch.device('cuda')
+            self.actor_critic = dict()
+            for policy_id in range(self.cfg.num_policies):
+                self.actor_critic[policy_id] = ActorCritic(self.obs_space, self.action_space, self.cfg)
+                self.actor_critic[policy_id].to(self.device)
+
+        while True:
+            with timing.add_time('gpu_waiting'):
+                task_type, data = safe_get(self.task_queue)
+
+            if task_type == TaskType.INIT:
+                self._init()
+            elif task_type == TaskType.TERMINATE:
+                self._terminate()
+                break
+            elif task_type == TaskType.POLICY_STEP:
+                if 'work' not in timing:
+                    timing.gpu_waiting = 0  # measure waiting time only after real work has started
+
+                with timing.add_time('work'):
+                    self._handle_policy_step(data, timing)
+
+        log.info('Gpu worker timing: %s', timing)
+
+    # def train(self, policy_id, training_data):
+    #     # TODO: pass the latest parameters too!
+    #     # TODO: return updated parameters after training!
+    #     return dict(policy_id=policy_id, worker_index=self.worker_index, weights=None)
+
+    def init(self):
+        self.task_queue.put((TaskType.INIT, None))
+        return safe_get(self.result_queue)
+
+    def policy_step(self, data):
+        self.task_queue.put((TaskType.POLICY_STEP, data))
+
+    def close(self):
+        self.task_queue.put((TaskType.TERMINATE, None))
+
+    def join(self):
+        empty_queue(self.result_queue)
+        self.process.join(timeout=5)
 
 
 class APPO(Algorithm):
     """Async PPO."""
-
-    TASK_ROLLOUT, TASK_POLICY_STEP, TASK_TRAIN = range(3)
 
     @classmethod
     def add_cli_args(cls, parser):
@@ -625,7 +814,6 @@ class APPO(Algorithm):
 
         p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-        p.add_argument('--num_envs', default=96, type=int, help='Number of environments to collect experience from. Size of the training batch is rollout X num_envs')
         p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
         p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
@@ -654,112 +842,220 @@ class APPO(Algorithm):
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
+        p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor')
+        p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=8, type=int, help='Number of policies to train jointly')
-        p.add_argument('--num_learners', default=1, type=int, help='Number of GPU learners')
+        p.add_argument('--num_learners', default=2, type=int, help='Number of GPU learners')
         p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
 
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        self.plasma_store_name = None
+
+        self.obs_space = self.action_space = None
+
         self.cpu_workers = None
         self.gpu_workers = None
-        self.tasks = dict()
+        self.workers_by_handle = None
+
         self.trajectories = dict()
         self.currently_training = set()
 
         self.policy_inputs = [[] for _ in range(self.cfg.num_policies)]
-        self.policy_outputs = [dict() for _ in range(self.cfg.num_workers)]
+        self.policy_outputs = dict()
+        for worker_idx in range(self.cfg.num_workers):
+            for split_idx in range(self.cfg.worker_num_splits):
+                self.policy_outputs[(worker_idx, split_idx)] = dict()
 
         self.last_timing = dict()
         self.num_frames = 0
         self.last_fps_report = time.time()
 
-        self.fps_stats = deque([], maxlen=5)
+        self.fps_stats = deque([], maxlen=10)
         self.fps_stats.append((time.time(), self.num_frames))
 
     def initialize(self):
         if not ray.is_initialized():
             ray.init(local_mode=False)
 
+        global_worker = ray.worker.global_worker
+        self.plasma_store_name = global_worker.node.plasma_store_socket_name
+
+        tmp_env = make_env_func(self.cfg, env_config=None)
+        self.obs_space = tmp_env.observation_space
+        self.action_space = tmp_env.action_space
+        tmp_env.close()
+
     def finalize(self):
         ray.shutdown()
 
+    def create_worker(self, idx):
+        return CpuWorker(self.cfg, self.obs_space, self.action_space, idx, plasma_store_name=self.plasma_store_name)
+
+    # noinspection PyProtectedMember
+    def init_subset(self, indices):
+        workers = dict()
+        started_reset = dict()
+        for i in indices:
+            w = self.create_worker(i)
+            w.init()
+            w.request_reset()
+            workers[i] = w
+            started_reset[i] = time.time()
+
+        fastest_reset_time = None
+
+        results = dict()
+        while True:
+            queues = [w.result_queue._reader for w in workers.values()]
+            ready, _, _ = select.select(queues, [], [], 0.1)
+
+            for ready_queue in ready:
+                w = None
+                for worker in workers.values():
+                    if ready_queue._handle == worker.result_queue._reader._handle:
+                        w = worker
+                        break
+                assert w is not None
+
+                result = safe_get(w.result_queue)
+                result = AttrDict(result)
+                results[w.worker_idx] = result
+                log.info('Finished reset for worker %d', w.worker_idx)
+                if fastest_reset_time is None:
+                    fastest_reset_time = time.time() - started_reset[w.worker_idx]
+                    log.debug('Fastest reset in %.3f seconds', fastest_reset_time)
+
+            if len(results) >= len(workers):
+                break
+
+            for worker_idx, w in workers.items():
+                if worker_idx in results:
+                    continue
+                if fastest_reset_time is None:
+                    continue
+
+                time_passed = time.time() - started_reset[w.worker_idx]
+                if time_passed > min(fastest_reset_time * 1.5, fastest_reset_time + 10):
+                    # if it takes more than 1.5x the usual time to reset, this worker is probably stuck
+                    log.error('Worker %d seems to be stuck (%.3f). Reset!', w.worker_idx, time_passed)
+                    stuck_worker = w
+                    stuck_worker.process.kill()
+
+                    new_worker = self.create_worker(worker_idx)
+                    new_worker.init()
+                    new_worker.request_reset()
+                    started_reset[worker_idx] = time.time()
+
+                    workers[worker_idx] = new_worker
+                    del stuck_worker
+
+        return list(workers.values()), results
+
+    # noinspection PyUnresolvedReferences
     def init_workers(self):
-        self.cpu_workers = [CpuWorker.remote(i, self.cfg) for i in range(self.cfg.num_workers)]
+        log.info('Initializing GPU workers...')
+        self.gpu_workers = []
+        for i in range(self.cfg.num_learners):
+            gpu_worker = GpuWorker(i, self.cfg, self.obs_space, self.action_space, self.plasma_store_name)
+            self.gpu_workers.append(gpu_worker)
+
+        log.info('Initializing actors...')
+
+        self.cpu_workers = []
+        reset_results = []
+        max_parallel_init = 8
+        worker_indices = list(range(self.cfg.num_workers))
+        for i in range(0, self.cfg.num_workers, max_parallel_init):
+            workers, reset_result = self.init_subset(worker_indices[i:i + max_parallel_init])
+            self.cpu_workers.extend(workers)
+            reset_results.extend(reset_result.values())
+
+        self.workers_by_handle = dict()
+        for w in self.gpu_workers:
+            self.workers_by_handle[w.result_queue._reader._handle] = w
         for w in self.cpu_workers:
-            self.start_new_rollout(w)
+            self.workers_by_handle[w.result_queue._reader._handle] = w
 
-        self.gpu_workers = [GpuWorker.remote(i, self.cfg) for i in range(self.cfg.num_learners)]
-        for gpu_w in self.gpu_workers:
-            gpu_w.active_task = None
+        # wait for GPU workers to finish initializing
+        for w in self.gpu_workers:
+            w.init()
 
-    def start_new_rollout(self, worker):
-        rollout = worker.start_new_rollout.remote()
-        self.tasks[rollout] = APPO.TASK_ROLLOUT
-        worker.rollout = rollout
+        return reset_results
+
+    def start_rollouts(self, reset_results):
+        for res in reset_results:
+            res = AttrDict(res)
+            worker_idx, splits, policy_inputs = res.worker_idx, res.splits, res.policy_inputs
+            for policy_inputs, split in zip(policy_inputs, splits):
+                rollout_step = dict(
+                    split_idx=split, worker_idx=worker_idx, policy_inputs=policy_inputs, complete_rollouts=[],
+                )
+                self.process_rollout(rollout_step)
 
     def process_task_result(self, task_result):
-        task_type = self.tasks[task_result]
-        if task_type == APPO.TASK_ROLLOUT:
+        task_type = task_result.task_type
+        if task_type == TaskType.ROLLOUT_STEP:
             self.process_rollout(task_result)
-        elif task_type == APPO.TASK_POLICY_STEP:
+        elif task_type == TaskType.POLICY_STEP:
             self.process_policy_step(task_result)
-        elif task_type == APPO.TASK_TRAIN:
-            self.process_train(task_result)
+        # elif task_type == APPO.TASK_TRAIN:
+        #     self.process_train(task_result)
         else:
             raise Exception(f'Unknown task {task_type}')
 
-        del self.tasks[task_result]
-
     def process_rollout(self, result):
-        result = ray.get(result)
-
         step_policy_inputs = result['policy_inputs']
-        worker_index = result['worker_index']
+        worker_idx = result['worker_idx']
+        split_idx = result['split_idx']
         for policy_id, policy_input in step_policy_inputs.items():
-            self.policy_inputs[policy_id].append((worker_index, policy_input))
-            self.policy_outputs[worker_index][policy_id] = None  # waiting for outputs to be computed
+            num_inputs, policy_input = policy_input
+            self.policy_inputs[policy_id].append((worker_idx, split_idx, num_inputs, policy_input))
+            self.policy_outputs[(worker_idx, split_idx)][policy_id] = None  # waiting for outputs to be computed
 
-        if result['complete_rollout']:
-            rollout_timing = result['timing']
-            self.last_timing = Timing(rollout_timing)
+        for complete_rollout in result['complete_rollouts']:
+            env_steps = complete_rollout['env_steps']
+            self.num_frames += env_steps
+            pass
 
-            self.save_trajectories(result)
-            self.num_frames += result['num_steps']  # total collected experience
-
-        self.cpu_workers[worker_index].rollout = None
+            # rollout_timing = result['timing']
+            # self.last_timing = Timing(rollout_timing)
+            #
+            # self.save_trajectories(result)
+            # self.num_frames += result['num_steps']  # total collected experience
 
     def process_policy_step(self, result):
-        policy_output_res = ray.get(result)
-        gpu_worker_index = policy_output_res['gpu_worker_index']
-        policy_id = policy_output_res['policy_id']
-        outputs_per_actor = policy_output_res['outputs_per_actor']
+        policy_id = result['policy_id']
+        outputs_per_actor = result['outputs_per_actor']
+        gpu_worker_idx = result['gpu_worker_idx']
 
         # distribute calculated policy outputs among corresponding CPU actors
-        for worker_index, policy_output_obj in outputs_per_actor.items():
-            self.policy_outputs[worker_index][policy_id] = policy_output_obj
+        for actor, policy_output_obj in outputs_per_actor.items():
+            worker_idx, split_idx = actor
+            self.policy_outputs[(worker_idx, split_idx)][policy_id] = policy_output_obj
 
-            if all([o is not None for o in self.policy_outputs[worker_index].values()]):
-                # finished calculating policy outputs for this worker
-                worker = self.cpu_workers[worker_index]
-                assert worker.rollout is None  # free worker
-                rollout = worker.advance_rollout.remote(self.policy_outputs[worker_index])
-                self.tasks[rollout] = APPO.TASK_ROLLOUT
-                worker.rollout = rollout
-                self.policy_outputs[worker_index] = dict()  # delete old policy outputs
+            if all([o is not None for o in self.policy_outputs[(worker_idx, split_idx)].values()]):
+                # finished calculating policy outputs for this actor
+                worker = self.cpu_workers[worker_idx]
+                policy_outputs = self.policy_outputs[(worker_idx, split_idx)]
+                worker.request_step(split_idx, policy_outputs)
 
-        self.gpu_workers[gpu_worker_index].active_task = None
+                self.policy_outputs[(worker_idx, split_idx)] = dict()  # delete old policy outputs
+
+        self.gpu_workers[gpu_worker_idx].num_tasks -= 1
+        assert self.gpu_workers[gpu_worker_idx].num_tasks >= 0
 
     def process_train(self, train_result):
         train_result = ray.get(train_result)
         policy_id = train_result['policy_id']
-        gpu_worker_index = train_result['worker_index']
+        gpu_worker_idx = train_result['worker_idx']
 
         # TODO: update the latest weights for the policy
         # TODO: increment policy version
         log.info('Finished training for policy %d', policy_id)
 
-        self.gpu_workers[gpu_worker_index].active_task = None
+        self.gpu_workers[gpu_worker_idx].active_task = None
         self.currently_training.remove(policy_id)
 
     def save_trajectories(self, rollout):
@@ -772,6 +1068,9 @@ class APPO(Algorithm):
             self.trajectories[policy_id]['traj_len'].append(t['length'])
 
     def process_experience(self):
+        #TODO
+        return
+
         free_gpu_workers = [w for w in self.gpu_workers if w.active_task is None]
 
         for policy_id, traj_data in self.trajectories.items():
@@ -808,31 +1107,35 @@ class APPO(Algorithm):
 
         # TODO: pass latest policy parameters
         train_task = gpu_worker.train.remote(policy_id, training_data)
-        self.tasks[train_task] = APPO.TASK_TRAIN
 
         assert policy_id not in self.currently_training
         self.currently_training.add(policy_id)
         gpu_worker.active_task = train_task
 
     def compute_policy_steps(self):
-        free_gpu_workers = [w for w in self.gpu_workers if w.active_task is None]
+        free_gpu_workers = [w for w in self.gpu_workers if w.num_tasks <= 0]
 
         while len(free_gpu_workers) > 0:
             gpu_worker = free_gpu_workers.pop()
-            task = self.compute_policies_worker(gpu_worker)
+            task = self.compute_policy_task()
             if task is None:
                 break
 
-            self.tasks[task] = APPO.TASK_POLICY_STEP
-            gpu_worker.active_task = task
+            gpu_worker.policy_step(task)
+            gpu_worker.num_tasks += 1
 
-    def compute_policies_worker(self, gpu_worker):
+    def compute_policy_task(self):
         policy_with_most_data = -1
         max_num_inputs = 0
 
         # find the policy with the most observations collected so far
         for policy_id, policy_inputs in enumerate(self.policy_inputs):
-            if len(policy_inputs) > max_num_inputs:
+            num_inputs = 0
+            for policy_input in policy_inputs:
+                _, _, n, _ = policy_input
+                num_inputs += n
+
+            if num_inputs > max_num_inputs:
                 policy_with_most_data = policy_id
                 max_num_inputs = len(policy_inputs)
 
@@ -841,7 +1144,7 @@ class APPO(Algorithm):
             return None
 
         selected_policy = policy_with_most_data
-        task = gpu_worker.policy_step.remote(selected_policy, self.policy_inputs[selected_policy])
+        task = (selected_policy, self.policy_inputs[selected_policy])
         self.policy_inputs[selected_policy] = []
         return task
 
@@ -852,26 +1155,69 @@ class APPO(Algorithm):
 
         past_moment, past_frames = self.fps_stats[0]
         fps = (self.num_frames - past_frames) / (now - past_moment)
-        log.info('Fps in the last %.1f sec is %.1f', now - past_moment, fps)
-        log.debug('Rollout timing %s', self.last_timing)
+        log.debug('Fps in the last %.1f sec is %.1f. Total num frames: %d', now - past_moment, fps, self.num_frames)
         self.fps_stats.append((now, self.num_frames))
         self.last_fps_report = time.time()
 
     def learn(self):
-        self.init_workers()
+        reset_results = self.init_workers()
+        self.start_rollouts(reset_results)
 
-        while True:  # TODO: stopping condition
-            tasks = list(self.tasks.keys())
-            finished, _ = ray.wait(tasks, num_returns=min(len(tasks), 100), timeout=1.0)
-            # log.info('%d tasks completed', len(finished))
+        log.info('Collecting experience...')
+        timing = Timing()
+        queues = [w.result_queue._reader for w in self.cpu_workers]
+        queues.extend([w.result_queue._reader for w in self.gpu_workers])
 
-            free_W = [w for w in self.cpu_workers if w.rollout is None]
-            log.info('Free workers %d', len(free_W))
+        with timing.timeit('experience'):
+            while self.num_frames < 1000000:  # TODO: stopping condition
+                ready, _, _ = select.select(queues, [], [], 0.001)
 
-            for task in finished:
-                self.process_task_result(task)
+                for ready_queue in ready:
+                    w = self.workers_by_handle[ready_queue._handle]
+                    result = safe_get(w.result_queue)
+                    result = AttrDict(result)
+                    self.process_task_result(result)
 
-            self.process_experience()
-            self.compute_policy_steps()
+                self.process_experience()
+                self.compute_policy_steps()
 
-            self.print_stats()
+                self.print_stats()
+
+        for w in self.cpu_workers:
+            w.close()
+        for w in self.gpu_workers:
+            w.close()
+        for w in self.cpu_workers:
+            w.join()
+        for w in self.gpu_workers:
+            w.join()
+
+        fps = self.num_frames / timing.experience
+        log.info('Collected %d, FPS: %.1f', self.num_frames, fps)
+        log.info('Timing: %s', timing)
+
+        time.sleep(0.1)
+        ray.shutdown()
+        log.info('Done!')
+
+
+# No training
+# W20 V20 S2 G2: 26591FPS
+# [2019-11-20 19:32:22,965] Gpu worker timing: init: 3.7416, gpu_waiting: 5.6309, deserialize: 5.3061, obs_dict: 0.0868, to_device: 3.9529, forward: 14.0111, serialize: 5.3650, postprocess: 6.7834, policy_step: 31.0437, work: 31.8166
+# [2019-11-20 19:32:22,993] Env runner 0: timing waiting: 0.5965, reset: 20.5919, parse_policy_outputs: 0.0004, env_step: 26.4536, finalize: 3.9813, overhead: 4.7497, format_output: 4.6372, one_step: 0.0234, work: 36.8783
+
+# W20 V20 S1 G2: 24996FPS
+# [2019-11-20 19:49:01,397] Gpu worker timing: init: 3.6439, gpu_waiting: 9.9744, deserialize: 3.5391, obs_dict: 0.0786, to_device: 4.1121, forward: 16.6075, serialize: 2.7663, postprocess: 4.0433, policy_step: 29.2388, work: 29.9234
+# [2019-11-20 19:49:01,404] Env runner 1: timing waiting: 6.4043, reset: 21.3081, parse_policy_outputs: 0.0006, env_step: 24.1964, finalize: 3.8485, overhead: 4.5882, format_output: 4.0478, one_step: 0.0533, work: 33.5044
+
+# W32 V20 S2 (2 GPU workers): 30370FPS
+# [2019-11-20 19:17:19,969] Gpu worker timing: init: 3.7086, gpu_waiting: 3.6520, work: 29.1827
+# [2019-11-20 19:17:19,970] Env runner 1: timing waiting: 4.4399, reset: 21.1310, parse_policy_outputs: 0.0007, env_step: 19.1307, finalize: 3.5949, overhead: 4.1450, format_output: 3.8386, one_step: 0.0311, work: 28.1974
+
+# W32 V40 S2 (2 GPU workers): 30701FPS
+# [2019-11-20 19:24:17,261] Env runner 0: timing waiting: 1.4417, reset: 42.2417, parse_policy_outputs: 0.0015, env_step: 21.1332, finalize: 3.9994, overhead: 4.6047, format_output: 4.0152, one_step: 0.0813, work: 30.7172
+# [2019-11-20 19:24:17,339] Env runner 1: timing waiting: 1.3387, reset: 39.7958, parse_policy_outputs: 0.0026, env_step: 21.2498, finalize: 3.7511, overhead: 4.4223, format_output: 4.2317, one_step: 0.0676, work: 30.8883
+
+# W32 V40 S1 G2: 30529FPS
+# [2019-11-20 19:56:44,631] Gpu worker timing: init: 3.5720, gpu_waiting: 8.4949, deserialize: 4.6235, obs_dict: 0.0809, to_device: 4.2894, forward: 9.3965, serialize: 3.6527, postprocess: 4.4345, policy_step: 23.5292, work: 24.2091
+# [2019-11-20 19:56:44,669] Env runner 0: timing waiting: 4.6958, reset: 44.1553, parse_policy_outputs: 0.0010, env_step: 19.5480, finalize: 3.8980, overhead: 4.5100, format_output: 3.4880, one_step: 0.1341, work: 28.0031

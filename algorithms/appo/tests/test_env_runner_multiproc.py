@@ -175,8 +175,6 @@ class VectorEnvRunner:
                                 observations.append(obs)
                                 misc_results.append((reward, done, info))
 
-                            # env_outputs = self.plasma_client.put(env_outputs, None, serialization_context=self.serialization_context)
-
                             observations = self.plasma_client.put(observations, None, serialization_context=self.serialization_context)
                             result = dict(split=split_idx, observations=observations, misc_results=misc_results, num_outputs=num_outputs)
 
@@ -221,7 +219,8 @@ class VectorEnvRunner:
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
-        self.task_queue.join()
+
+    def join(self):
         empty_queue(self.result_queue)
         self.process.join(timeout=2.0)
 
@@ -339,7 +338,7 @@ def env_runner_multi():
 
     log.info('Init GPU workers')
     gpu_workers = []
-    num_gpu_workers = 2
+    num_gpu_workers = 1
     for i in range(num_gpu_workers):
         gpu_workers.append(GPUWorker(obs_space, action_space, i, plasma_socket_name=plasma_socket_name))
 
@@ -361,7 +360,7 @@ def env_runner_multi():
     for w in gpu_workers:
         workers_by_handle[w.result_queue._reader._handle] = w
 
-    max_parallel_init = 10
+    max_parallel_init = 6
     reset_results = []
     for i in range(0, num_workers, max_parallel_init):
         for w in workers[i:i + max_parallel_init]:
@@ -389,7 +388,7 @@ def env_runner_multi():
 
     action_requests = []
     with timing.timeit('experience'):
-        while num_frames < 200000:
+        while num_frames < 1000000:
             ready, _, _ = select.select(queues, [], [], 0.001)
 
             for ready_queue in ready:
@@ -430,6 +429,8 @@ def env_runner_multi():
 
     for w in workers:
         w.close()
+    for w in workers:
+        w.join()
 
     fps = num_frames / timing.experience
     log.info('Collected %d, FPS: %.1f', num_frames, fps)
@@ -447,3 +448,9 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+
+# TIMING
+# W20 V20 S2: 32177FPS, waiting 1.15sec, work: 29.8sec, one_step: 0.0247sec
+# W20 V40 S2:
+# W32 V20 S2:
+# W32 V40 S2:
