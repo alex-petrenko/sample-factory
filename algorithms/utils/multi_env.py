@@ -20,6 +20,13 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
             log.info('Queue timed out (%s), timeout %.3f', msg, timeout)
 
 
+def queue_join_timeout(q, timeout=None):
+    with q._cond:
+        if not q._unfinished_tasks._semlock._is_zero():
+            return q._cond.wait(timeout=timeout)
+        return True
+
+
 def empty_queue(q):
     while True:
         try:

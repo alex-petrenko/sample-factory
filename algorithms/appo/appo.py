@@ -1,11 +1,10 @@
 import copy
 import math
 import random
-import select
 import time
 from collections import OrderedDict, deque
 from enum import Enum
-from multiprocessing import JoinableQueue, Process
+from queue import Empty
 
 import numpy as np
 import ray
@@ -14,13 +13,14 @@ import torch
 from ray.pyarrow_files.pyarrow import plasma
 from tensorboardX import SummaryWriter
 from torch import nn
+from torch.multiprocessing import JoinableQueue, Process
 from torch.nn import functional
 
 from algorithms.ppo.agent_ppo import calc_num_elements
 from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
 from algorithms.utils.algo_utils import num_env_steps, EPS
 from algorithms.utils.multi_agent import MultiAgentWrapper
-from algorithms.utils.multi_env import safe_get, empty_queue
+from algorithms.utils.multi_env import safe_get, queue_join_timeout
 from envs.create_env import create_env
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, AttrDict, log, str2bool
@@ -237,17 +237,22 @@ def make_env_func(cfg, env_config):
 class ActorState:
     """State of a single actor in an environment."""
 
-    def __init__(self, cfg, worker_idx, split_idx, agent_idx):
+    def __init__(self, cfg, worker_idx, split_idx, env_idx, agent_idx):
         self.cfg = cfg
         self.worker_idx = worker_idx
         self.split_idx = split_idx
+        self.env_idx = env_idx
         self.agent_idx = agent_idx
 
         self.curr_policy_id = self._sample_random_policy()
         self.rnn_state = self._reset_rnn_state()
         self.last_obs = None
 
+        self.curr_actions = self.new_rnn_state = None
+        self.ready = False
+
         self.trajectory = dict()
+        self.num_trajectories = 0
         self.episode_reward = 0
         self.env_steps = 0
 
@@ -282,21 +287,21 @@ class ActorState:
     def trajectory_len(self):
         return len(self.trajectory['obs']) if 'obs' in self.trajectory else 0
 
-    def finalize_trajectory(self, done, plasma_client, serialization_context):
+    def finalize_trajectory(self, done):
         if not done and self.trajectory_len() < self.cfg.rollout:
             return None
 
-        t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.agent_idx}'
-        traj_serialized = plasma_client.put(self.trajectory, None, serialization_context=serialization_context)
+        t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
         traj_dict = dict(
             t_id=t_id, length=self.trajectory_len(), env_steps=self.env_steps, policy_id=self.curr_policy_id,
-            t=traj_serialized,
+            t=self.trajectory,
         )
 
         self.trajectory = dict()
         self.episode_reward = 0
         self.env_steps = 0
         self.curr_policy_id = self._sample_random_policy()
+        self.num_trajectories += 1
 
         return traj_dict
 
@@ -310,7 +315,7 @@ class ActorState:
 
 
 class VectorEnvRunner:
-    def __init__(self, cfg, num_envs, worker_idx, split_idx, plasma_store_name):
+    def __init__(self, cfg, num_envs, worker_idx, split_idx, plasma_store):
         self.cfg = cfg
 
         self.num_envs = num_envs
@@ -321,8 +326,7 @@ class VectorEnvRunner:
 
         self.envs, self.actor_states, self.episode_rewards = [], [], []
 
-        self.plasma_client = plasma.connect(plasma_store_name)
-        self.serialization_context = pa.default_serialization_context()
+        self.plasma_client, self.serialization_context = plasma_store
 
     def init(self):
         for env_i in range(self.num_envs):
@@ -339,44 +343,48 @@ class VectorEnvRunner:
 
             actor_states_env, episode_rewards_env = [], []
             for agent_idx in range(self.num_agents):
-                actor_state = ActorState(self.cfg, env_i, self.split_idx, agent_idx)
+                actor_state = ActorState(self.cfg, self.worker_idx, self.split_idx, env_i, agent_idx)
                 actor_states_env.append(actor_state)
                 episode_rewards_env.append(0.0)
 
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
 
-    def _parse_policy_outputs(self, policy_outputs):
-        actions = np.empty((self.num_envs, self.num_agents), dtype=object)
-        new_rnn_states = np.empty((self.num_envs, self.num_agents), dtype=object)
+    def _save_policy_outputs(self, policy_id, policy_outputs):
+        policy_outputs = self.plasma_client.get(
+                policy_outputs, -1, serialization_context=self.serialization_context,
+        )
+        all_actors_ready = True
 
-        for policy_id, policy_output_obj in policy_outputs.items():
-            # deserialized = self.plasma_client.get(
-            #     policy_output_obj, -1, serialization_context=self.serialization_context,
-            # )
-            deserialized = policy_output_obj
-            policy_outputs[policy_id] = deserialized
-
-        actors_per_policy = [0 for _ in range(self.cfg.num_policies)]
+        i = 0
         for env_i in range(len(self.envs)):
             for agent_i in range(self.num_agents):
-                policy_id = self.actor_states[env_i][agent_i].curr_policy_id
-                outputs = AttrDict(policy_outputs[policy_id])
+                actor_state = self.actor_states[env_i][agent_i]
+                actor_policy = actor_state.curr_policy_id
 
-                i = actors_per_policy[policy_id]
-                actors_per_policy[policy_id] += 1
+                if actor_policy == policy_id:
+                    outputs = AttrDict(policy_outputs)
+                    actor_state.curr_actions = outputs.actions[i]
+                    actor_state.new_rnn_state = outputs.rnn_states[i]
+                    actor_state.trajectory_add_policy_step(
+                        outputs.actions[i],
+                        outputs.action_logits[i],
+                        outputs.log_prob_actions[i],
+                        outputs.values[i],
+                    )
 
-                actions[env_i][agent_i] = outputs.actions[i]
-                new_rnn_states[env_i][agent_i] = outputs.rnn_states[i]
+                    actor_state.ready = True
 
-                self.actor_states[env_i][agent_i].trajectory_add_policy_step(
-                    outputs.actions[i],
-                    outputs.action_logits[i],
-                    outputs.log_prob_actions[i],
-                    outputs.values[i],
-                )
+                    # number of actors with this policy id should match then number of policy outputs for this id
+                    i += 1
 
-        return actions, new_rnn_states
+                if not actor_state.ready:
+                    all_actors_ready = False
+
+        # Potential optimization: when actions are ready for all actors within one environment we can execute
+        # a simulation step right away, without waiting for all other actions to be calculated.
+        # Can be useful when number of agents per environment is small.
+        return all_actors_ready
 
     def _process_rewards(self, rewards, env_i):
         for agent_i, r in enumerate(rewards):
@@ -402,9 +410,7 @@ class VectorEnvRunner:
         complete_rollouts = []
         for agent_i in range(self.num_agents):
             actor_state = self.actor_states[env_i][agent_i]
-            complete_rollout = actor_state.finalize_trajectory(
-                dones[agent_i], self.plasma_client, self.serialization_context,
-            )
+            complete_rollout = actor_state.finalize_trajectory(dones[agent_i])
             if complete_rollout is not None:
                 complete_rollouts.append(complete_rollout)
 
@@ -441,12 +447,16 @@ class VectorEnvRunner:
                 obs_dict[key] = np.stack(x)
 
             policy_input['obs'] = obs_dict
-            policy_input_serialized = self.plasma_client.put(
-                policy_input, None, serialization_context=self.serialization_context,
-            )
-            policy_inputs[policy_id] = (policy_num_inputs[policy_id], policy_input_serialized)
+            policy_inputs[policy_id] = (policy_num_inputs[policy_id], policy_input)
 
         return policy_inputs
+
+    def _prepare_next_step(self):
+        for env_i in range(self.num_envs):
+            for agent_i in range(self.num_agents):
+                actor_state = self.actor_states[env_i][agent_i]
+                actor_state.curr_actions = actor_state.new_rnn_state = None
+                actor_state.ready = False
 
     def reset(self):
         for env_i, e in enumerate(self.envs):
@@ -459,14 +469,19 @@ class VectorEnvRunner:
         policy_inputs = self._format_policy_inputs()
         return policy_inputs
 
-    def advance_rollouts(self, policy_outputs, timing):
-        with timing.time_avg('parse_policy_outputs'):
-            actions, new_rnn_states = self._parse_policy_outputs(policy_outputs)
+    def advance_rollouts(self, data, timing):
+        with timing.time_avg('save_policy_outputs'):
+            policy_outputs = data['outputs']
+            policy_id = data['policy_id']
+            all_actors_ready = self._save_policy_outputs(policy_id, policy_outputs)
+            if not all_actors_ready:
+                return None, None
 
         complete_rollouts = []
         for env_i, e in enumerate(self.envs):
             with timing.add_time('env_step'):
-                new_obs, rewards, dones, infos = e.step(actions[env_i])
+                actions = [s.curr_actions for s in self.actor_states[env_i]]
+                new_obs, rewards, dones, infos = e.step(actions)
 
             with timing.add_time('overhead'):
                 rewards = self._process_rewards(rewards, env_i)
@@ -475,10 +490,13 @@ class VectorEnvRunner:
                 with timing.add_time('finalize'):
                     complete_rollouts.extend(self._finalize_trajectories(dones, env_i))
 
-                self._save_policy_inputs(new_obs, new_rnn_states[env_i], dones, env_i)
+                new_rnn_states = [s.new_rnn_state for s in self.actor_states[env_i]]
+                self._save_policy_inputs(new_obs, new_rnn_states, dones, env_i)
 
         with timing.add_time('format_output'):
             policy_inputs = self._format_policy_inputs()
+
+        self._prepare_next_step()
 
         return policy_inputs, complete_rollouts
 
@@ -488,10 +506,10 @@ class VectorEnvRunner:
 
 
 class TaskType(Enum):
-    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP = range(5)
+    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS = range(7)
 
 
-class CpuWorker:
+class ActorWorker:
     """
     Works with an array (vector) of environments that is processes in portions.
     Simple case, env vector is split into two parts:
@@ -507,7 +525,10 @@ class CpuWorker:
 
     """
 
-    def __init__(self, cfg, obs_space, action_space, worker_idx=0, plasma_store_name=None):
+    def __init__(
+        self, cfg, obs_space, action_space, worker_idx=0,
+        task_queue=None, plasma_store_name=None, policy_queues=None, learner_queues=None,
+    ):
         self.cfg = cfg
         self.obs_space = obs_space
         self.action_space = action_space
@@ -528,18 +549,24 @@ class CpuWorker:
         self.plasma_client = None
         self.serialization_context = None
 
-        self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
+        self.policy_queues = policy_queues
+        self.learner_queues = learner_queues
+        self.task_queue = task_queue
         self.process = Process(target=self._run, daemon=True)
 
         self.process.start()
 
     def _init(self):
+        self.plasma_client = plasma.connect(self.plasma_store_name)
+        self.serialization_context = pa.default_serialization_context()
+        plasma_store = (self.plasma_client, self.serialization_context)
+
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
         self.env_runners = []
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
-                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.plasma_store_name,
+                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, plasma_store,
             )
             env_runner.init()
             self.env_runners.append(env_runner)
@@ -548,18 +575,46 @@ class CpuWorker:
         for env_runner in self.env_runners:
             env_runner.close()
 
-    def _handle_reset(self):
-        policy_inputs = []
-        for env_runner in self.env_runners:
-            policy_inputs.append(env_runner.reset())
+    def _enqueue_policy_request(self, split_idx, policy_inputs):
+        for policy_id, experience in policy_inputs.items():
+            policy_request = dict(worker_idx=self.worker_idx, split_idx=split_idx, policy_inputs=experience)
+            policy_request = self.plasma_client.put(
+                policy_request, None, serialization_context=self.serialization_context,
+            )
+            self.policy_queues[policy_id].put((TaskType.POLICY_STEP, policy_request))
 
-        result = dict(splits=list(range(self.num_splits)), policy_inputs=policy_inputs)
-        return result
+    def _enqueue_complete_rollouts(self, complete_rollouts):
+        rollouts_per_policy = dict()
+
+        for rollout in complete_rollouts:
+            policy_id = rollout['policy_id']
+            if policy_id in rollouts_per_policy:
+                rollouts_per_policy[policy_id].append(rollout)
+            else:
+                rollouts_per_policy[policy_id] = [rollout]
+
+        for policy_id, rollouts in rollouts_per_policy.items():
+            rollouts = self.plasma_client.put(
+                rollouts, None, serialization_context=self.serialization_context,
+            )
+            self.learner_queues[policy_id].put((TaskType.TRAIN, rollouts))
+
+    def _handle_reset(self):
+        for split_idx, env_runner in enumerate(self.env_runners):
+            policy_inputs = env_runner.reset()
+            self._enqueue_policy_request(split_idx, policy_inputs)
+        log.info('Finished reset for worker %d', self.worker_idx)
 
     def _advance_rollouts(self, data, timing):
-        split_idx, policy_outputs = data
-        policy_inputs, complete_rollouts = self.env_runners[split_idx].advance_rollouts(policy_outputs, timing)
-        return dict(split_idx=split_idx, policy_inputs=policy_inputs, complete_rollouts=complete_rollouts)
+        split_idx = data['split_idx']
+        policy_inputs, complete_rollouts = self.env_runners[split_idx].advance_rollouts(data, timing)
+
+        if policy_inputs is not None:
+            self._enqueue_policy_request(split_idx, policy_inputs)
+
+        if complete_rollouts is not None and len(complete_rollouts) > 0:
+            self._enqueue_complete_rollouts(complete_rollouts)
+            pass
 
     def _run(self):
         log.info('Initializing vector env runner %d...', self.worker_idx)
@@ -585,46 +640,23 @@ class CpuWorker:
             # handling actual workload
             if task_type == TaskType.RESET:
                 with timing.add_time('reset'):
-                    result = self._handle_reset()
-            else:
+                    self._handle_reset()
+            elif task_type == TaskType.ROLLOUT_STEP:
                 if 'work' not in timing:
                     timing.waiting = 0  # measure waiting only after real work has started
 
                 with timing.add_time('work'):
                     with timing.time_avg('one_step'):
-                        result = self._advance_rollouts(data, timing)
+                        self._advance_rollouts(data, timing)
 
-            result['worker_idx'] = self.worker_idx
-            result['task_type'] = task_type
-
-            self.result_queue.put(result)
             self.task_queue.task_done()
 
         if self.worker_idx <= 1:
             log.info('Env runner %d: timing %s', self.worker_idx, timing)
 
-    def await_task(self, task_type, split_idx, data=None):
-        """Submit a task and block until it's completed."""
-
-        self.task_queue.put((task_type, split_idx, data))
-        self.task_queue.join()
-
-        results = safe_get(self.result_queue)
-        self.result_queue.task_done()
-
-        return results
-
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
         self.task_queue.join()
-        log.info('Env runner %d initialzed...', self.worker_idx)
-
-    def reset(self):
-        results = []
-        for split in range(self.num_splits):
-            _, result = self.await_task(TaskType.RESET, split)
-            results.append(result)
-        return results
 
     def request_reset(self):
         self.task_queue.put((TaskType.RESET, None))
@@ -637,18 +669,19 @@ class CpuWorker:
         self.task_queue.put((TaskType.TERMINATE, None))
 
     def join(self):
-        empty_queue(self.result_queue)
         self.process.join(timeout=2.0)
 
 
-class GpuWorker:
-    def __init__(self, worker_idx, cfg, obs_space, action_space, plasma_store_name):
-        log.info('Initializing GPU worker %d', worker_idx)
+class PolicyWorker:
+    def __init__(
+            self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, policy_queue, actor_queues,
+            weight_queue,
+    ):
+        log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
         self.worker_idx = worker_idx
+        self.policy_id = policy_id
         self.cfg = cfg
-
-        self.num_tasks = 0
 
         self.obs_space = obs_space
         self.action_space = action_space
@@ -659,11 +692,17 @@ class GpuWorker:
 
         self.device = None
         self.actor_critic = None
+        self.shared_model = None
+
+        self.task_queue = policy_queue
+        self.actor_queues = actor_queues
+        self.weight_queue = weight_queue
 
         self.num_requests = 0
 
-        self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
         self.process = Process(target=self._run, daemon=True)
+
+    def start_process(self):
         self.process.start()
 
     def _should_log(self):
@@ -671,15 +710,14 @@ class GpuWorker:
         return self.num_requests % log_rate == 0
 
     def _init(self):
-        self.result_queue.put(None)
         log.info('GPU worker %d initialized', self.worker_idx)
 
     def _terminate(self):
-        del self.actor_critic
-        del self.device
+        log.info('GPU worker %d terminated', self.worker_idx)
 
-    def _handle_policy_step(self, data, timing):
-        policy_id, requests = data
+    def _handle_policy_step(self, requests, timing):
+        if len(requests) <= 0:
+            return
 
         self.num_requests += 1
         with timing.add_time('policy_step'):
@@ -689,10 +727,13 @@ class GpuWorker:
                 num_obs_per_actor = []
 
                 for request in requests:
-                    actor_idx, split_idx, num_inputs, policy_input = request
-                    policy_input = self.plasma_client.get(
-                        policy_input, -1, serialization_context=self.serialization_context,
+                    request = self.plasma_client.get(
+                        request, -1, serialization_context=self.serialization_context,
                     )
+
+                    actor_idx = request['worker_idx']
+                    split_idx = request['split_idx']
+                    num_inputs, policy_input = request['policy_inputs']
 
                     obs = policy_input['obs']
                     for key, x in obs.items():
@@ -719,32 +760,189 @@ class GpuWorker:
                 #     )
 
                 with timing.add_time('forward'):
-                    actor_critic = self.actor_critic[policy_id]
-                    policy_outputs = actor_critic(observations, rnn_states)
+                    policy_outputs = self.actor_critic(observations, rnn_states)
 
                 with timing.add_time('postprocess'):
                     for key, value in policy_outputs.items():
                         policy_outputs[key] = value.cpu().numpy()
 
                     output_idx = 0
-                    outputs_per_actor = dict()
                     for actor_index, split_idx, num_obs in num_obs_per_actor:
                         outputs = dict()
                         for key, value in policy_outputs.items():
                             outputs[key] = value[output_idx:output_idx + num_obs]
 
                         with timing.add_time('serialize'):
-                            # outputs_per_actor[(actor_index, split_idx)] = self.plasma_client.put(
-                            #     outputs, None, serialization_context=self.serialization_context,
-                            # )
-                            outputs_per_actor[(actor_index, split_idx)] = outputs
+                            outputs = self.plasma_client.put(
+                                outputs, None, serialization_context=self.serialization_context,
+                            )
+
+                            advance_rollout_request = dict(
+                                split_idx=split_idx, policy_id=self.policy_id, outputs=outputs,
+                            )
+                            self.actor_queues[actor_index].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
+
                         output_idx += num_obs
 
-            with timing.timeit('result'):
-                self.result_queue.put(dict(
-                    task_type=TaskType.POLICY_STEP, policy_id=policy_id, outputs_per_actor=outputs_per_actor,
-                    gpu_worker_idx=self.worker_idx,
-                ))
+    def _update_weights(self, weight_update, timing):
+        if weight_update is None:
+            return
+
+        with timing.timeit('weight_update'):
+            policy_version, state_dict = weight_update
+            self.actor_critic.load_state_dict(state_dict)
+
+        log.info(
+            'Updated weights on worker %d, policy_version %d (%.5f)',
+            self.worker_idx, policy_version, timing.weight_update,
+        )
+
+    def _run(self):
+        timing = Timing()
+
+        with timing.timeit('init'):
+            self.plasma_client = plasma.connect(self.plasma_store_name)
+            self.serialization_context = pa.default_serialization_context()
+
+            # initialize the Torch modules
+            log.info('Initializing model on the policy worker %d...', self.worker_idx)
+
+            try:
+                self.device = torch.device('cuda')
+                self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+                self.actor_critic.to(self.device)
+            except Exception as exc:
+                log.exception(exc)
+
+            log.info('Initialized model on the policy worker %d!', self.worker_idx)
+
+        terminate = False
+        while not terminate:
+            pending_requests = []
+            weight_update = None
+            work_done = False
+
+            while True:
+                try:
+                    task_type, data = self.task_queue.get_nowait()
+                    if task_type == TaskType.INIT:
+                        self._init()
+                    elif task_type == TaskType.TERMINATE:
+                        self._terminate()
+                        terminate = True
+                        break
+                    elif task_type == TaskType.POLICY_STEP:
+                        pending_requests.append(data)
+
+                    self.task_queue.task_done()
+                    work_done = True
+
+                except Empty:
+                    break
+
+            self._handle_policy_step(pending_requests, timing)
+
+            while True:
+                try:
+                    task_type, data = self.weight_queue.get_nowait()
+                    if task_type == TaskType.UPDATE_WEIGHTS:
+                        weight_update = data
+                    self.weight_queue.task_done()
+                    work_done = True
+                except Empty:
+                    break
+
+            self._update_weights(weight_update, timing)
+
+            if not work_done:
+                with timing.add_time('gpu_waiting'):
+                    time.sleep(0.001)
+
+        log.info('Gpu worker timing: %s', timing)
+
+    def init(self):
+        self.task_queue.put((TaskType.INIT, None))
+        self.task_queue.join()
+
+    def close(self):
+        self.task_queue.put((TaskType.TERMINATE, None))
+
+    def join(self):
+        self.process.join(timeout=5)
+
+
+class LearnerWorker:
+    def __init__(self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, weight_queues):
+        log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
+
+        self.worker_idx = worker_idx
+        self.policy_id = policy_id
+        self.cfg = cfg
+        self.policy_version = 0
+
+        self.obs_space = obs_space
+        self.action_space = action_space
+
+        self.plasma_store_name = plasma_store_name
+        self.plasma_client = None
+        self.serialization_context = None
+
+        # initialize the Torch modules
+        self.device = None
+        self.actor_critic = None
+
+        self.task_queue = JoinableQueue()
+        self.report_queue = JoinableQueue()
+        self.weight_queues = weight_queues
+
+        self.num_samples = 0
+        self.num_requests = 0
+
+        self.process = Process(target=self._run, daemon=True)
+
+    def start_process(self):
+        self.process.start()
+
+    def _should_log(self):
+        log_rate = 50
+        return self.num_requests % log_rate == 0
+
+    def _init(self):
+        self._broadcast_weights()
+        log.info('GPU learner %d initialized', self.worker_idx)
+
+    def _terminate(self):
+        del self.actor_critic
+        del self.device
+
+    def _broadcast_weights(self):
+        state_dict = self.actor_critic.state_dict()
+        weight_update = (self.policy_version, state_dict)
+        for q in self.weight_queues:
+            q.put((TaskType.UPDATE_WEIGHTS, weight_update))
+
+    def _process_rollouts(self, rollouts):
+        stats = AttrDict(samples=0, env_steps=0)
+
+        rollouts = self.plasma_client.get(
+            rollouts, -1, serialization_context=self.serialization_context,
+        )
+
+        for rollout in rollouts:
+            num_samples = rollout['length']
+            self.num_samples += num_samples
+            stats.samples += num_samples
+            stats.env_steps += rollout['env_steps']
+
+        self.report_queue.put(stats)
+
+        if self.num_samples >= self.cfg.macro_batch:
+            # TODO: train
+            log.debug('Training policy %d on macro batch size %d', self.policy_id, self.num_samples)
+
+            self.num_samples = 0
+            self.policy_version += 1
+            self._broadcast_weights()
 
     def _run(self):
         timing = Timing()
@@ -755,46 +953,32 @@ class GpuWorker:
 
             # initialize the Torch modules
             self.device = torch.device('cuda')
-            self.actor_critic = dict()
-            for policy_id in range(self.cfg.num_policies):
-                self.actor_critic[policy_id] = ActorCritic(self.obs_space, self.action_space, self.cfg)
-                self.actor_critic[policy_id].to(self.device)
+            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+            self.actor_critic.to(self.device)
+            self.actor_critic.share_memory()
 
         while True:
-            with timing.add_time('gpu_waiting'):
-                task_type, data = safe_get(self.task_queue)
-
+            task_type, data = safe_get(self.task_queue)
             if task_type == TaskType.INIT:
                 self._init()
             elif task_type == TaskType.TERMINATE:
                 self._terminate()
                 break
-            elif task_type == TaskType.POLICY_STEP:
-                if 'work' not in timing:
-                    timing.gpu_waiting = 0  # measure waiting time only after real work has started
+            elif task_type == TaskType.TRAIN:
+                self._process_rollouts(data)
 
-                with timing.add_time('work'):
-                    self._handle_policy_step(data, timing)
+            self.task_queue.task_done()
 
-        log.info('Gpu worker timing: %s', timing)
-
-    # def train(self, policy_id, training_data):
-    #     # TODO: pass the latest parameters too!
-    #     # TODO: return updated parameters after training!
-    #     return dict(policy_id=policy_id, worker_index=self.worker_index, weights=None)
+        log.info('Gpu learner timing: %s', timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        return safe_get(self.result_queue)
-
-    def policy_step(self, data):
-        self.task_queue.put((TaskType.POLICY_STEP, data))
+        self.task_queue.join()
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
 
     def join(self):
-        empty_queue(self.result_queue)
         self.process.join(timeout=5)
 
 
@@ -844,8 +1028,8 @@ class APPO(Algorithm):
         # APPO-specific
         p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor')
         p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
-        p.add_argument('--num_policies', default=8, type=int, help='Number of policies to train jointly')
-        p.add_argument('--num_learners', default=2, type=int, help='Number of GPU learners')
+        p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
+        p.add_argument('--policy_workers_per_policy', default=2, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
         p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
 
     def __init__(self, cfg):
@@ -855,8 +1039,13 @@ class APPO(Algorithm):
 
         self.obs_space = self.action_space = None
 
-        self.cpu_workers = None
-        self.gpu_workers = None
+        self.actor_workers = None
+
+        self.policy_workers = dict()
+        self.policy_queues = dict()
+
+        self.learner_workers = dict()
+
         self.workers_by_handle = None
 
         self.trajectories = dict()
@@ -890,48 +1079,43 @@ class APPO(Algorithm):
     def finalize(self):
         ray.shutdown()
 
-    def create_worker(self, idx):
-        return CpuWorker(self.cfg, self.obs_space, self.action_space, idx, plasma_store_name=self.plasma_store_name)
+    def create_actor_worker(self, idx, actor_queue):
+        learner_queues = {p: w.task_queue for p, w in self.learner_workers.items()}
+
+        return ActorWorker(
+            self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
+            plasma_store_name=self.plasma_store_name, policy_queues=self.policy_queues,
+            learner_queues=learner_queues,
+        )
 
     # noinspection PyProtectedMember
-    def init_subset(self, indices):
+    def init_subset(self, indices, actor_queues):
         workers = dict()
         started_reset = dict()
         for i in indices:
-            w = self.create_worker(i)
+            w = self.create_actor_worker(i, actor_queues[i])
             w.init()
             w.request_reset()
             workers[i] = w
             started_reset[i] = time.time()
 
         fastest_reset_time = None
+        workers_finished = set()
 
-        results = dict()
-        while True:
-            queues = [w.result_queue._reader for w in workers.values()]
-            ready, _, _ = select.select(queues, [], [], 0.1)
+        while len(workers_finished) < len(workers):
+            for w in workers.values():
+                done = queue_join_timeout(w.task_queue, timeout=0.001)
+                if not done:
+                    continue
 
-            for ready_queue in ready:
-                w = None
-                for worker in workers.values():
-                    if ready_queue._handle == worker.result_queue._reader._handle:
-                        w = worker
-                        break
-                assert w is not None
-
-                result = safe_get(w.result_queue)
-                result = AttrDict(result)
-                results[w.worker_idx] = result
-                log.info('Finished reset for worker %d', w.worker_idx)
-                if fastest_reset_time is None:
+                if len(workers_finished) <= 0:
                     fastest_reset_time = time.time() - started_reset[w.worker_idx]
                     log.debug('Fastest reset in %.3f seconds', fastest_reset_time)
 
-            if len(results) >= len(workers):
-                break
+                workers_finished.add(w.worker_idx)
 
             for worker_idx, w in workers.items():
-                if worker_idx in results:
+                if worker_idx in workers_finished:
                     continue
                 if fastest_reset_time is None:
                     continue
@@ -943,7 +1127,7 @@ class APPO(Algorithm):
                     stuck_worker = w
                     stuck_worker.process.kill()
 
-                    new_worker = self.create_worker(worker_idx)
+                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx])
                     new_worker.init()
                     new_worker.request_reset()
                     started_reset[worker_idx] = time.time()
@@ -951,202 +1135,61 @@ class APPO(Algorithm):
                     workers[worker_idx] = new_worker
                     del stuck_worker
 
-        return list(workers.values()), results
+        return workers.values()
 
     # noinspection PyUnresolvedReferences
     def init_workers(self):
+        actor_queues = [JoinableQueue() for _ in range(self.cfg.num_workers)]
+
+        weight_queues = dict()
+        for policy_id in range(self.cfg.num_policies):
+            weight_queues[policy_id] = []
+            for i in range(self.cfg.policy_workers_per_policy):
+                weight_queues[policy_id].append(JoinableQueue())
+
+        log.info('Initializing GPU learners...')
+        learner_idx = 0
+        for policy_id in range(self.cfg.num_policies):
+            learner_worker = LearnerWorker(
+                learner_idx, policy_id, self.cfg, self.obs_space, self.action_space, self.plasma_store_name,
+                weight_queues[policy_id],
+            )
+            learner_worker.start_process()
+            learner_worker.init()
+
+            self.learner_workers[policy_id] = learner_worker
+            learner_idx += 1
+
         log.info('Initializing GPU workers...')
-        self.gpu_workers = []
-        for i in range(self.cfg.num_learners):
-            gpu_worker = GpuWorker(i, self.cfg, self.obs_space, self.action_space, self.plasma_store_name)
-            self.gpu_workers.append(gpu_worker)
+        policy_worker_idx = 0
+        for policy_id in range(self.cfg.num_policies):
+            self.policy_workers[policy_id] = []
+
+            policy_queue = JoinableQueue()
+            self.policy_queues[policy_id] = policy_queue
+
+            for i in range(self.cfg.policy_workers_per_policy):
+                policy_worker = PolicyWorker(
+                    policy_worker_idx, policy_id, self.cfg, self.obs_space, self.action_space,
+                    self.plasma_store_name, policy_queue, actor_queues, weight_queues[policy_id][i],
+                )
+                self.policy_workers[policy_id].append(policy_worker)
+                policy_worker_idx += 1
 
         log.info('Initializing actors...')
 
-        self.cpu_workers = []
-        reset_results = []
+        self.actor_workers = []
         max_parallel_init = 8
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
-            workers, reset_result = self.init_subset(worker_indices[i:i + max_parallel_init])
-            self.cpu_workers.extend(workers)
-            reset_results.extend(reset_result.values())
-
-        self.workers_by_handle = dict()
-        for w in self.gpu_workers:
-            self.workers_by_handle[w.result_queue._reader._handle] = w
-        for w in self.cpu_workers:
-            self.workers_by_handle[w.result_queue._reader._handle] = w
+            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
+            self.actor_workers.extend(workers)
 
         # wait for GPU workers to finish initializing
-        for w in self.gpu_workers:
-            w.init()
-
-        return reset_results
-
-    def start_rollouts(self, reset_results):
-        for res in reset_results:
-            res = AttrDict(res)
-            worker_idx, splits, policy_inputs = res.worker_idx, res.splits, res.policy_inputs
-            for policy_inputs, split in zip(policy_inputs, splits):
-                rollout_step = dict(
-                    split_idx=split, worker_idx=worker_idx, policy_inputs=policy_inputs, complete_rollouts=[],
-                )
-                self.process_rollout(rollout_step)
-
-    def process_task_result(self, task_result):
-        task_type = task_result.task_type
-        if task_type == TaskType.ROLLOUT_STEP:
-            self.process_rollout(task_result)
-        elif task_type == TaskType.POLICY_STEP:
-            self.process_policy_step(task_result)
-        # elif task_type == APPO.TASK_TRAIN:
-        #     self.process_train(task_result)
-        else:
-            raise Exception(f'Unknown task {task_type}')
-
-    def process_rollout(self, result):
-        step_policy_inputs = result['policy_inputs']
-        worker_idx = result['worker_idx']
-        split_idx = result['split_idx']
-        for policy_id, policy_input in step_policy_inputs.items():
-            num_inputs, policy_input = policy_input
-            self.policy_inputs[policy_id].append((worker_idx, split_idx, num_inputs, policy_input))
-            self.policy_outputs[(worker_idx, split_idx)][policy_id] = None  # waiting for outputs to be computed
-
-        for complete_rollout in result['complete_rollouts']:
-            env_steps = complete_rollout['env_steps']
-            self.num_frames += env_steps
-            pass
-
-            # rollout_timing = result['timing']
-            # self.last_timing = Timing(rollout_timing)
-            #
-            # self.save_trajectories(result)
-            # self.num_frames += result['num_steps']  # total collected experience
-
-    def process_policy_step(self, result):
-        policy_id = result['policy_id']
-        outputs_per_actor = result['outputs_per_actor']
-        gpu_worker_idx = result['gpu_worker_idx']
-
-        # distribute calculated policy outputs among corresponding CPU actors
-        for actor, policy_output_obj in outputs_per_actor.items():
-            worker_idx, split_idx = actor
-            self.policy_outputs[(worker_idx, split_idx)][policy_id] = policy_output_obj
-
-            if all([o is not None for o in self.policy_outputs[(worker_idx, split_idx)].values()]):
-                # finished calculating policy outputs for this actor
-                worker = self.cpu_workers[worker_idx]
-                policy_outputs = self.policy_outputs[(worker_idx, split_idx)]
-                worker.request_step(split_idx, policy_outputs)
-
-                self.policy_outputs[(worker_idx, split_idx)] = dict()  # delete old policy outputs
-
-        self.gpu_workers[gpu_worker_idx].num_tasks -= 1
-        assert self.gpu_workers[gpu_worker_idx].num_tasks >= 0
-
-    def process_train(self, train_result):
-        train_result = ray.get(train_result)
-        policy_id = train_result['policy_id']
-        gpu_worker_idx = train_result['worker_idx']
-
-        # TODO: update the latest weights for the policy
-        # TODO: increment policy version
-        log.info('Finished training for policy %d', policy_id)
-
-        self.gpu_workers[gpu_worker_idx].active_task = None
-        self.currently_training.remove(policy_id)
-
-    def save_trajectories(self, rollout):
-        rollout_trajectories = rollout['trajectories']
-        for t in rollout_trajectories:
-            policy_id = t['policy_id']
-            if policy_id not in self.trajectories:
-                self.trajectories[policy_id] = dict(traj=[], traj_len=[])
-            self.trajectories[policy_id]['traj'].append(t['t'])
-            self.trajectories[policy_id]['traj_len'].append(t['length'])
-
-    def process_experience(self):
-        #TODO
-        return
-
-        free_gpu_workers = [w for w in self.gpu_workers if w.active_task is None]
-
-        for policy_id, traj_data in self.trajectories.items():
-            length = sum(traj_data['traj_len'])
-            if length < self.cfg.macro_batch:
-                continue
-            if policy_id in self.currently_training:
-                continue
-
-            # enough experience for the policy to start training
-            if len(free_gpu_workers) < 1:
-                # always leave at least one GPU worker for action computation
-                break
-
-            gpu_worker = free_gpu_workers.pop()
-            self.train(policy_id, gpu_worker)
-
-    def train(self, policy_id, gpu_worker):
-        """Train policy `policy_id` on given GPU worker."""
-        traj_data = self.trajectories[policy_id]
-        total_len = 0
-        num_segments = 0
-        for t, t_len in zip(traj_data['traj'], traj_data['traj_len']):
-            total_len += t_len
-            num_segments += 1
-            if total_len >= self.cfg.macro_batch:
-                break
-
-        training_data = traj_data['traj'][:num_segments]
-
-        # leave remaining data to train later
-        self.trajectories[policy_id]['traj'] = traj_data['traj'][num_segments:]
-        self.trajectories[policy_id]['traj_len'] = traj_data['traj_len'][num_segments:]
-
-        # TODO: pass latest policy parameters
-        train_task = gpu_worker.train.remote(policy_id, training_data)
-
-        assert policy_id not in self.currently_training
-        self.currently_training.add(policy_id)
-        gpu_worker.active_task = train_task
-
-    def compute_policy_steps(self):
-        free_gpu_workers = [w for w in self.gpu_workers if w.num_tasks <= 0]
-
-        while len(free_gpu_workers) > 0:
-            gpu_worker = free_gpu_workers.pop()
-            task = self.compute_policy_task()
-            if task is None:
-                break
-
-            gpu_worker.policy_step(task)
-            gpu_worker.num_tasks += 1
-
-    def compute_policy_task(self):
-        policy_with_most_data = -1
-        max_num_inputs = 0
-
-        # find the policy with the most observations collected so far
-        for policy_id, policy_inputs in enumerate(self.policy_inputs):
-            num_inputs = 0
-            for policy_input in policy_inputs:
-                _, _, n, _ = policy_input
-                num_inputs += n
-
-            if num_inputs > max_num_inputs:
-                policy_with_most_data = policy_id
-                max_num_inputs = len(policy_inputs)
-
-        if max_num_inputs <= 0:
-            # no new experience from the policies
-            return None
-
-        selected_policy = policy_with_most_data
-        task = (selected_policy, self.policy_inputs[selected_policy])
-        self.policy_inputs[selected_policy] = []
-        return task
+        for policy_id, workers in self.policy_workers.items():
+            for w in workers:
+                w.start_process()
+                w.init()
 
     def print_stats(self):
         now = time.time()
@@ -1160,36 +1203,31 @@ class APPO(Algorithm):
         self.last_fps_report = time.time()
 
     def learn(self):
-        reset_results = self.init_workers()
-        self.start_rollouts(reset_results)
+        self.init_workers()
 
         log.info('Collecting experience...')
-        timing = Timing()
-        queues = [w.result_queue._reader for w in self.cpu_workers]
-        queues.extend([w.result_queue._reader for w in self.gpu_workers])
 
+        timing = Timing()
         with timing.timeit('experience'):
             while self.num_frames < 1000000:  # TODO: stopping condition
-                ready, _, _ = select.select(queues, [], [], 0.001)
-
-                for ready_queue in ready:
-                    w = self.workers_by_handle[ready_queue._handle]
-                    result = safe_get(w.result_queue)
-                    result = AttrDict(result)
-                    self.process_task_result(result)
-
-                self.process_experience()
-                self.compute_policy_steps()
+                for w in self.learner_workers.values():
+                    while True:
+                        try:
+                            report = w.report_queue.get(timeout=0.01)
+                            self.num_frames += report['env_steps']
+                        except Empty:
+                            break
 
                 self.print_stats()
 
-        for w in self.cpu_workers:
+        all_workers = self.actor_workers
+        for workers in self.policy_workers.values():
+            all_workers.extend(workers)
+        all_workers.extend(self.learner_workers.values())
+
+        for w in all_workers:
             w.close()
-        for w in self.gpu_workers:
-            w.close()
-        for w in self.cpu_workers:
-            w.join()
-        for w in self.gpu_workers:
+        for w in all_workers:
             w.join()
 
         fps = self.num_frames / timing.experience
