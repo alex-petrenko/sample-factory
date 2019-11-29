@@ -3,7 +3,6 @@ import math
 import random
 import time
 from collections import OrderedDict, deque
-from enum import Enum
 from queue import Empty
 
 import numpy as np
@@ -12,13 +11,12 @@ import ray.pyarrow_files.pyarrow as pa
 import torch
 from ray.pyarrow_files.pyarrow import plasma
 from tensorboardX import SummaryWriter
-from torch import nn
 from torch.multiprocessing import JoinableQueue, Process
-from torch.nn import functional
 
-from algorithms.ppo.agent_ppo import calc_num_elements
-from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
-from algorithms.utils.algo_utils import num_env_steps, EPS
+from algorithms.appo.model import ActorCritic
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append
+from algorithms.appo.learner import LearnerWorker
+from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from algorithms.utils.multi_env import safe_get, queue_join_timeout
 from envs.create_env import create_env
@@ -83,155 +81,28 @@ class Algorithm:
         self.writer = SummaryWriter(summary_dir, flush_secs=10)
 
 
-class ActorCritic(nn.Module):
-    def __init__(self, obs_space, action_space, cfg):
-        super().__init__()
-
-        self.cfg = cfg
-        self.action_space = action_space
-
-        def nonlinearity():
-            return nn.ELU(inplace=True)
-
-        obs_shape = AttrDict()
-        if hasattr(obs_space, 'spaces'):
-            for key, space in obs_space.spaces.items():
-                obs_shape[key] = space.shape
-        else:
-            obs_shape.obs = obs_space.shape
-        input_ch = obs_shape.obs[0]
-        log.debug('Num input channels: %d', input_ch)
-
-        if cfg.encoder == 'convnet_simple':
-            conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
-        elif cfg.encoder == 'minigrid_convnet_tiny':
-            conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
-        else:
-            raise NotImplementedError(f'Unknown encoder {cfg.encoder}')
-
-        conv_layers = []
-        for layer in conv_filters:
-            if layer == 'maxpool_2x2':
-                conv_layers.append(nn.MaxPool2d((2, 2)))
-            elif isinstance(layer, (list, tuple)):
-                inp_ch, out_ch, filter_size, stride = layer
-                conv_layers.append(nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride))
-                conv_layers.append(nonlinearity())
-            else:
-                raise NotImplementedError(f'Layer {layer} not supported!')
-
-        self.conv_head = nn.Sequential(*conv_layers)
-        self.conv_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
-        log.debug('Convolutional layer output size: %r', self.conv_out_size)
-
-        self.head_out_size = self.conv_out_size
-
-        self.measurements_head = None
-        if 'measurements' in obs_shape:
-            self.measurements_head = nn.Sequential(
-                nn.Linear(obs_shape.measurements[0], 128),
-                nonlinearity(),
-                nn.Linear(128, 128),
-                nonlinearity(),
-            )
-            measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
-            self.head_out_size += measurements_out_size
-
-        log.debug('Policy head output size: %r', self.head_out_size)
-
-        self.hidden_size = cfg.hidden_size
-        self.linear1 = nn.Linear(self.head_out_size, self.hidden_size)
-
-        fc_output_size = self.hidden_size
-
-        if cfg.use_rnn:
-            self.core = nn.GRUCell(fc_output_size, self.hidden_size)
-        else:
-            self.core = nn.Sequential(
-                nn.Linear(fc_output_size, self.hidden_size),
-                nonlinearity(),
-            )
-
-        self.critic_linear = nn.Linear(self.hidden_size, 1)
-        self.dist_linear = nn.Linear(self.hidden_size, calc_num_logits(self.action_space))
-
-        self.apply(self.initialize_weights)
-
-        self.train()
-
-    def forward_head(self, obs_dict):
-        mean = self.cfg.obs_subtract_mean
-        scale = self.cfg.obs_scale
-
-        if abs(mean) > EPS and abs(scale - 1.0) > EPS:
-            obs_dict.obs = (obs_dict.obs - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
-
-        x = self.conv_head(obs_dict.obs)
-        x = x.view(-1, self.conv_out_size)
-
-        if self.measurements_head is not None:
-            measurements = self.measurements_head(obs_dict.measurements)
-            x = torch.cat((x, measurements), dim=1)
-
-        x = self.linear1(x)
-        x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
-        return x
-
-    def forward_core(self, head_output, rnn_states, masks):
-        if self.cfg.use_rnn:
-            x = new_rnn_states = self.core(head_output, rnn_states * masks)
-        else:
-            x = self.core(head_output)
-            new_rnn_states = torch.zeros(x.shape[0])
-
-        return x, new_rnn_states
-
-    def forward_tail(self, core_output):
-        values = self.critic_linear(core_output)
-        action_logits = self.dist_linear(core_output)
-        dist = get_action_distribution(self.action_space, raw_logits=action_logits)
-
-        # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(dist)
-
-        result = AttrDict(dict(
-            actions=actions,
-            action_logits=action_logits,
-            log_prob_actions=log_prob_actions,
-            values=values,
-        ))
-        return result
-
-    def forward(self, obs_dict, rnn_states, masks=None):
-        x = self.forward_head(obs_dict)
-
-        if masks is None:
-            masks = torch.ones([x.shape[0], 1]).to(x.device)
-
-        x, new_rnn_states = self.forward_core(x, rnn_states, masks)
-        result = self.forward_tail(x)
-        result.rnn_states = new_rnn_states
-        return result
-
-    @staticmethod
-    def initialize_weights(layer):
-        if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
-            nn.init.orthogonal_(layer.weight.data, gain=1)
-            layer.bias.data.fill_(0)
-        elif type(layer) == nn.GRUCell:
-            nn.init.orthogonal_(layer.weight_ih, gain=1)
-            nn.init.orthogonal_(layer.weight_hh, gain=1)
-            layer.bias_ih.data.fill_(0)
-            layer.bias_hh.data.fill_(0)
-        else:
-            pass
-
-
 def make_env_func(cfg, env_config):
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
     if not hasattr(env, 'num_agents'):
         env = MultiAgentWrapper(env)
     return env
+
+
+def transform_dict_observations(observations):
+    """Transform list of dict observations into a dict of lists."""
+    obs_dict = dict()
+    if isinstance(observations[0], (dict, OrderedDict)):
+        for key in observations[0].keys():
+            if not isinstance(observations[0][key], str):
+                obs_dict[key] = [o[key] for o in observations]
+    else:
+        # handle flat observations also as dict
+        obs_dict['obs'] = observations
+
+    for key, x in obs_dict.items():
+        obs_dict[key] = np.stack(x)
+
+    return obs_dict
 
 
 class ActorState:
@@ -285,11 +156,15 @@ class ActorState:
         self._trajectory_add_args(**args)
 
     def trajectory_len(self):
-        return len(self.trajectory['obs']) if 'obs' in self.trajectory else 0
+        key = 'rewards'  # can be anything
+        return len(self.trajectory[key]) if key in self.trajectory else 0
 
     def finalize_trajectory(self, done):
         if not done and self.trajectory_len() < self.cfg.rollout:
             return None
+
+        obs_dict = transform_dict_observations(self.trajectory['obs'])
+        self.trajectory['obs'] = obs_dict
 
         t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
         traj_dict = dict(
@@ -505,10 +380,6 @@ class VectorEnvRunner:
             e.close()
 
 
-class TaskType(Enum):
-    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS = range(7)
-
-
 class ActorWorker:
     """
     Works with an array (vector) of environments that is processes in portions.
@@ -713,7 +584,8 @@ class PolicyWorker:
         log.info('GPU worker %d initialized', self.worker_idx)
 
     def _terminate(self):
-        log.info('GPU worker %d terminated', self.worker_idx)
+        # log.info('GPU worker %d terminated', self.worker_idx)
+        pass
 
     def _handle_policy_step(self, requests, timing):
         if len(requests) <= 0:
@@ -735,13 +607,7 @@ class PolicyWorker:
                     split_idx = request['split_idx']
                     num_inputs, policy_input = request['policy_inputs']
 
-                    obs = policy_input['obs']
-                    for key, x in obs.items():
-                        if key in observations:
-                            observations[key].append(x)
-                        else:
-                            observations[key] = [x]
-
+                    dict_of_lists_append(observations, policy_input['obs'])
                     rnn_states.append(policy_input['rnn_states'])
                     num_obs_per_actor.append((actor_idx, split_idx, num_inputs))
 
@@ -807,12 +673,10 @@ class PolicyWorker:
             # initialize the Torch modules
             log.info('Initializing model on the policy worker %d...', self.worker_idx)
 
-            try:
-                self.device = torch.device('cuda')
-                self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
-                self.actor_critic.to(self.device)
-            except Exception as exc:
-                log.exception(exc)
+            torch.set_num_threads(1)
+            self.device = torch.device('cuda')
+            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+            self.actor_critic.to(self.device)
 
             log.info('Initialized model on the policy worker %d!', self.worker_idx)
 
@@ -871,117 +735,6 @@ class PolicyWorker:
         self.process.join(timeout=5)
 
 
-class LearnerWorker:
-    def __init__(self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, weight_queues):
-        log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
-
-        self.worker_idx = worker_idx
-        self.policy_id = policy_id
-        self.cfg = cfg
-        self.policy_version = 0
-
-        self.obs_space = obs_space
-        self.action_space = action_space
-
-        self.plasma_store_name = plasma_store_name
-        self.plasma_client = None
-        self.serialization_context = None
-
-        # initialize the Torch modules
-        self.device = None
-        self.actor_critic = None
-
-        self.task_queue = JoinableQueue()
-        self.report_queue = JoinableQueue()
-        self.weight_queues = weight_queues
-
-        self.num_samples = 0
-        self.num_requests = 0
-
-        self.process = Process(target=self._run, daemon=True)
-
-    def start_process(self):
-        self.process.start()
-
-    def _should_log(self):
-        log_rate = 50
-        return self.num_requests % log_rate == 0
-
-    def _init(self):
-        self._broadcast_weights()
-        log.info('GPU learner %d initialized', self.worker_idx)
-
-    def _terminate(self):
-        del self.actor_critic
-        del self.device
-
-    def _broadcast_weights(self):
-        state_dict = self.actor_critic.state_dict()
-        weight_update = (self.policy_version, state_dict)
-        for q in self.weight_queues:
-            q.put((TaskType.UPDATE_WEIGHTS, weight_update))
-
-    def _process_rollouts(self, rollouts):
-        stats = AttrDict(samples=0, env_steps=0)
-
-        rollouts = self.plasma_client.get(
-            rollouts, -1, serialization_context=self.serialization_context,
-        )
-
-        for rollout in rollouts:
-            num_samples = rollout['length']
-            self.num_samples += num_samples
-            stats.samples += num_samples
-            stats.env_steps += rollout['env_steps']
-
-        self.report_queue.put(stats)
-
-        if self.num_samples >= self.cfg.macro_batch:
-            # TODO: train
-            log.debug('Training policy %d on macro batch size %d', self.policy_id, self.num_samples)
-
-            self.num_samples = 0
-            self.policy_version += 1
-            self._broadcast_weights()
-
-    def _run(self):
-        timing = Timing()
-
-        with timing.timeit('init'):
-            self.plasma_client = plasma.connect(self.plasma_store_name)
-            self.serialization_context = pa.default_serialization_context()
-
-            # initialize the Torch modules
-            self.device = torch.device('cuda')
-            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
-            self.actor_critic.to(self.device)
-            self.actor_critic.share_memory()
-
-        while True:
-            task_type, data = safe_get(self.task_queue)
-            if task_type == TaskType.INIT:
-                self._init()
-            elif task_type == TaskType.TERMINATE:
-                self._terminate()
-                break
-            elif task_type == TaskType.TRAIN:
-                self._process_rollouts(data)
-
-            self.task_queue.task_done()
-
-        log.info('Gpu learner timing: %s', timing)
-
-    def init(self):
-        self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.join()
-
-    def close(self):
-        self.task_queue.put((TaskType.TERMINATE, None))
-
-    def join(self):
-        self.process.join(timeout=5)
-
-
 class APPO(Algorithm):
     """Async PPO."""
 
@@ -1000,7 +753,6 @@ class APPO(Algorithm):
 
         p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-        p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
@@ -1029,7 +781,7 @@ class APPO(Algorithm):
         p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor')
         p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
-        p.add_argument('--policy_workers_per_policy', default=2, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
+        p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
         p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
 
     def __init__(self, cfg):

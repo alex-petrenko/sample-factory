@@ -12,11 +12,11 @@ from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGa
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
 
-DOOM_W = 128
-DOOM_H = 72
+# DOOM_W = 128
+# DOOM_H = 72
 
-# DOOM_W = 84
-# DOOM_H = 84
+DOOM_W = 84
+DOOM_H = 84
 
 
 class DoomSpec:
@@ -208,8 +208,8 @@ def make_doom_env_impl(
         env = BotDifficultyWrapper(env, bot_difficulty)
 
     if custom_resolution is None:
-        env = SetResolutionWrapper(env, '256x144')  # default (wide aspect ratio)
-        # env = SetResolutionWrapper(env, '160x120')  # default (wide aspect ratio)
+        # env = SetResolutionWrapper(env, '256x144')  # default (wide aspect ratio)
+        env = SetResolutionWrapper(env, '160x120')
     else:
         assert custom_resolution in resolutions
         env = SetResolutionWrapper(env, custom_resolution)
