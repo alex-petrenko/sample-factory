@@ -1,17 +1,14 @@
-import time
 from collections import OrderedDict
 
 import numpy as np
-
+import ray.pyarrow_files.pyarrow as pa
 import torch
+from ray.pyarrow_files.pyarrow import plasma
 from torch.multiprocessing import JoinableQueue, Process
 
-import ray.pyarrow_files.pyarrow as pa
-from ray.pyarrow_files.pyarrow import plasma
-
-from algorithms.appo.model import ActorCritic
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, list_of_dicts_to_dict_of_lists, extend_array_by, \
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, list_of_dicts_to_dict_of_lists, \
     iterate_recursively
+from algorithms.appo.model import ActorCritic
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
@@ -20,7 +17,9 @@ from utils.utils import log, AttrDict
 
 
 class LearnerWorker:
-    def __init__(self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, weight_queues):
+    def __init__(
+        self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, report_queue, weight_queues,
+    ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
         self.worker_idx = worker_idx
@@ -43,7 +42,7 @@ class LearnerWorker:
         self.optimizer = None
 
         self.task_queue = JoinableQueue()
-        self.report_queue = JoinableQueue()
+        self.report_queue = report_queue
         self.weight_queues = weight_queues
 
         self.num_samples = self.train_step = 0
@@ -92,8 +91,8 @@ class LearnerWorker:
             last_rnn_states = torch.from_numpy(last_rnn_states).to(self.device).float()
 
             policy_outputs = self.actor_critic(last_observations, last_rnn_states)
-            policy_outputs.values = policy_outputs.values.cpu().numpy()
-            for t, value in zip(trajectories, policy_outputs.values):
+            values = policy_outputs.values.cpu().numpy()
+            for t, value in zip(trajectories, values):
                 t.values.append(value)
 
         return trajectories
@@ -141,8 +140,6 @@ class LearnerWorker:
 
     def _experience_buffer(self, trajectories):
         buffer = AttrDict()
-        traj_indices = []
-        start_indices = []
 
         # by the end of this loop the buffer is a dictionary containing lists of numpy arrays of different lengths
         for i, t in enumerate(trajectories):
@@ -150,10 +147,6 @@ class LearnerWorker:
                 if key not in buffer:
                     buffer[key] = []
                 buffer[key].append(x)
-
-            t_len = len(t.rewards)
-            start_indices.append(len(traj_indices))
-            traj_indices.extend([i] * t_len)
 
         # convert lists of dict observations to a single dictionary of lists
         for key, x in buffer.items():
@@ -163,56 +156,41 @@ class LearnerWorker:
         # concatenate trajectories into a single big buffer
         for d, key, value in iterate_recursively(buffer):
             d[key] = np.concatenate(value)
+        experience_size = len(buffer.rewards)  # could have used any other key
 
         # normalize advantages if needed
         if self.cfg.normalize_advantage:
             adv_mean = buffer.advantages.mean()
             adv_std = buffer.advantages.std()
-            adv_max, adv_min = buffer.advantages.max(), buffer.advantages.min()
-            adv_max_abs = max(adv_max, abs(adv_min))
+            # adv_max, adv_min = buffer.advantages.max(), buffer.advantages.min()
+            # adv_max_abs = max(adv_max, abs(adv_min))
             # log.info(
             #     'Adv mean %.3f std %.3f, min %.3f, max %.3f, max abs %.3f',
             #     adv_mean, adv_std, adv_min, adv_max, adv_max_abs,
             # )
             buffer.advantages = (buffer.advantages - adv_mean) / max(1e-3, adv_std)
 
-        # if last trajectory in the buffer is shorter than the full rollout, extend it with zeros
-        # to make sure that no matter from which "start_index" we start, we always have at least "rollout" timesteps
-        # in the buffer
-        total_len = len(traj_indices)
-        extra_length = start_indices[-1] + self.cfg.rollout - total_len
-        for d, key, value in iterate_recursively(buffer):
-            d[key] = extend_array_by(value, extra_length)
-
-        # non-existing "fake" trajectory, just filling the gap
-        traj_indices.extend([traj_indices[-1] + 1] * extra_length)
-
         buffer = self._to_tensors(buffer)
+        return buffer, experience_size
 
-        return buffer, start_indices, traj_indices
-
-    def _get_minibatches(self, start_indices, traj_indices):
+    def _get_minibatches(self, experience_size):
         """Generating minibatches for training."""
-        start_indices = np.random.permutation(start_indices)
+        assert self.cfg.rollout % self.cfg.recurrence == 0
+        assert experience_size % self.cfg.batch_size == 0
 
-        # we mask tails of incomplete trajectories with zeros
-        masks = []
-        for start_idx in start_indices:
-            for i in range(self.cfg.rollout):
-                masks.append(traj_indices[start_idx + i] == traj_indices[start_idx])
+        # indices that will start the mini-trajectories from the same episode (for bptt)
+        indices = np.arange(0, experience_size, self.cfg.recurrence)
+        indices = np.random.permutation(indices)
 
         # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
-        indices = [np.arange(i, i + self.cfg.rollout) for i in start_indices]
+        indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
         indices = np.concatenate(indices)
 
-        experience_size = len(indices)
+        assert len(indices) == experience_size
+
         num_minibatches = experience_size // self.cfg.batch_size
         minibatches = np.split(indices, num_minibatches)
-
-        masks = np.split(np.asarray(masks), num_minibatches)
-        masks = torch.tensor(masks, device=self.device).float()
-
-        return minibatches, masks
+        return minibatches
 
     @staticmethod
     def _get_minibatch(buffer, indices):
@@ -275,7 +253,6 @@ class LearnerWorker:
         objective_clipped = -leak * ratio * mb.advantages + clipping * mb.advantages * (1.0 + leak)
 
         policy_loss = -(objective * is_ratio_not_clipped + objective_clipped * is_ratio_clipped)
-        policy_loss = policy_loss * mb.mask
         policy_loss = policy_loss.mean()
 
         return policy_loss, ratio, fraction_clipped
@@ -285,7 +262,6 @@ class LearnerWorker:
         value_original_loss = (new_values - mb.returns).pow(2)
         value_clipped_loss = (value_clipped - mb.returns).pow(2)
         value_loss = torch.max(value_original_loss, value_clipped_loss)
-        value_loss = value_loss * mb.mask
         value_loss = value_loss.mean()
         value_loss *= self.cfg.value_loss_coeff
         value_delta = torch.abs(new_values - mb.values).mean()
@@ -298,12 +274,11 @@ class LearnerWorker:
             trajectories = self._finalize_trajectories(timing)
 
         with timing.add_time('buffer'):
-            buffer, start_indices, traj_indices = self._experience_buffer(trajectories)
+            buffer, experience_size = self._experience_buffer(trajectories)
 
         with timing.add_time('train'):
             clip_ratio = self.cfg.ppo_clip_ratio
             clip_value = self.cfg.ppo_clip_value
-            recurrence = self.cfg.rollout
 
             kl_old_mean = kl_old_max = 0.0
             value_delta = value_delta_max = 0.0
@@ -318,38 +293,35 @@ class LearnerWorker:
                 if early_stopping:
                     break
 
-                minibatches, masks = self._get_minibatches(start_indices, traj_indices)
+                minibatches = self._get_minibatches(experience_size)
 
                 for batch_num in range(len(minibatches)):
                     indices = minibatches[batch_num]
-                    mask = masks[batch_num]
 
                     mb_stats = AttrDict(dict(rnn_dist=0))
                     with_summaries = self._should_save_summaries()
 
                     # current minibatch consisting of short trajectory segments with length == recurrence
                     mb = self._get_minibatch(buffer, indices)
-                    mb.mask = mask
 
                     # calculate policy head outside of recurrent loop
                     head_outputs = self.actor_critic.forward_head(mb.obs)
 
                     # indices corresponding to 1st frames of trajectory segments
-                    traj_indices = indices[::self.cfg.rollout]
+                    traj_indices = indices[::self.cfg.recurrence]
 
                     # initial rnn states
                     rnn_states = buffer.rnn_states[traj_indices]
 
                     # calculate RNN outputs for each timestep in a loop
                     core_outputs = []
-                    for i in range(recurrence):
+                    for i in range(self.cfg.recurrence):
                         # indices of head outputs corresponding to the current timestep
-                        timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.rollout)  # TODO! decouple recurrence and rollout
+                        timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
                         step_head_outputs = head_outputs[timestep_indices]
 
-                        step_mask = mb.mask[timestep_indices].unsqueeze(dim=1)
-                        rnn_states = step_mask * rnn_states + (1.0 - step_mask) * mb.rnn_states[timestep_indices]
-
+                        dones = mb.dones[timestep_indices].unsqueeze(dim=1)
+                        rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep_indices]
                         core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
                         core_outputs.append(core_output)
 
@@ -371,11 +343,10 @@ class LearnerWorker:
 
                     value_loss, value_delta, value_delta_max = self._value_loss(result.values, mb, clip_value)
 
+                    # entropy loss
                     entropy = action_distribution.entropy().mean()
                     kl_prior = action_distribution.kl_prior()
-                    kl_prior = kl_prior * mb.mask
                     kl_prior = kl_prior.mean()
-
                     prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
                     old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
@@ -383,7 +354,6 @@ class LearnerWorker:
                     # small KL penalty for being different from the behavior policy
                     kl_old = action_distribution.kl_divergence(old_action_distribution)
                     kl_old_max = kl_old.max()
-                    kl_old = kl_old * mb.mask
                     kl_old_mean = kl_old.mean()
                     kl_penalty = self.kl_coeff * kl_old_mean
 
@@ -475,18 +445,22 @@ class LearnerWorker:
             # log.info('Value delta 99, max: %.3f, %.3f', value_delta_99th, value_delta_max)
 
     def _process_rollouts(self, rollouts, timing):
-        stats = AttrDict(samples=0, env_steps=0)
+        stats = dict(samples=0, env_steps=0)
 
         rollouts = self.plasma_client.get(
             rollouts, -1, serialization_context=self.serialization_context,
         )
 
+        assert self.cfg.macro_batch % self.cfg.rollout == 0
+        assert self.cfg.rollout % self.cfg.recurrence == 0
+        assert self.cfg.macro_batch % self.cfg.recurrence == 0
+
         rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
 
         for rollout in rollouts:
             num_samples = rollout['length']
-            stats.samples += num_samples
-            stats.env_steps += rollout['env_steps']
+            stats['samples'] += num_samples
+            stats['env_steps'] += rollout['env_steps']
 
             self.num_samples += num_samples
             self.rollouts.append(rollout)

@@ -117,15 +117,18 @@ class ActorState:
 
         self.curr_policy_id = self._sample_random_policy()
         self.rnn_state = self._reset_rnn_state()
-        self.last_obs = None
-
-        self.curr_actions = self.new_rnn_state = None
+        self.last_obs = self.curr_actions = None
         self.ready = False
 
         self.trajectory = dict()
         self.num_trajectories = 0
-        self.episode_reward = 0
-        self.env_steps = 0
+        self.rollout_env_steps = 0
+
+        self.last_episode_reward = 0
+        self.last_episode_duration = 0
+
+        # whether the new episode was started during the current rollout
+        self.new_episode = False
 
     def _sample_random_policy(self):
         return random.randint(0, self.cfg.num_policies - 1)
@@ -146,9 +149,15 @@ class ActorState:
     def trajectory_add_policy_inputs(self, obs, rnn_states):
         self._trajectory_add_args(obs=obs, rnn_states=rnn_states)
 
-    def trajectory_add_env_step(self, rewards, dones, info):
-        self._trajectory_add_args(rewards=rewards, dones=dones)
-        self.env_steps += num_env_steps([info])
+    def trajectory_add_env_step(self, reward, done, info):
+        self._trajectory_add_args(rewards=reward, dones=done)
+
+        env_steps = num_env_steps([info])
+        self.rollout_env_steps += env_steps
+        self.last_episode_duration += env_steps
+
+        if done:
+            self.new_episode = True
 
     def trajectory_add_policy_step(self, actions, action_logits, log_prob_actions, values):
         args = copy.copy(locals())
@@ -159,34 +168,41 @@ class ActorState:
         key = 'rewards'  # can be anything
         return len(self.trajectory[key]) if key in self.trajectory else 0
 
-    def finalize_trajectory(self, done):
-        if not done and self.trajectory_len() < self.cfg.rollout:
-            return None
-
+    def finalize_trajectory(self):
         obs_dict = transform_dict_observations(self.trajectory['obs'])
         self.trajectory['obs'] = obs_dict
 
         t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
         traj_dict = dict(
-            t_id=t_id, length=self.trajectory_len(), env_steps=self.env_steps, policy_id=self.curr_policy_id,
+            t_id=t_id, length=self.trajectory_len(), env_steps=self.rollout_env_steps, policy_id=self.curr_policy_id,
             t=self.trajectory,
         )
 
         self.trajectory = dict()
-        self.episode_reward = 0
-        self.env_steps = 0
-        self.curr_policy_id = self._sample_random_policy()
         self.num_trajectories += 1
+        self.rollout_env_steps = 0
+
+        if self.new_episode:
+            new_policy_id = self._sample_random_policy()
+            if new_policy_id != self.curr_policy_id:
+                # we're switching to a different policy - reset the rnn hidden state
+                self.curr_policy_id = new_policy_id
+                self.rnn_state = self._reset_rnn_state()
+
+            self.new_episode = False
 
         return traj_dict
 
-    def update_rnn_state(self, new_rnn_state, done):
+    def update_rnn_state(self, done):
         if done:
             self.rnn_state = self._reset_rnn_state()
-        else:
-            self.rnn_state = new_rnn_state
 
         return self.rnn_state
+
+    def episodic_stats(self):
+        stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
+        self.last_episode_reward = self.last_episode_duration = 0
+        return stats
 
 
 class VectorEnvRunner:
@@ -226,9 +242,7 @@ class VectorEnvRunner:
             self.episode_rewards.append(episode_rewards_env)
 
     def _save_policy_outputs(self, policy_id, policy_outputs):
-        policy_outputs = self.plasma_client.get(
-                policy_outputs, -1, serialization_context=self.serialization_context,
-        )
+        policy_outputs = self.plasma_client.get(policy_outputs, -1, serialization_context=self.serialization_context)
         all_actors_ready = True
 
         i = 0
@@ -240,7 +254,7 @@ class VectorEnvRunner:
                 if actor_policy == policy_id:
                     outputs = AttrDict(policy_outputs)
                     actor_state.curr_actions = outputs.actions[i]
-                    actor_state.new_rnn_state = outputs.rnn_states[i]
+                    actor_state.rnn_state = outputs.rnn_states[i]
                     actor_state.trajectory_add_policy_step(
                         outputs.actions[i],
                         outputs.action_logits[i],
@@ -263,33 +277,44 @@ class VectorEnvRunner:
 
     def _process_rewards(self, rewards, env_i):
         for agent_i, r in enumerate(rewards):
-            self.actor_states[env_i][agent_i].episode_reward += r
+            self.actor_states[env_i][agent_i].last_episode_reward += r
 
         rewards = np.asarray(rewards, dtype=np.float32)
         rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
         rewards = rewards * self.cfg.reward_scale
         return rewards
 
-    def _save_env_step(self, rewards, dones, infos, env_i):
-        for agent_i in range(self.num_agents):
-            self.actor_states[env_i][agent_i].trajectory_add_env_step(rewards[agent_i], dones[agent_i], infos[agent_i])
+    def _process_env_step(self, new_obs, rewards, dones, infos, env_i):
+        complete_rollouts, episodic_stats = [], []
+        env_actor_states = self.actor_states[env_i]
 
-    def _save_policy_inputs(self, new_obs, new_rnn_states, dones, env_i):
+        rewards = self._process_rewards(rewards, env_i)
+
         for agent_i in range(self.num_agents):
-            actor_state = self.actor_states[env_i][agent_i]
-            new_rnn_state = actor_state.update_rnn_state(new_rnn_states[agent_i], dones[agent_i])
-            actor_state.trajectory_add_policy_inputs(new_obs[agent_i], new_rnn_state)
+            actor_state = env_actor_states[agent_i]
+
+            # add information from the last env step to the trajectory, after this call
+            # len(obs) == len(rnn_states) == len(rewards) == ...
+            actor_state.trajectory_add_env_step(rewards[agent_i], dones[agent_i], infos[agent_i])
+
+            # finalize and serialize the trajectory if we have a complete rollout
+            if actor_state.trajectory_len() >= self.cfg.rollout:
+                complete_rollouts.append(actor_state.finalize_trajectory())
+
+            # if we encountered episode boundary, reset rnn states to their default values
+            new_rnn_state = actor_state.update_rnn_state(dones[agent_i])
+
+            # save latest policy inputs (obs and hidden states)
+            # after this block len(obs) == len(rnn_states) == len(rewards) + 1 == len(dones) + 1 == ...
             actor_state.last_obs = new_obs[agent_i]
+            actor_state.trajectory_add_policy_inputs(actor_state.last_obs, new_rnn_state)
 
-    def _finalize_trajectories(self, dones, env_i):
-        complete_rollouts = []
-        for agent_i in range(self.num_agents):
-            actor_state = self.actor_states[env_i][agent_i]
-            complete_rollout = actor_state.finalize_trajectory(dones[agent_i])
-            if complete_rollout is not None:
-                complete_rollouts.append(complete_rollout)
+            # save episode stats if we are at the episode boundary
+            if dones[agent_i]:
+                # TODO! stats per policy
+                episodic_stats.append(actor_state.episodic_stats())
 
-        return complete_rollouts
+        return complete_rollouts, episodic_stats
 
     def _format_policy_inputs(self):
         policy_inputs = dict()
@@ -350,30 +375,26 @@ class VectorEnvRunner:
             policy_id = data['policy_id']
             all_actors_ready = self._save_policy_outputs(policy_id, policy_outputs)
             if not all_actors_ready:
-                return None, None
+                return None, None, None
 
-        complete_rollouts = []
+        complete_rollouts, episodic_stats = [], []
+
         for env_i, e in enumerate(self.envs):
             with timing.add_time('env_step'):
                 actions = [s.curr_actions for s in self.actor_states[env_i]]
                 new_obs, rewards, dones, infos = e.step(actions)
 
             with timing.add_time('overhead'):
-                rewards = self._process_rewards(rewards, env_i)
-                self._save_env_step(rewards, dones, infos, env_i)
+                rollouts, stats = self._process_env_step(new_obs, rewards, dones, infos, env_i)
+                complete_rollouts.extend(rollouts)
+                episodic_stats.extend(stats)
 
-                with timing.add_time('finalize'):
-                    complete_rollouts.extend(self._finalize_trajectories(dones, env_i))
-
-                new_rnn_states = [s.new_rnn_state for s in self.actor_states[env_i]]
-                self._save_policy_inputs(new_obs, new_rnn_states, dones, env_i)
-
-        with timing.add_time('format_output'):
+        with timing.add_time('format_inputs'):
             policy_inputs = self._format_policy_inputs()
 
         self._prepare_next_step()
 
-        return policy_inputs, complete_rollouts
+        return policy_inputs, complete_rollouts, episodic_stats
 
     def close(self):
         for e in self.envs:
@@ -398,7 +419,7 @@ class ActorWorker:
 
     def __init__(
         self, cfg, obs_space, action_space, worker_idx=0,
-        task_queue=None, plasma_store_name=None, policy_queues=None, learner_queues=None,
+        task_queue=None, plasma_store_name=None, policy_queues=None, report_queue=None, learner_queues=None,
     ):
         self.cfg = cfg
         self.obs_space = obs_space
@@ -421,6 +442,7 @@ class ActorWorker:
         self.serialization_context = None
 
         self.policy_queues = policy_queues
+        self.report_queue = report_queue
         self.learner_queues = learner_queues
         self.task_queue = task_queue
         self.process = Process(target=self._run, daemon=True)
@@ -470,6 +492,10 @@ class ActorWorker:
             )
             self.learner_queues[policy_id].put((TaskType.TRAIN, rollouts))
 
+    def _report_stats(self, stats):
+        stats = dict(episodic=stats)
+        self.report_queue.put(stats)
+
     def _handle_reset(self):
         for split_idx, env_runner in enumerate(self.env_runners):
             policy_inputs = env_runner.reset()
@@ -478,14 +504,14 @@ class ActorWorker:
 
     def _advance_rollouts(self, data, timing):
         split_idx = data['split_idx']
-        policy_inputs, complete_rollouts = self.env_runners[split_idx].advance_rollouts(data, timing)
+        policy_inputs, complete_rollouts, episodic_stats = self.env_runners[split_idx].advance_rollouts(data, timing)
 
         if policy_inputs is not None:
             self._enqueue_policy_request(split_idx, policy_inputs)
-
-        if complete_rollouts is not None and len(complete_rollouts) > 0:
+        if complete_rollouts:
             self._enqueue_complete_rollouts(complete_rollouts)
-            pass
+        if episodic_stats:
+            self._report_stats(episodic_stats)
 
     def _run(self):
         log.info('Initializing vector env runner %d...', self.worker_idx)
@@ -718,6 +744,7 @@ class PolicyWorker:
 
             self._update_weights(weight_update, timing)
 
+            # TODO: wait on both queues (use select.select)
             if not work_done:
                 with timing.add_time('gpu_waiting'):
                     time.sleep(0.001)
@@ -753,6 +780,7 @@ class APPO(Algorithm):
 
         p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
+        p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
@@ -793,6 +821,7 @@ class APPO(Algorithm):
 
         self.actor_workers = None
 
+        self.report_queue = JoinableQueue()
         self.policy_workers = dict()
         self.policy_queues = dict()
 
@@ -808,6 +837,8 @@ class APPO(Algorithm):
         for worker_idx in range(self.cfg.num_workers):
             for split_idx in range(self.cfg.worker_num_splits):
                 self.policy_outputs[(worker_idx, split_idx)] = dict()
+
+        self.episode_rewards = deque(maxlen=100)
 
         self.last_timing = dict()
         self.num_frames = 0
@@ -837,7 +868,7 @@ class APPO(Algorithm):
         return ActorWorker(
             self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
             plasma_store_name=self.plasma_store_name, policy_queues=self.policy_queues,
-            learner_queues=learner_queues,
+            report_queue=self.report_queue, learner_queues=learner_queues,
         )
 
     # noinspection PyProtectedMember
@@ -904,7 +935,7 @@ class APPO(Algorithm):
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space, self.plasma_store_name,
-                weight_queues[policy_id],
+                self.report_queue, weight_queues[policy_id],
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -951,6 +982,7 @@ class APPO(Algorithm):
         past_moment, past_frames = self.fps_stats[0]
         fps = (self.num_frames - past_frames) / (now - past_moment)
         log.debug('Fps in the last %.1f sec is %.1f. Total num frames: %d', now - past_moment, fps, self.num_frames)
+        log.debug('Avg episode reward %.3f', np.mean(self.episode_rewards))
         self.fps_stats.append((now, self.num_frames))
         self.last_fps_report = time.time()
 
@@ -961,12 +993,18 @@ class APPO(Algorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
-            while self.num_frames < 1000000:  # TODO: stopping condition
+            while self.num_frames < 10000000:  # TODO: stopping condition
                 for w in self.learner_workers.values():
                     while True:
                         try:
                             report = w.report_queue.get(timeout=0.01)
-                            self.num_frames += report['env_steps']
+                            if 'env_steps' in report:
+                                self.num_frames += report['env_steps']
+
+                            if 'episodic' in report:
+                                episodic_stats = report['episodic']
+                                for s in episodic_stats:
+                                    self.episode_rewards.append(s['reward'])
                         except Empty:
                             break
 
