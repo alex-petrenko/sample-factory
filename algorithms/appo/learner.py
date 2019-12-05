@@ -1,3 +1,4 @@
+import time
 from collections import OrderedDict
 
 import numpy as np
@@ -12,6 +13,7 @@ from algorithms.appo.model import ActorCritic
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
+from utils.decay import LinearDecay
 from utils.timing import Timing
 from utils.utils import log, AttrDict
 
@@ -46,6 +48,8 @@ class LearnerWorker:
         self.weight_queues = weight_queues
 
         self.num_samples = self.train_step = 0
+        self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)])
+        self.last_summary_written = -1e9
         self.rollouts = []
 
         # some stats we measure in the end of the last training epoch
@@ -83,17 +87,16 @@ class LearnerWorker:
             dict_of_lists_append(last_observations, last_obs)
             last_rnn_states.append(trajectory.rnn_states[-1])
 
-        with torch.no_grad():
-            for key, x in last_observations.items():
-                last_observations[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
+        for key, x in last_observations.items():
+            last_observations[key] = torch.from_numpy(np.stack(x)).to(self.device).float()
 
-            last_rnn_states = np.stack(last_rnn_states)
-            last_rnn_states = torch.from_numpy(last_rnn_states).to(self.device).float()
+        last_rnn_states = np.stack(last_rnn_states)
+        last_rnn_states = torch.from_numpy(last_rnn_states).to(self.device).float()
 
-            policy_outputs = self.actor_critic(last_observations, last_rnn_states)
-            values = policy_outputs.values.cpu().numpy()
-            for t, value in zip(trajectories, values):
-                t.values.append(value)
+        policy_outputs = self.actor_critic(last_observations, last_rnn_states)
+        values = policy_outputs.values.cpu().numpy()
+        for t, value in zip(trajectories, values):
+            t.values.append(value)
 
         return trajectories
 
@@ -207,24 +210,16 @@ class LearnerWorker:
         return mb
 
     def _should_save_summaries(self):
-        # TODO!
-        return False
+        summaries_every = self.summary_rate_decay.at(self.train_step)
+        return self.train_step - self.last_summary_written > summaries_every
 
     def _after_optimizer_step(self):
         """A hook to be called after each optimizer step."""
-        # self.train_step += 1
+        self.train_step += 1
         # self._maybe_save()
         # self.total_train_seconds += time.time() - self.last_training_step
-        # self.last_training_step = time.time()
-        pass
+        self.last_training_step = time.time()
         # TODO!!
-
-    def _report_train_summaries(self, stats):
-        # for key, scalar in stats.items():
-        #     self.writer.add_scalar(f'train/{key}', scalar, self.env_steps)
-        # self.last_summary_written = self.train_step
-        pass
-        # TODO!
 
     def _policy_loss(self, action_distribution, mb, clip_ratio):
         log_prob_actions = action_distribution.log_prob(mb.actions)
@@ -270,13 +265,16 @@ class LearnerWorker:
         return value_loss, value_delta, value_delta_max
 
     def _train(self, timing):
-        with timing.add_time('finalize'):
-            trajectories = self._finalize_trajectories(timing)
+        with torch.no_grad():
+            with timing.add_time('finalize'):
+                trajectories = self._finalize_trajectories(timing)
 
-        with timing.add_time('buffer'):
-            buffer, experience_size = self._experience_buffer(trajectories)
+            with timing.add_time('buffer'):
+                buffer, experience_size = self._experience_buffer(trajectories)
 
         with timing.add_time('train'):
+            stats = None
+
             clip_ratio = self.cfg.ppo_clip_ratio
             clip_value = self.cfg.ppo_clip_value
 
@@ -298,14 +296,12 @@ class LearnerWorker:
                 for batch_num in range(len(minibatches)):
                     indices = minibatches[batch_num]
 
-                    mb_stats = AttrDict(dict(rnn_dist=0))
-                    with_summaries = self._should_save_summaries()
-
                     # current minibatch consisting of short trajectory segments with length == recurrence
                     mb = self._get_minibatch(buffer, indices)
 
                     # calculate policy head outside of recurrent loop
-                    head_outputs = self.actor_critic.forward_head(mb.obs)
+                    with timing.add_time('forw_head'):
+                        head_outputs = self.actor_critic.forward_head(mb.obs)
 
                     # indices corresponding to 1st frames of trajectory segments
                     traj_indices = indices[::self.cfg.recurrence]
@@ -322,7 +318,10 @@ class LearnerWorker:
 
                         dones = mb.dones[timestep_indices].unsqueeze(dim=1)
                         rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep_indices]
-                        core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
+
+                        with timing.add_time('forw_core'):
+                            core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
+
                         core_outputs.append(core_output)
 
                     # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
@@ -332,7 +331,8 @@ class LearnerWorker:
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
                     # calculate policy tail outside of recurrent loop
-                    result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
+                    with timing.add_time('forw_tail'):
+                        result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
 
                     action_distribution = result.action_distribution
 
@@ -359,49 +359,48 @@ class LearnerWorker:
 
                     loss = policy_loss + value_loss + prior_loss + kl_penalty
 
-                    if with_summaries:
-                        mb_stats.loss = loss
-                        mb_stats.value = result.values.mean()
-                        mb_stats.entropy = entropy
-                        mb_stats.kl_prior = kl_prior
-                        mb_stats.value_loss = value_loss
-                        mb_stats.prior_loss = prior_loss
-                        mb_stats.kl_coeff = self.kl_coeff
-                        mb_stats.kl_penalty = kl_penalty
-                        mb_stats.max_abs_logprob = torch.abs(mb.action_logits).max()
-
-                        # we want this statistic for the last batch of the last epoch
-                        for key, value in self.last_batch_stats.items():
-                            mb_stats[key] = value
-
                     with timing.add_time('update'):
                         # update the weights
                         self.optimizer.zero_grad()
                         loss.backward()
 
-                        # max_grad = max(
-                        #     p.grad.max()
-                        #     for p in self.actor_critic.parameters()
-                        #     if p.grad is not None
-                        # )
-                        # log.debug('max grad back: %.6f', max_grad)
+                        with timing.add_time('clip'):
+                            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
-                        torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
                         self.optimizer.step()
                         num_sgd_steps += 1
 
                     self._after_optimizer_step()
 
                     # collect and report summaries
+                    with_summaries = self._should_save_summaries()
                     if with_summaries:
+                        self.last_summary_written = self.train_step
+
+                        stats = AttrDict()
                         grad_norm = sum(
                             p.grad.data.norm(2).item() ** 2
                             for p in self.actor_critic.parameters()
                             if p.grad is not None
                         ) ** 0.5
-                        mb_stats.grad_norm = grad_norm
+                        stats.grad_norm = grad_norm
+                        stats.loss = loss
+                        stats.value = result.values.mean()
+                        stats.entropy = entropy
+                        stats.kl_prior = kl_prior
+                        stats.value_loss = value_loss
+                        stats.prior_loss = prior_loss
+                        stats.kl_coeff = self.kl_coeff
+                        stats.kl_penalty = kl_penalty
+                        stats.max_abs_logprob = torch.abs(mb.action_logits).max()
 
-                        self._report_train_summaries(mb_stats)
+                        # we want this statistic for the last batch of the last epoch
+                        for key, value in self.last_batch_stats.items():
+                            stats[key] = value
+
+                        for key, value in stats.items():
+                            if isinstance(value, torch.Tensor):
+                                stats[key] = value.detach()
 
                     if self.cfg.early_stopping:
                         kl_99_th = np.percentile(kl_old.detach().cpu().numpy(), 99)
@@ -432,17 +431,7 @@ class LearnerWorker:
             self.last_batch_stats.ratio_max = ratio_max
             self.last_batch_stats.num_sgd_steps = num_sgd_steps
 
-            # diagnostics: TODO delete later!
-            # ratio_90_th = np.percentile(ratio.detach().cpu().numpy(), 90)
-            # ratio_95_th = np.percentile(ratio.detach().cpu().numpy(), 95)
-            # ratio_99_th = np.percentile(ratio.detach().cpu().numpy(), 99)
-            # kl_90_th = np.percentile(kl_old.detach().cpu().numpy(), 90)
-            # kl_95_th = np.percentile(kl_old.detach().cpu().numpy(), 95)
-            # kl_99_th = np.percentile(kl_old.detach().cpu().numpy(), 99)
-            # value_delta_99th = np.percentile(value_delta.detach().cpu().numpy(), 99)
-            # log.info('Ratio 90, 95, 99, max: %.3f, %.3f, %.3f, %.3f', ratio_90_th, ratio_95_th, ratio_99_th, ratio_max)
-            # log.info('KL 90, 95, 99, max: %.3f, %.3f, %.3f, %.3f', kl_90_th, kl_95_th, kl_99_th, kl_old_max)
-            # log.info('Value delta 99, max: %.3f, %.3f', value_delta_99th, value_delta_max)
+        return stats
 
     def _process_rollouts(self, rollouts, timing):
         stats = dict(samples=0, env_steps=0)
@@ -469,7 +458,9 @@ class LearnerWorker:
                 log.debug('Training policy %d on macro batch size %d', self.policy_id, self.num_samples)
                 with timing.add_time('work'):
                     if self.with_training:
-                        self._train(timing)
+                        train_stats = self._train(timing)
+                        if train_stats is not None:
+                            stats['train'] = train_stats
 
                 self.num_samples = 0
                 self.rollouts = []
@@ -539,3 +530,4 @@ class LearnerWorker:
 # [2019-11-27 22:24:20,622] Env runner 0: timing waiting: 1.0276, reset: 27.5389, save_policy_outputs: 0.0009, env_step: 31.5377, finalize: 0.4614, overhead: 1.4103, format_output: 0.3564, one_step: 0.0269, work: 44.6398
 # [2019-11-27 22:24:23,072] Gpu learner timing: init: 3.3635, last_values: 0.4506, gae: 3.5159, numpy: 0.6232, finalize: 4.6129, buffer: 6.4776, update: 16.3922, train: 26.0528, work: 37.2159
 # [2019-11-27 22:24:52,618] Collected 1012576, FPS: 22177.3
+

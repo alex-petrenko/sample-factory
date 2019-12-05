@@ -21,7 +21,7 @@ from algorithms.utils.multi_agent import MultiAgentWrapper
 from algorithms.utils.multi_env import safe_get, queue_join_timeout
 from envs.create_env import create_env
 from utils.timing import Timing
-from utils.utils import summaries_dir, experiment_dir, AttrDict, log, str2bool
+from utils.utils import summaries_dir, experiment_dir, AttrDict, log, str2bool, memory_consumption_mb
 
 
 class Algorithm:
@@ -669,11 +669,10 @@ class PolicyWorker:
                                 outputs, None, serialization_context=self.serialization_context,
                             )
 
-                            advance_rollout_request = dict(
-                                split_idx=split_idx, policy_id=self.policy_id, outputs=outputs,
-                            )
-                            self.actor_queues[actor_index].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
-
+                        advance_rollout_request = dict(
+                            split_idx=split_idx, policy_id=self.policy_id, outputs=outputs,
+                        )
+                        self.actor_queues[actor_index].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
                         output_idx += num_obs
 
     def _update_weights(self, weight_update, timing):
@@ -841,11 +840,14 @@ class APPO(Algorithm):
         self.episode_rewards = deque(maxlen=100)
 
         self.last_timing = dict()
-        self.num_frames = 0
-        self.last_fps_report = time.time()
+        self.env_steps = 0
+        self.last_print = self.last_summaries = time.time()
 
         self.fps_stats = deque([], maxlen=10)
-        self.fps_stats.append((time.time(), self.num_frames))
+        self.fps_stats.append((time.time(), self.env_steps))
+
+        summary_dir = summaries_dir(experiment_dir(cfg=self.cfg))
+        self.writer = SummaryWriter(summary_dir, flush_secs=10)
 
     def initialize(self):
         if not ray.is_initialized():
@@ -974,17 +976,67 @@ class APPO(Algorithm):
                 w.start_process()
                 w.init()
 
-    def print_stats(self):
+    def process_report(self, report):
+        if 'env_steps' in report:
+            self.env_steps += report['env_steps']
+
+        if 'episodic' in report:
+            episodic_stats = report['episodic']
+            for s in episodic_stats:
+                self.episode_rewards.append(s['reward'])
+
+        if 'train' in report:
+            self.report_train_summaries(report['train'])
+
+    def report(self):
         now = time.time()
-        if now - self.last_fps_report < 1.0:
+
+        should_print = now - self.last_print > 1.0
+        should_report_summaries = now - self.last_summaries > 2.0
+
+        if not should_print and not should_report_summaries:
             return
 
         past_moment, past_frames = self.fps_stats[0]
-        fps = (self.num_frames - past_frames) / (now - past_moment)
-        log.debug('Fps in the last %.1f sec is %.1f. Total num frames: %d', now - past_moment, fps, self.num_frames)
-        log.debug('Avg episode reward %.3f', np.mean(self.episode_rewards))
-        self.fps_stats.append((now, self.num_frames))
-        self.last_fps_report = time.time()
+        fps = (self.env_steps - past_frames) / (now - past_moment)
+
+        if len(self.episode_rewards) >= self.episode_rewards.maxlen:
+            avg_reward = np.mean(self.episode_rewards)
+        else:
+            avg_reward = math.nan
+
+        self.fps_stats.append((now, self.env_steps))
+
+        if should_print:
+            self.print_stats(fps, avg_reward)
+
+        if should_report_summaries:
+            avg_length = 0  # TODO!!!
+            self.report_basic_summaries(fps, avg_reward, avg_length)
+
+    def print_stats(self, fps, avg_reward):
+        log.debug('Fps is %.1f. Total num frames: %d', fps, self.env_steps)
+        log.debug('Avg episode reward %.3f', avg_reward)
+        self.last_print = time.time()
+
+    def report_train_summaries(self, stats):
+        for key, scalar in stats.items():
+            self.writer.add_scalar(f'train/{key}', scalar, self.env_steps)
+
+    def report_basic_summaries(self, fps, avg_reward, avg_length):
+        self.writer.add_scalar('0_aux/fps', fps, self.env_steps)
+
+        memory_mb = memory_consumption_mb()
+        self.writer.add_scalar('0_aux/master_process_memory_mb', float(memory_mb), self.env_steps)
+
+        if math.isnan(avg_reward) or math.isnan(avg_length):
+            # not enough data to report yet
+            return
+
+        self.writer.add_scalar('0_aux/avg_reward', float(avg_reward), self.env_steps)
+        self.writer.add_scalar('0_aux/avg_length', float(avg_length), self.env_steps)
+        # self.writer.add_scalar('0_aux/best_reward_ever', float(self.best_avg_reward), self.env_steps)
+        self.last_summaries = time.time()
 
     def learn(self):
         self.init_workers()
@@ -993,22 +1045,16 @@ class APPO(Algorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
-            while self.num_frames < 10000000:  # TODO: stopping condition
+            while self.env_steps < 3000000:  # TODO: stopping condition
                 for w in self.learner_workers.values():
                     while True:
                         try:
                             report = w.report_queue.get(timeout=0.01)
-                            if 'env_steps' in report:
-                                self.num_frames += report['env_steps']
-
-                            if 'episodic' in report:
-                                episodic_stats = report['episodic']
-                                for s in episodic_stats:
-                                    self.episode_rewards.append(s['reward'])
+                            self.process_report(report)
                         except Empty:
                             break
 
-                self.print_stats()
+                self.report()
 
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():
@@ -1017,11 +1063,12 @@ class APPO(Algorithm):
 
         for w in all_workers:
             w.close()
+            time.sleep(0.01)
         for w in all_workers:
             w.join()
 
-        fps = self.num_frames / timing.experience
-        log.info('Collected %d, FPS: %.1f', self.num_frames, fps)
+        fps = self.env_steps / timing.experience
+        log.info('Collected %d, FPS: %.1f', self.env_steps, fps)
         log.info('Timing: %s', timing)
 
         time.sleep(0.1)
