@@ -159,7 +159,7 @@ class ActorState:
         if done:
             self.new_episode = True
 
-    def trajectory_add_policy_step(self, actions, action_logits, log_prob_actions, values):
+    def trajectory_add_policy_step(self, actions, action_logits, log_prob_actions, values, policy_version):
         args = copy.copy(locals())
         del args['self']  # only args passed to the function without "self"
         self._trajectory_add_args(**args)
@@ -241,7 +241,7 @@ class VectorEnvRunner:
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
 
-    def _save_policy_outputs(self, policy_id, policy_outputs):
+    def _save_policy_outputs(self, policy_id, policy_outputs, policy_version):
         policy_outputs = self.plasma_client.get(policy_outputs, -1, serialization_context=self.serialization_context)
         all_actors_ready = True
 
@@ -260,6 +260,7 @@ class VectorEnvRunner:
                         outputs.action_logits[i],
                         outputs.log_prob_actions[i],
                         outputs.values[i],
+                        policy_version,
                     )
 
                     actor_state.ready = True
@@ -369,11 +370,11 @@ class VectorEnvRunner:
         policy_inputs = self._format_policy_inputs()
         return policy_inputs
 
-    def advance_rollouts(self, data, timing):
+    def advance_rollouts(self, data, policy_version, timing):
         with timing.time_avg('save_policy_outputs'):
             policy_outputs = data['outputs']
             policy_id = data['policy_id']
-            all_actors_ready = self._save_policy_outputs(policy_id, policy_outputs)
+            all_actors_ready = self._save_policy_outputs(policy_id, policy_outputs, policy_version)
             if not all_actors_ready:
                 return None, None, None
 
@@ -504,12 +505,18 @@ class ActorWorker:
 
     def _advance_rollouts(self, data, timing):
         split_idx = data['split_idx']
-        policy_inputs, complete_rollouts, episodic_stats = self.env_runners[split_idx].advance_rollouts(data, timing)
+        policy_version = data['policy_version']
+        policy_inputs, complete_rollouts, episodic_stats = self.env_runners[split_idx].advance_rollouts(
+            data, policy_version, timing,
+        )
 
-        if policy_inputs is not None:
-            self._enqueue_policy_request(split_idx, policy_inputs)
-        if complete_rollouts:
-            self._enqueue_complete_rollouts(complete_rollouts)
+        with timing.add_time('enqueue_policy_requests'):
+            if policy_inputs is not None:
+                self._enqueue_policy_request(split_idx, policy_inputs)
+        with timing.add_time('complete_rollouts'):
+            if complete_rollouts:
+                self._enqueue_complete_rollouts(complete_rollouts)
+
         if episodic_stats:
             self._report_stats(episodic_stats)
 
@@ -597,6 +604,8 @@ class PolicyWorker:
 
         self.num_requests = 0
 
+        self.latest_policy_version = 0
+
         self.process = Process(target=self._run, daemon=True)
 
     def start_process(self):
@@ -614,6 +623,7 @@ class PolicyWorker:
         pass
 
     def _handle_policy_step(self, requests, timing):
+        # log.info('Num pending requests: %d', len(requests))
         if len(requests) <= 0:
             return
 
@@ -671,6 +681,7 @@ class PolicyWorker:
 
                         advance_rollout_request = dict(
                             split_idx=split_idx, policy_id=self.policy_id, outputs=outputs,
+                            policy_version=self.latest_policy_version,
                         )
                         self.actor_queues[actor_index].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
                         output_idx += num_obs
@@ -682,6 +693,7 @@ class PolicyWorker:
         with timing.timeit('weight_update'):
             policy_version, state_dict = weight_update
             self.actor_critic.load_state_dict(state_dict)
+            self.latest_policy_version = policy_version
 
         log.info(
             'Updated weights on worker %d, policy_version %d (%.5f)',
@@ -706,8 +718,11 @@ class PolicyWorker:
             log.info('Initialized model on the policy worker %d!', self.worker_idx)
 
         terminate = False
+        pause = False
+
+        pending_requests = []
+
         while not terminate:
-            pending_requests = []
             weight_update = None
             work_done = False
 
@@ -729,13 +744,19 @@ class PolicyWorker:
                 except Empty:
                     break
 
-            self._handle_policy_step(pending_requests, timing)
+            if not pause:
+                self._handle_policy_step(pending_requests, timing)
+                pending_requests = []
 
             while True:
                 try:
                     task_type, data = self.weight_queue.get_nowait()
                     if task_type == TaskType.UPDATE_WEIGHTS:
                         weight_update = data
+                    elif task_type == TaskType.TOO_MUCH_DATA:
+                        pause = data
+                        log.debug('Pause: %r', pause)
+
                     self.weight_queue.task_done()
                     work_done = True
                 except Empty:
@@ -1045,7 +1066,7 @@ class APPO(Algorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
-            while self.env_steps < 3000000:  # TODO: stopping condition
+            while self.env_steps < 1e10 + 1000000:  # TODO: stopping condition
                 for w in self.learner_workers.values():
                     while True:
                         try:

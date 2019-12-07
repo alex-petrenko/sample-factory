@@ -89,13 +89,13 @@ class ExperienceBuffer:
     def finalize_batch(self, gamma, gae_lambda, normalize_advantage):
         device = self.values[0].device
 
-        self.rewards = np.asarray(self.rewards, dtype=np.float32)
-        self.dones = np.asarray(self.dones)
+        self.rewards = np.asarray(self.rewards, dtype=np.float32)  # [T, E]
+        self.dones = np.asarray(self.dones)  # [T, E]
 
-        values = torch.stack(self.values).squeeze(dim=2).cpu().numpy()
+        values = torch.stack(self.values).squeeze(dim=2).cpu().numpy()  # [T+1, E, 1] -> [T+1, E]
 
         # calculate discounted returns and GAE
-        self.advantages, self.returns = calculate_gae(self.rewards, self.dones, values, gamma, gae_lambda)
+        self.advantages, self.returns = calculate_gae(self.rewards, self.dones, values, gamma, gae_lambda)  # both [T, E]
 
         adv_mean = self.advantages.mean()
         adv_std = self.advantages.std()
@@ -111,7 +111,7 @@ class ExperienceBuffer:
             self.advantages = (self.advantages - adv_mean) / max(1e-2, adv_std)
 
         # values vector has one extra last value that we don't need
-        self.values = self.values[:-1]
+        self.values = self.values[:-1]  # [T+1, E, 1] -> [T, E, 1]
 
         # convert lists and numpy arrays to PyTorch tensors
         self._to_tensors(device)

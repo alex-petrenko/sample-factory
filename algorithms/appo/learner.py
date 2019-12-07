@@ -1,5 +1,6 @@
 import time
 from collections import OrderedDict
+from queue import Empty
 
 import numpy as np
 import ray.pyarrow_files.pyarrow as pa
@@ -12,7 +13,6 @@ from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, list_of_d
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
-from algorithms.utils.multi_env import safe_get
 from utils.decay import LinearDecay
 from utils.timing import Timing
 from utils.utils import log, AttrDict
@@ -47,9 +47,10 @@ class LearnerWorker:
         self.report_queue = report_queue
         self.weight_queues = weight_queues
 
-        self.num_samples = self.train_step = 0
+        self.train_step = 0
         self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)])
         self.last_summary_written = -1e9
+        self.last_train = time.time()
         self.rollouts = []
 
         # some stats we measure in the end of the last training epoch
@@ -96,31 +97,33 @@ class LearnerWorker:
         policy_outputs = self.actor_critic(last_observations, last_rnn_states)
         values = policy_outputs.values.cpu().numpy()
         for t, value in zip(trajectories, values):
-            t.values.append(value)
+            t.values.append(value)  # [T, 1] -> [T+1, 1]
 
         return trajectories
 
     def _calculate_gae(self, trajectories):
         for t in trajectories:
-            t.rewards = np.asarray(t.rewards, dtype=np.float32)
-            t.dones = np.asarray(t.dones)
+            t.rewards = np.asarray(t.rewards, dtype=np.float32)  # [T]
+            t.dones = np.asarray(t.dones)  # [T]
 
             # calculate discounted returns and GAE
-            t.values = np.stack(t.values).reshape((-1,))
-            advantages, returns = calculate_gae(t.rewards, t.dones, t.values, self.cfg.gamma, self.cfg.gae_lambda)
-            t.advantages = advantages
-            t.returns = returns
+            values = np.stack(t.values).reshape((-1,))  # [T+1, 1] -> [T+1]
+            advantages, returns = calculate_gae(t.rewards, t.dones, values, self.cfg.gamma, self.cfg.gae_lambda)
+            t.advantages = advantages  # [T]
+            t.returns = returns  # [T]
 
             # values vector has one extra last value that we don't need
-            t.values = t.values[:-1]
+            t.values = t.values[:-1]  # [T+1, 1] -> [T, 1]
 
             # some scalars need to be converted from [E x T] to [E x T, 1] for loss calculations
-            t.returns = t.returns.reshape((-1, 1))
+            t.returns = t.returns.reshape((-1, 1))  # [T] -> [T, 1]
 
         return trajectories
 
-    def _finalize_trajectories(self, timing):
-        trajectories = [AttrDict(r['t']) for r in self.rollouts]
+    def _finalize_trajectories(self, rollouts, timing):
+        trajectories = [AttrDict(r['t']) for r in rollouts]
+        log.info('%r', trajectories[0].policy_version)
+        log.info('%r', trajectories[-1].policy_version)
 
         with timing.add_time('last_values'):
             trajectories = self._calculate_last_values(trajectories)
@@ -259,15 +262,14 @@ class LearnerWorker:
         value_loss = torch.max(value_original_loss, value_clipped_loss)
         value_loss = value_loss.mean()
         value_loss *= self.cfg.value_loss_coeff
-        value_delta = torch.abs(new_values - mb.values).mean()
-        value_delta_max = torch.abs(new_values - mb.values).max()
+        value_delta = torch.abs(new_values - mb.values)
 
-        return value_loss, value_delta, value_delta_max
+        return value_loss, value_delta
 
-    def _train(self, timing):
+    def _train(self, rollouts, timing):
         with torch.no_grad():
             with timing.add_time('finalize'):
-                trajectories = self._finalize_trajectories(timing)
+                trajectories = self._finalize_trajectories(rollouts, timing)
 
             with timing.add_time('buffer'):
                 buffer, experience_size = self._experience_buffer(trajectories)
@@ -279,7 +281,7 @@ class LearnerWorker:
             clip_value = self.cfg.ppo_clip_value
 
             kl_old_mean = kl_old_max = 0.0
-            value_delta = value_delta_max = 0.0
+            value_delta_avg = value_delta_max = 0.0
             fraction_clipped = 0.0
             rnn_dist = 0.0
             ratio_mean = ratio_min = ratio_max = 0.0
@@ -341,7 +343,8 @@ class LearnerWorker:
                     ratio_min = ratio.min()
                     ratio_max = ratio.max()
 
-                    value_loss, value_delta, value_delta_max = self._value_loss(result.values, mb, clip_value)
+                    value_loss, value_delta = self._value_loss(result.values, mb, clip_value)
+                    value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
                     # entropy loss
                     entropy = action_distribution.entropy().mean()
@@ -393,6 +396,12 @@ class LearnerWorker:
                         stats.kl_coeff = self.kl_coeff
                         stats.kl_penalty = kl_penalty
                         stats.max_abs_logprob = torch.abs(mb.action_logits).max()
+                        stats.avg_version = mb.policy_version.mean()
+
+                        version_diff = self.policy_version - mb.policy_version
+                        stats.version_diff_avg = version_diff.mean()
+                        stats.version_diff_min = version_diff.min()
+                        stats.version_diff_max = version_diff.max()
 
                         # we want this statistic for the last batch of the last epoch
                         for key, value in self.last_batch_stats.items():
@@ -422,7 +431,7 @@ class LearnerWorker:
 
             self.last_batch_stats.kl_divergence = kl_old_mean
             self.last_batch_stats.kl_max = kl_old_max
-            self.last_batch_stats.value_delta = value_delta
+            self.last_batch_stats.value_delta = value_delta_avg
             self.last_batch_stats.value_delta_max = value_delta_max
             self.last_batch_stats.fraction_clipped = fraction_clipped
             self.last_batch_stats.rnn_dist = rnn_dist
@@ -431,39 +440,59 @@ class LearnerWorker:
             self.last_batch_stats.ratio_max = ratio_max
             self.last_batch_stats.num_sgd_steps = num_sgd_steps
 
+            value_delta_99th = np.percentile(value_delta.detach().cpu().numpy(), 99)
+            log.info('Value delta avg, 99, max: %.3f, %.3f, %.3f', value_delta_avg, value_delta_99th, value_delta_max)
+
         return stats
 
-    def _process_rollouts(self, rollouts, timing):
-        stats = dict(samples=0, env_steps=0)
-
+    def store_rollouts(self, rollouts):
         rollouts = self.plasma_client.get(
             rollouts, -1, serialization_context=self.serialization_context,
         )
+        self.rollouts.extend(rollouts)
+
+    def _process_rollouts(self, timing):
+        # log.info('Pending rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
+        rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
+
+        work_done = False
+        while len(self.rollouts) >= rollouts_in_macro_batch:
+            rollouts_to_process = self.rollouts[:rollouts_in_macro_batch]
+            self.rollouts = self.rollouts[rollouts_in_macro_batch:]
+
+            # for q in self.weight_queues:
+            #     q.put((TaskType.TOO_MUCH_DATA, True))
+
+            log.info('Waiting for new experience %f', time.time() - self.last_train)
+            self._process_macro_batch(rollouts_to_process, timing)
+            log.info('Unprocessed rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
+            work_done = True
+
+            # for q in self.weight_queues:
+            #     q.put((TaskType.TOO_MUCH_DATA, False))
+
+            self.last_train = time.time()
+        return work_done
+
+    def _process_macro_batch(self, rollouts, timing):
+        stats = dict(samples=0, env_steps=0)
 
         assert self.cfg.macro_batch % self.cfg.rollout == 0
         assert self.cfg.rollout % self.cfg.recurrence == 0
         assert self.cfg.macro_batch % self.cfg.recurrence == 0
-
-        rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
 
         for rollout in rollouts:
             num_samples = rollout['length']
             stats['samples'] += num_samples
             stats['env_steps'] += rollout['env_steps']
 
-            self.num_samples += num_samples
-            self.rollouts.append(rollout)
+        with timing.add_time('work'):
+            if self.with_training:
+                log.debug('Training policy %d on %d rollouts', self.policy_id, len(rollouts))
+                train_stats = self._train(rollouts, timing)
+                if train_stats is not None:
+                    stats['train'] = train_stats
 
-            if len(self.rollouts) >= rollouts_in_macro_batch:
-                log.debug('Training policy %d on macro batch size %d', self.policy_id, self.num_samples)
-                with timing.add_time('work'):
-                    if self.with_training:
-                        train_stats = self._train(timing)
-                        if train_stats is not None:
-                            stats['train'] = train_stats
-
-                self.num_samples = 0
-                self.rollouts = []
                 self.policy_version += 1
                 self._broadcast_weights()
 
@@ -491,17 +520,26 @@ class LearnerWorker:
                 eps=self.cfg.adam_eps,
             )
 
-        while True:
-            task_type, data = safe_get(self.task_queue)
-            if task_type == TaskType.INIT:
-                self._init()
-            elif task_type == TaskType.TERMINATE:
-                self._terminate()
-                break
-            elif task_type == TaskType.TRAIN:
-                self._process_rollouts(data, timing)
+        terminate = False
+        while not terminate:
+            while True:
+                try:
+                    task_type, data = self.task_queue.get_nowait()
+                    if task_type == TaskType.INIT:
+                        self._init()
+                    elif task_type == TaskType.TERMINATE:
+                        self._terminate()
+                        terminate = True
+                        break
+                    elif task_type == TaskType.TRAIN:
+                        self.store_rollouts(data)
 
-            self.task_queue.task_done()
+                    self.task_queue.task_done()
+                except Empty:
+                    break
+
+                if not self._process_rollouts(timing):
+                    time.sleep(0.001)
 
         log.info('Gpu learner timing: %s', timing)
 
@@ -531,3 +569,8 @@ class LearnerWorker:
 # [2019-11-27 22:24:23,072] Gpu learner timing: init: 3.3635, last_values: 0.4506, gae: 3.5159, numpy: 0.6232, finalize: 4.6129, buffer: 6.4776, update: 16.3922, train: 26.0528, work: 37.2159
 # [2019-11-27 22:24:52,618] Collected 1012576, FPS: 22177.3
 
+# Env runner 0: timing waiting: 2.5731, reset: 5.0527, save_policy_outputs: 0.0007, env_step: 28.7689, overhead: 1.1565, format_inputs: 0.3170, one_step: 0.0276, work: 39.3452
+# [2019-12-06 19:01:42,042] Env runner 1: timing waiting: 2.5900, reset: 4.9147, save_policy_outputs: 0.0004, env_step: 28.8585, overhead: 1.1266, format_inputs: 0.3087, one_step: 0.0254, work: 39.3333
+# [2019-12-06 19:01:42,227] Gpu worker timing: init: 2.8738, weight_update: 0.0006, deserialize: 7.6602, to_device: 5.3244, forward: 8.1527, serialize: 14.3651, postprocess: 17.5523, policy_step: 38.8745, gpu_waiting: 0.5276
+# [2019-12-06 19:01:42,232] Gpu learner timing: init: 3.3448, last_values: 0.2737, gae: 3.0682, numpy: 0.5308, finalize: 3.8888, buffer: 5.2451, forw_head: 0.2639, forw_core: 0.8289, forw_tail: 0.5334, clip: 4.5709, update: 12.0888, train: 19.6720, work: 28.8663
+# [2019-12-06 19:01:42,723] Collected 1007616, FPS: 23975.2

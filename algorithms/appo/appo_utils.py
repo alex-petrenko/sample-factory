@@ -5,7 +5,7 @@ import numpy as np
 
 
 class TaskType(Enum):
-    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS = range(7)
+    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, TOO_MUCH_DATA = range(8)
 
 
 def dict_of_lists_append(dict_of_lists, new_data):
