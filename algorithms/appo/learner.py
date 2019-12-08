@@ -452,7 +452,7 @@ class LearnerWorker:
         self.rollouts.extend(rollouts)
 
     def _process_rollouts(self, timing):
-        # log.info('Pending rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
+        log.info('Pending rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
         rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
 
         work_done = False
