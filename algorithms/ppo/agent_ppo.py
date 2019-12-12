@@ -73,7 +73,9 @@ class ExperienceBuffer:
 
         def _do_transform(tensor):
             assert len(tensor.shape) >= 2
-            return tensor.transpose(0, 1).reshape(-1, *tensor.shape[2:])
+            tensor = tensor.transpose(0, 1)
+            tensor = tensor.reshape(-1, *tensor.shape[2:])
+            return tensor
 
         for item, x in self.__dict__.items():
             if x is None:
