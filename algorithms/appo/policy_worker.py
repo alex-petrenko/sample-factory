@@ -1,6 +1,5 @@
-import time
-from queue import Empty, Queue
-from threading import Thread
+import select
+from queue import Empty
 
 import numpy as np
 import ray.pyarrow_files.pyarrow as pa
@@ -10,7 +9,6 @@ from torch.multiprocessing import Process
 
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append
 from algorithms.appo.model import ActorCritic
-from algorithms.utils.multi_env import safe_get
 from utils.timing import Timing
 from utils.utils import AttrDict, log
 
@@ -41,33 +39,50 @@ class PolicyWorker:
         self.actor_queues = actor_queues
         self.weight_queue = weight_queue
 
-        self.num_requests = 0
         self.terminate = False
 
         self.latest_policy_version = 0
+
+        self.requests = dict()
+        self.workers_paused = set()
+
+        self.sync_mode = True
 
         self.process = Process(target=self._run, daemon=True)
 
     def start_process(self):
         self.process.start()
 
-    def _should_log(self):
-        log_rate = 50
-        return self.num_requests % log_rate == 0
-
     def _init(self):
         log.info('GPU worker %d initialized', self.worker_idx)
 
     def _terminate(self):
-        # log.info('GPU worker %d terminated', self.worker_idx)
         pass
 
-    def _handle_policy_step(self, requests, timing):
+    def _store_policy_step_request(self, request):
+        worker_idx = request['worker_idx']
+        split_idx = request['split_idx']
+        self.requests[(worker_idx, split_idx)] = request
+
+    def _filter_requests(self):
+        requests, to_remove = [], []
+        for worker_split, request in self.requests.items():
+            if worker_split not in self.workers_paused:
+                requests.append(request)
+                to_remove.append(worker_split)
+
+        for worker_split in to_remove:
+            del self.requests[worker_split]
+
+        return requests
+
+    def _handle_policy_steps(self, timing):
+        requests = self._filter_requests()
+
         # log.info('Num pending requests: %d', len(requests))
         if len(requests) <= 0:
             return
 
-        self.num_requests += 1
         with timing.add_time('policy_step'):
             with timing.add_time('deserialize'):
                 observations = AttrDict()
@@ -75,17 +90,23 @@ class PolicyWorker:
                 num_obs_per_actor = []
 
                 for request in requests:
-                    request = self.plasma_client.get(
-                        request, -1, serialization_context=self.serialization_context,
-                    )
-
                     actor_idx = request['worker_idx']
                     split_idx = request['split_idx']
-                    num_inputs, policy_input = request['policy_inputs']
 
-                    dict_of_lists_append(observations, policy_input['obs'])
-                    rnn_states.append(policy_input['rnn_states'])
+                    request_data = self.plasma_client.get(
+                        request['policy_inputs'], -1, serialization_context=self.serialization_context,
+                    )
+
+                    num_inputs, rollout_step, policy_inputs = request_data
+                    # log.info('A:%d  S:%d  num:%d  roll:%d  policy:%d', actor_idx, split_idx, num_inputs, rollout_step, self.latest_policy_version)
+
+                    dict_of_lists_append(observations, policy_inputs['obs'])
+                    rnn_states.append(policy_inputs['rnn_states'])
                     num_obs_per_actor.append((actor_idx, split_idx, num_inputs))
+
+                    if self.sync_mode:
+                        if rollout_step >= self.cfg.rollout - 1:
+                            self.workers_paused.add((actor_idx, split_idx))
 
             with torch.no_grad():
                 with timing.add_time('to_device'):
@@ -94,12 +115,6 @@ class PolicyWorker:
 
                     rnn_states = np.concatenate(rnn_states)
                     rnn_states = torch.from_numpy(rnn_states).to(self.device).float()
-
-                # if self._should_log():
-                #     log.info(
-                #         'Forward pass for policy %d, num observations in a batch %d, GPU worker %d',
-                #         policy_id, rnn_states.shape[0], self.worker_idx,
-                #     )
 
                 with timing.add_time('forward'):
                     policy_outputs = self.actor_critic(observations, rnn_states)
@@ -117,6 +132,9 @@ class PolicyWorker:
             policy_version, state_dict = weight_update
             self.actor_critic.load_state_dict(state_dict)
             self.latest_policy_version = policy_version
+
+        if self.sync_mode:
+            self.workers_paused.clear()
 
         log.info(
             'Updated weights on worker %d, policy_version %d (%.5f)',
@@ -161,55 +179,40 @@ class PolicyWorker:
 
             log.info('Initialized model on the policy worker %d!', self.worker_idx)
 
-        pause = False
-        pending_requests = []
+        queues = [self.task_queue._reader, self.weight_queue._reader]
+        queues_by_handle = dict()
+        queues_by_handle[self.task_queue._reader._handle] = self.task_queue
+        queues_by_handle[self.weight_queue._reader._handle] = self.weight_queue
 
         while not self.terminate:
-            weight_update = None
-            work_done = False
+            with timing.add_time('gpu_waiting'):
+                ready, _, _ = select.select(queues, [], [])
 
-            while True:
-                try:
-                    task_type, data = self.task_queue.get_nowait()
-                    if task_type == TaskType.INIT:
-                        self._init()
-                    elif task_type == TaskType.TERMINATE:
-                        self._terminate()
-                        self.terminate = True
-                        break
-                    elif task_type == TaskType.POLICY_STEP:
-                        pending_requests.append(data)
+            with timing.add_time('work'):
+                for readable_queue in ready:
+                    q = queues_by_handle[readable_queue._handle]
 
-                    self.task_queue.task_done()
-                    work_done = True
+                    while True:
+                        try:
+                            task_type, data = q.get_nowait()
 
-                except Empty:
-                    break
+                            if task_type == TaskType.INIT:
+                                self._init()
+                            elif task_type == TaskType.TERMINATE:
+                                self._terminate()
+                                self.terminate = True
+                                break
+                            elif task_type == TaskType.POLICY_STEP:
+                                self._store_policy_step_request(data)
+                            elif task_type == TaskType.UPDATE_WEIGHTS:
+                                self._update_weights(data, timing)
 
-            if not pause:
-                self._handle_policy_step(pending_requests, timing)
-                pending_requests = []
+                            q.task_done()
 
-            while True:
-                try:
-                    task_type, data = self.weight_queue.get_nowait()
-                    if task_type == TaskType.UPDATE_WEIGHTS:
-                        weight_update = data
-                    elif task_type == TaskType.TOO_MUCH_DATA:
-                        pause = data
-                        log.debug('Pause: %r', pause)
+                        except Empty:
+                            break
 
-                    self.weight_queue.task_done()
-                    work_done = True
-                except Empty:
-                    break
-
-            self._update_weights(weight_update, timing)
-
-            # TODO: wait on both queues (use select.select)
-            if not work_done:
-                with timing.add_time('gpu_waiting'):
-                    time.sleep(0.001)
+                self._handle_policy_steps(timing)
 
         log.info('Gpu worker timing: %s', timing)
 

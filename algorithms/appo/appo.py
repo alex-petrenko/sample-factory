@@ -153,7 +153,7 @@ class APPO(Algorithm):
 
         self.last_timing = dict()
         self.env_steps = 0
-        self.last_print = self.last_summaries = time.time()
+        self.last_report = time.time()
 
         self.fps_stats = deque([], maxlen=10)
         self.fps_stats.append((time.time(), self.env_steps))
@@ -302,13 +302,6 @@ class APPO(Algorithm):
 
     def report(self):
         now = time.time()
-
-        should_print = now - self.last_print > 1.0
-        should_report_summaries = now - self.last_summaries > 2.0
-
-        if not should_print and not should_report_summaries:
-            return
-
         past_moment, past_frames = self.fps_stats[0]
         fps = (self.env_steps - past_frames) / (now - past_moment)
 
@@ -319,17 +312,14 @@ class APPO(Algorithm):
 
         self.fps_stats.append((now, self.env_steps))
 
-        if should_print:
-            self.print_stats(fps, avg_reward)
+        self.print_stats(fps, avg_reward)
 
-        if should_report_summaries:
-            avg_length = 0  # TODO!!!
-            self.report_basic_summaries(fps, avg_reward, avg_length)
+        avg_length = 0  # TODO!!!
+        self.report_basic_summaries(fps, avg_reward, avg_length)
 
     def print_stats(self, fps, avg_reward):
         log.debug('Fps is %.1f. Total num frames: %d', fps, self.env_steps)
         log.debug('Avg episode reward %.3f', avg_reward)
-        self.last_print = time.time()
 
     def report_train_summaries(self, stats):
         for key, scalar in stats.items():
@@ -348,7 +338,6 @@ class APPO(Algorithm):
         self.writer.add_scalar('0_aux/avg_reward', float(avg_reward), self.env_steps)
         self.writer.add_scalar('0_aux/avg_length', float(avg_length), self.env_steps)
         # self.writer.add_scalar('0_aux/best_reward_ever', float(self.best_avg_reward), self.env_steps)
-        self.last_summaries = time.time()
 
     def learn(self):
         self.init_workers()
@@ -366,7 +355,9 @@ class APPO(Algorithm):
                         except Empty:
                             break
 
-                self.report()
+                if time.time() - self.last_report > 1.0:
+                    self.report()
+                    self.last_report = time.time()
 
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():

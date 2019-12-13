@@ -151,6 +151,8 @@ class VectorEnvRunner:
         self.worker_idx = worker_idx
         self.split_idx = split_idx
 
+        self.rollout_step = 0
+
         self.num_agents = -1  # queried from env
 
         self.envs, self.actor_states, self.episode_rewards = [], [], []
@@ -240,7 +242,7 @@ class VectorEnvRunner:
             if actor_state.trajectory_len() >= self.cfg.rollout:
                 complete_rollouts.append(actor_state.finalize_trajectory())
 
-            # if we encountered episode boundary, reset rnn states to their default values
+            # if we encountered an episode boundary, reset rnn states to their default values
             new_rnn_state = actor_state.update_rnn_state(dones[agent_i])
 
             # save latest policy inputs (obs and hidden states)
@@ -286,7 +288,7 @@ class VectorEnvRunner:
                 obs_dict[key] = np.stack(x)
 
             policy_input['obs'] = obs_dict
-            policy_inputs[policy_id] = (policy_num_inputs[policy_id], policy_input)
+            policy_inputs[policy_id] = (policy_num_inputs[policy_id], self.rollout_step, policy_input)
 
         return policy_inputs
 
@@ -315,6 +317,9 @@ class VectorEnvRunner:
             all_actors_ready = self._save_policy_outputs(policy_id, policy_outputs, policy_version)
             if not all_actors_ready:
                 return None, None, None
+
+        # increment rollout step idx here, before the actual env step because 0-th rollout step comes from env.reset()
+        self.rollout_step = (self.rollout_step + 1) % self.cfg.rollout
 
         complete_rollouts, episodic_stats = [], []
 
@@ -369,7 +374,7 @@ class ActorWorker:
 
         # random delay in the beginning guarantees that workers will produce complete rollouts more or less
         # uniformly, improving the overall throughput and reducing policy version gap
-        self.add_random_delay = True
+        self.add_random_delay = False
         self.rollout_start = None
 
         self.plasma_store_name = plasma_store_name
@@ -438,10 +443,10 @@ class ActorWorker:
 
     def _enqueue_policy_request(self, split_idx, policy_inputs, serialization_context, plasma_client):
         for policy_id, experience in policy_inputs.items():
-            policy_request = dict(worker_idx=self.worker_idx, split_idx=split_idx, policy_inputs=experience)
-            policy_request = plasma_client.put(
-                policy_request, None, serialization_context=serialization_context,
+            experience = plasma_client.put(
+                experience, None, serialization_context=serialization_context,
             )
+            policy_request = dict(worker_idx=self.worker_idx, split_idx=split_idx, policy_inputs=experience)
             self.policy_queues[policy_id].put((TaskType.POLICY_STEP, policy_request))
 
     def _enqueue_complete_rollouts(self, complete_rollouts, serialization_context, plasma_client):
@@ -508,7 +513,7 @@ class ActorWorker:
 
                 if self.add_random_delay:
                     rollout_duration = time.time() - self.rollout_start
-                    delay = random.random() * 10 * rollout_duration
+                    delay = random.random() * 5 * rollout_duration
                     log.info('Rollout took %.3f sec, sleep for %.3f sec', rollout_duration, delay)
                     time.sleep(delay)
                     self.add_random_delay = False

@@ -51,7 +51,9 @@ class LearnerWorker:
         self.weight_queues = weight_queues
 
         self.experience_buffer_queue = Queue()
-        self.training_thread = Thread(target=self._train_loop)
+
+        self.train_in_background = True
+        self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
 
         self.train_step = 0
@@ -81,131 +83,6 @@ class LearnerWorker:
         weight_update = (self.policy_version, state_dict)
         for q in self.weight_queues:
             q.put((TaskType.UPDATE_WEIGHTS, weight_update))
-
-    # def _calculate_last_values(self, trajectories):
-    #     """
-    #     Generate fake value targets for the last step in the trajectory.
-    #     Temporal difference for the very last step in the rollout will be zero, which means the rollout is
-    #     effectively 1 step shorter.
-    #
-    #     Alternative (and the standard thing to do) is to save another round of observations and use the critic
-    #     to calculate the next value. A more simple approach is chosen for speed and simplicity, with sufficient
-    #     rollout length (e.g. >= 32) this one extra step will not affect the training too much.
-    #
-    #     """
-    #
-    #     last_rewards = np.asarray([t.rewards[-1] for t in trajectories])  # [E]
-    #     last_values = np.asarray([t.values[-1][0] for t in trajectories])  # [E]
-    #
-    #     # this will make sure that advantage of the very last action is always zero
-    #     next_values = (last_values - last_rewards) / self.cfg.gamma  # [E]
-    #     next_values = next_values.reshape((-1, 1))  # [E, 1]
-    #
-    #     for t, value in zip(trajectories, next_values):
-    #         t.values.append(value)  # [T, 1] -> [T+1, 1]
-    #
-    #     return trajectories
-
-    # def _calculate_gae(self, trajectories):
-    #     for t in trajectories:
-    #         t.rewards = np.asarray(t.rewards, dtype=np.float32)  # [T]
-    #         t.dones = np.asarray(t.dones)  # [T]
-    #
-    #         # calculate discounted returns and GAE
-    #         values = np.stack(t.values).reshape((-1,))  # [T+1, 1] -> [T+1]
-    #         advantages, returns = calculate_gae(t.rewards, t.dones, values, self.cfg.gamma, self.cfg.gae_lambda)
-    #         t.advantages = advantages  # [T]
-    #         t.returns = returns  # [T]
-    #
-    #         # values vector has one extra last value that we don't need
-    #         t.values = t.values[:-1]  # [T+1, 1] -> [T, 1]
-    #
-    #         # some scalars need to be converted from [E x T] to [E x T, 1] for loss calculations
-    #         t.returns = t.returns.reshape((-1, 1))  # [T] -> [T, 1]
-    #
-    #     return trajectories
-
-    # def _finalize_trajectories(self, rollouts, timing):
-    #     trajectories = [AttrDict(r['t']) for r in rollouts]
-    #     log.info('%r', trajectories[0].policy_version)
-    #     log.info('%r', trajectories[-1].policy_version)
-    #
-    #     with timing.add_time('last_values'):
-    #         trajectories = self._calculate_last_values(trajectories)
-    #
-    #     with timing.add_time('gae'):
-    #         trajectories = self._calculate_gae(trajectories)
-    #
-    #     with timing.add_time('numpy'):
-    #         for t in trajectories:
-    #             for key, x in t.items():
-    #                 if isinstance(x, list):
-    #                     t[key] = np.asarray(x)
-    #
-    #     return trajectories
-
-    # def _experience_buffer(self, trajectories):
-    #     buffer = AttrDict()
-    #
-    #     # by the end of this loop the buffer is a dictionary containing lists of numpy arrays of different lengths
-    #     for i, t in enumerate(trajectories):
-    #         for key, x in t.items():
-    #             if key not in buffer:
-    #                 buffer[key] = []
-    #             buffer[key].append(x)
-    #
-    #     # convert lists of dict observations to a single dictionary of lists
-    #     for key, x in buffer.items():
-    #         if isinstance(x[0], (dict, OrderedDict)):
-    #             buffer[key] = list_of_dicts_to_dict_of_lists(x)
-    #
-    #     # concatenate trajectories into a single big buffer
-    #     for d, key, value in iterate_recursively(buffer):
-    #         d[key] = np.concatenate(value)
-    #     experience_size = len(buffer.rewards)  # could have used any other key
-    #
-    #     # normalize advantages if needed
-    #     if self.cfg.normalize_advantage:
-    #         adv_mean = buffer.advantages.mean()
-    #         adv_std = buffer.advantages.std()
-    #         # adv_max, adv_min = buffer.advantages.max(), buffer.advantages.min()
-    #         # adv_max_abs = max(adv_max, abs(adv_min))
-    #         # log.info(
-    #         #     'Adv mean %.3f std %.3f, min %.3f, max %.3f, max abs %.3f',
-    #         #     adv_mean, adv_std, adv_min, adv_max, adv_max_abs,
-    #         # )
-    #         buffer.advantages = (buffer.advantages - adv_mean) / max(1e-3, adv_std)
-    #
-    #     buffer = self._to_tensors(buffer)
-    #     return buffer, experience_size
-
-    # def _calculate_gae(self, buffer):
-    #     # calculating fake values for the last step in the rollout
-    #     # this will make sure that advantage of the very last action is always zero
-    #     rewards = np.array(buffer.rewards)  # [E, T]
-    #     dones = np.array(buffer.dones)  # [E, T]
-    #     values_arr = np.array(buffer.values).squeeze()  # [E, T]
-    #
-    #     values = []
-    #     for i in range(len(values_arr)):
-    #         last_value, last_reward = values_arr[i][-1], rewards[i, -1]
-    #         next_value = (last_value - last_reward) / self.cfg.gamma
-    #         values.append(list(values_arr[i]))
-    #         values[i].append(float(next_value))  # [T] -> [T+1]
-    #
-    #     # calculating returns and GAE
-    #     rewards = rewards.transpose((1, 0))  # [E, T] -> [T, E]
-    #     dones = dones.transpose((1, 0))  # [E, T] -> [T, E]
-    #     values = np.asarray(values).transpose((1, 0))  # [E, T+1] -> [T+1, E]
-    #
-    #     advantages, returns = calculate_gae(rewards, dones, values, self.cfg.gamma, self.cfg.gae_lambda)
-    #     returns = returns.reshape((-1, 1))  # [T, E, 1]
-    #
-    #     # transpose tensors back to [E, T] before creating a single experience buffer
-    #     buffer.advantages = advantages.transpose((1, 0))  # [T, E] -> [E, T]
-    #     buffer.returns = returns.transpose((1, 0))  # [T, E, 1] -> [E, T, 1]
-    #
-    #     return buffer
 
     def _calculate_gae(self, buffer):
         rewards = np.asarray(buffer.rewards)  # [E, T]
@@ -564,9 +441,7 @@ class LearnerWorker:
 
         return stats
 
-    def _train_loop(self):
-        timing = Timing()
-
+    def _init_training(self, timing):
         with timing.timeit('init'):
             # initialize the Torch modules
             if self.cfg.seed is not None:
@@ -592,6 +467,32 @@ class LearnerWorker:
 
         self.train_thread_initialized.set()
 
+    def _process_training_data(self, data, timing, wait_stats=None):
+        buffer, experience_size, samples, env_steps = data
+        stats = dict(samples=samples, env_steps=env_steps)
+
+        with timing.add_time('train'):
+            if self.with_training:
+                log.debug('Training policy %d on %d samples', self.policy_id, samples)
+                train_stats = self._train(buffer, experience_size, timing)
+                if train_stats is not None:
+                    stats['train'] = train_stats
+
+                    if wait_stats is not None:
+                        wait_avg, wait_min, wait_max = wait_stats
+                        stats['train']['wait_avg'] = wait_avg
+                        stats['train']['wait_min'] = wait_min
+                        stats['train']['wait_max'] = wait_max
+
+                self.policy_version += 1
+                self._broadcast_weights()
+
+        self.report_queue.put(stats)
+
+    def _train_loop(self):
+        timing = Timing()
+        self._init_training(timing)
+
         wait_times = deque([], maxlen=20)
 
         while not self.terminate:
@@ -610,23 +511,8 @@ class LearnerWorker:
                 timing.train_wait, wait_avg,
             )
 
-            buffer, experience_size, samples, env_steps = data
-            stats = dict(samples=samples, env_steps=env_steps)
-
-            with timing.add_time('train'):
-                if self.with_training:
-                    log.debug('Training policy %d on %d samples', self.policy_id, samples)
-                    train_stats = self._train(buffer, experience_size, timing)
-                    if train_stats is not None:
-                        stats['train'] = train_stats
-                        stats['train']['wait_avg'] = wait_avg
-                        stats['train']['wait_min'] = wait_min
-                        stats['train']['wait_max'] = wait_max
-
-                    self.policy_version += 1
-                    self._broadcast_weights()
-
-            self.report_queue.put(stats)
+            wait_stats = (wait_avg, wait_min, wait_max)
+            self._process_training_data(data, timing, wait_stats)
 
         log.info('Train loop timing: %s', timing)
         del self.actor_critic
@@ -640,7 +526,10 @@ class LearnerWorker:
 
         rollouts = []
 
-        self.training_thread.start()
+        if self.train_in_background:
+            self.training_thread.start()
+        else:
+            self._init_training(timing)
 
         while not self.terminate:
             while True:
@@ -656,14 +545,20 @@ class LearnerWorker:
                         rollouts.extend(new_rollouts)
                         rollouts = self._process_rollouts(rollouts, timing)
 
+                        if not self.train_in_background:
+                            while not self.experience_buffer_queue.empty():
+                                training_data = self.experience_buffer_queue.get()
+                                self._process_training_data(training_data, timing)
+
                     self.task_queue.task_done()
                 except Empty:
                     break
 
         log.info('GPU learner timing: %s', timing)
 
-        self.experience_buffer_queue.put(None)
-        self.training_thread.join()
+        if self.train_in_background:
+            self.experience_buffer_queue.put(None)
+            self.training_thread.join()
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
