@@ -154,6 +154,7 @@ class APPO(Algorithm):
         self.last_timing = dict()
         self.env_steps = 0
         self.last_report = time.time()
+        self.report_interval = 2.0  # sec
 
         self.fps_stats = deque([], maxlen=10)
         self.fps_stats.append((time.time(), self.env_steps))
@@ -163,7 +164,11 @@ class APPO(Algorithm):
 
     def initialize(self):
         if not ray.is_initialized():
-            ray.init(local_mode=False)
+            ray.init(
+                local_mode=False,
+                memory=int(1e10), object_store_memory=int(1e10),
+                redis_max_memory=int(1e9), driver_object_store_memory=int(1e9),
+            )
 
         global_worker = ray.worker.global_worker
         self.plasma_store_name = global_worker.node.plasma_store_socket_name
@@ -355,7 +360,7 @@ class APPO(Algorithm):
                         except Empty:
                             break
 
-                if time.time() - self.last_report > 1.0:
+                if time.time() - self.last_report > self.report_interval:
                     self.report()
                     self.last_report = time.time()
 
