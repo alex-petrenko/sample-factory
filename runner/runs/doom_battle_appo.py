@@ -7,7 +7,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'battle_fs4',
-    'python -m algorithms.appo.train_appo --env=doom_battle_hybrid --train_for_seconds=360000 --algo=APPO --env_frameskip=4 --use_rnn=True --reward_scale=0.5 --num_workers=16 --num_envs_per_worker=6 --num_policies=1 --ppo_epochs=1 --rollout=64',
+    'python -m algorithms.appo.train_appo --env=doom_battle_hybrid --train_for_seconds=360000 --algo=APPO --env_frameskip=4 --use_rnn=True --reward_scale=0.5 --num_workers=16 --num_envs_per_worker=6 --num_policies=1 --ppo_epochs=1 --rollout=64 --sync_mode=True',
     _params.generate_params(randomize=False),
 )
 
