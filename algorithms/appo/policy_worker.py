@@ -46,8 +46,6 @@ class PolicyWorker:
         self.requests = dict()
         self.workers_paused = set()
 
-        self.sync_mode = True
-
         self.process = Process(target=self._run, daemon=True)
 
     def start_process(self):
@@ -104,7 +102,7 @@ class PolicyWorker:
                     rnn_states.append(policy_inputs['rnn_states'])
                     num_obs_per_actor.append((actor_idx, split_idx, num_inputs))
 
-                    if self.sync_mode:
+                    if self.cfg.sync_mode:
                         if rollout_step >= self.cfg.rollout - 1:
                             self.workers_paused.add((actor_idx, split_idx))
 
@@ -133,7 +131,7 @@ class PolicyWorker:
             self.actor_critic.load_state_dict(state_dict)
             self.latest_policy_version = policy_version
 
-        if self.sync_mode:
+        if self.cfg.sync_mode:
             self.workers_paused.clear()
 
         log.info(

@@ -225,6 +225,7 @@ class LearnerWorker:
     def _after_optimizer_step(self):
         """A hook to be called after each optimizer step."""
         self.train_step += 1
+        self.policy_version += 1
         # self._maybe_save()
         # TODO!!
 
@@ -484,7 +485,6 @@ class LearnerWorker:
                         stats['train']['wait_min'] = wait_min
                         stats['train']['wait_max'] = wait_max
 
-                self.policy_version += 1
                 self._broadcast_weights()
 
         self.report_queue.put(stats)
