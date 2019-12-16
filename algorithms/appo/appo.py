@@ -125,6 +125,10 @@ class APPO(Algorithm):
 
         p.add_argument('--sync_mode', default=False, type=str2bool, help='Fully synchronous mode to compare against the standard PPO implementation')
 
+        p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
+
+        p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -353,7 +357,8 @@ class APPO(Algorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
-            while self.env_steps < 1*1e10 + 1000000:  # TODO: stopping condition
+            train_for_env_steps = int(1e6) if self.cfg.benchmark else int(1e12)
+            while self.env_steps < train_for_env_steps:
                 for w in self.learner_workers.values():
                     while True:
                         try:

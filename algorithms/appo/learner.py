@@ -132,8 +132,9 @@ class LearnerWorker:
                 if isinstance(x[0], (dict, OrderedDict)):
                     buffer[key] = list_of_dicts_to_dict_of_lists(x)
 
-        with timing.add_time('calc_gae'):
-            buffer = self._calculate_gae(buffer)
+        if not self.cfg.with_vtrace:
+            with timing.add_time('calc_gae'):
+                buffer = self._calculate_gae(buffer)
 
         with timing.add_time('tensors'):
             for d, key, value in iterate_recursively(buffer):
@@ -144,17 +145,18 @@ class LearnerWorker:
 
             experience_size = buffer.rewards.shape[0]  # could have used any other key
 
-        # normalize advantages if needed
-        if self.cfg.normalize_advantage:
-            adv_mean = buffer.advantages.mean()
-            adv_std = buffer.advantages.std()
-            # adv_max, adv_min = buffer.advantages.max(), buffer.advantages.min()
-            # adv_max_abs = max(adv_max, abs(adv_min))
-            # log.info(
-            #     'Adv mean %.3f std %.3f, min %.3f, max %.3f, max abs %.3f',
-            #     adv_mean, adv_std, adv_min, adv_max, adv_max_abs,
-            # )
-            buffer.advantages = (buffer.advantages - adv_mean) / max(1e-2, adv_std)
+        if not self.cfg.with_vtrace:
+            # normalize advantages if needed
+            if self.cfg.normalize_advantage:
+                adv_mean = buffer.advantages.mean()
+                adv_std = buffer.advantages.std()
+                # adv_max, adv_min = buffer.advantages.max(), buffer.advantages.min()
+                # adv_max_abs = max(adv_max, abs(adv_min))
+                # log.info(
+                #     'Adv mean %.3f std %.3f, min %.3f, max %.3f, max abs %.3f',
+                #     adv_mean, adv_std, adv_min, adv_max, adv_max_abs,
+                # )
+                buffer.advantages = (buffer.advantages - adv_mean) / max(1e-2, adv_std)
 
         return buffer, experience_size
 
@@ -229,18 +231,16 @@ class LearnerWorker:
         # self._maybe_save()
         # TODO!!
 
-    def _policy_loss(self, action_distribution, mb, clip_ratio):
-        log_prob_actions = action_distribution.log_prob(mb.actions)
-        ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
+    def _policy_loss(self, ratio, adv, clip_ratio):
+        # TODO: get rid of leaky PPO, simplify this function
 
-        # p_old = torch.exp(mb.log_prob_actions)
         positive_clip_ratio = clip_ratio
         negative_clip_ratio = 1.0 / clip_ratio
 
-        is_adv_positive = (mb.advantages > 0.0).float()
+        is_adv_positive = (adv > 0.0).float()
         is_ratio_too_big = (ratio > positive_clip_ratio).float() * is_adv_positive
 
-        is_adv_negative = (mb.advantages < 0.0).float()
+        is_adv_negative = (adv < 0.0).float()
         is_ratio_too_small = (ratio < negative_clip_ratio).float() * is_adv_negative
 
         clipping = is_adv_positive * positive_clip_ratio + is_adv_negative * negative_clip_ratio
@@ -251,28 +251,32 @@ class LearnerWorker:
         # total_non_clipped = torch.sum(is_ratio_not_clipped).float()
         fraction_clipped = is_ratio_clipped.mean()
 
-        objective = ratio * mb.advantages
+        objective = ratio * adv
         leak = 0.0  # currently not used
-        objective_clipped = -leak * ratio * mb.advantages + clipping * mb.advantages * (1.0 + leak)
+        objective_clipped = -leak * ratio * adv + clipping * adv * (1.0 + leak)
 
         policy_loss = -(objective * is_ratio_not_clipped + objective_clipped * is_ratio_clipped)
         policy_loss = policy_loss.mean()
 
-        return policy_loss, ratio, fraction_clipped
+        return policy_loss, fraction_clipped
 
-    def _value_loss(self, new_values, mb, clip_value):
-        value_clipped = mb.values + torch.clamp(new_values - mb.values, -clip_value, clip_value)
-        value_original_loss = (new_values - mb.returns).pow(2)
-        value_clipped_loss = (value_clipped - mb.returns).pow(2)
+    def _value_loss(self, new_values, old_values, target, clip_value):
+        value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
+        value_original_loss = (new_values - target).pow(2)
+        value_clipped_loss = (value_clipped - target).pow(2)
         value_loss = torch.max(value_original_loss, value_clipped_loss)
         value_loss = value_loss.mean()
         value_loss *= self.cfg.value_loss_coeff
-        value_delta = torch.abs(new_values - mb.values)
+        value_delta = torch.abs(new_values - old_values)
 
         return value_loss, value_delta
 
     def _train(self, buffer, experience_size, timing):
         stats = None
+
+        rho_hat = c_hat = 1.0  # V-trace parameters
+        rho_hat = torch.Tensor([rho_hat]).to(self.device)
+        c_hat = torch.Tensor([c_hat]).to(self.device)
 
         clip_ratio = self.cfg.ppo_clip_ratio
         clip_value = self.cfg.ppo_clip_value
@@ -312,11 +316,11 @@ class LearnerWorker:
                 core_outputs = []
                 for i in range(self.cfg.recurrence):
                     # indices of head outputs corresponding to the current timestep
-                    timestep_indices = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
-                    step_head_outputs = head_outputs[timestep_indices]
+                    timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+                    step_head_outputs = head_outputs[timestep]
 
-                    dones = mb.dones[timestep_indices].unsqueeze(dim=1)
-                    rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep_indices]
+                    dones = mb.dones[timestep].unsqueeze(dim=1)
+                    rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep]
 
                     with timing.add_time('forw_core'):
                         core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
@@ -326,6 +330,9 @@ class LearnerWorker:
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                 # which is the same shape as the minibatch
                 core_outputs = torch.stack(core_outputs)
+                num_timesteps, num_trajectories = core_outputs.shape[:2]
+                assert num_timesteps == self.cfg.recurrence
+                assert num_timesteps * num_trajectories == self.cfg.batch_size
                 core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
                 assert core_outputs.shape[0] == head_outputs.shape[0]
 
@@ -334,13 +341,51 @@ class LearnerWorker:
                     result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
 
                 action_distribution = result.action_distribution
+                log_prob_actions = action_distribution.log_prob(mb.actions)
+                ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
-                policy_loss, ratio, fraction_clipped = self._policy_loss(action_distribution, mb, clip_ratio)
+                vtrace_c = torch.min(c_hat, ratio.detach())
+                vtrace_rho = torch.min(rho_hat, ratio.detach())
+
+                values = result.values.squeeze()
+
+                last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
+                next_values = (values[last_timestep].detach() - mb.rewards[last_timestep]) / self.cfg.gamma
+                next_vs = next_values
+
+                gamma = self.cfg.gamma
+
+                vs = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
+                adv = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
+
+                for i in reversed(range(self.cfg.recurrence)):
+                    timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+
+                    rewards = mb.rewards[timestep]
+                    dones = mb.dones[timestep]
+                    not_done = 1.0 - dones
+
+                    delta_s = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_values - values[timestep])).detach()
+                    adv[timestep] = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_vs - values[timestep])).detach()
+
+                    vs[timestep] = (values[timestep] + delta_s + not_done * gamma * vtrace_c[timestep] * (next_vs - next_values)).detach()
+
+                    next_values = values[timestep].detach()
+                    next_vs = vs[timestep].detach()
+
+                adv = adv.detach()
+                adv_mean = adv.mean()
+                adv_std = adv.std()
+                adv = (adv - adv_mean) / max(1e-2, adv_std)
+
+                policy_loss, fraction_clipped = self._policy_loss(ratio, adv, clip_ratio)
                 ratio_mean = torch.abs(1.0 - ratio).mean()
                 ratio_min = ratio.min()
                 ratio_max = ratio.max()
 
-                value_loss, value_delta = self._value_loss(result.values, mb, clip_value)
+                targets = vs.detach()
+                old_values = mb.values.squeeze()
+                value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
                 value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
                 # entropy loss

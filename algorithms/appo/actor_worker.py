@@ -374,7 +374,7 @@ class ActorWorker:
 
         # random delay in the beginning guarantees that workers will produce complete rollouts more or less
         # uniformly, improving the overall throughput and reducing policy version gap
-        self.add_random_delay = False
+        self.add_random_delay = not self.cfg.benchmark
         self.rollout_start = None
 
         self.plasma_store_name = plasma_store_name
