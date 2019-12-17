@@ -437,6 +437,9 @@ class LearnerWorker:
                     stats.prior_loss = prior_loss
                     stats.kl_coeff = self.kl_coeff
                     stats.kl_penalty = kl_penalty
+                    stats.adv_mean_before_norm = adv_mean
+                    stats.adv_min = adv.min()
+                    stats.adv_max = adv.max()
                     stats.max_abs_logprob = torch.abs(mb.action_logits).max()
                     stats.avg_version = mb.policy_version.mean()
 
