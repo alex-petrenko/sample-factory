@@ -1,8 +1,10 @@
+import ctypes
 import sys
+import threading
 import time
 from enum import Enum
 from multiprocessing import Process, JoinableQueue
-from queue import Empty
+from queue import Empty, Queue
 
 import cv2
 import numpy as np
@@ -11,6 +13,35 @@ from algorithms.utils.multi_env import MultiEnv, MsgType
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log, kill
+
+
+def _async_raise(tid, excobj):
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, ctypes.py_object(excobj))
+    if res == 0:
+        raise ValueError("nonexistent thread id")
+    elif res > 1:
+        # """if it returns a number greater than one, you're in trouble,
+        # and you should call it again with exc=NULL to revert the effect"""
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, 0)
+        raise SystemError("PyThreadState_SetAsyncExc failed")
+
+
+class Thread(threading.Thread):
+    def raise_exc(self, excobj):
+        assert self.isAlive(), "thread must be started"
+        for tid, tobj in threading._active.items():
+            if tobj is self:
+                _async_raise(tid, excobj)
+                return
+
+        # the thread was alive when we entered the loop, but was not found
+        # in the dict, hence it must have been already terminated. should we raise
+        # an exception here? silently ignore?
+
+    def terminate(self):
+        # must raise the SystemExit type, instead of a SystemExit() instance
+        # due to a bug in PyThreadState_SetAsyncExc
+        self.raise_exc(SystemExit)
 
 
 def safe_get(q, timeout=1e6, msg='Queue timeout'):
@@ -42,13 +73,18 @@ def init_multiplayer_env(make_env_func, player_id, env_config, init_info=None):
 
 
 class MultiAgentEnvWorker:
-    def __init__(self, player_id, make_env_func, env_config):
+    def __init__(self, player_id, make_env_func, env_config, use_multiprocessing=False):
         self.player_id = player_id
         self.make_env_func = make_env_func
         self.env_config = env_config
 
-        self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
-        self.process = Process(target=self.start, daemon=True)
+        if use_multiprocessing:
+            self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
+            self.process = Process(target=self.start, daemon=False)
+        else:
+            self.task_queue, self.result_queue = Queue(), Queue()
+            self.process = Thread(target=self.start)
+
         self.process.start()
 
     def _init(self, init_info):
@@ -206,13 +242,17 @@ class MultiAgentEnv:
                         time.sleep(0.1)
 
                 for i, worker in enumerate(self.workers):
-                    worker.result_queue.get(timeout=5)
+                    worker.result_queue.get(timeout=500)  #TODO!!!
                     worker.result_queue.task_done()
                     worker.task_queue.join()
             except Exception as exc:
                 for worker in self.workers:
-                    log.info('Killing process %r', worker.process.pid)
-                    kill(worker.process.pid)
+                    if isinstance(worker.process, Thread):
+                        log.info('Killing thread...')
+                        worker.process.terminate()
+                    else:
+                        log.info('Killing process %r', worker.process.pid)
+                        kill(worker.process.pid)
                 del self.workers
                 log.warning('Could not initialize env, try again! Error: %r', exc)
                 time.sleep(1)

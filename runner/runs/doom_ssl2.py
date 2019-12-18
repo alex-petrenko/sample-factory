@@ -1,5 +1,4 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_processes import run
 
 _params = ParamGrid([
     ('ppo_epochs', [1]),

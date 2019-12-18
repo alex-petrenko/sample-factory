@@ -1,5 +1,6 @@
 import copy
 import os
+import random
 import re
 import time
 from os.path import join
@@ -233,6 +234,7 @@ class VizdoomEnv(gym.Env):
 
         if self.record_to is None or self.is_multiplayer:
             # no demo recording (default)
+            time.sleep(random.random())
             self.game.new_episode()
         else:
             # does not work in multiplayer (uses different mechanism)
