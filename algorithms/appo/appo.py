@@ -1,7 +1,9 @@
+import json
 import logging
 import math
 import time
 from collections import deque
+from os.path import join
 from queue import Empty
 
 import numpy as np
@@ -14,7 +16,7 @@ from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.learner import LearnerWorker
 from algorithms.utils.multi_env import queue_join_timeout
 from utils.timing import Timing
-from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb
+from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
 
 
 class Algorithm:
@@ -25,15 +27,14 @@ class Algorithm:
         p.add_argument('--seed', default=42, type=int, help='Set a fixed seed value')
 
         p.add_argument('--initial_save_rate', default=1000, type=int,
-                       help='Save model every N steps in the beginning of training')
+                       help='Save model every N train steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=4, type=int, help='Number of model checkpoints to keep')
 
         p.add_argument('--stats_episodes', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 
         p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
 
-        p.add_argument('--train_for_steps', default=int(1e10), type=int, help='Stop training after this many SGD steps')
-        p.add_argument('--train_for_env_steps', default=int(1e10), type=int, help='Stop training after this many environment steps')
+        p.add_argument('--train_for_env_steps', default=int(1e10), type=int, help='Stop after all policies are trained for this many env steps')
         p.add_argument('--train_for_seconds', default=int(1e10), type=int, help='Stop training after this many seconds')
 
         # observation preprocessing
@@ -56,22 +57,6 @@ class Algorithm:
 
     def __init__(self, cfg):
         self.cfg = cfg
-
-        # TODO:
-        # if self.cfg.seed is not None:
-        #     log.info('Settings fixed seed %d', self.cfg.seed)
-        #     torch.manual_seed(self.cfg.seed)
-        #     np.random.seed(self.cfg.seed)
-
-        self.train_step = self.env_steps = 0
-
-        self.total_train_seconds = 0
-        self.last_training_step = time.time()
-
-        self.best_avg_reward = math.nan
-
-        summary_dir = summaries_dir(experiment_dir(cfg=self.cfg))
-        self.writer = SummaryWriter(summary_dir, flush_secs=10)
 
 
 class APPO(Algorithm):
@@ -100,7 +85,6 @@ class APPO(Algorithm):
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
         p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
-        p.add_argument('--early_stopping', default=False, type=str2bool, help='Early stop training on the experience batch when KL-divergence is too high')
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
@@ -157,18 +141,37 @@ class APPO(Algorithm):
             for split_idx in range(self.cfg.worker_num_splits):
                 self.policy_outputs[(worker_idx, split_idx)] = dict()
 
-        self.episode_rewards = deque(maxlen=100)
+        self.episode_rewards = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
+        self.episode_lengths = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
 
         self.last_timing = dict()
-        self.env_steps = 0
+        self.env_steps = dict()
+        self.total_env_steps_since_resume = 0
+
+        self.total_train_seconds = 0  # TODO: save and load from checkpoint??
+
         self.last_report = time.time()
         self.report_interval = 2.0  # sec
 
         self.fps_stats = deque([], maxlen=10)
-        self.fps_stats.append((time.time(), self.env_steps))
 
-        summary_dir = summaries_dir(experiment_dir(cfg=self.cfg))
-        self.writer = SummaryWriter(summary_dir, flush_secs=10)
+        self.writers = dict()
+        writer_keys = list(range(self.cfg.num_policies))
+        for key in writer_keys:
+            summary_dir = join(summaries_dir(experiment_dir(cfg=self.cfg)), str(key))
+            summary_dir = ensure_dir_exists(summary_dir)
+            self.writers[key] = SummaryWriter(summary_dir, flush_secs=20)
+
+    def _cfg_dict(self):
+        if isinstance(self.cfg, dict):
+            return self.cfg
+        else:
+            return vars(self.cfg)
+
+    def _save_cfg(self):
+        cfg_dict = self._cfg_dict()
+        with open(cfg_file(self.cfg), 'w') as json_file:
+            json.dump(cfg_dict, json_file, indent=2)
 
     def initialize(self):
         if not ray.is_initialized():
@@ -186,6 +189,8 @@ class APPO(Algorithm):
         self.obs_space = tmp_env.observation_space
         self.action_space = tmp_env.action_space
         tmp_env.close()
+
+        self._save_cfg()
 
     def finalize(self):
         ray.shutdown()
@@ -303,55 +308,79 @@ class APPO(Algorithm):
                 w.init()
 
     def process_report(self, report):
+        policy_id = report['policy_id']
+
         if 'env_steps' in report:
-            self.env_steps += report['env_steps']
+            if policy_id in self.env_steps:
+                delta = report['env_steps'] - self.env_steps[policy_id]
+                self.total_env_steps_since_resume += delta
+            self.env_steps[policy_id] = report['env_steps']
 
         if 'episodic' in report:
-            episodic_stats = report['episodic']
-            for s in episodic_stats:
-                self.episode_rewards.append(s['reward'])
+            s = report['episodic']
+            self.episode_rewards[policy_id].append(s['reward'])
+            self.episode_lengths[policy_id].append(s['len'])
 
         if 'train' in report:
-            self.report_train_summaries(report['train'])
+            self.report_train_summaries(report['train'], policy_id)
 
     def report(self):
         now = time.time()
-        past_moment, past_frames = self.fps_stats[0]
-        fps = (self.env_steps - past_frames) / (now - past_moment)
 
-        if len(self.episode_rewards) >= self.episode_rewards.maxlen:
-            avg_reward = np.mean(self.episode_rewards)
-        else:
-            avg_reward = math.nan
-
-        self.fps_stats.append((now, self.env_steps))
-
-        self.print_stats(fps, avg_reward)
-
-        avg_length = 0  # TODO!!!
-        self.report_basic_summaries(fps, avg_reward, avg_length)
-
-    def print_stats(self, fps, avg_reward):
-        log.debug('Fps is %.1f. Total num frames: %d', fps, self.env_steps)
-        log.debug('Avg episode reward %.3f', avg_reward)
-
-    def report_train_summaries(self, stats):
-        for key, scalar in stats.items():
-            self.writer.add_scalar(f'train/{key}', scalar, self.env_steps)
-
-    def report_basic_summaries(self, fps, avg_reward, avg_length):
-        self.writer.add_scalar('0_aux/fps', fps, self.env_steps)
-
-        memory_mb = memory_consumption_mb()
-        self.writer.add_scalar('0_aux/master_process_memory_mb', float(memory_mb), self.env_steps)
-
-        if math.isnan(avg_reward) or math.isnan(avg_length):
-            # not enough data to report yet
+        total_env_steps = sum(self.env_steps.values())
+        self.fps_stats.append((now, total_env_steps))
+        if len(self.fps_stats) <= 1:
             return
 
-        self.writer.add_scalar('0_aux/avg_reward', float(avg_reward), self.env_steps)
-        self.writer.add_scalar('0_aux/avg_length', float(avg_length), self.env_steps)
-        # self.writer.add_scalar('0_aux/best_reward_ever', float(self.best_avg_reward), self.env_steps)
+        past_moment, past_frames = self.fps_stats[0]
+        fps = (total_env_steps - past_frames) / (now - past_moment)
+
+        avg_reward, avg_length = dict(), dict()
+        for policy_id in range(self.cfg.num_policies):
+            if len(self.episode_rewards[policy_id]) >= self.episode_rewards[policy_id].maxlen:
+                avg_reward[policy_id] = np.mean(self.episode_rewards[policy_id])
+            else:
+                avg_reward[policy_id] = math.nan
+
+            if len(self.episode_lengths[policy_id]) >= self.episode_lengths[policy_id].maxlen:
+                avg_length[policy_id] = np.mean(self.episode_lengths[policy_id])
+            else:
+                avg_length[policy_id] = math.nan
+
+        self.print_stats(fps, avg_reward, total_env_steps)
+        self.report_basic_summaries(fps, avg_reward, avg_length)
+
+    @staticmethod
+    def print_stats(fps, avg_reward, total_env_steps):
+        log.debug('Fps is %.1f. Total num frames: %d', fps, total_env_steps)
+        log.debug('Avg episode reward: %r', [f'{p}: {r:.3f}' for p, r in avg_reward.items()])
+
+    def report_train_summaries(self, stats, policy_id):
+        for key, scalar in stats.items():
+            self.writers[policy_id].add_scalar(f'train/{key}', scalar, self.env_steps[policy_id])
+
+    def report_basic_summaries(self, fps, avg_reward, avg_length):
+        memory_mb = memory_consumption_mb()
+
+        for policy_id, env_steps in self.env_steps.items():
+            self.writers[policy_id].add_scalar('0_aux/fps', fps, env_steps)
+            self.writers[policy_id].add_scalar('0_aux/master_process_memory_mb', float(memory_mb), env_steps)
+
+            if math.isnan(avg_reward[policy_id]) or math.isnan(avg_length[policy_id]):
+                # not enough data to report yet
+                continue
+
+            self.writers[policy_id].add_scalar('0_aux/avg_reward', float(avg_reward[policy_id]), env_steps)
+            self.writers[policy_id].add_scalar('0_aux/avg_length', float(avg_length[policy_id]), env_steps)
+
+    def _should_end_training(self):
+        end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
+        end |= self.total_train_seconds > self.cfg.train_for_seconds
+
+        if self.cfg.benchmark:
+            end |= self.total_env_steps_since_resume >= int(1e6)
+
+        return end
 
     def learn(self):
         self.init_workers()
@@ -360,8 +389,8 @@ class APPO(Algorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
-            train_for_env_steps = int(1e6) if self.cfg.benchmark else int(1e12)
-            while self.env_steps < train_for_env_steps:
+
+            while not self._should_end_training():
                 for w in self.learner_workers.values():
                     while True:
                         try:
@@ -372,7 +401,10 @@ class APPO(Algorithm):
 
                 if time.time() - self.last_report > self.report_interval:
                     self.report()
-                    self.last_report = time.time()
+
+                    now = time.time()
+                    self.total_train_seconds += now - self.last_report
+                    self.last_report = now
 
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():
@@ -385,8 +417,8 @@ class APPO(Algorithm):
         for w in all_workers:
             w.join()
 
-        fps = self.env_steps / timing.experience
-        log.info('Collected %d, FPS: %.1f', self.env_steps, fps)
+        fps = sum(self.env_steps.values()) / timing.experience
+        log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
         log.info('Timing: %s', timing)
 
         time.sleep(0.1)

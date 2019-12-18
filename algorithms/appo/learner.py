@@ -1,7 +1,9 @@
-import threading
+import glob
+import os
 import threading
 import time
 from collections import OrderedDict, deque
+from os.path import join
 from queue import Empty, Queue
 from threading import Thread
 
@@ -18,7 +20,7 @@ from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
 
 
 class LearnerWorker:
@@ -30,7 +32,6 @@ class LearnerWorker:
         self.worker_idx = worker_idx
         self.policy_id = policy_id
         self.cfg = cfg
-        self.policy_version = 0
 
         self.with_training = True  # TODO: debug, remove
         self.terminate = False
@@ -40,7 +41,6 @@ class LearnerWorker:
 
         self.plasma_store_name = plasma_store_name
 
-        # initialize the Torch modules
         self.device = None
         self.actor_critic = None
         self.optimizer = None
@@ -56,9 +56,11 @@ class LearnerWorker:
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
 
-        self.train_step = 0
+        self.train_step = self.env_steps = 0
+
         self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)])
         self.last_summary_written = -1e9
+        self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
 
         # some stats we measure in the end of the last training epoch
         self.last_batch_stats = AttrDict()
@@ -84,7 +86,8 @@ class LearnerWorker:
 
     def _broadcast_weights(self, discarding_rate):
         state_dict = self.actor_critic.state_dict()
-        weight_update = (self.policy_version, state_dict, discarding_rate)
+        policy_version = self.train_step
+        weight_update = (policy_version, state_dict, discarding_rate)
         for q in self.weight_queues:
             q.put((TaskType.UPDATE_WEIGHTS, weight_update))
 
@@ -119,9 +122,9 @@ class LearnerWorker:
     def _prepare_train_buffer(self, rollouts, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
 
-        if self.cfg.benchmark:
-            log.info('%r', trajectories[0].policy_version)
-            log.info('%r', trajectories[-1].policy_version)
+        # if self.cfg.benchmark:
+        #     log.info('%r', trajectories[0].policy_version)
+        #     log.info('%r', trajectories[-1].policy_version)
 
         with timing.add_time('buffers'):
             buffer = AttrDict()
@@ -183,9 +186,10 @@ class LearnerWorker:
         work_done = False
 
         discard_rollouts = 0
+        policy_version = self.train_step
         for r in rollouts:
             rollout_min_version = min(r['t']['policy_version'])
-            if self.policy_version - rollout_min_version >= self.cfg.max_policy_lag:
+            if policy_version - rollout_min_version >= self.cfg.max_policy_lag:
                 discard_rollouts += 1
             else:
                 break
@@ -250,11 +254,50 @@ class LearnerWorker:
     def _after_optimizer_step(self):
         """A hook to be called after each optimizer step."""
         self.train_step += 1
-        self.policy_version += 1
-        # self._maybe_save()
-        # TODO!!
+        self._maybe_save()
 
-    def _policy_loss(self, ratio, adv, clip_ratio):
+    def _maybe_save(self):
+        save_every = self.save_rate_decay.at(self.train_step)
+        if (self.train_step + 1) % save_every == 0 or self.train_step <= 1:
+            self._save()
+
+    @staticmethod
+    def checkpoint_dir(cfg, policy_id):
+        checkpoint_dir = join(experiment_dir(cfg=cfg), f'checkpoint_p{policy_id}')
+        return ensure_dir_exists(checkpoint_dir)
+
+    @staticmethod
+    def get_checkpoints(checkpoints_dir):
+        checkpoints = glob.glob(join(checkpoints_dir, 'checkpoint_*'))
+        return sorted(checkpoints)
+
+    def _get_checkpoint_dict(self):
+        checkpoint = {
+            'train_step': self.train_step,
+            'env_steps': self.env_steps,
+            'kl_coeff': self.kl_coeff,
+            'model': self.actor_critic.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+        }
+        return checkpoint
+
+    def _save(self):
+        checkpoint = self._get_checkpoint_dict()
+        assert checkpoint is not None
+
+        checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
+        filepath = join(checkpoint_dir, f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth')
+        log.info('Saving %s...', filepath)
+        torch.save(checkpoint, filepath)
+
+        while len(self.get_checkpoints(checkpoint_dir)) > self.cfg.keep_checkpoints:
+            oldest_checkpoint = self.get_checkpoints(checkpoint_dir)[0]
+            if os.path.isfile(oldest_checkpoint):
+                log.debug('Removing %s', oldest_checkpoint)
+                os.remove(oldest_checkpoint)
+
+    @staticmethod
+    def _policy_loss(ratio, adv, clip_ratio):
         # TODO: get rid of leaky PPO, simplify this function
 
         positive_clip_ratio = clip_ratio
@@ -326,8 +369,7 @@ class LearnerWorker:
                 mb = self._get_minibatch(buffer, indices)
 
                 # calculate policy head outside of recurrent loop
-                with timing.add_time('forw_head'):
-                    head_outputs = self.actor_critic.forward_head(mb.obs)
+                head_outputs = self.actor_critic.forward_head(mb.obs)
 
                 # indices corresponding to 1st frames of trajectory segments
                 traj_indices = indices[::self.cfg.recurrence]
@@ -345,8 +387,7 @@ class LearnerWorker:
                     dones = mb.dones[timestep].unsqueeze(dim=1)
                     rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep]
 
-                    with timing.add_time('forw_core'):
-                        core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
+                    core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
 
                     core_outputs.append(core_output)
 
@@ -360,8 +401,7 @@ class LearnerWorker:
                 assert core_outputs.shape[0] == head_outputs.shape[0]
 
                 # calculate policy tail outside of recurrent loop
-                with timing.add_time('forw_tail'):
-                    result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
+                result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
 
                 action_distribution = result.action_distribution
                 log_prob_actions = action_distribution.log_prob(mb.actions)
@@ -412,7 +452,6 @@ class LearnerWorker:
                 value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
                 # entropy loss
-                entropy = action_distribution.entropy().mean()
                 kl_prior = action_distribution.kl_prior()
                 kl_prior = kl_prior.mean()
                 prior_loss = self.cfg.prior_loss_coeff * kl_prior
@@ -454,19 +493,18 @@ class LearnerWorker:
                     stats.grad_norm = grad_norm
                     stats.loss = loss
                     stats.value = result.values.mean()
-                    stats.entropy = entropy
+                    stats.entropy = action_distribution.entropy().mean()
                     stats.kl_prior = kl_prior
                     stats.value_loss = value_loss
                     stats.prior_loss = prior_loss
                     stats.kl_coeff = self.kl_coeff
                     stats.kl_penalty = kl_penalty
-                    stats.adv_mean_before_norm = adv_mean
                     stats.adv_min = adv.min()
                     stats.adv_max = adv.max()
                     stats.max_abs_logprob = torch.abs(mb.action_logits).max()
-                    stats.avg_version = mb.policy_version.mean()
 
-                    version_diff = self.policy_version - mb.policy_version
+                    curr_policy_version = self.train_step
+                    version_diff = curr_policy_version - mb.policy_version
                     stats.version_diff_avg = version_diff.mean()
                     stats.version_diff_min = version_diff.min()
                     stats.version_diff_max = version_diff.max()
@@ -478,17 +516,6 @@ class LearnerWorker:
                     for key, value in stats.items():
                         if isinstance(value, torch.Tensor):
                             stats[key] = value.detach()
-
-                if self.cfg.early_stopping:
-                    kl_99_th = np.percentile(kl_old.detach().cpu().numpy(), 99)
-                    value_delta_99th = np.percentile(value_delta.detach().cpu().numpy(), 99)
-                    if kl_99_th > self.cfg.target_kl * 5 or value_delta_99th > self.cfg.ppo_clip_value * 5:
-                        log.info(
-                            'Early stopping due to KL %.3f or value delta %.3f, epoch %d, step %d',
-                            kl_99_th, value_delta_99th, epoch, num_sgd_steps,
-                        )
-                        early_stopping = True
-                        break
 
         # adjust KL-penalty coefficient if KL divergence at the end of training is high
         if kl_old_mean > self.cfg.target_kl:
@@ -508,12 +535,43 @@ class LearnerWorker:
         self.last_batch_stats.ratio_max = ratio_max
         self.last_batch_stats.num_sgd_steps = num_sgd_steps
 
-        value_delta_99th = np.percentile(value_delta.detach().cpu().numpy(), 99)
-        log.info('Value delta avg, 99, max: %.3f, %.3f, %.3f', value_delta_avg, value_delta_99th, value_delta_max)
-
         return stats
 
-    def _init_training(self, timing):
+    @staticmethod
+    def load_checkpoint(checkpoints):
+        if len(checkpoints) <= 0:
+            log.warning('No checkpoints found')
+            return None
+        else:
+            latest_checkpoint = checkpoints[-1]
+            log.warning('Loading state from checkpoint %s...', latest_checkpoint)
+
+            checkpoint_dict = torch.load(latest_checkpoint)
+            return checkpoint_dict
+
+    def _load_state(self, checkpoint_dict):
+        self.train_step = checkpoint_dict['train_step']
+        self.env_steps = checkpoint_dict['env_steps']
+        self.kl_coeff = checkpoint_dict['kl_coeff']
+        self.actor_critic.load_state_dict(checkpoint_dict['model'])
+        self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
+        log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
+
+    def init_model(self):
+        self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+        self.actor_critic.to(self.device)
+        self.actor_critic.share_memory()
+
+    def load_from_checkpoint(self):
+        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, self.policy_id))
+        checkpoint_dict = self.load_checkpoint(checkpoints)
+        if checkpoint_dict is None:
+            log.debug('Did not load from checkpoint, starting from scratch!')
+        else:
+            log.debug('Loading model from checkpoint')
+            self._load_state(checkpoint_dict)
+
+    def initialize(self, timing):
         with timing.timeit('init'):
             # initialize the Torch modules
             if self.cfg.seed is not None:
@@ -524,9 +582,7 @@ class LearnerWorker:
             torch.set_num_threads(1)  # TODO: experimental
 
             self.device = torch.device('cuda')
-            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
-            self.actor_critic.to(self.device)
-            self.actor_critic.share_memory()
+            self.init_model()
 
             self.optimizer = torch.optim.Adam(
                 self.actor_critic.parameters(),
@@ -535,14 +591,18 @@ class LearnerWorker:
                 eps=self.cfg.adam_eps,
             )
 
+            self.load_from_checkpoint()
+
             self._broadcast_weights(self._discarding_rate())  # sync the very first version of the weights
 
         self.train_thread_initialized.set()
 
     def _process_training_data(self, data, timing, wait_stats=None):
         buffer, samples, env_steps = data
-        stats = dict(samples=samples, env_steps=env_steps)
+        self.env_steps += env_steps
         experience_size = buffer.rewards.shape[0]
+
+        stats = dict(env_steps=self.env_steps, policy_id=self.policy_id)
 
         with timing.add_time('train'):
             discarding_rate = self._discarding_rate()
@@ -569,7 +629,7 @@ class LearnerWorker:
 
     def _train_loop(self):
         timing = Timing()
-        self._init_training(timing)
+        self.initialize(timing)
 
         wait_times = deque([], maxlen=self.cfg.num_workers)
 
@@ -628,7 +688,7 @@ class LearnerWorker:
         if self.train_in_background:
             self.training_thread.start()
         else:
-            self._init_training(timing)
+            self.initialize(timing)
 
         while not self.terminate:
             while True:

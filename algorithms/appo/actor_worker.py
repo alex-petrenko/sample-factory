@@ -139,8 +139,9 @@ class ActorState:
 
     def episodic_stats(self):
         stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
+        report = dict(episodic=stats, policy_id=self.curr_policy_id)
         self.last_episode_reward = self.last_episode_duration = 0
-        return stats
+        return report
 
 
 class VectorEnvRunner:
@@ -466,8 +467,8 @@ class ActorWorker:
             self.learner_queues[policy_id].put((TaskType.TRAIN, rollouts))
 
     def _report_stats(self, stats):
-        stats = dict(episodic=stats)
-        self.report_queue.put(stats)
+        for report in stats:
+            self.report_queue.put(report)
 
     def _handle_reset(self):
         for split_idx, env_runner in enumerate(self.env_runners):
