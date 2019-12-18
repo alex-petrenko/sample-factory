@@ -1,3 +1,4 @@
+import logging
 import math
 import time
 from collections import deque
@@ -122,6 +123,7 @@ class APPO(Algorithm):
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
         p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
+        p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
 
         p.add_argument('--sync_mode', default=False, type=str2bool, help='Fully synchronous mode to compare against the standard PPO implementation')
 
@@ -174,6 +176,7 @@ class APPO(Algorithm):
                 local_mode=False,
                 memory=int(1e10), object_store_memory=int(1e10),
                 redis_max_memory=int(1e9), driver_object_store_memory=int(1e9),
+                logging_level=logging.CRITICAL,
             )
 
         global_worker = ray.worker.global_worker

@@ -1,4 +1,5 @@
 import select
+import time
 from queue import Empty
 
 import numpy as np
@@ -9,6 +10,7 @@ from torch.multiprocessing import Process
 
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append
 from algorithms.appo.model import ActorCritic
+from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
 from utils.utils import AttrDict, log
 
@@ -45,6 +47,8 @@ class PolicyWorker:
 
         self.requests = dict()
         self.workers_paused = set()
+        self.too_many_workers = False
+        self.last_speed_adjustment = time.time()
 
         self.process = Process(target=self._run, daemon=True)
 
@@ -60,6 +64,11 @@ class PolicyWorker:
     def _store_policy_step_request(self, request):
         worker_idx = request['worker_idx']
         split_idx = request['split_idx']
+
+        request['policy_inputs'] = self.plasma_client.get(
+            request['policy_inputs'], -1, serialization_context=self.serialization_context,
+        )
+
         self.requests[(worker_idx, split_idx)] = request
 
     def _filter_requests(self):
@@ -90,21 +99,24 @@ class PolicyWorker:
                 for request in requests:
                     actor_idx = request['worker_idx']
                     split_idx = request['split_idx']
-
-                    request_data = self.plasma_client.get(
-                        request['policy_inputs'], -1, serialization_context=self.serialization_context,
-                    )
+                    request_data = request['policy_inputs']
 
                     num_inputs, rollout_step, policy_inputs = request_data
-                    # log.info('A:%d  S:%d  num:%d  roll:%d  policy:%d', actor_idx, split_idx, num_inputs, rollout_step, self.latest_policy_version)
 
                     dict_of_lists_append(observations, policy_inputs['obs'])
                     rnn_states.append(policy_inputs['rnn_states'])
                     num_obs_per_actor.append((actor_idx, split_idx, num_inputs))
 
-                    if self.cfg.sync_mode:
-                        if rollout_step >= self.cfg.rollout - 1:
+                    if rollout_step >= self.cfg.rollout - 1:
+                        if self.cfg.sync_mode or self.too_many_workers:
                             self.workers_paused.add((actor_idx, split_idx))
+
+                            if self.too_many_workers:
+                                log.warning(
+                                    'Paused worker (%d, %d), total %d (%r)',
+                                    actor_idx, split_idx, len(self.workers_paused), self.workers_paused,
+                                )
+                                self.too_many_workers = False
 
             with torch.no_grad():
                 with timing.add_time('to_device'):
@@ -127,9 +139,30 @@ class PolicyWorker:
             return
 
         with timing.timeit('weight_update'):
-            policy_version, state_dict = weight_update
+            policy_version, state_dict, discarding_rate = weight_update
             self.actor_critic.load_state_dict(state_dict)
             self.latest_policy_version = policy_version
+
+        # adjust experience collection rate
+        if time.time() - self.last_speed_adjustment > 30.0:
+            if discarding_rate <= 0:
+                if self.workers_paused:
+                    worker_idx = self.workers_paused.pop()
+                    log.warning(
+                        'Resume experience collection on worker %r (paused %d: %r)',
+                        worker_idx, len(self.workers_paused), self.workers_paused,
+                    )
+
+                    self.last_speed_adjustment = time.time()
+                    self.too_many_workers = False
+
+            elif discarding_rate > EPS:
+                # learner isn't fast enough to process all experience - disable a single worker to reduce
+                # collection rate
+                # We will pause the worker when the entire rollout is collected
+                log.warning('Worker is requested to pause after the end of the next rollout')
+                self.last_speed_adjustment = time.time()
+                self.too_many_workers = True
 
         if self.cfg.sync_mode:
             self.workers_paused.clear()

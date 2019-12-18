@@ -1,4 +1,4 @@
-import copy
+import threading
 import threading
 import time
 from collections import OrderedDict, deque
@@ -11,8 +11,7 @@ import torch
 from ray.pyarrow_files.pyarrow import plasma
 from torch.multiprocessing import JoinableQueue, Process
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, list_of_dicts_to_dict_of_lists, \
-    iterate_recursively
+from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
@@ -55,6 +54,7 @@ class LearnerWorker:
         self.train_in_background = True
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
+        self.processing_experience_batch = threading.Event()
 
         self.train_step = 0
         self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)])
@@ -62,6 +62,10 @@ class LearnerWorker:
 
         # some stats we measure in the end of the last training epoch
         self.last_batch_stats = AttrDict()
+
+        self.discarded_experience_over_time = deque([], maxlen=30)
+        self.discarded_experience_timer = time.time()
+        self.num_discarded_rollouts = 0
 
         self.kl_coeff = self.cfg.initial_kl_coeff
 
@@ -78,9 +82,9 @@ class LearnerWorker:
     def _terminate(self):
         self.terminate = True
 
-    def _broadcast_weights(self):
+    def _broadcast_weights(self, discarding_rate):
         state_dict = self.actor_critic.state_dict()
-        weight_update = (self.policy_version, state_dict)
+        weight_update = (self.policy_version, state_dict, discarding_rate)
         for q in self.weight_queues:
             q.put((TaskType.UPDATE_WEIGHTS, weight_update))
 
@@ -114,8 +118,10 @@ class LearnerWorker:
 
     def _prepare_train_buffer(self, rollouts, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
-        log.info('%r', trajectories[0].policy_version)
-        log.info('%r', trajectories[-1].policy_version)
+
+        if self.cfg.benchmark:
+            log.info('%r', trajectories[0].policy_version)
+            log.info('%r', trajectories[-1].policy_version)
 
         with timing.add_time('buffers'):
             buffer = AttrDict()
@@ -136,16 +142,6 @@ class LearnerWorker:
             with timing.add_time('calc_gae'):
                 buffer = self._calculate_gae(buffer)
 
-        with timing.add_time('tensors'):
-            for d, key, value in iterate_recursively(buffer):
-                value = np.asarray(value)
-                value = torch.tensor(value, device=self.device)
-                value = value.float()
-                d[key] = value.reshape(-1, *value.shape[2:])
-
-            experience_size = buffer.rewards.shape[0]  # could have used any other key
-
-        if not self.cfg.with_vtrace:
             # normalize advantages if needed
             if self.cfg.normalize_advantage:
                 adv_mean = buffer.advantages.mean()
@@ -158,7 +154,14 @@ class LearnerWorker:
                 # )
                 buffer.advantages = (buffer.advantages - adv_mean) / max(1e-2, adv_std)
 
-        return buffer, experience_size
+        with timing.add_time('tensors'):
+            for d, key, value in iterate_recursively(buffer):
+                value = np.asarray(value)
+                value = torch.tensor(value, device=self.device)
+                value = value.float()
+                d[key] = value.reshape(-1, *value.shape[2:])
+
+        return buffer
 
     def _process_macro_batch(self, rollouts, timing):
         assert self.cfg.macro_batch % self.cfg.rollout == 0
@@ -171,21 +174,41 @@ class LearnerWorker:
             env_steps += rollout['env_steps']
 
         with timing.add_time('prepare'):
-            buffer, experience_size = self._prepare_train_buffer(rollouts, timing)
-            self.experience_buffer_queue.put((buffer, experience_size, samples, env_steps))
+            buffer = self._prepare_train_buffer(rollouts, timing)
+            self.experience_buffer_queue.put((buffer, samples, env_steps))
 
     def _process_rollouts(self, rollouts, timing):
         # log.info('Pending rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
         rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
+        work_done = False
 
-        while len(rollouts) >= rollouts_in_macro_batch:
+        discard_rollouts = 0
+        for r in rollouts:
+            rollout_min_version = min(r['t']['policy_version'])
+            if self.policy_version - rollout_min_version >= self.cfg.max_policy_lag:
+                discard_rollouts += 1
+            else:
+                break
+
+        if discard_rollouts > 0:
+            log.warning(
+                'Discarding %d old rollouts (learner is not fast enough to process experience)',
+                discard_rollouts,
+            )
+            rollouts = rollouts[discard_rollouts:]
+            self.num_discarded_rollouts += discard_rollouts
+
+        if len(rollouts) >= rollouts_in_macro_batch:
+            # process newest rollouts
             rollouts_to_process = rollouts[:rollouts_in_macro_batch]
             rollouts = rollouts[rollouts_in_macro_batch:]
 
             self._process_macro_batch(rollouts_to_process, timing)
             log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
 
-        return rollouts
+            work_done = True
+
+        return rollouts, work_done
 
     def _get_minibatches(self, experience_size):
         """Generating minibatches for training."""
@@ -512,18 +535,22 @@ class LearnerWorker:
                 eps=self.cfg.adam_eps,
             )
 
-            self._broadcast_weights()  # sync the very first version of the weights
+            self._broadcast_weights(self._discarding_rate())  # sync the very first version of the weights
 
         self.train_thread_initialized.set()
 
     def _process_training_data(self, data, timing, wait_stats=None):
-        buffer, experience_size, samples, env_steps = data
+        buffer, samples, env_steps = data
         stats = dict(samples=samples, env_steps=env_steps)
+        experience_size = buffer.rewards.shape[0]
 
         with timing.add_time('train'):
+            discarding_rate = self._discarding_rate()
+
             if self.with_training:
-                log.debug('Training policy %d on %d samples', self.policy_id, samples)
+                # log.debug('Training policy %d on %d samples', self.policy_id, samples)
                 train_stats = self._train(buffer, experience_size, timing)
+
                 if train_stats is not None:
                     stats['train'] = train_stats
 
@@ -533,7 +560,10 @@ class LearnerWorker:
                         stats['train']['wait_min'] = wait_min
                         stats['train']['wait_max'] = wait_max
 
-                self._broadcast_weights()
+                    stats['train']['discarded_rollouts'] = self.num_discarded_rollouts
+                    stats['train']['discarding_rate'] = discarding_rate
+
+                self._broadcast_weights(discarding_rate)
 
         self.report_queue.put(stats)
 
@@ -541,30 +571,51 @@ class LearnerWorker:
         timing = Timing()
         self._init_training(timing)
 
-        wait_times = deque([], maxlen=20)
+        wait_times = deque([], maxlen=self.cfg.num_workers)
 
         while not self.terminate:
             with timing.timeit('train_wait'):
                 data = safe_get(self.experience_buffer_queue)
 
+            self.processing_experience_batch.set()
+
             if self.terminate:
                 break
 
+            wait_stats = None
             wait_times.append(timing.train_wait)
-            wait_times_arr = np.asarray(wait_times)
-            wait_avg = np.mean(wait_times_arr)
-            wait_min, wait_max = wait_times_arr.min(), wait_times_arr.max()
-            log.debug(
-                'Training thread had to wait %.4f s for the new experience buffer (avg %.4f)',
-                timing.train_wait, wait_avg,
-            )
 
-            wait_stats = (wait_avg, wait_min, wait_max)
+            if len(wait_times) >= wait_times.maxlen:
+                wait_times_arr = np.asarray(wait_times)
+                wait_avg = np.mean(wait_times_arr)
+                wait_min, wait_max = wait_times_arr.min(), wait_times_arr.max()
+                log.debug(
+                    'Training thread had to wait %.5f s for the new experience buffer (avg %.5f)',
+                    timing.train_wait, wait_avg,
+                )
+                wait_stats = (wait_avg, wait_min, wait_max)
+
             self._process_training_data(data, timing, wait_stats)
 
         log.info('Train loop timing: %s', timing)
         del self.actor_critic
         del self.device
+
+    def _experience_collection_rate_stats(self):
+        now = time.time()
+        if now - self.discarded_experience_timer > 1.0:
+            self.discarded_experience_timer = now
+            self.discarded_experience_over_time.append((now, self.num_discarded_rollouts))
+
+    def _discarding_rate(self):
+        if len(self.discarded_experience_over_time) <= 0:
+            return 0
+
+        first, last = self.discarded_experience_over_time[0], self.discarded_experience_over_time[-1]
+        delta_rollouts = last[1] - first[1]
+        delta_time = last[0] - first[0]
+        discarding_rate = delta_rollouts / delta_time
+        return discarding_rate
 
     def _run(self):
         timing = Timing()
@@ -582,7 +633,7 @@ class LearnerWorker:
         while not self.terminate:
             while True:
                 try:
-                    task_type, data = self.task_queue.get(timeout=0.01)
+                    task_type, data = self.task_queue.get_nowait()
                     if task_type == TaskType.INIT:
                         self._init()
                     elif task_type == TaskType.TERMINATE:
@@ -591,16 +642,28 @@ class LearnerWorker:
                     elif task_type == TaskType.TRAIN:
                         new_rollouts = plasma_client.get(data, -1, serialization_context=serialization_context)
                         rollouts.extend(new_rollouts)
-                        rollouts = self._process_rollouts(rollouts, timing)
-
-                        if not self.train_in_background:
-                            while not self.experience_buffer_queue.empty():
-                                training_data = self.experience_buffer_queue.get()
-                                self._process_training_data(training_data, timing)
 
                     self.task_queue.task_done()
                 except Empty:
                     break
+
+            while self.experience_buffer_queue.qsize() > 1:
+                self.processing_experience_batch.clear()
+                self.processing_experience_batch.wait()
+
+            rollouts, work_done = self._process_rollouts(rollouts, timing)
+
+            if not self.train_in_background:
+                while not self.experience_buffer_queue.empty():
+                    training_data = self.experience_buffer_queue.get()
+                    self.processing_experience_batch.set()
+                    self._process_training_data(training_data, timing)
+
+            self._experience_collection_rate_stats()
+
+            if not work_done:
+                # if we didn't do anything let's sleep to prevent wasting CPU time
+                time.sleep(0.005)
 
         log.info('GPU learner timing: %s', timing)
 
