@@ -2,7 +2,6 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('seed', [42, 42]),
-    ('adam_beta1', [0.5, 0.9]),
 ])
 
 _experiment_32 = Experiment(
@@ -17,4 +16,4 @@ _experiment_16 = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('doom_battle_appo_v47_fs4_speed', experiments=[_experiment_32, _experiment_16], pause_between_experiments=30, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
+RUN_DESCRIPTION = RunDescription('doom_battle_appo_v47_fs4_speed', experiments=[_experiment_32, _experiment_16], pause_between_experiments=30, use_gpus=4, experiments_per_gpu=1, max_parallel=4)
