@@ -76,6 +76,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     with torch.no_grad():
         for _ in range(max_num_episodes):
             obs = env.reset()
+
             done = [False] * len(obs)
             rnn_states = torch.zeros([env.num_agents, cfg.hidden_size], dtype=torch.float32, device=device)
 

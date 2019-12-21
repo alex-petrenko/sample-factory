@@ -378,18 +378,19 @@ class LearnerWorker:
                 rnn_states = buffer.rnn_states[traj_indices]
 
                 # calculate RNN outputs for each timestep in a loop
-                core_outputs = []
-                for i in range(self.cfg.recurrence):
-                    # indices of head outputs corresponding to the current timestep
-                    timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
-                    step_head_outputs = head_outputs[timestep]
+                with timing.add_time('bptt'):
+                    core_outputs = []
+                    for i in range(self.cfg.recurrence):
+                        # indices of head outputs corresponding to the current timestep
+                        timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+                        step_head_outputs = head_outputs[timestep]
 
-                    dones = mb.dones[timestep].unsqueeze(dim=1)
-                    rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep]
+                        dones = mb.dones[timestep].unsqueeze(dim=1)
+                        rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep]
 
-                    core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
+                        core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
 
-                    core_outputs.append(core_output)
+                        core_outputs.append(core_output)
 
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                 # which is the same shape as the minibatch
@@ -421,58 +422,61 @@ class LearnerWorker:
                 vs = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
                 adv = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
 
-                for i in reversed(range(self.cfg.recurrence)):
-                    timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+                with timing.add_time('vtrace'):
+                    for i in reversed(range(self.cfg.recurrence)):
+                        timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
 
-                    rewards = mb.rewards[timestep]
-                    dones = mb.dones[timestep]
-                    not_done = 1.0 - dones
+                        rewards = mb.rewards[timestep]
+                        dones = mb.dones[timestep]
+                        not_done = 1.0 - dones
 
-                    delta_s = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_values - values[timestep])).detach()
-                    adv[timestep] = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_vs - values[timestep])).detach()
+                        delta_s = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_values - values[timestep])).detach()
+                        adv[timestep] = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_vs - values[timestep])).detach()
 
-                    vs[timestep] = (values[timestep] + delta_s + not_done * gamma * vtrace_c[timestep] * (next_vs - next_values)).detach()
+                        vs[timestep] = (values[timestep] + delta_s + not_done * gamma * vtrace_c[timestep] * (next_vs - next_values)).detach()
 
-                    next_values = values[timestep].detach()
-                    next_vs = vs[timestep].detach()
+                        next_values = values[timestep].detach()
+                        next_vs = vs[timestep].detach()
 
                 adv = adv.detach()
                 adv_mean = adv.mean()
                 adv_std = adv.std()
                 adv = (adv - adv_mean) / max(1e-2, adv_std)
 
-                policy_loss, fraction_clipped = self._policy_loss(ratio, adv, clip_ratio)
-                ratio_mean = torch.abs(1.0 - ratio).mean()
-                ratio_min = ratio.min()
-                ratio_max = ratio.max()
+                with timing.add_time('losses'):
+                    policy_loss, fraction_clipped = self._policy_loss(ratio, adv, clip_ratio)
+                    ratio_mean = torch.abs(1.0 - ratio).mean()
+                    ratio_min = ratio.min()
+                    ratio_max = ratio.max()
 
-                targets = vs.detach()
-                old_values = mb.values.squeeze()
-                value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
-                value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
+                    targets = vs.detach()
+                    old_values = mb.values.squeeze()
+                    value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
+                    value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
-                # entropy loss
-                kl_prior = action_distribution.kl_prior()
-                kl_prior = kl_prior.mean()
-                prior_loss = self.cfg.prior_loss_coeff * kl_prior
+                    # entropy loss
+                    kl_prior = action_distribution.kl_prior()
+                    kl_prior = kl_prior.mean()
+                    prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
-                old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
+                    old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
 
-                # small KL penalty for being different from the behavior policy
-                kl_old = action_distribution.kl_divergence(old_action_distribution)
-                kl_old_max = kl_old.max()
-                kl_old_mean = kl_old.mean()
-                kl_penalty = self.kl_coeff * kl_old_mean
+                    # small KL penalty for being different from the behavior policy
+                    kl_old = action_distribution.kl_divergence(old_action_distribution)
+                    kl_old_max = kl_old.max()
+                    kl_old_mean = kl_old.mean()
+                    kl_penalty = self.kl_coeff * kl_old_mean
 
-                loss = policy_loss + value_loss + prior_loss + kl_penalty
+                    loss = policy_loss + value_loss + prior_loss + kl_penalty
 
                 with timing.add_time('update'):
                     # update the weights
                     self.optimizer.zero_grad()
                     loss.backward()
 
-                    with timing.add_time('clip'):
-                        torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
+                    if self.cfg.max_grad_norm > 0.0:
+                        with timing.add_time('clip'):
+                            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
                     self.optimizer.step()
                     num_sgd_steps += 1

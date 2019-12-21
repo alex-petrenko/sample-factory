@@ -8,7 +8,7 @@ import torch
 from ray.pyarrow_files.pyarrow import plasma
 from torch.multiprocessing import Process
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
@@ -131,7 +131,7 @@ class PolicyWorker:
 
                 with timing.add_time('postprocess'):
                     self._enqueue_policy_outputs(
-                        num_obs_per_actor, policy_outputs, self.serialization_context, self.plasma_client,
+                        num_obs_per_actor, policy_outputs, self.serialization_context, self.plasma_client, timing,
                     )
 
     def _update_weights(self, weight_update, timing):
@@ -172,7 +172,7 @@ class PolicyWorker:
             self.worker_idx, policy_version, timing.weight_update,
         )
 
-    def _enqueue_policy_outputs(self, num_obs_per_actor, policy_outputs, serialization_context, plasma_client):
+    def _enqueue_policy_outputs(self, num_obs_per_actor, policy_outputs, serialization_context, plasma_client, timing):
         for key, value in policy_outputs.items():
             policy_outputs[key] = value.cpu().numpy()
 
@@ -182,9 +182,10 @@ class PolicyWorker:
             for key, value in policy_outputs.items():
                 outputs[key] = value[output_idx:output_idx + num_obs]
 
-            outputs = plasma_client.put(
-                outputs, None, serialization_context=serialization_context,
-            )
+            with timing.add_time('serialize'):
+                outputs = plasma_client.put(
+                    outputs, None, serialization_context=serialization_context,
+                )
 
             advance_rollout_request = dict(
                 split_idx=split_idx, policy_id=self.policy_id, outputs=outputs,
@@ -204,7 +205,8 @@ class PolicyWorker:
             log.info('Initializing model on the policy worker %d...', self.worker_idx)
 
             torch.set_num_threads(1)
-            self.device = torch.device('cuda')
+
+            self.device = device_for_policy(self.policy_id)
             self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
             self.actor_critic.to(self.device)
 

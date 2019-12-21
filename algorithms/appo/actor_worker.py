@@ -164,6 +164,7 @@ class VectorEnvRunner:
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
             env_config = AttrDict({'worker_index': self.worker_idx, 'vector_index': vector_idx})
+            # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func(self.cfg, env_config=env_config)
 
             if not hasattr(env, 'num_agents'):

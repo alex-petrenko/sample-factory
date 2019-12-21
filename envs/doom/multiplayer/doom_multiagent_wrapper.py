@@ -97,9 +97,9 @@ class MultiAgentEnvWorker:
         if env is None:
             return
 
-        log.info('Stop env for player %d...', self.player_id)
+        # log.info('Stop env for player %d...', self.player_id)
         env.close()
-        log.info('Env with player %d terminated!', self.player_id)
+        # log.info('Env with player %d terminated!', self.player_id)
 
     @staticmethod
     def _get_info(env):
@@ -230,7 +230,8 @@ class MultiAgentEnv:
             ]
 
             try:
-                port = find_available_port(DEFAULT_UDP_PORT + self.env_config.worker_index, increment=100)
+                port_to_use = DEFAULT_UDP_PORT + 100 * self.env_config.worker_index + self.env_config.vector_index
+                port = find_available_port(port_to_use, increment=1000)
                 log.debug('Using port %d', port)
                 init_info = dict(port=port)
 
@@ -274,7 +275,7 @@ class MultiAgentEnv:
 
     def reset(self):
         self._ensure_initialized()
-        observation = self.await_tasks(None, TaskType.RESET)[0]
+        observation = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
         return observation
 
     def step(self, actions):
@@ -285,6 +286,9 @@ class MultiAgentEnv:
         obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
         for info in infos:
             info['num_frames'] = self.skip_frames
+
+        if all(dones):
+            obs = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
 
         if self.enable_rendering:
             self.last_obs = obs
@@ -311,7 +315,7 @@ class MultiAgentEnv:
 
     def close(self):
         if self.workers is not None:
-            log.info('Stopping multiagent env %d...', self.env_config.worker_index)
+            # log.info('Stopping multiagent env %d...', self.env_config.worker_index)
             for worker in self.workers:
                 worker.task_queue.put((None, TaskType.TERMINATE))
                 time.sleep(0.1)

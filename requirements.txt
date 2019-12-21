@@ -36,8 +36,6 @@ Markdown==3.1.1
 mock==3.0.5
 more-itertools==7.0.0
 numpy==1.16.4
-opencv-python==4.1.0.25
-opencv-python-headless==4.1.0.25
 packaging==19.0
 pandas==0.24.2
 parso==0.4.0
@@ -80,3 +78,4 @@ wcwidth==0.1.7
 Werkzeug==0.15.4
 yapf==0.27.0
 zipp==0.5.1
+ray==0.8.0

@@ -1,3 +1,4 @@
+import torch
 from collections import OrderedDict
 from enum import Enum
 
@@ -51,3 +52,10 @@ def extend_array_by(x, extra_len):
     tail = [last_elem] * extra_len
     tail = np.stack(tail)
     return np.append(x, tail, axis=0)
+
+
+def device_for_policy(policy_id):
+    num_gpus = torch.cuda.device_count()
+    gpu_idx = policy_id % num_gpus
+    device = torch.device('cuda', index=gpu_idx)
+    return device

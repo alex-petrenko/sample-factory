@@ -237,7 +237,7 @@ class APPO(Algorithm):
                     continue
 
                 time_passed = time.time() - started_reset[w.worker_idx]
-                if time_passed > min(fastest_reset_time * 1.5, fastest_reset_time + 10):
+                if time_passed > max(fastest_reset_time * 1.5, fastest_reset_time + 10):
                     # if it takes more than 1.5x the usual time to reset, this worker is probably stuck
                     log.error('Worker %d seems to be stuck (%.3f). Reset!', w.worker_idx, time_passed)
                     stuck_worker = w
@@ -295,7 +295,7 @@ class APPO(Algorithm):
         log.info('Initializing actors...')
 
         self.actor_workers = []
-        max_parallel_init = 4
+        max_parallel_init = 8
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
             workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
