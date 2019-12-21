@@ -13,7 +13,7 @@ import torch
 from ray.pyarrow_files.pyarrow import plasma
 from torch.multiprocessing import JoinableQueue, Process
 
-from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively
+from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
@@ -585,7 +585,7 @@ class LearnerWorker:
 
             torch.set_num_threads(1)  # TODO: experimental
 
-            self.device = torch.device('cuda')
+            self.device = device_for_policy(self.policy_id)
             self.init_model()
 
             self.optimizer = torch.optim.Adam(
