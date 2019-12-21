@@ -1,6 +1,8 @@
 import copy
+import multiprocessing
 import queue
 import random
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -402,6 +404,7 @@ class ActorWorker:
         self.learner_queues = learner_queues
         self.task_queue = task_queue
 
+        self.critical_error = multiprocessing.Event()
         self.process = Process(target=self._run, daemon=True)
         self.process.start()
 
@@ -543,17 +546,23 @@ class ActorWorker:
                 self.task_queue.task_done()
                 break
 
-            # handling actual workload
-            if task_type == TaskType.RESET:
-                with timing.add_time('reset'):
-                    self._handle_reset()
-            elif task_type == TaskType.ROLLOUT_STEP:
-                if 'work' not in timing:
-                    timing.waiting = 0  # measure waiting only after real work has started
+            try:
+                # handling actual workload
+                if task_type == TaskType.RESET:
+                    with timing.add_time('reset'):
+                        self._handle_reset()
+                elif task_type == TaskType.ROLLOUT_STEP:
+                    if 'work' not in timing:
+                        timing.waiting = 0  # measure waiting only after real work has started
 
-                with timing.add_time('work'):
-                    with timing.time_avg('one_step'):
-                        self._advance_rollouts(data, timing)
+                    with timing.add_time('work'):
+                        with timing.time_avg('one_step'):
+                            self._advance_rollouts(data, timing)
+            except RuntimeError:
+                log.warning('Error while processing data w: %d', self.worker_idx)
+                log.warning('Terminate process...')
+                self.terminate = True
+                self.critical_error.set()
 
             self.task_queue.task_done()
 

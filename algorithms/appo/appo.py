@@ -220,7 +220,7 @@ class APPO(Algorithm):
 
         while len(workers_finished) < len(workers):
             for w in workers.values():
-                done = queue_join_timeout(w.task_queue, timeout=0.001)
+                done = queue_join_timeout(w.task_queue, timeout=0.1)
                 if not done:
                     continue
 
@@ -228,18 +228,26 @@ class APPO(Algorithm):
                     fastest_reset_time = time.time() - started_reset[w.worker_idx]
                     log.debug('Fastest reset in %.3f seconds', fastest_reset_time)
 
-                workers_finished.add(w.worker_idx)
+                if not w.critical_error.is_set():
+                    workers_finished.add(w.worker_idx)
 
+            log.warning('Workers finished: %r', workers_finished)
             for worker_idx, w in workers.items():
                 if worker_idx in workers_finished:
                     continue
-                if fastest_reset_time is None:
-                    continue
 
                 time_passed = time.time() - started_reset[w.worker_idx]
-                if time_passed > max(fastest_reset_time * 1.5, fastest_reset_time + 10):
+                if fastest_reset_time is None:
+                    timeout = False
+                else:
+                    timeout = time_passed > max(fastest_reset_time * 1.5, fastest_reset_time + 10)
+
+                is_process_alive = w.process.is_alive() and not w.critical_error.is_set()
+
+                if timeout or not is_process_alive:
                     # if it takes more than 1.5x the usual time to reset, this worker is probably stuck
                     log.error('Worker %d seems to be stuck (%.3f). Reset!', w.worker_idx, time_passed)
+                    log.debug('Status: %r %r', is_process_alive, w.critical_error.is_set())
                     stuck_worker = w
                     stuck_worker.process.kill()
 
@@ -295,7 +303,7 @@ class APPO(Algorithm):
         log.info('Initializing actors...')
 
         self.actor_workers = []
-        max_parallel_init = 8
+        max_parallel_init = 10
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
             workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)

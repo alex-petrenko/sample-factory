@@ -8,7 +8,7 @@ from utils.network import is_udp_port_available
 from utils.utils import log
 
 
-DEFAULT_UDP_PORT = 50300
+DEFAULT_UDP_PORT = 40300
 
 
 def find_available_port(start_port, increment=1000):

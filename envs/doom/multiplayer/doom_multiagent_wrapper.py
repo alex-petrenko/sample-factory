@@ -1,4 +1,4 @@
-import ctypes
+import random
 import sys
 import threading
 import time
@@ -13,35 +13,6 @@ from algorithms.utils.multi_env import MultiEnv, MsgType
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log, kill
-
-
-def _async_raise(tid, excobj):
-    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, ctypes.py_object(excobj))
-    if res == 0:
-        raise ValueError("nonexistent thread id")
-    elif res > 1:
-        # """if it returns a number greater than one, you're in trouble,
-        # and you should call it again with exc=NULL to revert the effect"""
-        ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, 0)
-        raise SystemError("PyThreadState_SetAsyncExc failed")
-
-
-class Thread(threading.Thread):
-    def raise_exc(self, excobj):
-        assert self.isAlive(), "thread must be started"
-        for tid, tobj in threading._active.items():
-            if tobj is self:
-                _async_raise(tid, excobj)
-                return
-
-        # the thread was alive when we entered the loop, but was not found
-        # in the dict, hence it must have been already terminated. should we raise
-        # an exception here? silently ignore?
-
-    def terminate(self):
-        # must raise the SystemExit type, instead of a SystemExit() instance
-        # due to a bug in PyThreadState_SetAsyncExc
-        self.raise_exc(SystemExit)
 
 
 def safe_get(q, timeout=1e6, msg='Queue timeout'):
@@ -83,7 +54,7 @@ class MultiAgentEnvWorker:
             self.process = Process(target=self.start, daemon=False)
         else:
             self.task_queue, self.result_queue = Queue(), Queue()
-            self.process = Thread(target=self.start)
+            self.process = threading.Thread(target=self.start)
 
         self.process.start()
 
@@ -116,11 +87,9 @@ class MultiAgentEnvWorker:
             data, task_type = safe_get(self.task_queue)
 
             if task_type == TaskType.INIT:
-                log.debug('Init task received %d', self.player_id)
                 env = self._init(data)
                 self.result_queue.put(None)  # signal we're done
                 self.task_queue.task_done()
-                log.debug('Init task done %d', self.player_id)
                 continue
 
             if task_type == TaskType.TERMINATE:
@@ -240,17 +209,17 @@ class MultiAgentEnv:
                     if self.safe_init:
                         time.sleep(1.0)  # just in case
                     else:
-                        time.sleep(0.1)
+                        time.sleep(0.01)
 
                 for i, worker in enumerate(self.workers):
-                    worker.result_queue.get(timeout=500)  #TODO!!!
+                    worker.result_queue.get(timeout=5)
                     worker.result_queue.task_done()
                     worker.task_queue.join()
             except Exception as exc:
                 for worker in self.workers:
-                    if isinstance(worker.process, Thread):
-                        log.info('Killing thread...')
-                        worker.process.terminate()
+                    if isinstance(worker.process, threading.Thread):
+                        log.info('We cannot really kill a thread, so let the whole process die')
+                        raise RuntimeError('Critical error: worker stuck on initialization. Abort!')
                     else:
                         log.info('Killing process %r', worker.process.pid)
                         kill(worker.process.pid)
@@ -262,7 +231,7 @@ class MultiAgentEnv:
 
         if attempt >= num_attempts:
             log.error('Could not initialize env even after %d attempts. Fail!', attempt)
-            sys.exit(1)
+            raise RuntimeError('Critical error: worker stuck on initialization, num attempts exceeded. Abort!')
 
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
         log.debug('Took %d attempts!\n', attempt + 1)
