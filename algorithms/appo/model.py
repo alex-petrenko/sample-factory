@@ -30,6 +30,8 @@ class ActorCritic(nn.Module):
 
         if cfg.encoder == 'convnet_simple':
             conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
+        elif cfg.encoder == 'convnet_impala':
+            conv_filters = [[input_ch, 16, 8, 4], [16, 32, 4, 2]]
         elif cfg.encoder == 'minigrid_convnet_tiny':
             conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
         else:

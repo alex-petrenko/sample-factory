@@ -542,7 +542,7 @@ class LearnerWorker:
         return stats
 
     @staticmethod
-    def load_checkpoint(checkpoints):
+    def load_checkpoint(checkpoints, policy_id):
         if len(checkpoints) <= 0:
             log.warning('No checkpoints found')
             return None
@@ -550,7 +550,8 @@ class LearnerWorker:
             latest_checkpoint = checkpoints[-1]
             log.warning('Loading state from checkpoint %s...', latest_checkpoint)
 
-            checkpoint_dict = torch.load(latest_checkpoint)
+            device = device_for_policy(policy_id)
+            checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
             return checkpoint_dict
 
     def _load_state(self, checkpoint_dict):
@@ -568,7 +569,7 @@ class LearnerWorker:
 
     def load_from_checkpoint(self):
         checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, self.policy_id))
-        checkpoint_dict = self.load_checkpoint(checkpoints)
+        checkpoint_dict = self.load_checkpoint(checkpoints, self.policy_id)
         if checkpoint_dict is None:
             log.debug('Did not load from checkpoint, starting from scratch!')
         else:

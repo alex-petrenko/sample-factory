@@ -28,7 +28,7 @@ class Algorithm:
 
         p.add_argument('--initial_save_rate', default=1000, type=int,
                        help='Save model every N train steps in the beginning of training')
-        p.add_argument('--keep_checkpoints', default=4, type=int, help='Number of model checkpoints to keep')
+        p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
 
         p.add_argument('--stats_episodes', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 
@@ -92,7 +92,7 @@ class APPO(Algorithm):
 
         # components of the loss function
         p.add_argument(
-            '--prior_loss_coeff', default=0.0005, type=float,
+            '--prior_loss_coeff', default=0.001, type=float,
             help=('Coefficient for the exploration component of the loss function. Typically this is entropy maximization, but here we use KL-divergence between our policy and a prior.'
                   'By default prior is a uniform distribution, and this is numerically equivalent to maximizing entropy.'
                   'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
@@ -231,7 +231,9 @@ class APPO(Algorithm):
                 if not w.critical_error.is_set():
                     workers_finished.add(w.worker_idx)
 
-            log.warning('Workers finished: %r', workers_finished)
+            if workers_finished:
+                log.warning('Workers finished: %r', workers_finished)
+
             for worker_idx, w in workers.items():
                 if worker_idx in workers_finished:
                     continue

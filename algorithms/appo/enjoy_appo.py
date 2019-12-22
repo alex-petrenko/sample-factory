@@ -1,15 +1,15 @@
 import sys
 import time
-import torch
 from os.path import join
 
 import cv2
 import numpy as np
+import torch
 
 from algorithms.appo.actor_worker import transform_dict_observations
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.model import ActorCritic
-from algorithms.utils.arguments import parse_args, get_algo_class, load_from_checkpoint
+from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
 from utils.utils import log, AttrDict
@@ -62,7 +62,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
     policy_id = 0  # TODO - evaluate other policies?
     checkpoints = LearnerWorker.get_checkpoints(LearnerWorker.checkpoint_dir(cfg, policy_id))
-    checkpoint_dict = LearnerWorker.load_checkpoint(checkpoints)
+    checkpoint_dict = LearnerWorker.load_checkpoint(checkpoints, policy_id)
     actor_critic.load_state_dict(checkpoint_dict['model'])
 
     episode_rewards = []

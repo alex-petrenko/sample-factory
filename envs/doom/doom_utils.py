@@ -18,6 +18,10 @@ DOOM_H = 72
 # DOOM_W = 84
 # DOOM_H = 84
 
+# IMPALA
+# DOOM_W = 96
+# DOOM_H = 72
+
 
 class DoomSpec:
     def __init__(
@@ -46,7 +50,7 @@ class DoomSpec:
     @staticmethod
     def _extra_wrappers_or_default(wrappers):
         if wrappers is None:
-            return [(DoomAdditionalInputAndRewards, {})]
+            return [(DoomAdditionalInputAndRewards, {})]  # if no wrappers provided, we use the default one
         else:
             return wrappers
 
@@ -62,7 +66,7 @@ DOOM_ENVS = [
     DoomSpec('doom_corridor', 'deadly_corridor.cfg', Discrete(1 + 7), 0.01, 2100),
     DoomSpec('doom_gathering', 'health_gathering.cfg', Discrete(1 + 3), 0.01, 2100),
 
-    DoomSpec('doom_battle_discrete', 'D3_battle.cfg', Discrete(1 + 8), 1.0, 2100),
+    DoomSpec('doom_battle', 'D3_battle.cfg', Discrete(1 + 8), 1.0, 2100, extra_wrappers=[]),
     DoomSpec('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
     DoomSpec('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
     DoomSpec('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100),

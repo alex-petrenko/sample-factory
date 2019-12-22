@@ -4,6 +4,8 @@ from enum import Enum
 
 import numpy as np
 
+from utils.utils import log
+
 
 class TaskType(Enum):
     INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, TOO_MUCH_DATA = range(8)
@@ -58,4 +60,5 @@ def device_for_policy(policy_id):
     num_gpus = torch.cuda.device_count()
     gpu_idx = policy_id % num_gpus
     device = torch.device('cuda', index=gpu_idx)
+    log.debug('Using GPU #%d (total num gpus: %d) for policy %d...', gpu_idx, num_gpus, policy_id)
     return device
