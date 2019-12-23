@@ -256,7 +256,6 @@ class VectorEnvRunner:
 
             # save episode stats if we are at the episode boundary
             if dones[agent_i]:
-                # TODO! stats per policy
                 episodic_stats.append(actor_state.episodic_stats())
 
         return complete_rollouts, episodic_stats
@@ -310,6 +309,11 @@ class VectorEnvRunner:
                 actor_state = self.actor_states[env_i][agent_i]
                 actor_state.trajectory_add_policy_inputs(obs, actor_state.rnn_state)
                 actor_state.last_obs = obs
+
+            log.warning(
+                'Reset progress w:%d-%d finished %d/%d initializing envs...',
+                self.worker_idx, self.split_idx, env_i + 1, len(self.envs),
+            )
 
         policy_inputs = self._format_policy_inputs()
         return policy_inputs

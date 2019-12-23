@@ -84,18 +84,23 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # This process will function as a host for a multiplayer game with this many players (including the host).
             # It will wait for other machines to connect using the -join parameter and then
             # start the game when everyone is connected.
-            self.game.add_game_args(
-                f'-host {self.max_num_players} -port {port} '
-                '-deathmatch '  # Deathmatch rules are used for the game.                
-                '+timelimit 4.0 '  # The game (episode) will end after this many minutes have elapsed.
-                '+sv_forcerespawn 1 '  # Players will respawn automatically after they die.
-                '+sv_noautoaim 1 '  # Autoaim is disabled for all players.
-                '+sv_respawnprotect 1 '  # Players will be invulnerable for two second after spawning.
-                '+sv_spawnfarthest 1 '  # Players will be spawned as far as possible from any other players.
-                '+sv_nocrouch 1 '  # Disables crouching.
-                f'+viz_respawn_delay {self.respawn_delay} '  # Sets delay between respanws (in seconds).
-                '+viz_connect_timeout 4 '  # In seconds
-            )
+            game_args_list = [
+                f'-host {self.max_num_players}',
+                f'-port {port}',
+                '-deathmatch',  # Deathmatch rules are used for the game.
+                '+timelimit 4.0',  # The game (episode) will end after this many minutes have elapsed.
+                '+sv_forcerespawn 1',  # Players will respawn automatically after they die.
+                '+sv_noautoaim 1',  # Autoaim is disabled for all players.
+                '+sv_respawnprotect 1',  # Players will be invulnerable for two second after spawning.
+                '+sv_spawnfarthest 1',  # Players will be spawned as far as possible from any other players.
+                '+sv_nocrouch 1',  # Disables crouching.
+                '+sv_nojump 1',  # Disables jumping.
+                '+sv_nofreelook 1',  # Disables free look with a mouse (only keyboard).
+                '+sv_noexit 1',  # Prevents players from exiting the level in deathmatch before timelimit is hit.
+                f'+viz_respawn_delay {self.respawn_delay}',  # Sets delay between respanws (in seconds).
+                '+viz_connect_timeout 4',  # In seconds
+            ]
+            self.game.add_game_args(' '.join(game_args_list))
 
             # Additional commands:
             #

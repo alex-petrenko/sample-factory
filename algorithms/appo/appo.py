@@ -305,7 +305,7 @@ class APPO(Algorithm):
         log.info('Initializing actors...')
 
         self.actor_workers = []
-        max_parallel_init = 10
+        max_parallel_init = 5
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
             workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
