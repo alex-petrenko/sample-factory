@@ -382,22 +382,20 @@ class APPO(Algorithm):
         memory_mb = memory_consumption_mb()
 
         default_policy = 0
-        self.writers[default_policy].add_scalar('0_aux/fps', fps, self.env_steps[default_policy])
-        self.writers[default_policy].add_scalar(
-            '0_aux/master_process_memory_mb', float(memory_mb), self.env_steps[default_policy],
-        )
         for policy_id, env_steps in self.env_steps.items():
+            if policy_id == default_policy:
+                self.writers[policy_id].add_scalar('0_aux/fps', fps, env_steps)
+                self.writers[policy_id].add_scalar('0_aux/master_process_memory_mb', float(memory_mb), env_steps)
+                for key, value in self.avg_stats.items():
+                    if len(value) >= value.maxlen:
+                        self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
+
             if math.isnan(avg_reward[policy_id]) or math.isnan(avg_length[policy_id]):
                 # not enough data to report yet
                 continue
 
             self.writers[policy_id].add_scalar('0_aux/avg_reward', float(avg_reward[policy_id]), env_steps)
             self.writers[policy_id].add_scalar('0_aux/avg_length', float(avg_length[policy_id]), env_steps)
-
-        for key, value in self.avg_stats.items():
-            if len(value) < value.maxlen:
-                continue
-            self.writers[default_policy].add_scalar(f'stats/{key}', np.mean(value), self.env_steps[default_policy])
 
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
