@@ -18,7 +18,7 @@ from utils.utils import AttrDict, log
 class PolicyWorker:
     def __init__(
             self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, policy_queue, actor_queues,
-            weight_queue,
+            weight_queue, report_queue,
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
@@ -40,6 +40,7 @@ class PolicyWorker:
         self.task_queue = policy_queue
         self.actor_queues = actor_queues
         self.weight_queue = weight_queue
+        self.report_queue = report_queue
 
         self.terminate = False
 
@@ -217,8 +218,10 @@ class PolicyWorker:
         queues_by_handle[self.task_queue._reader._handle] = self.task_queue
         queues_by_handle[self.weight_queue._reader._handle] = self.weight_queue
 
+        last_report = time.time()
+
         while not self.terminate:
-            with timing.add_time('gpu_waiting'):
+            with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
                 ready, _, _ = select.select(queues, [], [])
 
             with timing.add_time('work'):
@@ -245,7 +248,13 @@ class PolicyWorker:
                         except Empty:
                             break
 
-                self._handle_policy_steps(timing)
+                with timing.timeit('one_step'):
+                    self._handle_policy_steps(timing)
+
+                if time.time() - last_report > 1.0 and 'one_step' in timing:
+                    timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
+                    self.report_queue.put(dict(timing=timing_stats))
+                    last_report = time.time()
 
         log.info('Gpu worker timing: %s', timing)
 

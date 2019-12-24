@@ -310,7 +310,7 @@ class VectorEnvRunner:
                 actor_state.trajectory_add_policy_inputs(obs, actor_state.rnn_state)
                 actor_state.last_obs = obs
 
-            log.warning(
+            log.debug(
                 'Reset progress w:%d-%d finished %d/%d initializing envs...',
                 self.worker_idx, self.split_idx, env_i + 1, len(self.envs),
             )
@@ -522,7 +522,7 @@ class ActorWorker:
 
                 if self.add_random_delay:
                     rollout_duration = time.time() - self.rollout_start
-                    delay = random.random() * 5 * rollout_duration
+                    delay = random.random() * 3 * rollout_duration
                     log.info('Rollout took %.3f sec, sleep for %.3f sec', rollout_duration, delay)
                     time.sleep(delay)
                     self.add_random_delay = False
@@ -535,8 +535,9 @@ class ActorWorker:
 
         self.serialization_thread.start()
 
+        last_report = time.time()
         while not self.terminate:
-            with timing.add_time('waiting'):
+            with timing.add_time('waiting'), timing.timeit('wait_actor'):
                 timeout = 1 if initialized else 1e3
                 task_type, data = safe_get(self.task_queue, timeout=timeout)
 
@@ -559,9 +560,9 @@ class ActorWorker:
                     if 'work' not in timing:
                         timing.waiting = 0  # measure waiting only after real work has started
 
-                    with timing.add_time('work'):
-                        with timing.time_avg('one_step'):
-                            self._advance_rollouts(data, timing)
+                    with timing.add_time('work'), timing.timeit('one_step'):
+                        self._advance_rollouts(data, timing)
+
             except RuntimeError:
                 log.warning('Error while processing data w: %d', self.worker_idx)
                 log.warning('Terminate process...')
@@ -569,6 +570,11 @@ class ActorWorker:
                 self.critical_error.set()
 
             self.task_queue.task_done()
+
+            if time.time() - last_report > 5.0 and 'one_step' in timing:
+                timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
+                self.report_queue.put(dict(timing=timing_stats))
+                last_report = time.time()
 
         if self.worker_idx <= 1:
             log.info('Env runner %d: timing %s', self.worker_idx, timing)

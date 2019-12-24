@@ -151,9 +151,10 @@ class APPO(Algorithm):
         self.total_train_seconds = 0  # TODO: save and load from checkpoint??
 
         self.last_report = time.time()
-        self.report_interval = 2.0  # sec
+        self.report_interval = 3.0  # sec
 
         self.fps_stats = deque([], maxlen=10)
+        self.avg_stats = dict()
 
         self.writers = dict()
         writer_keys = list(range(self.cfg.num_policies))
@@ -298,6 +299,7 @@ class APPO(Algorithm):
                 policy_worker = PolicyWorker(
                     policy_worker_idx, policy_id, self.cfg, self.obs_space, self.action_space,
                     self.plasma_store_name, policy_queue, actor_queues, weight_queues[policy_id][i],
+                    self.report_queue,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
                 policy_worker_idx += 1
@@ -318,21 +320,28 @@ class APPO(Algorithm):
                 w.init()
 
     def process_report(self, report):
-        policy_id = report['policy_id']
+        if 'policy_id' in report:
+            policy_id = report['policy_id']
 
-        if 'env_steps' in report:
-            if policy_id in self.env_steps:
-                delta = report['env_steps'] - self.env_steps[policy_id]
-                self.total_env_steps_since_resume += delta
-            self.env_steps[policy_id] = report['env_steps']
+            if 'env_steps' in report:
+                if policy_id in self.env_steps:
+                    delta = report['env_steps'] - self.env_steps[policy_id]
+                    self.total_env_steps_since_resume += delta
+                self.env_steps[policy_id] = report['env_steps']
 
-        if 'episodic' in report:
-            s = report['episodic']
-            self.episode_rewards[policy_id].append(s['reward'])
-            self.episode_lengths[policy_id].append(s['len'])
+            if 'episodic' in report:
+                s = report['episodic']
+                self.episode_rewards[policy_id].append(s['reward'])
+                self.episode_lengths[policy_id].append(s['len'])
 
-        if 'train' in report:
-            self.report_train_summaries(report['train'], policy_id)
+            if 'train' in report:
+                self.report_train_summaries(report['train'], policy_id)
+
+        if 'timing' in report:
+            for k, v in report['timing'].items():
+                if k not in self.avg_stats:
+                    self.avg_stats[k] = deque([], maxlen=50)
+                self.avg_stats[k].append(v)
 
     def report(self):
         now = time.time()
@@ -372,16 +381,23 @@ class APPO(Algorithm):
     def report_basic_summaries(self, fps, avg_reward, avg_length):
         memory_mb = memory_consumption_mb()
 
+        default_policy = 0
+        self.writers[default_policy].add_scalar('0_aux/fps', fps, self.env_steps[default_policy])
+        self.writers[default_policy].add_scalar(
+            '0_aux/master_process_memory_mb', float(memory_mb), self.env_steps[default_policy],
+        )
         for policy_id, env_steps in self.env_steps.items():
-            self.writers[policy_id].add_scalar('0_aux/fps', fps, env_steps)
-            self.writers[policy_id].add_scalar('0_aux/master_process_memory_mb', float(memory_mb), env_steps)
-
             if math.isnan(avg_reward[policy_id]) or math.isnan(avg_length[policy_id]):
                 # not enough data to report yet
                 continue
 
             self.writers[policy_id].add_scalar('0_aux/avg_reward', float(avg_reward[policy_id]), env_steps)
             self.writers[policy_id].add_scalar('0_aux/avg_length', float(avg_length[policy_id]), env_steps)
+
+        for key, value in self.avg_stats.items():
+            if len(value) < value.maxlen:
+                continue
+            self.writers[default_policy].add_scalar(f'stats/{key}', np.mean(value), self.env_steps[default_policy])
 
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())

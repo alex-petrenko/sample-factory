@@ -199,7 +199,7 @@ def make_doom_env_impl(
     should_record = False
     if env_config is None:
         should_record = True
-    elif env_config.worker_index == 0 and env_config.vector_index == 0 and player_id <= 1:
+    elif env_config.worker_index == 0 and env_config.vector_index == 0 and player_id is not None and player_id <= 1:
         should_record = True
 
     if record_to is not None and should_record:
