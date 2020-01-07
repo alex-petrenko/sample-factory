@@ -32,7 +32,6 @@ class LearnerWorker:
         self.policy_id = policy_id
         self.cfg = cfg
 
-        self.with_training = True  # TODO: debug, remove
         self.terminate = False
 
         self.obs_space = obs_space
@@ -51,6 +50,7 @@ class LearnerWorker:
 
         self.experience_buffer_queue = Queue()
 
+        self.with_training = False  # TODO: debug, remove
         self.train_in_background = False  # TODO!!!! Debug!!!
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
@@ -695,7 +695,7 @@ class LearnerWorker:
 
         self.traj_buffer_ready[(worker_idx, split_idx)] = data.is_ready_tensor
 
-    def _extract_rollouts(self, data):
+    def _extract_rollouts(self, data, timing):
         data = AttrDict(data)
         worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
 
@@ -704,14 +704,20 @@ class LearnerWorker:
             env_idx, agent_idx = rollout_data['env_idx'], rollout_data['agent_idx']
             tensor_dict_key = (worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx)
             tensors = self.rollout_tensors[tensor_dict_key]
-            tensors = copy.deepcopy(tensors)
+
+            with timing.add_time('deepcopy'):
+                tensors = copy.deepcopy(tensors)
 
             # we copied the data from the shared buffer, now we can mark the buffers as free
-            traj_buffer_ready = self.traj_buffer_ready[(worker_idx, split_idx)]
-            traj_buffer_ready[env_idx, agent_idx, traj_buffer_idx] = 1
+            with timing.add_time('buff_ready'):
+                traj_buffer_ready = self.traj_buffer_ready[(worker_idx, split_idx)]
+                traj_buffer_ready[env_idx, agent_idx, traj_buffer_idx] = 1
 
             rollout_data['t'] = tensors
             rollouts.append(rollout_data)
+
+        if not self.with_training:
+            return []
 
         return rollouts
 
@@ -739,7 +745,8 @@ class LearnerWorker:
                     elif task_type == TaskType.INIT_TENSORS:
                         self._init_rollout_tensors(data)
                     elif task_type == TaskType.TRAIN:
-                        rollouts.extend(self._extract_rollouts(data))
+                        with timing.add_time('extract'):
+                            rollouts.extend(self._extract_rollouts(data, timing))
                         log.info('Num rollouts: %d', len(rollouts))
                 except Empty:
                     break
