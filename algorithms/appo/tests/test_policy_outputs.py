@@ -1,6 +1,7 @@
 import copy
 import pickle
 import sys
+import time
 from concurrent.futures.thread import ThreadPoolExecutor
 
 import torch
@@ -72,6 +73,13 @@ def _enqueue_policy_outputs(request_order, policy_outputs, output_tensors, execu
 
 
 def main():
+    start = time.time()
+    for i in range(100000):
+        time.sleep(0.00001)
+
+    log.debug('Took %.4f s', time.time() - start)
+    return
+
     with open('/tmp/policy_outputs3', 'rb') as fobj:
         data_item = pickle.load(fobj)
 

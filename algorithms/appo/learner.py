@@ -24,7 +24,7 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
 
 class LearnerWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, weight_queues, traj_buffer_events,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, weight_queues,
     ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
@@ -46,13 +46,15 @@ class LearnerWorker:
         self.report_queue = report_queue
         self.weight_queues = weight_queues
 
+        self.rollout_tensors = dict()
+        self.traj_buffer_ready = dict()
+
         self.experience_buffer_queue = Queue()
 
         self.train_in_background = False  # TODO!!!! Debug!!!
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
-        self.traj_buffer_events = traj_buffer_events
 
         self.train_step = self.env_steps = 0
 
@@ -183,7 +185,7 @@ class LearnerWorker:
         discard_rollouts = 0
         policy_version = self.train_step
         for r in rollouts:
-            rollout_min_version = min(r['t']['policy_version'])
+            rollout_min_version = r['t']['policy_version'].min().item()
             if policy_version - rollout_min_version >= self.cfg.max_policy_lag:
                 discard_rollouts += 1
             else:
@@ -679,11 +681,37 @@ class LearnerWorker:
         discarding_rate = delta_rollouts / delta_time
         return discarding_rate
 
+    def _init_rollout_tensors(self, data):
+        data = AttrDict(data)
+        assert self.policy_id == data.policy_id
+
+        worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
+        for env_agent, rollout_data in data.tensors.items():
+            env_idx, agent_idx = env_agent
+            tensor_dict_key = (worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx)
+            assert tensor_dict_key not in self.rollout_tensors
+
+            self.rollout_tensors[tensor_dict_key] = rollout_data
+
+        self.traj_buffer_ready[(worker_idx, split_idx)] = data.is_ready_tensor
+
     def _extract_rollouts(self, data):
         data = AttrDict(data)
-        rollouts = copy.deepcopy(data.rollouts)  # potential optimization
-        buffer_event = self.traj_buffer_events[data.worker_idx, data.split_idx, data.traj_buffer_idx]
-        buffer_event.set()  # signal to actor that shared data buffer is free and can be reused
+        worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
+
+        rollouts = []
+        for rollout_data in data.rollouts:
+            env_idx, agent_idx = rollout_data['env_idx'], rollout_data['agent_idx']
+            tensor_dict_key = (worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx)
+            tensors = self.rollout_tensors[tensor_dict_key]
+            tensors = copy.deepcopy(tensors)
+
+            # we copied the data from the shared buffer, now we can mark the buffers as free
+            traj_buffer_ready = self.traj_buffer_ready[(worker_idx, split_idx)]
+            traj_buffer_ready[env_idx, agent_idx, traj_buffer_idx] = 1
+
+            rollout_data['t'] = tensors
+            rollouts.append(rollout_data)
 
         return rollouts
 
@@ -708,6 +736,8 @@ class LearnerWorker:
                     elif task_type == TaskType.TERMINATE:
                         self._terminate()
                         break
+                    elif task_type == TaskType.INIT_TENSORS:
+                        self._init_rollout_tensors(data)
                     elif task_type == TaskType.TRAIN:
                         rollouts.extend(self._extract_rollouts(data))
                         log.info('Num rollouts: %d', len(rollouts))

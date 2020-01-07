@@ -189,21 +189,20 @@ class APPO(Algorithm):
     def finalize(self):
         pass
 
-    def create_actor_worker(self, idx, actor_queue, traj_buffer_events):
+    def create_actor_worker(self, idx, actor_queue):
         learner_queues = {p: w.task_queue for p, w in self.learner_workers.items()}
 
         return ActorWorker(
             self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
             policy_queues=self.policy_queues, report_queue=self.report_queue, learner_queues=learner_queues,
-            traj_buffer_events=traj_buffer_events,
         )
 
     # noinspection PyProtectedMember
-    def init_subset(self, indices, actor_queues, traj_buffer_events):
+    def init_subset(self, indices, actor_queues):
         workers = dict()
         started_reset = dict()
         for i in indices:
-            w = self.create_actor_worker(i, actor_queues[i], traj_buffer_events[i])
+            w = self.create_actor_worker(i, actor_queues[i])
             w.init()
             time.sleep(0.1)  # just in case
             w.request_reset()
@@ -248,7 +247,7 @@ class APPO(Algorithm):
                     stuck_worker = w
                     stuck_worker.process.kill()
 
-                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx], traj_buffer_events)
+                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx])
                     new_worker.init()
                     new_worker.request_reset()
                     started_reset[worker_idx] = time.time()
@@ -273,13 +272,6 @@ class APPO(Algorithm):
             self.cfg.worker_num_splits,
             num_trajectory_buffers,
         ]
-        traj_buffer_events = np.ndarray(shape, dtype=object)
-        for worker_idx in range(self.cfg.num_workers):
-            for split_idx in range(self.cfg.worker_num_splits):
-                for buffer_idx in range(num_trajectory_buffers):
-                    e = Event()
-                    e.set()  # initially all buffers are available
-                    traj_buffer_events[worker_idx, split_idx, buffer_idx] = e
 
         weight_queues = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -292,7 +284,7 @@ class APPO(Algorithm):
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
-                self.report_queue, weight_queues[policy_id], traj_buffer_events,
+                self.report_queue, weight_queues[policy_id],
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -322,7 +314,7 @@ class APPO(Algorithm):
         max_parallel_init = 5
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
-            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues, traj_buffer_events)
+            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
             self.actor_workers.extend(workers)
 
         # wait for GPU workers to finish initializing

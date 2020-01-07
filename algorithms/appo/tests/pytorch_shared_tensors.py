@@ -1,5 +1,7 @@
+import copy
 import pickle
 import sys
+import time
 
 import numpy as np
 import torch
@@ -26,19 +28,26 @@ def worker(evt):
     timing = Timing()
 
     tensor = None
+    is_ready_tensor = None
 
     while True:
         log.debug('Reading from queue...')
         with timing.add_time('read'):
-            data = q.get(log_func=log.debug)
+            data = q.get()
         log.debug('Done Reading!!')
         counter += 1
 
         if data is None:
-            q.task_done()
+            is_ready_tensor[0] = 1
             break
+        elif isinstance(data, torch.Tensor):
+            is_ready_tensor = data
+            continue
         elif isinstance(data, dict):
             tensor = data['d']['t'][0]
+
+            tensor_copy = copy.deepcopy(tensor)
+            print(tensor_copy)
 
         value = tensor[0][0][0][0].cpu().detach().item()
         a.append(value)
@@ -47,8 +56,10 @@ def worker(evt):
         tensor[0][0][0][0] = 42.0
         log.debug('After tensor fill: %.4f', tensor[0][0][0][0].cpu().detach().item())
 
+        is_ready_tensor[0] = 1
+
         # data.share_memory_()
-        q.task_done()
+        # q.task_done()
 
         # evt.set()
 
@@ -69,7 +80,7 @@ def main():
         with timing.timeit('data'):
             log.info('Generating data...')
             np.random.seed(0)
-            all_data = np.random.random([n, 100, 128, 72, 3])
+            all_data = np.random.random([n, 1000, 128, 72, 3])
             log.info('Done!')
 
         shared_mem = True
@@ -79,7 +90,12 @@ def main():
             shared_tensor.share_memory_()
         tensor_sent = False
 
+        is_ready_tensor = torch.zeros([1], dtype=torch.int32)
+        is_ready_tensor.share_memory_()
+
         p.start()
+
+        q.put(is_ready_tensor)
 
         with timing.timeit('sending'):
             for i in range(n):
@@ -90,6 +106,8 @@ def main():
                     with timing.add_time('copy'):
                         shared_tensor.copy_(t)
                     with timing.add_time('queue'):
+                        is_ready_tensor[0] = 0
+
                         if tensor_sent:
                             q.put(False)
                         else:
@@ -102,7 +120,11 @@ def main():
                         # evt.clear()
                         # log.info('Done waiting!')
                         # shared_tensor.fill_(-42.0)
-                        q.join()
+
+
+                        while is_ready_tensor[0] == 0:
+                            time.sleep(0.001)
+                        # q.join()
 
                         log.info('Data: %.3f', shared_tensor[0, 0, 0, 0].cpu().detach().item())
                 else:
@@ -114,8 +136,10 @@ def main():
                 log.info('Progress %d/%d', i, n)
 
         with timing.timeit('fin'):
+            is_ready_tensor[0] = 0
             q.put(None)
-            q.join()
+            while is_ready_tensor[0] == 0:
+                time.sleep(0.001)
             p.join()
 
     log.info('Timing: %s', timing)

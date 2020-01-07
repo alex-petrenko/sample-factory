@@ -111,6 +111,7 @@
           <option value="ray.pyarrow_files.pyarrow.*" />
           <option value="torch.Tensor.copy_" />
           <option value="torch.nn" />
+          <option value="torch.bool" />
         </list>
       </option>
     </inspection_tool>

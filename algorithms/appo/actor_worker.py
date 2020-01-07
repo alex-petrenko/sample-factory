@@ -155,11 +155,10 @@ class ActorState:
         if done:
             self.new_episode = True
 
-    def finalize_trajectory(self, rollout_step, traj_buffer_idx):
+    def finalize_trajectory(self, rollout_step):
         t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
         traj_dict = dict(
             t_id=t_id, length=rollout_step, env_steps=self.rollout_env_steps, policy_id=self.curr_policy_id,
-            t=self.trajectories[traj_buffer_idx],
         )
 
         self.num_trajectories += 1
@@ -203,6 +202,10 @@ class VectorEnvRunner:
 
         self.rollout_step = 0
         self.traj_buffer_idx = 0  # current shared trajectory buffer to use
+        self.traj_buffers_initialized = [False] * num_traj_buffers
+
+        # whenever the buffer is ready the learner will just flip the bool value in the buffer using shared memory
+        self.traj_buffer_ready = None
 
         self.num_agents = -1  # queried from env
 
@@ -232,6 +235,10 @@ class VectorEnvRunner:
 
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
+
+        # whenever the buffer is ready the learner will just flip the bool value in the buffer using shared memory
+        self.traj_buffer_ready = torch.ones([self.num_envs, self.num_agents, self.num_traj_buffers], dtype=torch.uint8)
+        self.traj_buffer_ready.share_memory_()
 
     def _process_policy_outputs(self, policy_id):
         all_actors_ready = True
@@ -296,7 +303,10 @@ class VectorEnvRunner:
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
-                rollouts.append(actor_state.finalize_trajectory(self.rollout_step, self.traj_buffer_idx))
+                rollout = actor_state.finalize_trajectory(self.rollout_step)
+                rollout['env_idx'] = env_i
+                rollout['agent_idx'] = agent_i
+                rollouts.append(rollout)
 
         return rollouts
 
@@ -311,9 +321,8 @@ class VectorEnvRunner:
                 data = (env_i, agent_i, self.rollout_step)
 
                 if policy_id not in policy_request:
-                    policy_request[policy_id] = [data]
-                else:
-                    policy_request[policy_id].append(data)
+                    policy_request[policy_id] = []
+                policy_request[policy_id].append(data)
 
         return policy_request
 
@@ -332,6 +341,15 @@ class VectorEnvRunner:
                 policy_input_tensors[(env_i, agent_i)] = actor_state.policy_inputs
 
         return policy_input_tensors
+
+    def rollout_tensors(self, traj_buff_idx):
+        traj_buffers = dict()
+        for env_i in range(self.num_envs):
+            for agent_i in range(self.num_agents):
+                actor_state = self.actor_states[env_i][agent_i]
+                traj_buffers[(env_i, agent_i)] = actor_state.trajectories[traj_buff_idx]
+
+        return traj_buffers
 
     def init_policy_output_tensors(self, env_i, agent_i, tensors, tensor_names, tensor_sizes):
         actor_state = self.actor_states[env_i][agent_i]
@@ -406,8 +424,7 @@ class ActorWorker:
     """
 
     def __init__(
-        self, cfg, obs_space, action_space, worker_idx,
-        task_queue, policy_queues, report_queue, learner_queues, traj_buffer_events,
+        self, cfg, obs_space, action_space, worker_idx, task_queue, policy_queues, report_queue, learner_queues,
     ):
         self.cfg = cfg
         self.obs_space = obs_space
@@ -434,8 +451,7 @@ class ActorWorker:
         self.learner_queues = learner_queues
         self.task_queue = task_queue
 
-        self.traj_buffer_events = traj_buffer_events
-        self.num_traj_buffers = self.traj_buffer_events.shape[-1]
+        self.num_traj_buffers = 2
 
         self.critical_error = Event()
         self.process = TorchProcess(target=self._run, daemon=True)
@@ -470,45 +486,65 @@ class ActorWorker:
             policy_request = dict(worker_idx=self.worker_idx, split_idx=split_idx, policy_inputs=requests)
             self.policy_queues[policy_id].put((TaskType.POLICY_STEP, policy_request))
 
+    def _ensure_traj_buffers_initialized(self, env_runner, split_idx):
+        traj_buffer_idx = env_runner.traj_buffer_idx
+        if env_runner.traj_buffers_initialized[traj_buffer_idx]:
+            return
+
+        for policy_id in range(self.cfg.num_policies):
+            request = dict(
+                policy_id=policy_id, worker_idx=self.worker_idx, split_idx=split_idx,
+                tensors=env_runner.rollout_tensors(traj_buffer_idx),
+                is_ready_tensor=env_runner.traj_buffer_ready,
+                traj_buffer_idx=traj_buffer_idx,
+            )
+            log.debug('Sending trajectory buffers from %d-%d to learner %d', self.worker_idx, split_idx, policy_id)
+            self.learner_queues[policy_id].put((TaskType.INIT_TENSORS, request))
+
+        self.env_runners[split_idx].traj_buffers_initialized[traj_buffer_idx] = True
+
     def _enqueue_complete_rollouts(self, split_idx, complete_rollouts, timing):
         """Send complete rollouts from VectorEnv to the learner."""
         if self.cfg.sampler_only:
             return
 
-        traj_buffer_idx = self.env_runners[split_idx].traj_buffer_idx
-        rollouts_per_policy = dict()
+        env_runner = self.env_runners[split_idx]
+        traj_buffer_idx = env_runner.traj_buffer_idx
 
+        # mark current set of trajectory buffers unavailable, until the learner processes them
+        env_runner.traj_buffer_ready[:, :, traj_buffer_idx] = 0
+
+        self._ensure_traj_buffers_initialized(env_runner, split_idx)
+
+        rollouts_per_policy = dict()
         for rollout in complete_rollouts:
             policy_id = rollout['policy_id']
-            if policy_id in rollouts_per_policy:
-                rollouts_per_policy[policy_id]['rollouts'].append(rollout)
-            else:
+            if policy_id not in rollouts_per_policy:
                 # provide additional information to the learner, so it is clear which event to raise when
                 # the buffer is ready
                 rollouts_per_policy[policy_id] = dict(
-                    rollouts=[rollout], worker_idx=self.worker_idx,
+                    rollouts=[], worker_idx=self.worker_idx,
                     split_idx=split_idx, traj_buffer_idx=traj_buffer_idx,
                 )
 
-        # mark current set of trajectory buffers unavailable, until the learner processes them
-        self.traj_buffer_events[split_idx, traj_buffer_idx].clear()
+            rollouts_per_policy[policy_id]['rollouts'].append(rollout)
+
+        # switch to the next available trajectory buffer (usually just double-buffering)
         new_traj_buffer_idx = (traj_buffer_idx + 1) % self.num_traj_buffers
-        self.env_runners[split_idx].traj_buffer_idx = new_traj_buffer_idx
+        env_runner.traj_buffer_idx = new_traj_buffer_idx
 
         for policy_id, rollouts in rollouts_per_policy.items():
             self.learner_queues[policy_id].put((TaskType.TRAIN, rollouts))
 
-        # wait for the previous set of buffers to be released
+        # wait for the next set of buffers to be released, if it's not ready yet
         # this should be a no-op, unless we are collecting experience faster than we can learn from it, in which case
-        # this will act as a self-regulating mechanism
+        # this will act as a speed adjusting mechanism
         #
-        # If the multi-server version of the algorithm is considered, this mechanism should probably be dropped
+        # If the multi-server version of the algorithm is considered, this mechanism should be dropped
         # in favor of explicit data serialization/sharing across machines
-        with timing.add_time('wait_buffers'):  #TODO!!! remove this and do the INIT_TENSORS thing instead
-            start_waiting = time.time()
-            log.debug('Waiting for buffer %d %d %d', self.worker_idx, split_idx, new_traj_buffer_idx)
-            self.traj_buffer_events[split_idx, new_traj_buffer_idx].wait()
-            log.debug('Done waiting for buffer %d %d %d, took %.4f', self.worker_idx, split_idx, new_traj_buffer_idx, time.time() - start_waiting)
+        with timing.add_time('wait_buffers'):
+            while env_runner.traj_buffer_ready[:, :, new_traj_buffer_idx].min() == 0:
+                time.sleep(0.001)
 
     def _report_stats(self, stats):
         for report in stats:
