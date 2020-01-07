@@ -1,14 +1,31 @@
-import torch
 from collections import OrderedDict
 from enum import Enum
 
 import numpy as np
+import torch
 
 from utils.utils import log
 
 
 class TaskType(Enum):
-    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, TOO_MUCH_DATA = range(8)
+    INIT, TERMINATE, RESET, INIT_TENSORS, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, EMPTY = range(9)
+
+
+def set_step_data(dictionary, key, data):
+    if isinstance(data, np.ndarray):
+        torch_data = torch.from_numpy(data)
+    elif isinstance(data, torch.Tensor):
+        torch_data = data
+    elif isinstance(data, (int, float, bool, list, tuple, np.float32)):
+        torch_data = torch.tensor(data)
+    else:
+        raise RuntimeError('Unsupported data type!')
+
+    if key not in dictionary:
+        dictionary[key] = torch_data.cpu().clone().detach()  # this is slow, but we do it only once
+        dictionary[key].share_memory_()
+    else:
+        dictionary[key].copy_(torch_data)
 
 
 def dict_of_lists_append(dict_of_lists, new_data):

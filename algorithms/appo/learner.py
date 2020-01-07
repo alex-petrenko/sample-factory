@@ -1,3 +1,4 @@
+import copy
 import glob
 import os
 import threading
@@ -8,10 +9,8 @@ from queue import Empty, Queue
 from threading import Thread
 
 import numpy as np
-import ray.pyarrow_files.pyarrow as pa
 import torch
-from ray.pyarrow_files.pyarrow import plasma
-from torch.multiprocessing import JoinableQueue, Process
+from torch.multiprocessing import Process, Queue as TorchQueue
 
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy
 from algorithms.appo.model import ActorCritic
@@ -25,7 +24,7 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
 
 class LearnerWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, report_queue, weight_queues,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, weight_queues, traj_buffer_events,
     ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
@@ -39,22 +38,21 @@ class LearnerWorker:
         self.obs_space = obs_space
         self.action_space = action_space
 
-        self.plasma_store_name = plasma_store_name
-
         self.device = None
         self.actor_critic = None
         self.optimizer = None
 
-        self.task_queue = JoinableQueue()
+        self.task_queue = TorchQueue()
         self.report_queue = report_queue
         self.weight_queues = weight_queues
 
         self.experience_buffer_queue = Queue()
 
-        self.train_in_background = True
+        self.train_in_background = False  # TODO!!!! Debug!!!
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
+        self.traj_buffer_events = traj_buffer_events
 
         self.train_step = self.env_steps = 0
 
@@ -159,10 +157,7 @@ class LearnerWorker:
 
         with timing.add_time('tensors'):
             for d, key, value in iterate_recursively(buffer):
-                value = np.asarray(value)
-                value = torch.tensor(value, device=self.device)
-                value = value.float()
-                d[key] = value.reshape(-1, *value.shape[2:])
+                d[key] = torch.cat(value, dim=0).to(self.device).float()
 
         return buffer
 
@@ -341,7 +336,9 @@ class LearnerWorker:
         stats = None
 
         rho_hat = c_hat = 1.0  # V-trace parameters
+        # noinspection PyArgumentList
         rho_hat = torch.Tensor([rho_hat]).to(self.device)
+        # noinspection PyArgumentList
         c_hat = torch.Tensor([c_hat]).to(self.device)
 
         clip_ratio = self.cfg.ppo_clip_ratio
@@ -682,11 +679,16 @@ class LearnerWorker:
         discarding_rate = delta_rollouts / delta_time
         return discarding_rate
 
+    def _extract_rollouts(self, data):
+        data = AttrDict(data)
+        rollouts = copy.deepcopy(data.rollouts)  # potential optimization
+        buffer_event = self.traj_buffer_events[data.worker_idx, data.split_idx, data.traj_buffer_idx]
+        buffer_event.set()  # signal to actor that shared data buffer is free and can be reused
+
+        return rollouts
+
     def _run(self):
         timing = Timing()
-
-        plasma_client = plasma.connect(self.plasma_store_name)
-        serialization_context = pa.default_serialization_context()
 
         rollouts = []
 
@@ -705,10 +707,8 @@ class LearnerWorker:
                         self._terminate()
                         break
                     elif task_type == TaskType.TRAIN:
-                        new_rollouts = plasma_client.get(data, -1, serialization_context=serialization_context)
-                        rollouts.extend(new_rollouts)
-
-                    self.task_queue.task_done()
+                        rollouts.extend(self._extract_rollouts(data))
+                        log.info('Num rollouts: %d', len(rollouts))
                 except Empty:
                     break
 
@@ -738,7 +738,11 @@ class LearnerWorker:
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.join()
+        self.task_queue.put((TaskType.EMPTY, None))
+
+        # wait until we finished initializing
+        while self.task_queue.qsize() > 0:
+            time.sleep(0.01)
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))

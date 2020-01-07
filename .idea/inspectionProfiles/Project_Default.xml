@@ -109,6 +109,8 @@
           <option value="object.tolist" />
           <option value="torch.optim.RMSprop" />
           <option value="ray.pyarrow_files.pyarrow.*" />
+          <option value="torch.Tensor.copy_" />
+          <option value="torch.nn" />
         </list>
       </option>
     </inspection_tool>

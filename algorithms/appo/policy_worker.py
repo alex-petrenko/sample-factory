@@ -1,14 +1,12 @@
+import random
 import select
 import time
 from queue import Empty
 
-import numpy as np
-import ray.pyarrow_files.pyarrow as pa
 import torch
-from ray.pyarrow_files.pyarrow import plasma
-from torch.multiprocessing import Process
+from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, set_step_data
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
@@ -17,7 +15,7 @@ from utils.utils import AttrDict, log
 
 class PolicyWorker:
     def __init__(
-            self, worker_idx, policy_id, cfg, obs_space, action_space, plasma_store_name, policy_queue, actor_queues,
+            self, worker_idx, policy_id, cfg, obs_space, action_space, policy_queue, actor_queues,
             weight_queue, report_queue,
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
@@ -29,13 +27,12 @@ class PolicyWorker:
         self.obs_space = obs_space
         self.action_space = action_space
 
-        self.plasma_store_name = plasma_store_name
-        self.plasma_client = None
-        self.serialization_context = None
-
         self.device = None
         self.actor_critic = None
         self.shared_model = None
+
+        self.input_tensors = dict()  # memshared input tensors, main way to receive data from actors
+        self.output_tensors = dict()
 
         self.task_queue = policy_queue
         self.actor_queues = actor_queues
@@ -51,7 +48,9 @@ class PolicyWorker:
         self.too_many_workers = False
         self.last_speed_adjustment = time.time()
 
-        self.process = Process(target=self._run, daemon=True)
+        self.total_num_samples = 0
+
+        self.process = TorchProcess(target=self._run, daemon=True)
 
     def start_process(self):
         self.process.start()
@@ -65,11 +64,6 @@ class PolicyWorker:
     def _store_policy_step_request(self, request):
         worker_idx = request['worker_idx']
         split_idx = request['split_idx']
-
-        request['policy_inputs'] = self.plasma_client.get(
-            request['policy_inputs'], -1, serialization_context=self.serialization_context,
-        )
-
         self.requests[(worker_idx, split_idx)] = request
 
     def _filter_requests(self):
@@ -95,18 +89,21 @@ class PolicyWorker:
             with timing.add_time('deserialize'):
                 observations = AttrDict()
                 rnn_states = []
-                num_obs_per_actor = []
+                request_order = []
 
                 for request in requests:
                     actor_idx = request['worker_idx']
                     split_idx = request['split_idx']
                     request_data = request['policy_inputs']
 
-                    num_inputs, rollout_step, policy_inputs = request_data
-
-                    dict_of_lists_append(observations, policy_inputs['obs'])
-                    rnn_states.append(policy_inputs['rnn_states'])
-                    num_obs_per_actor.append((actor_idx, split_idx, num_inputs))
+                    rollout_step = -1
+                    for env_idx, agent_idx, rollout_step in request_data:
+                        tensors_dict_key = (actor_idx, split_idx, env_idx, agent_idx)
+                        input_tensors = self.input_tensors[tensors_dict_key]
+                        dict_of_lists_append(observations, input_tensors['obs'])
+                        rnn_states.append(input_tensors['rnn_states'])
+                        request_order.append(tensors_dict_key)
+                        self.total_num_samples += 1
 
                     if rollout_step >= self.cfg.rollout - 1:
                         if self.cfg.sync_mode or self.too_many_workers:
@@ -122,18 +119,32 @@ class PolicyWorker:
             with torch.no_grad():
                 with timing.add_time('to_device'):
                     for key, x in observations.items():
-                        observations[key] = torch.from_numpy(np.concatenate(x)).to(self.device).float()
+                        observations[key] = torch.stack(x).to(self.device).float()
 
-                    rnn_states = np.concatenate(rnn_states)
-                    rnn_states = torch.from_numpy(rnn_states).to(self.device).float()
+                    rnn_states = torch.stack(rnn_states).to(self.device).float()
+                    num_samples = rnn_states.shape[0]
 
                 with timing.add_time('forward'):
                     policy_outputs = self.actor_critic(observations, rnn_states)
 
+                for key, value in policy_outputs.items():
+                    policy_outputs[key] = value.cpu()
+                policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
+
+                # concat all tensors into a single tensor for performance
+                output_tensors, tensor_sizes = [], []
+                tensor_names = sorted(tuple(policy_outputs.keys()))
+                for key in tensor_names:
+                    value = policy_outputs[key].float()
+                    if len(value.shape) == 1:
+                        value = torch.unsqueeze(value, dim=1)
+                    output_tensors.append(value)
+                    tensor_sizes.append(value.shape[-1])
+
+                output_tensors = torch.cat(output_tensors, dim=1)
+
                 with timing.add_time('postprocess'):
-                    self._enqueue_policy_outputs(
-                        num_obs_per_actor, policy_outputs, self.serialization_context, self.plasma_client, timing,
-                    )
+                    self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
 
     def _update_weights(self, weight_update, timing):
         if weight_update is None:
@@ -173,35 +184,50 @@ class PolicyWorker:
             self.worker_idx, policy_version, timing.weight_update,
         )
 
-    def _enqueue_policy_outputs(self, num_obs_per_actor, policy_outputs, serialization_context, plasma_client, timing):
-        for key, value in policy_outputs.items():
-            policy_outputs[key] = value.cpu().numpy()
-
+    def _enqueue_policy_outputs(self, request_order, output_tensors, tensor_names, tensor_sizes):
         output_idx = 0
-        for actor_index, split_idx, num_obs in num_obs_per_actor:
-            outputs = dict()
-            for key, value in policy_outputs.items():
-                outputs[key] = value[output_idx:output_idx + num_obs]
+        outputs_ready = set()
 
-            with timing.add_time('serialize'):
-                outputs = plasma_client.put(
-                    outputs, None, serialization_context=serialization_context,
+        for actor_idx, split_idx, env_idx, agent_idx in request_order:
+            tensors_dict_key = actor_idx, split_idx, env_idx, agent_idx
+
+            if tensors_dict_key in self.output_tensors:
+                self.output_tensors[tensors_dict_key].copy_(output_tensors[output_idx])
+            else:
+                self.output_tensors[tensors_dict_key] = output_tensors[output_idx].clone().detach()
+                self.output_tensors[tensors_dict_key].share_memory_()
+
+                log.debug('Sending ouput tensors to %r', tensors_dict_key)
+                init_tensors_request = dict(
+                    split_idx=split_idx, env_idx=env_idx, agent_idx=agent_idx,
+                    tensors=self.output_tensors[tensors_dict_key],
+                    tensor_names=tensor_names, tensor_sizes=tensor_sizes,
                 )
+                self.actor_queues[actor_idx].put((TaskType.INIT_TENSORS, init_tensors_request))
 
-            advance_rollout_request = dict(
-                split_idx=split_idx, policy_id=self.policy_id, outputs=outputs,
-                policy_version=self.latest_policy_version,
-            )
-            self.actor_queues[actor_index].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
-            output_idx += num_obs
+            output_idx += 1
 
+            outputs_ready.add((actor_idx, split_idx))
+
+        for actor_idx, split_idx in outputs_ready:
+            advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
+            self.actor_queues[actor_idx].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
+
+    def _init_input_tensors(self, data):
+        data = AttrDict(data)
+        worker_idx, split_idx = data.worker_idx, data.split_idx
+        log.debug('Policy worker %d initializing input tensors from %d %d', self.policy_id, worker_idx, split_idx)
+
+        for key, tensors in data.tensors.items():
+            env_idx, agent_idx = key
+            tensors_dict_key = (worker_idx, split_idx, env_idx, agent_idx)
+            self.input_tensors[tensors_dict_key] = tensors
+
+    # noinspection PyProtectedMember
     def _run(self):
         timing = Timing()
 
         with timing.timeit('init'):
-            self.plasma_client = plasma.connect(self.plasma_store_name)
-            self.serialization_context = pa.default_serialization_context()
-
             # initialize the Torch modules
             log.info('Initializing model on the policy worker %d...', self.worker_idx)
 
@@ -219,6 +245,7 @@ class PolicyWorker:
         queues_by_handle[self.weight_queue._reader._handle] = self.weight_queue
 
         last_report = time.time()
+        last_report_samples = 0
 
         while not self.terminate:
             with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
@@ -228,39 +255,47 @@ class PolicyWorker:
                 for readable_queue in ready:
                     q = queues_by_handle[readable_queue._handle]
 
-                    while True:
-                        try:
-                            task_type, data = q.get_nowait()
+                    with timing.add_time('loop'):
+                        while True:
+                            try:
+                                task_type, data = q.get_nowait()
 
-                            if task_type == TaskType.INIT:
-                                self._init()
-                            elif task_type == TaskType.TERMINATE:
-                                self._terminate()
-                                self.terminate = True
+                                if task_type == TaskType.INIT:
+                                    self._init()
+                                elif task_type == TaskType.TERMINATE:
+                                    self._terminate()
+                                    self.terminate = True
+                                    break
+                                elif task_type == TaskType.INIT_TENSORS:
+                                    self._init_input_tensors(data)
+                                elif task_type == TaskType.POLICY_STEP:
+                                    self._store_policy_step_request(data)
+                                elif task_type == TaskType.UPDATE_WEIGHTS:
+                                    with timing.timeit('updates'):
+                                        self._update_weights(data, timing)
+
+                            except Empty:
                                 break
-                            elif task_type == TaskType.POLICY_STEP:
-                                self._store_policy_step_request(data)
-                            elif task_type == TaskType.UPDATE_WEIGHTS:
-                                self._update_weights(data, timing)
 
-                            q.task_done()
-
-                        except Empty:
-                            break
-
-                with timing.timeit('one_step'):
+                with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
                     self._handle_policy_steps(timing)
 
                 if time.time() - last_report > 1.0 and 'one_step' in timing:
                     timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
-                    self.report_queue.put(dict(timing=timing_stats))
+                    samples_since_last_report = self.total_num_samples - last_report_samples
+                    self.report_queue.put(dict(
+                        timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id,
+                    ))
                     last_report = time.time()
+                    last_report_samples = self.total_num_samples
 
         log.info('Gpu worker timing: %s', timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.join()
+        self.task_queue.put((TaskType.EMPTY, None))
+        while self.task_queue.qsize() > 0:
+            time.sleep(0.01)
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))

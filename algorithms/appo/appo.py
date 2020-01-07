@@ -1,5 +1,4 @@
 import json
-import logging
 import math
 import time
 from collections import deque
@@ -7,14 +6,12 @@ from os.path import join
 from queue import Empty
 
 import numpy as np
-import ray
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import JoinableQueue
+from torch.multiprocessing import Event, Queue as TorchQueue
 
 from algorithms.appo.actor_worker import make_env_func, ActorWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.learner import LearnerWorker
-from algorithms.utils.multi_env import queue_join_timeout
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
 
@@ -113,18 +110,18 @@ class APPO(Algorithm):
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 
+        # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
+        p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
 
     def __init__(self, cfg):
         super().__init__(cfg)
-
-        self.plasma_store_name = None
 
         self.obs_space = self.action_space = None
 
         self.actor_workers = None
 
-        self.report_queue = JoinableQueue()
+        self.report_queue = TorchQueue()
         self.policy_workers = dict()
         self.policy_queues = dict()
 
@@ -146,6 +143,7 @@ class APPO(Algorithm):
 
         self.last_timing = dict()
         self.env_steps = dict()
+        self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
         self.total_env_steps_since_resume = 0
 
         self.total_train_seconds = 0  # TODO: save and load from checkpoint??
@@ -154,6 +152,7 @@ class APPO(Algorithm):
         self.report_interval = 3.0  # sec
 
         self.fps_stats = deque([], maxlen=10)
+        self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
 
         self.writers = dict()
@@ -175,17 +174,6 @@ class APPO(Algorithm):
             json.dump(cfg_dict, json_file, indent=2)
 
     def initialize(self):
-        if not ray.is_initialized():
-            ray.init(
-                local_mode=False,
-                memory=int(1e10), object_store_memory=int(1e10),
-                redis_max_memory=int(1e9), driver_object_store_memory=int(1e9),
-                logging_level=logging.CRITICAL,
-            )
-
-        global_worker = ray.worker.global_worker
-        self.plasma_store_name = global_worker.node.plasma_store_socket_name
-
         tmp_env = make_env_func(self.cfg, env_config=None)
         self.obs_space = tmp_env.observation_space
         self.action_space = tmp_env.action_space
@@ -194,24 +182,25 @@ class APPO(Algorithm):
         self._save_cfg()
 
     def finalize(self):
-        ray.shutdown()
+        pass
 
-    def create_actor_worker(self, idx, actor_queue):
+    def create_actor_worker(self, idx, actor_queue, traj_buffer_events):
         learner_queues = {p: w.task_queue for p, w in self.learner_workers.items()}
 
         return ActorWorker(
             self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
-            plasma_store_name=self.plasma_store_name, policy_queues=self.policy_queues,
-            report_queue=self.report_queue, learner_queues=learner_queues,
+            policy_queues=self.policy_queues, report_queue=self.report_queue, learner_queues=learner_queues,
+            traj_buffer_events=traj_buffer_events,
         )
 
     # noinspection PyProtectedMember
-    def init_subset(self, indices, actor_queues):
+    def init_subset(self, indices, actor_queues, traj_buffer_events):
         workers = dict()
         started_reset = dict()
         for i in indices:
-            w = self.create_actor_worker(i, actor_queues[i])
+            w = self.create_actor_worker(i, actor_queues[i], traj_buffer_events[i])
             w.init()
+            time.sleep(0.1)  # just in case
             w.request_reset()
             workers[i] = w
             started_reset[i] = time.time()
@@ -221,8 +210,8 @@ class APPO(Algorithm):
 
         while len(workers_finished) < len(workers):
             for w in workers.values():
-                done = queue_join_timeout(w.task_queue, timeout=0.1)
-                if not done:
+                if w.task_queue.qsize() > 0:
+                    time.sleep(0.05)
                     continue
 
                 if len(workers_finished) <= 0:
@@ -254,7 +243,7 @@ class APPO(Algorithm):
                     stuck_worker = w
                     stuck_worker.process.kill()
 
-                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx])
+                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx], traj_buffer_events)
                     new_worker.init()
                     new_worker.request_reset()
                     started_reset[worker_idx] = time.time()
@@ -266,20 +255,39 @@ class APPO(Algorithm):
 
     # noinspection PyUnresolvedReferences
     def init_workers(self):
-        actor_queues = [JoinableQueue() for _ in range(self.cfg.num_workers)]
+        actor_queues = [TorchQueue() for _ in range(self.cfg.num_workers)]
+
+        # two buffers - one for learner to process while another is being filled by the actor
+        num_trajectory_buffers = 2
+
+        # events are used to signal when learner is done with the shared trajectory buffer, so it can be reused
+        # on the actor. The alternative is to send the buffers back from learner to the actor, but this introduces
+        # another set of queues. This seems like a good compromise.
+        shape = [
+            self.cfg.num_workers,
+            self.cfg.worker_num_splits,
+            num_trajectory_buffers,
+        ]
+        traj_buffer_events = np.ndarray(shape, dtype=object)
+        for worker_idx in range(self.cfg.num_workers):
+            for split_idx in range(self.cfg.worker_num_splits):
+                for buffer_idx in range(num_trajectory_buffers):
+                    e = Event()
+                    e.set()  # initially all buffers are available
+                    traj_buffer_events[worker_idx, split_idx, buffer_idx] = e
 
         weight_queues = dict()
         for policy_id in range(self.cfg.num_policies):
             weight_queues[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
-                weight_queues[policy_id].append(JoinableQueue())
+                weight_queues[policy_id].append(TorchQueue())
 
         log.info('Initializing GPU learners...')
         learner_idx = 0
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
-                learner_idx, policy_id, self.cfg, self.obs_space, self.action_space, self.plasma_store_name,
-                self.report_queue, weight_queues[policy_id],
+                learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
+                self.report_queue, weight_queues[policy_id], traj_buffer_events,
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -292,14 +300,13 @@ class APPO(Algorithm):
         for policy_id in range(self.cfg.num_policies):
             self.policy_workers[policy_id] = []
 
-            policy_queue = JoinableQueue()
+            policy_queue = TorchQueue()
             self.policy_queues[policy_id] = policy_queue
 
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker = PolicyWorker(
                     policy_worker_idx, policy_id, self.cfg, self.obs_space, self.action_space,
-                    self.plasma_store_name, policy_queue, actor_queues, weight_queues[policy_id][i],
-                    self.report_queue,
+                    policy_queue, actor_queues, weight_queues[policy_id][i], self.report_queue,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
                 policy_worker_idx += 1
@@ -310,7 +317,7 @@ class APPO(Algorithm):
         max_parallel_init = 5
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
-            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
+            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues, traj_buffer_events)
             self.actor_workers.extend(workers)
 
         # wait for GPU workers to finish initializing
@@ -337,6 +344,9 @@ class APPO(Algorithm):
             if 'train' in report:
                 self.report_train_summaries(report['train'], policy_id)
 
+            if 'samples' in report:
+                self.samples_collected[policy_id] += report['samples']
+
         if 'timing' in report:
             for k, v in report['timing'].items():
                 if k not in self.avg_stats:
@@ -354,7 +364,7 @@ class APPO(Algorithm):
         past_moment, past_frames = self.fps_stats[0]
         fps = (total_env_steps - past_frames) / (now - past_moment)
 
-        avg_reward, avg_length = dict(), dict()
+        avg_reward, avg_length, sample_throughput = dict(), dict(), dict()
         for policy_id in range(self.cfg.num_policies):
             if len(self.episode_rewards[policy_id]) >= self.episode_rewards[policy_id].maxlen:
                 avg_reward[policy_id] = np.mean(self.episode_rewards[policy_id])
@@ -366,19 +376,29 @@ class APPO(Algorithm):
             else:
                 avg_length[policy_id] = math.nan
 
-        self.print_stats(fps, avg_reward, total_env_steps)
-        self.report_basic_summaries(fps, avg_reward, avg_length)
+            self.throughput_stats[policy_id].append((now, self.samples_collected[policy_id]))
+            if len(self.throughput_stats[policy_id]) > 1:
+                past_moment, past_samples = self.throughput_stats[policy_id][0]
+                sample_throughput[policy_id] = (self.samples_collected[policy_id] - past_samples) / (now - past_moment)
+            else:
+                sample_throughput[policy_id] = math.nan
 
-    @staticmethod
-    def print_stats(fps, avg_reward, total_env_steps):
-        log.debug('Fps is %.1f. Total num frames: %d', fps, total_env_steps)
+        self.print_stats(fps, sample_throughput, avg_reward, total_env_steps)
+        self.report_basic_summaries(fps, sample_throughput, avg_reward, avg_length)
+
+    def print_stats(self, fps, sample_throughput, avg_reward, total_env_steps):
+        samples_per_policy = ', '.join([f'{p}: {s:.1f}' for p, s in sample_throughput.items()])
+        log.debug(
+            'Fps is %.1f. Total num frames: %d. Throughput: %s. Samples: %d',
+            fps, total_env_steps, samples_per_policy, sum(self.samples_collected),
+        )
         log.debug('Avg episode reward: %r', [f'{p}: {r:.3f}' for p, r in avg_reward.items()])
 
     def report_train_summaries(self, stats, policy_id):
         for key, scalar in stats.items():
             self.writers[policy_id].add_scalar(f'train/{key}', scalar, self.env_steps[policy_id])
 
-    def report_basic_summaries(self, fps, avg_reward, avg_length):
+    def report_basic_summaries(self, fps, sample_throughput, avg_reward, avg_length):
         memory_mb = memory_consumption_mb()
 
         default_policy = 0
@@ -394,6 +414,7 @@ class APPO(Algorithm):
                 # not enough data to report yet
                 continue
 
+            self.writers[policy_id].add_scalar('0_aux/sample_throughput', sample_throughput[policy_id], env_steps)
             self.writers[policy_id].add_scalar('0_aux/avg_reward', float(avg_reward[policy_id]), env_steps)
             self.writers[policy_id].add_scalar('0_aux/avg_length', float(avg_length[policy_id]), env_steps)
 
@@ -403,6 +424,7 @@ class APPO(Algorithm):
 
         if self.cfg.benchmark:
             end |= self.total_env_steps_since_resume >= int(1e6)
+            end |= sum(self.samples_collected) >= int(4e5)
 
         return end
 
@@ -435,6 +457,7 @@ class APPO(Algorithm):
             all_workers.extend(workers)
         all_workers.extend(self.learner_workers.values())
 
+        time.sleep(1.0)
         for w in all_workers:
             w.close()
             time.sleep(0.01)
@@ -446,7 +469,6 @@ class APPO(Algorithm):
         log.info('Timing: %s', timing)
 
         time.sleep(0.1)
-        ray.shutdown()
         log.info('Done!')
 
 
