@@ -136,7 +136,7 @@ class PolicyWorker:
             for key in tensor_names:
                 value = policy_outputs[key].float()
                 if len(value.shape) == 1:
-                    value = torch.unsqueeze(value, dim=1)
+                    value.unsqueeze_(dim=1)
                 output_tensors.append(value)
                 tensor_sizes.append(value.shape[-1])
 

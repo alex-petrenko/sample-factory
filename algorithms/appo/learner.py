@@ -50,8 +50,8 @@ class LearnerWorker:
 
         self.experience_buffer_queue = Queue()
 
-        self.with_training = False  # TODO: debug, remove
-        self.train_in_background = False  # TODO!!!! Debug!!!
+        self.with_training = True  # TODO: debug, remove
+        self.train_in_background = True  # TODO!!!! Debug!!! should always train in separate thread
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
@@ -161,6 +161,18 @@ class LearnerWorker:
             for d, key, value in iterate_recursively(buffer):
                 d[key] = torch.cat(value, dim=0).to(self.device).float()
 
+            tensors_to_squeeze = ['log_prob_actions', 'policy_version', 'values']
+            for tensor_name in tensors_to_squeeze:
+                buffer[tensor_name].squeeze_()
+
+        with timing.add_time('buff_ready'):
+            for r in rollouts:
+                r = AttrDict(r)
+
+                # we copied the data from the shared buffer, now we can mark the buffers as free
+                traj_buffer_ready = self.traj_buffer_ready[(r.worker_idx, r.split_idx)]
+                traj_buffer_ready[r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
+
         return buffer
 
     def _process_macro_batch(self, rollouts, timing):
@@ -205,7 +217,7 @@ class LearnerWorker:
             rollouts = rollouts[rollouts_in_macro_batch:]
 
             self._process_macro_batch(rollouts_to_process, timing)
-            log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
+            # log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
 
             work_done = True
 
@@ -449,7 +461,7 @@ class LearnerWorker:
                     ratio_max = ratio.max()
 
                     targets = vs.detach()
-                    old_values = mb.values.squeeze()
+                    old_values = mb.values
                     value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
                     value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
@@ -653,10 +665,10 @@ class LearnerWorker:
                 wait_times_arr = np.asarray(wait_times)
                 wait_avg = np.mean(wait_times_arr)
                 wait_min, wait_max = wait_times_arr.min(), wait_times_arr.max()
-                log.debug(
-                    'Training thread had to wait %.5f s for the new experience buffer (avg %.5f)',
-                    timing.train_wait, wait_avg,
-                )
+                # log.debug(
+                #     'Training thread had to wait %.5f s for the new experience buffer (avg %.5f)',
+                #     timing.train_wait, wait_avg,
+                # )
                 wait_stats = (wait_avg, wait_min, wait_max)
 
             self._process_training_data(data, timing, wait_stats)
@@ -695,7 +707,7 @@ class LearnerWorker:
 
         self.traj_buffer_ready[(worker_idx, split_idx)] = data.is_ready_tensor
 
-    def _extract_rollouts(self, data, timing):
+    def _extract_rollouts(self, data):
         data = AttrDict(data)
         worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
 
@@ -705,15 +717,10 @@ class LearnerWorker:
             tensor_dict_key = (worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx)
             tensors = self.rollout_tensors[tensor_dict_key]
 
-            with timing.add_time('deepcopy'):
-                tensors = copy.deepcopy(tensors)
-
-            # we copied the data from the shared buffer, now we can mark the buffers as free
-            with timing.add_time('buff_ready'):
-                traj_buffer_ready = self.traj_buffer_ready[(worker_idx, split_idx)]
-                traj_buffer_ready[env_idx, agent_idx, traj_buffer_idx] = 1
-
             rollout_data['t'] = tensors
+            rollout_data['worker_idx'] = worker_idx
+            rollout_data['split_idx'] = split_idx
+            rollout_data['traj_buffer_idx'] = traj_buffer_idx
             rollouts.append(rollout_data)
 
         if not self.with_training:
@@ -740,14 +747,14 @@ class LearnerWorker:
                     if task_type == TaskType.INIT:
                         self._init()
                     elif task_type == TaskType.TERMINATE:
+                        log.info('GPU learner timing: %s', timing)
                         self._terminate()
                         break
                     elif task_type == TaskType.INIT_TENSORS:
                         self._init_rollout_tensors(data)
                     elif task_type == TaskType.TRAIN:
                         with timing.add_time('extract'):
-                            rollouts.extend(self._extract_rollouts(data, timing))
-                        log.info('Num rollouts: %d', len(rollouts))
+                            rollouts.extend(self._extract_rollouts(data))
                 except Empty:
                     break
 
@@ -768,8 +775,6 @@ class LearnerWorker:
             if not work_done:
                 # if we didn't do anything let's sleep to prevent wasting CPU time
                 time.sleep(0.005)
-
-        log.info('GPU learner timing: %s', timing)
 
         if self.train_in_background:
             self.experience_buffer_queue.put(None)
@@ -810,3 +815,20 @@ class LearnerWorker:
 # [2019-12-06 19:01:42,227] Gpu worker timing: init: 2.8738, weight_update: 0.0006, deserialize: 7.6602, to_device: 5.3244, forward: 8.1527, serialize: 14.3651, postprocess: 17.5523, policy_step: 38.8745, gpu_waiting: 0.5276
 # [2019-12-06 19:01:42,232] Gpu learner timing: init: 3.3448, last_values: 0.2737, gae: 3.0682, numpy: 0.5308, finalize: 3.8888, buffer: 5.2451, forw_head: 0.2639, forw_core: 0.8289, forw_tail: 0.5334, clip: 4.5709, update: 12.0888, train: 19.6720, work: 28.8663
 # [2019-12-06 19:01:42,723] Collected 1007616, FPS: 23975.2
+
+# Last version using Plasma:
+# [2020-01-07 00:24:27,690] Env runner 0: timing wait_actor: 0.0001, waiting: 2.2242, reset: 13.0768, save_policy_outputs: 0.0004, env_step: 27.5735, overhead: 1.0524, format_inputs: 0.2934, enqueue_policy_requests: 4.6075, complete_rollouts: 3.2226, one_step: 0.0250, work: 37.9023
+# [2020-01-07 00:24:27,697] Env runner 1: timing wait_actor: 0.0042, waiting: 2.2486, reset: 13.3085, save_policy_outputs: 0.0005, env_step: 27.5389, overhead: 1.0206, format_inputs: 0.2921, enqueue_policy_requests: 4.5829, complete_rollouts: 3.3319, one_step: 0.0240, work: 37.8813
+# [2020-01-07 00:24:27,890] Gpu worker timing: init: 3.0419, wait_policy: 0.0002, gpu_waiting: 0.4060, weight_update: 0.0007, deserialize: 0.0923, to_device: 4.7866, forward: 6.8820, serialize: 13.8782, postprocess: 16.9365, policy_step: 28.8341, one_step: 0.0000, work: 39.9577
+# [2020-01-07 00:24:27,906] GPU learner timing: buffers: 0.0461, tensors: 8.7751, prepare: 8.8510
+# [2020-01-07 00:24:27,907] Train loop timing: init: 3.0417, train_wait: 0.0969, bptt: 2.6350, vtrace: 5.7421, losses: 0.7799, clip: 4.6204, update: 9.1475, train: 21.3880
+# [2020-01-07 00:24:28,213] Collected {0: 1015808}, FPS: 25279.4
+# [2020-01-07 00:24:28,214] Timing: experience: 40.1832
+
+# Version using Pytorch tensors with shared memory:
+# [2020-01-07 01:08:05,569] Env runner 0: timing wait_actor: 0.0003, waiting: 0.6292, reset: 12.4041, save_policy_outputs: 0.4311, env_step: 30.1347, overhead: 4.3134, enqueue_policy_requests: 0.0677, complete_rollouts: 0.0274, one_step: 0.0261, work: 35.3962, wait_buffers: 0.0164
+# [2020-01-07 01:08:05,596] Env runner 1: timing wait_actor: 0.0003, waiting: 0.7102, reset: 12.7194, save_policy_outputs: 0.4400, env_step: 30.1091, overhead: 4.2822, enqueue_policy_requests: 0.0630, complete_rollouts: 0.0234, one_step: 0.0270, work: 35.3405, wait_buffers: 0.0162
+# [2020-01-07 01:08:05,762] Gpu worker timing: init: 2.8383, wait_policy: 0.0000, gpu_waiting: 2.3759, loop: 4.3098, weight_update: 0.0006, updates: 0.0008, deserialize: 0.8207, to_device: 6.8636, forward: 15.0019, postprocess: 2.4855, handle_policy_step: 29.5612, one_step: 0.0000, work: 33.9772
+# [2020-01-07 01:08:05,896] Train loop timing: init: 2.9927, train_wait: 0.0001, bptt: 2.6755, vtrace: 6.3307, losses: 0.7319, update: 4.6164, train: 22.0022
+# [2020-01-07 01:08:10,888] Collected {0: 1015808}, FPS: 28900.6
+# [2020-01-07 01:08:10,888] Timing: experience: 35.1483
