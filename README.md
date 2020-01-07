@@ -9,6 +9,8 @@ RL for classic Doom deathmatch
 
 3) Activate conda env: `conda activate doom-rl`
 
+3.5) Install OpenCV from Conda: `conda install -c conda-forge opencv=4.1.0`
+
 4) Install VizDoom system dependencies (from here https://github.com/mwydmuch/ViZDoom/blob/master/doc/Building.md#linux_deps):
 
 ```

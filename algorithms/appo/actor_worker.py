@@ -565,6 +565,8 @@ class ActorWorker:
     def _run(self):
         log.info('Initializing vector env runner %d...', self.worker_idx)
 
+        torch.multiprocessing.set_sharing_strategy('file_system')
+
         timing = Timing()
         initialized = False
 

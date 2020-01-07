@@ -5,6 +5,8 @@ from collections import deque
 from os.path import join
 from queue import Empty
 
+import torch
+
 import numpy as np
 from tensorboardX import SummaryWriter
 from torch.multiprocessing import Event, Queue as TorchQueue
@@ -14,6 +16,9 @@ from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.learner import LearnerWorker
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
+
+
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 class Algorithm:

@@ -232,6 +232,8 @@ class PolicyWorker:
 
     # noinspection PyProtectedMember
     def _run(self):
+        torch.multiprocessing.set_sharing_strategy('file_system')
+
         timing = Timing()
 
         with timing.timeit('init'):
