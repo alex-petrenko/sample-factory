@@ -85,66 +85,65 @@ class PolicyWorker:
         if len(requests) <= 0:
             return
 
-        with timing.add_time('policy_step'):
-            with timing.add_time('deserialize'):
-                observations = AttrDict()
-                rnn_states = []
-                request_order = []
+        with timing.add_time('deserialize'):
+            observations = AttrDict()
+            rnn_states = []
+            request_order = []
 
-                for request in requests:
-                    actor_idx = request['worker_idx']
-                    split_idx = request['split_idx']
-                    request_data = request['policy_inputs']
+            for request in requests:
+                actor_idx = request['worker_idx']
+                split_idx = request['split_idx']
+                request_data = request['policy_inputs']
 
-                    rollout_step = -1
-                    for env_idx, agent_idx, rollout_step in request_data:
-                        tensors_dict_key = (actor_idx, split_idx, env_idx, agent_idx)
-                        input_tensors = self.input_tensors[tensors_dict_key]
-                        dict_of_lists_append(observations, input_tensors['obs'])
-                        rnn_states.append(input_tensors['rnn_states'])
-                        request_order.append(tensors_dict_key)
-                        self.total_num_samples += 1
+                rollout_step = -1
+                for env_idx, agent_idx, rollout_step in request_data:
+                    tensors_dict_key = (actor_idx, split_idx, env_idx, agent_idx)
+                    input_tensors = self.input_tensors[tensors_dict_key]
+                    dict_of_lists_append(observations, input_tensors['obs'])
+                    rnn_states.append(input_tensors['rnn_states'])
+                    request_order.append(tensors_dict_key)
+                    self.total_num_samples += 1
 
-                    if rollout_step >= self.cfg.rollout - 1:
-                        if self.cfg.sync_mode or self.too_many_workers:
-                            self.workers_paused.add((actor_idx, split_idx))
+                if rollout_step >= self.cfg.rollout - 1:
+                    if self.cfg.sync_mode or self.too_many_workers:
+                        self.workers_paused.add((actor_idx, split_idx))
 
-                            if self.too_many_workers:
-                                log.warning(
-                                    'Paused worker (%d, %d), total %d (%r)',
-                                    actor_idx, split_idx, len(self.workers_paused), self.workers_paused,
-                                )
-                                self.too_many_workers = False
+                        if self.too_many_workers:
+                            log.warning(
+                                'Paused worker (%d, %d), total %d (%r)',
+                                actor_idx, split_idx, len(self.workers_paused), self.workers_paused,
+                            )
+                            self.too_many_workers = False
 
-            with torch.no_grad():
-                with timing.add_time('to_device'):
-                    for key, x in observations.items():
-                        observations[key] = torch.stack(x).to(self.device).float()
+        with torch.no_grad():
+            with timing.add_time('to_device'):
+                for key, x in observations.items():
+                    observations[key] = torch.stack(x).to(self.device).float()
 
-                    rnn_states = torch.stack(rnn_states).to(self.device).float()
-                    num_samples = rnn_states.shape[0]
+                rnn_states = torch.stack(rnn_states).to(self.device).float()
+                num_samples = rnn_states.shape[0]
 
-                with timing.add_time('forward'):
-                    policy_outputs = self.actor_critic(observations, rnn_states)
+            with timing.add_time('forward'):
+                policy_outputs = self.actor_critic(observations, rnn_states)
 
-                for key, value in policy_outputs.items():
-                    policy_outputs[key] = value.cpu()
-                policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
+            for key, value in policy_outputs.items():
+                policy_outputs[key] = value.cpu()
+            policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
 
-                # concat all tensors into a single tensor for performance
-                output_tensors, tensor_sizes = [], []
-                tensor_names = sorted(tuple(policy_outputs.keys()))
-                for key in tensor_names:
-                    value = policy_outputs[key].float()
-                    if len(value.shape) == 1:
-                        value = torch.unsqueeze(value, dim=1)
-                    output_tensors.append(value)
-                    tensor_sizes.append(value.shape[-1])
+            # concat all tensors into a single tensor for performance
+            output_tensors, tensor_sizes = [], []
+            tensor_names = sorted(tuple(policy_outputs.keys()))
+            for key in tensor_names:
+                value = policy_outputs[key].float()
+                if len(value.shape) == 1:
+                    value = torch.unsqueeze(value, dim=1)
+                output_tensors.append(value)
+                tensor_sizes.append(value.shape[-1])
 
-                output_tensors = torch.cat(output_tensors, dim=1)
+            output_tensors = torch.cat(output_tensors, dim=1)
 
-                with timing.add_time('postprocess'):
-                    self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
+            with timing.add_time('postprocess'):
+                self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
 
     def _update_weights(self, weight_update, timing):
         if weight_update is None:
