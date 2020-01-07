@@ -356,7 +356,7 @@ class VectorEnvRunner:
         return policy_request
 
     def advance_rollouts(self, data, timing):
-        with timing.time_avg('save_policy_outputs'):
+        with timing.add_time('save_policy_outputs'):
             policy_id = data['policy_id']
             all_actors_ready = self._process_policy_outputs(policy_id)
             if not all_actors_ready:
@@ -376,13 +376,10 @@ class VectorEnvRunner:
         self.rollout_step = self.rollout_step + 1
         if self.rollout_step == self.cfg.rollout:
             # finalize and serialize the trajectory if we have a complete rollout
-            with timing.add_time('finalize'):
-                complete_rollouts = self._finalize_trajectories()
+            complete_rollouts = self._finalize_trajectories()
             self.rollout_step = 0
 
-        with timing.add_time('format'):
-            policy_request = self._format_policy_request()
-
+        policy_request = self._format_policy_request()
         self._prepare_next_step()
 
         return policy_request, complete_rollouts, episodic_stats
@@ -517,11 +514,17 @@ class ActorWorker:
         for report in stats:
             self.report_queue.put(report)
 
-    def _init_policy_output_tensors(self, data):
-        data = AttrDict(data)
+    def _init_policy_output_tensors(self, request_data):
+        data = AttrDict(request_data)
         self.env_runners[data.split_idx].init_policy_output_tensors(
             data.env_idx, data.agent_idx, data.tensors, data.tensor_names, data.tensor_sizes,
         )
+
+        # broadcast the tensors to all the other policy workers, so they all share the same set of tensors
+        for policy_id in range(self.cfg.num_policies):
+            if policy_id != data.policy_id:
+                log.debug('Sending output tensors to policy worker %d...', policy_id)
+                self.policy_queues[policy_id].put((TaskType.INIT_TENSORS, request_data))
 
     def _handle_reset(self):
         for split_idx, env_runner in enumerate(self.env_runners):

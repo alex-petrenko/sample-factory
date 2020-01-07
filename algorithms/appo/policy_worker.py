@@ -197,11 +197,13 @@ class PolicyWorker:
                 self.output_tensors[tensors_dict_key] = output_tensors[output_idx].clone().detach()
                 self.output_tensors[tensors_dict_key].share_memory_()
 
-                log.debug('Sending ouput tensors to %r', tensors_dict_key)
+                log.debug('Sending ouput tensors for policy %d to %r', self.policy_id, tensors_dict_key)
                 init_tensors_request = dict(
-                    split_idx=split_idx, env_idx=env_idx, agent_idx=agent_idx,
+                    actor_idx=actor_idx, split_idx=split_idx, env_idx=env_idx, agent_idx=agent_idx,
+                    policy_id=self.policy_id,
                     tensors=self.output_tensors[tensors_dict_key],
                     tensor_names=tensor_names, tensor_sizes=tensor_sizes,
+                    init_output_tensors=True,
                 )
                 self.actor_queues[actor_idx].put((TaskType.INIT_TENSORS, init_tensors_request))
 
@@ -222,6 +224,12 @@ class PolicyWorker:
             env_idx, agent_idx = key
             tensors_dict_key = (worker_idx, split_idx, env_idx, agent_idx)
             self.input_tensors[tensors_dict_key] = tensors
+
+    def _init_output_tensors(self, data):
+        data = AttrDict(data)
+        tensors_dict_key = (data.actor_idx, data.split_idx, data.env_idx, data.agent_idx)
+        assert tensors_dict_key not in self.output_tensors
+        self.output_tensors[tensors_dict_key] = data.tensors
 
     # noinspection PyProtectedMember
     def _run(self):
@@ -267,7 +275,10 @@ class PolicyWorker:
                                     self.terminate = True
                                     break
                                 elif task_type == TaskType.INIT_TENSORS:
-                                    self._init_input_tensors(data)
+                                    if 'init_output_tensors' in data:
+                                        self._init_output_tensors(data)
+                                    else:
+                                        self._init_input_tensors(data)
                                 elif task_type == TaskType.POLICY_STEP:
                                     self._store_policy_step_request(data)
                                 elif task_type == TaskType.UPDATE_WEIGHTS:
