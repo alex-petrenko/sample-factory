@@ -13,5 +13,3 @@ _experiment = Experiment(
 )
 
 RUN_DESCRIPTION = RunDescription('doom_battle_v52_fs4', experiments=[_experiment], pause_between_experiments=10, use_gpus=4, experiments_per_gpu=2, max_parallel=8)
-
-
