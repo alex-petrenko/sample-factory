@@ -1,4 +1,3 @@
-import random
 import select
 import time
 from queue import Empty
@@ -6,11 +5,11 @@ from queue import Empty
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, set_step_data
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
-from utils.utils import AttrDict, log
+from utils.utils import AttrDict, log, memory_consumption_mb
 
 
 class PolicyWorker:
@@ -295,8 +294,10 @@ class PolicyWorker:
                 if time.time() - last_report > 1.0 and 'one_step' in timing:
                     timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
                     samples_since_last_report = self.total_num_samples - last_report_samples
+                    memory_mb = memory_consumption_mb()
+                    stats = dict(memory_policy_worker=memory_mb)
                     self.report_queue.put(dict(
-                        timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id,
+                        timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
                     ))
                     last_report = time.time()
                     last_report_samples = self.total_num_samples

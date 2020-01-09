@@ -1,6 +1,10 @@
+import math
 import random
 import time
 from collections import OrderedDict
+
+import gym
+from gym import spaces, Wrapper
 from torch.multiprocessing import Process as TorchProcess, Event
 
 import numpy as np
@@ -12,13 +16,30 @@ from algorithms.utils.multi_agent import MultiAgentWrapper
 from algorithms.utils.multi_env import safe_get
 from envs.create_env import create_env
 from utils.timing import Timing
-from utils.utils import log, AttrDict
+from utils.utils import log, AttrDict, memory_consumption_mb
+
+
+class DictObservationsWrapper(Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.num_agents = env.num_agents
+        self.observation_space = gym.spaces.Dict(dict(obs=self.observation_space))
+
+    def reset(self, **kwargs):
+        obs = self.env.reset(**kwargs)
+        return [dict(obs=o) for o in obs]
+
+    def step(self, action):
+        obs, rew, done, info = self.env.step(action)
+        return [dict(obs=o) for o in obs], rew, done, info
 
 
 def make_env_func(cfg, env_config):
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
     if not hasattr(env, 'num_agents'):
         env = MultiAgentWrapper(env)
+    if not isinstance(env.observation_space, spaces.Dict):
+        env = DictObservationsWrapper(env)
     return env
 
 
@@ -191,18 +212,18 @@ class ActorState:
 
 
 class VectorEnvRunner:
-    def __init__(self, cfg, num_envs, worker_idx, split_idx, num_traj_buffers):
+    def __init__(self, cfg, num_envs, worker_idx, split_idx):
         self.cfg = cfg
 
         self.num_envs = num_envs
         self.worker_idx = worker_idx
         self.split_idx = split_idx
 
-        self.num_traj_buffers = num_traj_buffers
+        self.num_traj_buffers = -1
 
         self.rollout_step = 0
         self.traj_buffer_idx = 0  # current shared trajectory buffer to use
-        self.traj_buffers_initialized = [False] * num_traj_buffers
+        self.traj_buffers_initialized = None
 
         # whenever the buffer is ready the learner will just flip the bool value in the buffer using shared memory
         self.traj_buffer_ready = None
@@ -211,6 +232,31 @@ class VectorEnvRunner:
 
         self.envs, self.actor_states, self.episode_rewards = [], [], []
 
+    def _on_num_agents_known(self):
+        """Some extra initialization once num of agents is queried from the env."""
+
+        # calculate how many buffers are required per env runner to collect one "macro batch" for training
+        # once macro batch is collected, all buffers will be released
+        # we could have just copied the tensors on the learner to avoid this complicated logic, but it's better for
+        # performance to keep data in shared buffers until they're needed
+        self.num_traj_buffers = self.cfg.macro_batch / (self.cfg.num_workers * self.cfg.num_envs_per_worker * self.num_agents * self.cfg.rollout)
+
+        # make sure we have enough buffers to actually never wait
+        # usually it'll be just two buffers and we swap back and forth
+        self.num_traj_buffers *= 2
+
+        # make sure we have at least two to swap between so we never actually have to wait
+        self.num_traj_buffers = math.ceil(max(self.num_traj_buffers, 2))
+
+        self.traj_buffers_initialized = [False] * self.num_traj_buffers
+
+        # whenever the buffer is ready the learner will just flip the bool value in the buffer using shared memory
+        log.debug(
+            'Actor %d-%d allocating %d trajectory buffers', self.worker_idx, self.split_idx, self.num_traj_buffers,
+        )
+        self.traj_buffer_ready = torch.ones([self.num_envs, self.num_agents, self.num_traj_buffers], dtype=torch.uint8)
+        self.traj_buffer_ready.share_memory_()
+
     def init(self):
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
@@ -218,9 +264,9 @@ class VectorEnvRunner:
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func(self.cfg, env_config=env_config)
 
-            if not hasattr(env, 'num_agents'):
-                env = MultiAgentWrapper(env)
-            self.num_agents = env.num_agents
+            if self.num_agents == -1:
+                self.num_agents = env.num_agents
+                self._on_num_agents_known()
 
             env.seed(self.worker_idx * 1000 + env_i)
             self.envs.append(env)
@@ -235,10 +281,6 @@ class VectorEnvRunner:
 
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
-
-        # whenever the buffer is ready the learner will just flip the bool value in the buffer using shared memory
-        self.traj_buffer_ready = torch.ones([self.num_envs, self.num_agents, self.num_traj_buffers], dtype=torch.uint8)
-        self.traj_buffer_ready.share_memory_()
 
     def _process_policy_outputs(self, policy_id):
         all_actors_ready = True
@@ -451,8 +493,6 @@ class ActorWorker:
         self.learner_queues = learner_queues
         self.task_queue = task_queue
 
-        self.num_traj_buffers = 2
-
         self.critical_error = Event()
         self.process = TorchProcess(target=self._run, daemon=True)
         self.process.start()
@@ -463,7 +503,7 @@ class ActorWorker:
         self.env_runners = []
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
-                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.num_traj_buffers,
+                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx,
             )
             env_runner.init()
             self.env_runners.append(env_runner)
@@ -498,7 +538,10 @@ class ActorWorker:
                 is_ready_tensor=env_runner.traj_buffer_ready,
                 traj_buffer_idx=traj_buffer_idx,
             )
-            log.debug('Sending trajectory buffers from %d-%d to learner %d', self.worker_idx, split_idx, policy_id)
+            log.debug(
+                'Sending trajectory buffers from %d-%d to learner %d, idx: %d',
+                self.worker_idx, split_idx, policy_id, traj_buffer_idx,
+            )
             self.learner_queues[policy_id].put((TaskType.INIT_TENSORS, request))
 
         self.env_runners[split_idx].traj_buffers_initialized[traj_buffer_idx] = True
@@ -530,7 +573,7 @@ class ActorWorker:
             rollouts_per_policy[policy_id]['rollouts'].append(rollout)
 
         # switch to the next available trajectory buffer (usually just double-buffering)
-        new_traj_buffer_idx = (traj_buffer_idx + 1) % self.num_traj_buffers
+        new_traj_buffer_idx = (traj_buffer_idx + 1) % env_runner.num_traj_buffers
         env_runner.traj_buffer_idx = new_traj_buffer_idx
 
         for policy_id, rollouts in rollouts_per_policy.items():
@@ -543,7 +586,11 @@ class ActorWorker:
         # If the multi-server version of the algorithm is considered, this mechanism should be dropped
         # in favor of explicit data serialization/sharing across machines
         with timing.add_time('wait_buffers'):
+            print_warning = True
             while env_runner.traj_buffer_ready[:, :, new_traj_buffer_idx].min() == 0:
+                if print_warning:
+                    log.warning('Waiting for tensors %d', new_traj_buffer_idx)
+                    print_warning = False
                 time.sleep(0.001)
 
     def _report_stats(self, stats):
@@ -578,7 +625,8 @@ class ActorWorker:
             self.rollout_start = time.time()
 
         runner = self.env_runners[split_idx]
-        policy_request, complete_rollouts, episodic_stats = runner.advance_rollouts(data, timing)
+        with torch.no_grad():
+            policy_request, complete_rollouts, episodic_stats = runner.advance_rollouts(data, timing)
 
         if episodic_stats:
             self._report_stats(episodic_stats)
@@ -591,12 +639,12 @@ class ActorWorker:
             if complete_rollouts:
                 self._enqueue_complete_rollouts(split_idx, complete_rollouts, timing)
 
-        if self.add_random_delay:
-            rollout_duration = time.time() - self.rollout_start
-            delay = random.random() * 3 * rollout_duration
-            log.info('Rollout took %.3f sec, sleep for %.3f sec', rollout_duration, delay)
-            time.sleep(delay)
-            self.add_random_delay = False
+                if self.add_random_delay:
+                    rollout_duration = time.time() - self.rollout_start
+                    delay = random.random() * 3 * rollout_duration
+                    log.info('Rollout took %.3f sec, sleep for %.3f sec', rollout_duration, delay)
+                    time.sleep(delay)
+                    self.add_random_delay = False
 
     def _run(self):
         log.info('Initializing vector env runner %d...', self.worker_idx)
@@ -642,7 +690,9 @@ class ActorWorker:
 
             if time.time() - last_report > 5.0 and 'one_step' in timing:
                 timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
-                self.report_queue.put(dict(timing=timing_stats))
+                memory_mb = memory_consumption_mb()
+                stats = dict(memory_actor=memory_mb)
+                self.report_queue.put(dict(timing=timing_stats, stats=stats))
                 last_report = time.time()
 
         if self.worker_idx <= 1:

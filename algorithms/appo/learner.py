@@ -1,4 +1,3 @@
-import copy
 import glob
 import os
 import threading
@@ -19,7 +18,7 @@ from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, memory_consumption_mb
 
 
 class LearnerWorker:
@@ -161,7 +160,8 @@ class LearnerWorker:
             for d, key, value in iterate_recursively(buffer):
                 d[key] = torch.cat(value, dim=0).to(self.device).float()
 
-            tensors_to_squeeze = ['log_prob_actions', 'policy_version', 'values']
+            # will squeeze actions only in simple categorical case
+            tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values']
             for tensor_name in tensors_to_squeeze:
                 buffer[tensor_name].squeeze_()
 
@@ -639,6 +639,9 @@ class LearnerWorker:
                     stats['train']['discarded_rollouts'] = self.num_discarded_rollouts
                     stats['train']['discarding_rate'] = discarding_rate
 
+                    memory_mb = memory_consumption_mb()
+                    stats['stats'] = dict(memory_learner=memory_mb)
+
                 self._broadcast_weights(discarding_rate)
 
         self.report_queue.put(stats)
@@ -744,6 +747,7 @@ class LearnerWorker:
             while True:
                 try:
                     task_type, data = self.task_queue.get_nowait()
+
                     if task_type == TaskType.INIT:
                         self._init()
                     elif task_type == TaskType.TERMINATE:

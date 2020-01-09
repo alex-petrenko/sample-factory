@@ -1,4 +1,4 @@
-from gym import Wrapper, spaces
+from gym import Wrapper
 
 
 class MultiAgentWrapper(Wrapper):

@@ -159,6 +159,7 @@ class APPO(Algorithm):
         self.fps_stats = deque([], maxlen=10)
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
+        self.stats = dict()  # regular (non-averaged) stats
 
         self.writers = dict()
         writer_keys = list(range(self.cfg.num_policies))
@@ -350,6 +351,10 @@ class APPO(Algorithm):
                     self.avg_stats[k] = deque([], maxlen=50)
                 self.avg_stats[k].append(v)
 
+        if 'stats' in report:
+            self.stats.update(report['stats'])
+
+
     def report(self):
         now = time.time()
 
@@ -406,6 +411,9 @@ class APPO(Algorithm):
                 for key, value in self.avg_stats.items():
                     if len(value) >= value.maxlen:
                         self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
+
+                for key, value in self.stats.items():
+                    self.writers[policy_id].add_scalar(f'stats/{key}', value, env_steps)
 
             if math.isnan(avg_reward[policy_id]) or math.isnan(avg_length[policy_id]):
                 # not enough data to report yet
