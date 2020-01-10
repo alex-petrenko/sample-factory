@@ -60,7 +60,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     device = torch.device('cuda')
     actor_critic.to(device)
 
-    policy_id = 0  # TODO - evaluate other policies?
+    policy_id = cfg.policy_index
     checkpoints = LearnerWorker.get_checkpoints(LearnerWorker.checkpoint_dir(cfg, policy_id))
     checkpoint_dict = LearnerWorker.load_checkpoint(checkpoints, policy_id)
     actor_critic.load_state_dict(checkpoint_dict['model'])
@@ -131,7 +131,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                 break
 
     env.close()
-    cv2.destroyAllWindows()
 
 
 def main():

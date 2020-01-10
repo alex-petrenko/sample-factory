@@ -5,11 +5,11 @@ from queue import Empty
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, memory_stats
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
-from utils.utils import AttrDict, log, memory_consumption_mb
+from utils.utils import AttrDict, log
 
 
 class PolicyWorker:
@@ -49,6 +49,11 @@ class PolicyWorker:
 
         self.total_num_samples = 0
 
+        if self.cfg.benchmark:
+            self.max_requests_allowed = 1e9  # unlimited from the start
+        else:
+            self.max_requests_allowed = 1 + self.cfg.num_workers // self.cfg.num_policies
+
         self.process = TorchProcess(target=self._run, daemon=True)
 
     def start_process(self):
@@ -72,6 +77,11 @@ class PolicyWorker:
                 requests.append(request)
                 to_remove.append(worker_split)
 
+            if len(requests) > self.max_requests_allowed:
+                # this is a simple heuristic to allow the policy worker to ramp up gradually
+                # and avoid using too much CUDA memory right from the start
+                break
+
         for worker_split in to_remove:
             del self.requests[worker_split]
 
@@ -83,6 +93,8 @@ class PolicyWorker:
         # log.info('Num pending requests: %d', len(requests))
         if len(requests) <= 0:
             return
+
+        self.max_requests_allowed += 1
 
         with timing.add_time('deserialize'):
             observations = AttrDict()
@@ -143,6 +155,8 @@ class PolicyWorker:
 
             with timing.add_time('postprocess'):
                 self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
+
+            del policy_outputs
 
     def _update_weights(self, weight_update, timing):
         if weight_update is None:
@@ -252,7 +266,7 @@ class PolicyWorker:
         queues_by_handle[self.task_queue._reader._handle] = self.task_queue
         queues_by_handle[self.weight_queue._reader._handle] = self.weight_queue
 
-        last_report = time.time()
+        last_report = last_cache_cleanup = time.time()
         last_report_samples = 0
 
         while not self.terminate:
@@ -291,16 +305,21 @@ class PolicyWorker:
                 with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
                     self._handle_policy_steps(timing)
 
-                if time.time() - last_report > 1.0 and 'one_step' in timing:
+                if time.time() - last_report > 3.0 and 'one_step' in timing:
                     timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
                     samples_since_last_report = self.total_num_samples - last_report_samples
-                    memory_mb = memory_consumption_mb()
-                    stats = dict(memory_policy_worker=memory_mb)
+
+                    stats = memory_stats('policy_worker', self.device)
+
                     self.report_queue.put(dict(
                         timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
                     ))
                     last_report = time.time()
                     last_report_samples = self.total_num_samples
+
+                if time.time() - last_cache_cleanup > 30.0:
+                    torch.cuda.empty_cache()
+                    last_cache_cleanup = time.time()
 
         log.info('Gpu worker timing: %s', timing)
 

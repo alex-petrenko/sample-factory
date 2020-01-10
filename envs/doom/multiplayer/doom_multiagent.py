@@ -111,7 +111,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 6')
+            self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
         else:
             # Join existing game.
             self.game.add_game_args(
@@ -122,7 +122,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # Name your agent and select color
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
-            self.game.add_game_args(f'+name AI{self.player_id} +colorset 3')
+            self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
 
         try:
             self.game.init()

@@ -11,14 +11,15 @@ import numpy as np
 import torch
 from torch.multiprocessing import Process, Queue as TorchQueue
 
-from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy
+from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy, \
+    memory_stats
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, memory_consumption_mb
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
 
 
 class LearnerWorker:
@@ -158,7 +159,7 @@ class LearnerWorker:
 
         with timing.add_time('tensors'):
             for d, key, value in iterate_recursively(buffer):
-                d[key] = torch.cat(value, dim=0).to(self.device).float()
+                d[key] = torch.cat(value, dim=0)
 
             # will squeeze actions only in simple categorical case
             tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values']
@@ -230,7 +231,13 @@ class LearnerWorker:
 
         # indices that will start the mini-trajectories from the same episode (for bptt)
         indices = np.arange(0, experience_size, self.cfg.recurrence)
-        indices = np.random.permutation(indices)
+
+        if self.cfg.macro_batch == self.cfg.batch_size and self.cfg.ppo_epochs == 1:
+            # if it's only one batch, we don't need to randomize anything
+            # it should be pretty random just due to async nature of the algorithm
+            pass
+        else:
+            indices = np.random.permutation(indices)
 
         # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
         indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
@@ -346,7 +353,15 @@ class LearnerWorker:
 
         return value_loss, value_delta
 
-    def _train(self, buffer, experience_size, timing):
+    def _copy_train_data_to_gpu(self, buffer):
+        for d, k, v in iterate_recursively(buffer):
+            d[k] = v.to(self.device).float()
+        return buffer
+
+    def _train(self, cpu_buffer, experience_size, timing):
+        with timing.add_time('tensors_gpu_float'):
+            buffer = self._copy_train_data_to_gpu(cpu_buffer)
+
         stats = None
 
         rho_hat = c_hat = 1.0  # V-trace parameters
@@ -358,19 +373,17 @@ class LearnerWorker:
         clip_ratio = self.cfg.ppo_clip_ratio
         clip_value = self.cfg.ppo_clip_value
 
+        gamma = self.cfg.gamma
+
         kl_old_mean = kl_old_max = 0.0
         value_delta_avg = value_delta_max = 0.0
         fraction_clipped = 0.0
         rnn_dist = 0.0
         ratio_mean = ratio_min = ratio_max = 0.0
 
-        early_stopping = False
         num_sgd_steps = 0
 
         for epoch in range(self.cfg.ppo_epochs):
-            if early_stopping:
-                break
-
             minibatches = self._get_minibatches(experience_size)
 
             for batch_num in range(len(minibatches)):
@@ -419,48 +432,50 @@ class LearnerWorker:
                 log_prob_actions = action_distribution.log_prob(mb.actions)
                 ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
-                vtrace_c = torch.min(c_hat, ratio.detach())
-                vtrace_rho = torch.min(rho_hat, ratio.detach())
-
                 values = result.values.squeeze()
 
-                last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
-                next_values = (values[last_timestep].detach() - mb.rewards[last_timestep]) / self.cfg.gamma
-                next_vs = next_values
+                with torch.no_grad():  # these computations are not the part of the computation graph
+                    vtrace_c = torch.min(c_hat, ratio)
+                    vtrace_rho = torch.min(rho_hat, ratio)
 
-                gamma = self.cfg.gamma
+                    vs = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
+                    adv = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
 
-                vs = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
-                adv = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
+                    last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
+                    next_values = (values[last_timestep] - mb.rewards[last_timestep]) / self.cfg.gamma
+                    next_vs = next_values
 
-                with timing.add_time('vtrace'):
-                    for i in reversed(range(self.cfg.recurrence)):
-                        timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+                    with timing.add_time('vtrace'):
+                        for i in reversed(range(self.cfg.recurrence)):
+                            timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
 
-                        rewards = mb.rewards[timestep]
-                        dones = mb.dones[timestep]
-                        not_done = 1.0 - dones
+                            rewards = mb.rewards[timestep]
+                            dones = mb.dones[timestep]
+                            not_done = 1.0 - dones
+                            not_done_times_gamma = not_done * gamma
 
-                        delta_s = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_values - values[timestep])).detach()
-                        adv[timestep] = (vtrace_rho[timestep] * (rewards + not_done * gamma * next_vs - values[timestep])).detach()
+                            curr_values = values[timestep]
+                            curr_vtrace_rho = vtrace_rho[timestep]
+                            curr_vtrace_c = vtrace_c[timestep]
 
-                        vs[timestep] = (values[timestep] + delta_s + not_done * gamma * vtrace_c[timestep] * (next_vs - next_values)).detach()
+                            delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
+                            adv[timestep] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
+                            vs[timestep] = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
 
-                        next_values = values[timestep].detach()
-                        next_vs = vs[timestep].detach()
+                            next_values = curr_values
+                            next_vs = vs[timestep]
 
-                adv = adv.detach()
-                adv_mean = adv.mean()
-                adv_std = adv.std()
-                adv = (adv - adv_mean) / max(1e-2, adv_std)
+                    adv_mean = adv.mean()
+                    adv_std = adv.std()
+                    adv = (adv - adv_mean) / max(1e-2, adv_std)  # normalize advantage
 
                 with timing.add_time('losses'):
                     policy_loss, fraction_clipped = self._policy_loss(ratio, adv, clip_ratio)
-                    ratio_mean = torch.abs(1.0 - ratio).mean()
-                    ratio_min = ratio.min()
-                    ratio_max = ratio.max()
+                    ratio_mean = torch.abs(1.0 - ratio).mean().detach()
+                    ratio_min = ratio.min().detach()
+                    ratio_max = ratio.max().detach()
 
-                    targets = vs.detach()
+                    targets = vs
                     old_values = mb.values
                     value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
                     value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
@@ -492,64 +507,70 @@ class LearnerWorker:
                     self.optimizer.step()
                     num_sgd_steps += 1
 
-                self._after_optimizer_step()
+                with torch.no_grad():
+                    self._after_optimizer_step()
 
-                # collect and report summaries
-                with_summaries = self._should_save_summaries()
-                if with_summaries:
-                    self.last_summary_written = self.train_step
+                    # collect and report summaries
+                    with_summaries = self._should_save_summaries()
+                    if with_summaries:
+                        self.last_summary_written = self.train_step
+                        stats = AttrDict()
 
-                    stats = AttrDict()
-                    grad_norm = sum(
-                        p.grad.data.norm(2).item() ** 2
-                        for p in self.actor_critic.parameters()
-                        if p.grad is not None
-                    ) ** 0.5
-                    stats.grad_norm = grad_norm
-                    stats.loss = loss
-                    stats.value = result.values.mean()
-                    stats.entropy = action_distribution.entropy().mean()
-                    stats.kl_prior = kl_prior
-                    stats.value_loss = value_loss
-                    stats.prior_loss = prior_loss
-                    stats.kl_coeff = self.kl_coeff
-                    stats.kl_penalty = kl_penalty
-                    stats.adv_min = adv.min()
-                    stats.adv_max = adv.max()
-                    stats.max_abs_logprob = torch.abs(mb.action_logits).max()
+                        grad_norm = sum(
+                            p.grad.data.norm(2).item() ** 2
+                            for p in self.actor_critic.parameters()
+                            if p.grad is not None
+                        ) ** 0.5
+                        stats.grad_norm = grad_norm
+                        stats.loss = loss
+                        stats.value = result.values.mean()
+                        stats.entropy = action_distribution.entropy().mean()
+                        stats.kl_prior = kl_prior
+                        stats.value_loss = value_loss
+                        stats.prior_loss = prior_loss
+                        stats.kl_coeff = self.kl_coeff
+                        stats.kl_penalty = kl_penalty
+                        stats.adv_min = adv.min()
+                        stats.adv_max = adv.max()
+                        stats.max_abs_logprob = torch.abs(mb.action_logits).max()
 
-                    curr_policy_version = self.train_step
-                    version_diff = curr_policy_version - mb.policy_version
-                    stats.version_diff_avg = version_diff.mean()
-                    stats.version_diff_min = version_diff.min()
-                    stats.version_diff_max = version_diff.max()
+                        curr_policy_version = self.train_step
+                        version_diff = curr_policy_version - mb.policy_version
+                        stats.version_diff_avg = version_diff.mean()
+                        stats.version_diff_min = version_diff.min()
+                        stats.version_diff_max = version_diff.max()
 
-                    # we want this statistic for the last batch of the last epoch
-                    for key, value in self.last_batch_stats.items():
-                        stats[key] = value
+                        # we want this statistic for the last batch of the last epoch
+                        for key, value in self.last_batch_stats.items():
+                            stats[key] = value
 
-                    for key, value in stats.items():
-                        if isinstance(value, torch.Tensor):
-                            stats[key] = value.detach()
+                        for key, value in stats.items():
+                            if isinstance(value, torch.Tensor):
+                                stats[key] = value.detach()
 
-        # adjust KL-penalty coefficient if KL divergence at the end of training is high
-        if kl_old_mean > self.cfg.target_kl:
-            self.kl_coeff *= 1.5
-        elif kl_old_mean < self.cfg.target_kl / 2:
-            self.kl_coeff /= 1.5
-        self.kl_coeff = max(self.kl_coeff, 1e-6)
+        with torch.no_grad():
+            # adjust KL-penalty coefficient if KL divergence at the end of training is high
+            if kl_old_mean > self.cfg.target_kl:
+                self.kl_coeff *= 1.5
+            elif kl_old_mean < self.cfg.target_kl / 2:
+                self.kl_coeff /= 1.5
+            self.kl_coeff = max(self.kl_coeff, 1e-6)
 
-        self.last_batch_stats.kl_divergence = kl_old_mean
-        self.last_batch_stats.kl_max = kl_old_max
-        self.last_batch_stats.value_delta = value_delta_avg
-        self.last_batch_stats.value_delta_max = value_delta_max
-        self.last_batch_stats.fraction_clipped = fraction_clipped
-        self.last_batch_stats.rnn_dist = rnn_dist
-        self.last_batch_stats.ratio_mean = ratio_mean
-        self.last_batch_stats.ratio_min = ratio_min
-        self.last_batch_stats.ratio_max = ratio_max
-        self.last_batch_stats.num_sgd_steps = num_sgd_steps
+            self.last_batch_stats.kl_divergence = kl_old_mean
+            self.last_batch_stats.kl_max = kl_old_max
+            self.last_batch_stats.value_delta = value_delta_avg
+            self.last_batch_stats.value_delta_max = value_delta_max
+            self.last_batch_stats.fraction_clipped = fraction_clipped
+            self.last_batch_stats.rnn_dist = rnn_dist
+            self.last_batch_stats.ratio_mean = ratio_mean
+            self.last_batch_stats.ratio_min = ratio_min
+            self.last_batch_stats.ratio_max = ratio_max
+            self.last_batch_stats.num_sgd_steps = num_sgd_steps
+            for key, value in self.last_batch_stats.items():
+                if isinstance(value, torch.Tensor):
+                    self.last_batch_stats[key] = value.detach()
 
+        del buffer
         return stats
 
     @staticmethod
@@ -639,8 +660,7 @@ class LearnerWorker:
                     stats['train']['discarded_rollouts'] = self.num_discarded_rollouts
                     stats['train']['discarding_rate'] = discarding_rate
 
-                    memory_mb = memory_consumption_mb()
-                    stats['stats'] = dict(memory_learner=memory_mb)
+                    stats['stats'] = memory_stats('learner', self.device)
 
                 self._broadcast_weights(discarding_rate)
 
@@ -651,6 +671,7 @@ class LearnerWorker:
         self.initialize(timing)
 
         wait_times = deque([], maxlen=self.cfg.num_workers)
+        last_cache_cleanup = time.time()
 
         while not self.terminate:
             with timing.timeit('train_wait'):
@@ -675,6 +696,10 @@ class LearnerWorker:
                 wait_stats = (wait_avg, wait_min, wait_max)
 
             self._process_training_data(data, timing, wait_stats)
+
+            if time.time() - last_cache_cleanup > 30.0:
+                torch.cuda.empty_cache()
+                last_cache_cleanup = time.time()
 
         log.info('Train loop timing: %s', timing)
         del self.actor_critic
@@ -836,3 +861,12 @@ class LearnerWorker:
 # [2020-01-07 01:08:05,896] Train loop timing: init: 2.9927, train_wait: 0.0001, bptt: 2.6755, vtrace: 6.3307, losses: 0.7319, update: 4.6164, train: 22.0022
 # [2020-01-07 01:08:10,888] Collected {0: 1015808}, FPS: 28900.6
 # [2020-01-07 01:08:10,888] Timing: experience: 35.1483
+
+# Version V53, Torch 1.3.1
+# [2020-01-09 20:33:23,540] Env runner 0: timing wait_actor: 0.0002, waiting: 0.7097, reset: 5.2281, save_policy_outputs: 0.3789, env_step: 29.3372, overhead: 4.2642, enqueue_policy_requests: 0.0660, complete_rollouts: 0.0313, one_step: 0.0244, work: 34.5037, wait_buffers: 0.0213
+# [2020-01-09 20:33:23,556] Env runner 1: timing wait_actor: 0.0009, waiting: 0.6965, reset: 5.3100, save_policy_outputs: 0.3989, env_step: 29.3533, overhead: 4.2378, enqueue_policy_requests: 0.0685, complete_rollouts: 0.0290, one_step: 0.0261, work: 34.5326, wait_buffers: 0.0165
+# [2020-01-09 20:33:23,711] Gpu worker timing: init: 1.3378, wait_policy: 0.0016, gpu_waiting: 2.3035, loop: 4.5320, weight_update: 0.0006, updates: 0.0008, deserialize: 0.8223, to_device: 6.4952, forward: 14.8064, postprocess: 2.4568, handle_policy_step: 28.7065, one_step: 0.0000, work: 33.3578
+# [2020-01-09 20:33:23,816] GPU learner timing: extract: 0.0137, buffers: 0.0437, tensors: 6.6962, buff_ready: 0.1400, prepare: 6.9068
+# [2020-01-09 20:33:23,892] Train loop timing: init: 1.3945, train_wait: 0.0000, bptt: 2.2262, vtrace: 5.5308, losses: 0.6580, update: 3.6261, train: 19.8292
+# [2020-01-09 20:33:28,787] Collected {0: 1015808}, FPS: 29476.0
+# [2020-01-09 20:33:28,787] Timing: experience: 34.4622
