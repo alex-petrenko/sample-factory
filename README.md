@@ -37,30 +37,9 @@ This list might not be entirely comprehensive, maybe on a clean system you need 
 
 6) Install python dependencies: `pip install -r requirements.txt`
 
-7) Currently a custom version of Ray is used that is installed via "dev-setup" procedure (from here: https://ray.readthedocs.io/en/latest/rllib-dev.html#development-install)
+7) If you want to work with RLLIB scripts, install Ray with `pip install ray`
 
-We first install "base" ray package and then replace the Python code of RLLIB inside our conda env.
-
-```
-# install Ray dev package for binary compatibility
-pip install ./setup/ray-0.8.0.dev2-cp37-cp37m-manylinux1_x86_64.whl
-
-# clone forked custom Ray repo
-cd ~/
-git clone https://github.com/alex-petrenko/ray.git
-cd ray
-
-# switch to dev branch with latest patches
-git checkout doom_bot_project
-
-# replace python files in the installed package with files from this folder (actually creats symlinks):
-cd python/ray
-./setup-dev.py
-
-# say Y to everything!
-```
-
-## Testing the installation
+## Testing the RLLIB training scripts
 
 From the doom-neurobot root, run the train script:
 
