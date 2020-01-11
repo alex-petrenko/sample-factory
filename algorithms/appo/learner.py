@@ -195,6 +195,9 @@ class LearnerWorker:
         rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
         work_done = False
 
+        if len(rollouts) < rollouts_in_macro_batch:
+            return rollouts, work_done
+
         discard_rollouts = 0
         policy_version = self.train_step
         for r in rollouts:

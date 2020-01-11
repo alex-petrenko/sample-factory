@@ -239,7 +239,8 @@ class VectorEnvRunner:
         # once macro batch is collected, all buffers will be released
         # we could have just copied the tensors on the learner to avoid this complicated logic, but it's better for
         # performance to keep data in shared buffers until they're needed
-        self.num_traj_buffers = self.cfg.macro_batch / (self.cfg.num_workers * self.cfg.num_envs_per_worker * self.num_agents * self.cfg.rollout)
+        samples_per_iteration = self.cfg.macro_batch * self.cfg.num_policies
+        self.num_traj_buffers = samples_per_iteration / (self.cfg.num_workers * self.cfg.num_envs_per_worker * self.num_agents * self.cfg.rollout)
 
         # make sure we have enough buffers to actually never wait
         # usually it'll be just two buffers and we swap back and forth
