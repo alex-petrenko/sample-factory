@@ -244,7 +244,7 @@ class VectorEnvRunner:
 
         # make sure we have enough buffers to actually never wait
         # usually it'll be just two buffers and we swap back and forth
-        self.num_traj_buffers *= 2
+        self.num_traj_buffers *= 3
 
         # make sure we have at least two to swap between so we never actually have to wait
         self.num_traj_buffers = math.ceil(max(self.num_traj_buffers, 2))
