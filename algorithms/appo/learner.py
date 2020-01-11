@@ -787,6 +787,7 @@ class LearnerWorker:
                     elif task_type == TaskType.TRAIN:
                         with timing.add_time('extract'):
                             rollouts.extend(self._extract_rollouts(data))
+                            log.debug('Learner %d has %d rollouts', self.policy_id, len(rollouts))
                 except Empty:
                     break
 
