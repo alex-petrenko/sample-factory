@@ -52,7 +52,7 @@ class PolicyWorker:
         if self.cfg.benchmark:
             self.max_requests_allowed = 1e9  # unlimited from the start
         else:
-            self.max_requests_allowed = 1 + self.cfg.num_workers // self.cfg.num_policies
+            self.max_requests_allowed = 10
 
         self.process = TorchProcess(target=self._run, daemon=True)
 
@@ -317,7 +317,7 @@ class PolicyWorker:
                     last_report = time.time()
                     last_report_samples = self.total_num_samples
 
-                if time.time() - last_cache_cleanup > 30.0:
+                if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
                     torch.cuda.empty_cache()
                     last_cache_cleanup = time.time()
 

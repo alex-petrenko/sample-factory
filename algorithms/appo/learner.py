@@ -675,6 +675,7 @@ class LearnerWorker:
 
         wait_times = deque([], maxlen=self.cfg.num_workers)
         last_cache_cleanup = time.time()
+        num_batches_processed = 0
 
         while not self.terminate:
             with timing.timeit('train_wait'):
@@ -699,8 +700,9 @@ class LearnerWorker:
                 wait_stats = (wait_avg, wait_min, wait_max)
 
             self._process_training_data(data, timing, wait_stats)
+            num_batches_processed += 1
 
-            if time.time() - last_cache_cleanup > 30.0:
+            if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and num_batches_processed < 100):
                 torch.cuda.empty_cache()
                 last_cache_cleanup = time.time()
 
