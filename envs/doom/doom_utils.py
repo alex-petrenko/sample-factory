@@ -12,16 +12,6 @@ from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGa
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
 
-DOOM_W = 128
-DOOM_H = 72
-
-# DOOM_W = 84
-# DOOM_H = 84
-
-# IMPALA
-# DOOM_W = 96
-# DOOM_H = 72
-
 
 class DoomSpec:
     def __init__(
@@ -211,16 +201,16 @@ def make_doom_env_impl(
         bot_difficulty = cfg.start_bot_difficulty if 'start_bot_difficulty' in cfg else None
         env = BotDifficultyWrapper(env, bot_difficulty)
 
-    if custom_resolution is None:
-        env = SetResolutionWrapper(env, '256x144')  # default (wide aspect ratio)
-        # env = SetResolutionWrapper(env, '160x120')
-    else:
-        assert custom_resolution in resolutions
-        env = SetResolutionWrapper(env, custom_resolution)
+    resolution = custom_resolution
+    if resolution is None:
+        resolution = '256x144' if cfg.wide_aspect_ratio else '160x120'
+
+    assert resolution in resolutions
+    env = SetResolutionWrapper(env, resolution)  # default (wide aspect ratio)
 
     h, w, channels = env.observation_space.shape
-    if w != DOOM_W:
-        env = ResizeWrapper(env, DOOM_W, DOOM_H, grayscale=False)
+    if w != cfg.res_w or h != cfg.res_h:
+        env = ResizeWrapper(env, cfg.res_w, cfg.res_h, grayscale=False)
 
     # randomly vary episode duration to somewhat decorrelate the experience
     timeout = doom_spec.default_timeout
@@ -230,7 +220,7 @@ def make_doom_env_impl(
 
     pixel_format = cfg.pixel_format if 'pixel_format' in cfg else 'HWC'
     if pixel_format == 'CHW':
-        env = PixelFormatChwWrapper(env)
+        env = PixelFormatChwWrapper(env)  # TODO: potential optimization, render directly in CHW?
 
     if doom_spec.extra_wrappers is not None:
         for wrapper_cls, wrapper_kwargs in doom_spec.extra_wrappers:
