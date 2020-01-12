@@ -58,7 +58,7 @@ class LearnerWorker:
 
         self.train_step = self.env_steps = 0
 
-        self.summary_rate_decay = LinearDecay([(0, 100), (1000000, 2000), (10000000, 10000)])
+        self.summary_rate_decay = LinearDecay([(0, 50), (1000000, 1000), (10000000, 5000)])
         self.last_summary_written = -1e9
         self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
 
@@ -478,6 +478,9 @@ class LearnerWorker:
                     ratio_min = ratio.min().detach()
                     ratio_max = ratio.max().detach()
 
+                    # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
+                    # log.debug('Learner %d policy_Loss %.7f', self.policy_id, policy_loss.cpu().item())
+
                     targets = vs
                     old_values = mb.values
                     value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
@@ -529,6 +532,7 @@ class LearnerWorker:
                         stats.value = result.values.mean()
                         stats.entropy = action_distribution.entropy().mean()
                         stats.kl_prior = kl_prior
+                        stats.policy_loss = policy_loss
                         stats.value_loss = value_loss
                         stats.prior_loss = prior_loss
                         stats.kl_coeff = self.kl_coeff
@@ -536,6 +540,12 @@ class LearnerWorker:
                         stats.adv_min = adv.min()
                         stats.adv_max = adv.max()
                         stats.max_abs_logprob = torch.abs(mb.action_logits).max()
+
+                        # this caused numerical issues on some versions of PyTorch with second moment getting to infinity
+                        adam_max_second_moment = 0.0
+                        for key, tensor_state in self.optimizer.state.items():
+                            adam_max_second_moment = max(tensor_state['exp_avg_sq'].max().item(), adam_max_second_moment)
+                        stats.adam_max_second_moment = adam_max_second_moment
 
                         curr_policy_version = self.train_step
                         version_diff = curr_policy_version - mb.policy_version

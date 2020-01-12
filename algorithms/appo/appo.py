@@ -90,7 +90,7 @@ class APPO(Algorithm):
 
         p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
 
-        p.add_argument('--max_grad_norm', default=0.0, type=float, help='Max L2 norm of the gradient vector (disabled by default)')
+        p.add_argument('--max_grad_norm', default=2.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
         p.add_argument(
