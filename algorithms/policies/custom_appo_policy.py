@@ -19,7 +19,7 @@ def stats(policy, batch_tensors):
         stats_dict.update(dict(mean_IS=is_stat_mean))
         stats_dict.update(dict(var_IS=is_stat_var))
 
-    if policy.config['use_kl_loss']:
+    if 'use_kl_loss' in policy.config and policy.config['use_kl_loss']:
         stats_dict.update(dict(KL=policy.loss.mean_kl))
         stats_dict.update(dict(KL_Coeff=policy.kl_coeff))
 

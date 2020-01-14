@@ -70,3 +70,4 @@ wcwidth==0.1.7
 Werkzeug==0.15.4
 yapf==0.27.0
 zipp==0.5.1
+matplotlib

@@ -115,6 +115,13 @@ class APPO(Algorithm):
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 
+        p.add_argument(
+            '--worker_init_delay', default=0.1, type=float,
+            help=('With some envs, especially multi-player Doom envs, it helps to add a delay when creating workers. It prevents too many envs from being initialized at the same time,'
+                  'and reduces chance of crashes during startup'),
+        )
+        p.add_argument('--init_workers_parallel', default=5, type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
+
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
         p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
@@ -156,7 +163,7 @@ class APPO(Algorithm):
         self.last_report = time.time()
         self.report_interval = 3.0  # sec
 
-        self.fps_stats = deque([], maxlen=10)
+        self.fps_stats = deque([], maxlen=5)
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
         self.stats = dict()  # regular (non-averaged) stats
@@ -205,7 +212,7 @@ class APPO(Algorithm):
         for i in indices:
             w = self.create_actor_worker(i, actor_queues[i])
             w.init()
-            time.sleep(0.1)  # just in case
+            time.sleep(self.cfg.worker_init_delay)  # just in case
             w.request_reset()
             workers[i] = w
             started_reset[i] = time.time()
@@ -428,7 +435,7 @@ class APPO(Algorithm):
         end |= self.total_train_seconds > self.cfg.train_for_seconds
 
         if self.cfg.benchmark:
-            end |= self.total_env_steps_since_resume >= int(1e6)
+            end |= self.total_env_steps_since_resume >= int(2e6)
             end |= sum(self.samples_collected) >= int(4e5)
 
         return end

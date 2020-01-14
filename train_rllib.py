@@ -178,11 +178,12 @@ def run_experiment(args, parser):
     else:
         raise Exception('No config file!')
 
-    for cfg_mixin_file in args.cfg_mixins:
-        with open(cfg_mixin_file, 'r') as f:
-            override_cfg = yaml.load(f)
-            log.info('Overriding parameters from %s: %r', cfg_mixin_file, override_cfg)
-            exp = merge_dicts(exp, override_cfg)
+    if args.cfg_mixins is not None:
+        for cfg_mixin_file in args.cfg_mixins:
+            with open(cfg_mixin_file, 'r') as f:
+                override_cfg = yaml.load(f)
+                log.info('Overriding parameters from %s: %r', cfg_mixin_file, override_cfg)
+                exp = merge_dicts(exp, override_cfg)
 
     if not exp.get("run"):
         parser.error("the following arguments are required: --run")

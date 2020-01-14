@@ -1,8 +1,10 @@
 import numpy as np
 import tensorflow as tf
+# from ray.rllib.models.misc import get_activation_fn, flatten
+#
+# from ray.rllib.models.visionnet import VisionNetwork, _get_filter_config
 from ray.rllib.models.misc import get_activation_fn, flatten
-
-from ray.rllib.models.visionnet import VisionNetwork, _get_filter_config
+from ray.rllib.models.visionnet import _get_filter_config, VisionNetwork
 from ray.rllib.utils.annotations import override
 
 
@@ -26,12 +28,19 @@ def tf_normalize(obs, obs_space, low=None, high=None):
 class VizdoomVisionNetwork(VisionNetwork):
     @override(VisionNetwork)
     def _build_layers_v2(self, input_dict, num_outputs, options):
-        # unpacking Doom observation dict, and
-        obs = input_dict['obs']['obs']
+        if isinstance(input_dict['obs'], dict):
+            # unpacking Doom observation dict, and
+            obs = input_dict['obs']['obs']
+        else:
+            obs = input_dict['obs']
+
         obs = tf_normalize(obs, self.obs_space, low=0, high=255)
 
-        # health, ammo, etc.
-        measurements = input_dict['obs']['measurements']
+        if isinstance(input_dict['obs'], dict) and 'measurements' in input_dict['obs']:
+            # health, ammo, etc.
+            measurements = input_dict['obs']['measurements']
+        else:
+            measurements = None
 
         filters = options.get('conv_filters')
         if not filters:
@@ -54,10 +63,12 @@ class VizdoomVisionNetwork(VisionNetwork):
 
             vis_input_flat = flatten(obs)
 
-            measurements_fc = tf.layers.dense(measurements, 128, activation=fcnet_activation, name=f'm_fc1')
-            measurements_fc = tf.layers.dense(measurements_fc, 128, activation=fcnet_activation, name=f'm_fc2')
-
-            all_input = tf.concat([vis_input_flat, measurements_fc], axis=1)
+            if measurements is not None:
+                measurements_fc = tf.layers.dense(measurements, 128, activation=fcnet_activation, name=f'm_fc1')
+                measurements_fc = tf.layers.dense(measurements_fc, 128, activation=fcnet_activation, name=f'm_fc2')
+                all_input = tf.concat([vis_input_flat, measurements_fc], axis=1)
+            else:
+                all_input = vis_input_flat
 
             fc_hiddens = [512]
             for i, fc_hidden in enumerate(fc_hiddens, 1):
