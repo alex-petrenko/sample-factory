@@ -8,19 +8,22 @@ import seaborn as sns
 sns.set()
 
 labels = ['20', '40', '80', '160', '320', '640']
-fps_by_method_10_core_cpu = dict(
-    impala=[8590, 10596, 10941, 10928, 13328, math.nan],
-    rllib=[9384, 9676, 11171, 11328, 11590, 11345],
-    ours=[10894, 16982, 25068, 37410, 46977, 52033]
-)
+# fps_by_method_10_core_cpu = dict(
+#     deepmind_impala=[8590, 10596, 10941, 10928, 13328, math.nan],
+#     rllib_appo=[9384, 9676, 11171, 11328, 11590, 11345],
+#     ours=[10894, 16982, 25068, 37410, 46977, 52033]
+# )
+# data = fps_by_method_10_core_cpu
 
+labels = ['20', '40', '80', '160', '320', '640']
 fps_by_method_36_core_cpu = dict(
-    impala=[6951, 8191, 8041, 9900, 10014, math.nan],
-    rllib=[9384, 9676, 11171, 11328, 11590, 11345],
-    ours=[10894, 16982, 25068, 37410, 46977, 50222]
+    deepmind_impala=[6951, 8191, 8041, 9900, 10014, math.nan],
+    rllib_appo=[13308, 23608, 30568, 31002, 32840, 33784],
+    ours=[11230, 18374, 22433, 38700, 45611, 69337]
 )
+data = fps_by_method_36_core_cpu
 
-data = fps_by_method_10_core_cpu
+
 
 x = np.arange(len(labels))  # the label locations
 width = 0.25  # the width of the bars
