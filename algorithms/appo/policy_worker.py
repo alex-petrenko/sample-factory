@@ -66,7 +66,7 @@ class PolicyWorker:
         self.process.start()
 
     def _init(self):
-        log.info('GPU worker %d initialized', self.worker_idx)
+        log.info('GPU worker %d-%d initialized', self.policy_id, self.worker_idx)
 
     def _terminate(self):
         pass
@@ -281,7 +281,7 @@ class PolicyWorker:
 
         with timing.timeit('init'):
             # initialize the Torch modules
-            log.info('Initializing model on the policy worker %d...', self.worker_idx)
+            log.info('Initializing model on the policy worker %d-%d...', self.policy_id, self.worker_idx)
 
             torch.set_num_threads(1)
 
@@ -289,7 +289,7 @@ class PolicyWorker:
             self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
             self.actor_critic.to(self.device)
 
-            log.info('Initialized model on the policy worker %d!', self.worker_idx)
+            log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
 
         queues = [self.policy_queue._reader, self.weight_queue._reader, self.task_queue._reader]
         queues_by_handle = dict()
