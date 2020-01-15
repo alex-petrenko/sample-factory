@@ -112,6 +112,14 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
             self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
+
+            # Warning! This does not work, see https://github.com/mwydmuch/ViZDoom/issues/402
+            # if self.record_to is not None:
+            #     # reportedly this does not work with bots
+            #     demo_path = self.demo_path(self._num_episodes)
+            #     log.debug('Recording multiplayer demo to %s', demo_path)
+            #     self.game.add_game_args(f'-record {demo_path}')
+
         else:
             # Join existing game.
             self.game.add_game_args(
@@ -126,7 +134,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         try:
             self.game.init()
-        except Exception as exc:
+        except Exception:
             log.warning('game.init() threw exception. Terminate process')
             sys.exit(1)
 

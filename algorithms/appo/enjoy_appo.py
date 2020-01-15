@@ -83,11 +83,11 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
             episode_reward = 0
 
             while True:
-                obs = AttrDict(transform_dict_observations(obs))
-                for key, x in obs.items():
-                    obs[key] = torch.from_numpy(x).to(device).float()
+                obs_torch = AttrDict(transform_dict_observations(obs))
+                for key, x in obs_torch.items():
+                    obs_torch[key] = torch.from_numpy(x).to(device).float()
 
-                policy_outputs = actor_critic(obs, rnn_states)
+                policy_outputs = actor_critic(obs_torch, rnn_states)
                 actions = policy_outputs.actions.cpu().numpy()
                 rnn_states = policy_outputs.rnn_states
 
@@ -127,6 +127,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                 'Episode reward: %f, avg reward for %d episodes: %f', episode_reward, len(last_episodes), avg_reward,
             )
 
+            break  # TODO!!!
             if max_frames_reached(num_frames):
                 break
 

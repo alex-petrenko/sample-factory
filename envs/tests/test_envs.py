@@ -136,7 +136,7 @@ class TestDoom(TestCase):
         env.reset()
         env.close()
 
-        demo_path = join(rec_dir, VizdoomEnv.demo_name(episode_idx=0))
+        demo_path = join(rec_dir, VizdoomEnv.demo_path(episode_idx=0))
 
         env = self.make_env_bots_hybrid_actions(None, custom_resolution='1920x1080')
 

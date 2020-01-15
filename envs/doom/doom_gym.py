@@ -138,7 +138,7 @@ class VizdoomEnv(gym.Env):
 
     def _set_game_mode(self, mode):
         if mode == 'replay':
-            self.game.set_mode(Mode.ASYNC_SPECTATOR)
+            self.game.set_mode(Mode.PLAYER)
         else:
             if self.async_mode:
                 log.info('Starting in async mode! Use this only for testing, otherwise PLAYER mode is much faster')
@@ -163,11 +163,7 @@ class VizdoomEnv(gym.Env):
 
         self._set_game_mode(mode)
 
-    def _ensure_initialized(self):
-        if self.initialized:
-            # Doom env already initialized!
-            return
-
+    def initialize(self):
         self._create_doom_game(self.mode)
 
         # (optional) top-down view provided by the game engine
@@ -180,19 +176,23 @@ class VizdoomEnv(gym.Env):
             # self.game.add_game_args("+am_restorecolors")
             # self.game.add_game_args("+am_followplayer 1")
             background_color = 'ffffff'
-            self.game.add_game_args("+viz_am_center 1")
-            self.game.add_game_args("+am_backcolor " + background_color)
-            self.game.add_game_args("+am_tswallcolor dddddd")
+            self.game.add_game_args('+viz_am_center 1')
+            self.game.add_game_args('+am_backcolor ' + background_color)
+            self.game.add_game_args('+am_tswallcolor dddddd')
             # self.game.add_game_args("+am_showthingsprites 0")
-            self.game.add_game_args("+am_yourcolor " + background_color)
-            self.game.add_game_args("+am_cheat 0")
-            self.game.add_game_args("+am_thingcolor 0000ff")  # player color
-            self.game.add_game_args("+am_thingcolor_item 00ff00")
+            self.game.add_game_args('+am_yourcolor ' + background_color)
+            self.game.add_game_args('+am_cheat 0')
+            self.game.add_game_args('+am_thingcolor 0000ff')  # player color
+            self.game.add_game_args('+am_thingcolor_item 00ff00')
             # self.game.add_game_args("+am_thingcolor_citem 00ff00")
 
         self.game.init()
 
         self.initialized = True
+
+    def _ensure_initialized(self):
+        if not self.initialized:
+            self.initialize()
 
     @staticmethod
     def _parse_variable_indices(config):
@@ -225,24 +225,26 @@ class VizdoomEnv(gym.Env):
             variables[variable] = game_variables[idx]
         return variables
 
-    @staticmethod
-    def demo_name(episode_idx):
-        return f'ep_{episode_idx}_rec.lmp'
+    def demo_path(self, episode_idx):
+        demo_name = f'ep_{episode_idx:03d}_rec.lmp'
+        demo_path = join(self.record_to, demo_name)
+        demo_path = os.path.normpath(demo_path)
+        return demo_path
 
     def reset(self):
         self._ensure_initialized()
 
-        if self.record_to is None or self.is_multiplayer:
-            # no demo recording (default)
-            self.game.new_episode()
-        else:
+        if self.record_to is not None and not self.is_multiplayer:
             # does not work in multiplayer (uses different mechanism)
             if not os.path.exists(self.record_to):
                 os.makedirs(self.record_to)
 
-            demo_path = join(self.record_to, self.demo_name(self._num_episodes))
+            demo_path = self.demo_path(self._num_episodes)
             log.warning('Recording episode demo to %s', demo_path)
             self.game.new_episode(demo_path)
+        else:
+            # no demo recording (default)
+            self.game.new_episode()
 
         self.state = self.game.get_state()
         img = self.state.screen_buffer
@@ -260,7 +262,7 @@ class VizdoomEnv(gym.Env):
 
         self._num_episodes += 1
 
-        return np.transpose(img, (1, 2, 0))
+        return np.transpose(img, (1, 2, 0))  # TODO - optimize, we don't need to do that
 
     def _convert_actions(self, actions):
         """
@@ -313,7 +315,6 @@ class VizdoomEnv(gym.Env):
         Action is either a single value (discrete, one-hot), or a tuple with an action for each of the
         discrete action subspaces.
         """
-        self._ensure_initialized()
         info = {'num_frames': self.skip_frames}
 
         if self._actions_flattened is not None:
@@ -343,6 +344,8 @@ class VizdoomEnv(gym.Env):
         try:
             img = self.game.get_state().screen_buffer
             img = np.transpose(img, [1, 2, 0])
+            if mode == 'rgb_array':
+                return img
 
             h, w = img.shape[:2]
             render_w = 1280
@@ -355,8 +358,9 @@ class VizdoomEnv(gym.Env):
                 from gym.envs.classic_control import rendering
                 self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
             self.viewer.imshow(img)
+            return img
         except AttributeError:
-            pass
+            return None
 
     def close(self):
         if self.viewer is not None:

@@ -444,6 +444,9 @@ class RecordingWrapper(gym.core.Wrapper):
 
         self._recorded_actions = []
 
+        # Experimental! Recording Doom replay. Does not work in all scenarios, e.g. when there are in-game bots.
+        self.unwrapped.record_to = record_to
+
     def reset(self):
         if self._episode_recording_dir is not None and self._record_id > 0:
             # save actions to text file
