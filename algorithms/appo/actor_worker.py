@@ -4,11 +4,10 @@ import time
 from collections import OrderedDict
 
 import gym
-from gym import spaces, Wrapper
-from torch.multiprocessing import Process as TorchProcess, Event
-
 import numpy as np
 import torch
+from gym import spaces, Wrapper
+from torch.multiprocessing import Process as TorchProcess, Event
 
 from algorithms.appo.appo_utils import TaskType, set_step_data
 from algorithms.utils.algo_utils import num_env_steps
@@ -468,6 +467,7 @@ class ActorWorker:
 
     def __init__(
         self, cfg, obs_space, action_space, worker_idx, task_queue, policy_queues, report_queue, learner_queues,
+        policy_workers,
     ):
         self.cfg = cfg
         self.obs_space = obs_space
@@ -494,6 +494,8 @@ class ActorWorker:
         self.learner_queues = learner_queues
         self.task_queue = task_queue
 
+        self.policy_workers = policy_workers
+
         self.critical_error = Event()
         self.process = TorchProcess(target=self._run, daemon=True)
         self.process.start()
@@ -516,11 +518,21 @@ class ActorWorker:
         self.terminate = True
 
     def _init_policy_input_tensors(self, split_idx, tensors):
-        msg = dict(worker_idx=self.worker_idx, split_idx=split_idx, tensors=tensors)
-
         # initialize policy input tensors on all policy workers
         for policy_id in range(self.cfg.num_policies):
-            self.policy_queues[policy_id].put((TaskType.INIT_TENSORS, msg))
+            for policy_worker_idx in range(self.cfg.policy_workers_per_policy):
+                log.debug('Sending input tensors for policy worker %d-%d...', policy_id, policy_worker_idx)
+                msg = dict(
+                    worker_idx=self.worker_idx, split_idx=split_idx, tensors=tensors,
+                    policy_id=policy_id, policy_worker_idx=policy_worker_idx,
+                )
+                self.policy_workers[policy_id][policy_worker_idx].task_queue.put((TaskType.INIT_TENSORS, msg))
+
+    def _init_policy_output_tensors(self, request_data):
+        data = AttrDict(request_data)
+        self.env_runners[data.split_idx].init_policy_output_tensors(
+            data.env_idx, data.agent_idx, data.tensors, data.tensor_names, data.tensor_sizes,
+        )
 
     def _enqueue_policy_request(self, split_idx, policy_inputs):
         for policy_id, requests in policy_inputs.items():
@@ -597,18 +609,6 @@ class ActorWorker:
     def _report_stats(self, stats):
         for report in stats:
             self.report_queue.put(report)
-
-    def _init_policy_output_tensors(self, request_data):
-        data = AttrDict(request_data)
-        self.env_runners[data.split_idx].init_policy_output_tensors(
-            data.env_idx, data.agent_idx, data.tensors, data.tensor_names, data.tensor_sizes,
-        )
-
-        # broadcast the tensors to all the other policy workers, so they all share the same set of tensors
-        for policy_id in range(self.cfg.num_policies):
-            if policy_id != data.policy_id:
-                log.debug('Sending output tensors to policy worker %d...', policy_id)
-                self.policy_queues[policy_id].put((TaskType.INIT_TENSORS, request_data))
 
     def _handle_reset(self):
         for split_idx, env_runner in enumerate(self.env_runners):

@@ -203,6 +203,7 @@ class APPO(Algorithm):
         return ActorWorker(
             self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
             policy_queues=self.policy_queues, report_queue=self.report_queue, learner_queues=learner_queues,
+            policy_workers=self.policy_workers,
         )
 
     # noinspection PyProtectedMember
@@ -269,18 +270,7 @@ class APPO(Algorithm):
     def init_workers(self):
         actor_queues = [TorchQueue() for _ in range(self.cfg.num_workers)]
 
-        # two buffers - one for learner to process while another is being filled by the actor
-        num_trajectory_buffers = 2
-
-        # events are used to signal when learner is done with the shared trajectory buffer, so it can be reused
-        # on the actor. The alternative is to send the buffers back from learner to the actor, but this introduces
-        # another set of queues. This seems like a good compromise.
-        shape = [
-            self.cfg.num_workers,
-            self.cfg.worker_num_splits,
-            num_trajectory_buffers,
-        ]
-
+        # TODO: refactor this!! get rid of policy worker task_queue
         weight_queues = dict()
         for policy_id in range(self.cfg.num_policies):
             weight_queues[policy_id] = []
@@ -301,7 +291,6 @@ class APPO(Algorithm):
             learner_idx += 1
 
         log.info('Initializing GPU workers...')
-        policy_worker_idx = 0
         for policy_id in range(self.cfg.num_policies):
             self.policy_workers[policy_id] = []
 
@@ -310,11 +299,11 @@ class APPO(Algorithm):
 
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker = PolicyWorker(
-                    policy_worker_idx, policy_id, self.cfg, self.obs_space, self.action_space,
+                    i, policy_id, self.cfg, self.obs_space, self.action_space,
                     policy_queue, actor_queues, weight_queues[policy_id][i], self.report_queue,
+                    self.policy_workers,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
-                policy_worker_idx += 1
 
         log.info('Initializing actors...')
 
@@ -329,6 +318,7 @@ class APPO(Algorithm):
         for policy_id, workers in self.policy_workers.items():
             for w in workers:
                 w.start_process()
+            for w in workers:
                 w.init()
 
     def process_report(self, report):
@@ -360,7 +350,6 @@ class APPO(Algorithm):
 
         if 'stats' in report:
             self.stats.update(report['stats'])
-
 
     def report(self):
         now = time.time()
@@ -435,7 +424,7 @@ class APPO(Algorithm):
         end |= self.total_train_seconds > self.cfg.train_for_seconds
 
         if self.cfg.benchmark:
-            end |= self.total_env_steps_since_resume >= int(2e6)
+            end |= self.total_env_steps_since_resume >= int(1e6)
             end |= sum(self.samples_collected) >= int(4e5)
 
         return end

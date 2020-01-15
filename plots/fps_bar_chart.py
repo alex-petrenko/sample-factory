@@ -1,6 +1,5 @@
 import math
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -11,7 +10,7 @@ labels = ['20', '40', '80', '160', '320', '640']
 # fps_by_method_10_core_cpu = dict(
 #     deepmind_impala=[8590, 10596, 10941, 10928, 13328, math.nan],
 #     rllib_appo=[9384, 9676, 11171, 11328, 11590, 11345],
-#     ours=[10894, 16982, 25068, 37410, 46977, 52033]
+#     ours=[11565, 16982, 25068, 37410, 46977, 52033]
 # )
 # data = fps_by_method_10_core_cpu
 
@@ -22,8 +21,6 @@ fps_by_method_36_core_cpu = dict(
     ours=[11230, 18374, 22433, 38700, 45611, 69337]
 )
 data = fps_by_method_36_core_cpu
-
-
 
 x = np.arange(len(labels))  # the label locations
 width = 0.25  # the width of the bars

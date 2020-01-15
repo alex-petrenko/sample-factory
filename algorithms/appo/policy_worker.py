@@ -1,9 +1,10 @@
+import random
 import select
 import time
 from queue import Empty
 
 import torch
-from torch.multiprocessing import Process as TorchProcess
+from torch.multiprocessing import Process as TorchProcess, Queue as TorchQueue
 
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, memory_stats
 from algorithms.appo.model import ActorCritic
@@ -15,7 +16,7 @@ from utils.utils import AttrDict, log
 class PolicyWorker:
     def __init__(
             self, worker_idx, policy_id, cfg, obs_space, action_space, policy_queue, actor_queues,
-            weight_queue, report_queue,
+            weight_queue, report_queue, policy_workers,
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
@@ -33,10 +34,15 @@ class PolicyWorker:
         self.input_tensors = dict()  # memshared input tensors, main way to receive data from actors
         self.output_tensors = dict()
 
-        self.task_queue = policy_queue
+        self.policy_queue = policy_queue
         self.actor_queues = actor_queues
         self.weight_queue = weight_queue
         self.report_queue = report_queue
+
+        # utility queue that is used to talk directly to this worker
+        self.task_queue = TorchQueue()
+
+        self.all_policy_workers = policy_workers  # reference to the container with all policy workers
 
         self.terminate = False
 
@@ -196,6 +202,21 @@ class PolicyWorker:
             self.worker_idx, policy_version, timing.weight_update,
         )
 
+    def _initialize_shared_output_tensors(self, init_tensors_request, actor_idx):
+        msg = (TaskType.INIT_TENSORS, init_tensors_request)
+
+        # we're sending the tensors to the actor
+        self.actor_queues[actor_idx].put(msg)
+
+        # and to all other policy workers that should all share same memory
+        for policy_id in range(self.cfg.num_policies):
+            for policy_worker_idx in range(self.cfg.policy_workers_per_policy):
+                if policy_id == self.policy_id and self.worker_idx == policy_worker_idx:
+                    # don't send this message to ourselves
+                    continue
+
+                self.all_policy_workers[policy_id][policy_worker_idx].task_queue.put(msg)
+
     def _enqueue_policy_outputs(self, request_order, output_tensors, tensor_names, tensor_sizes):
         output_idx = 0
         outputs_ready = set()
@@ -206,18 +227,18 @@ class PolicyWorker:
             if tensors_dict_key in self.output_tensors:
                 self.output_tensors[tensors_dict_key].copy_(output_tensors[output_idx])
             else:
-                self.output_tensors[tensors_dict_key] = output_tensors[output_idx].clone().detach()
-                self.output_tensors[tensors_dict_key].share_memory_()
+                shared_output_tensors = output_tensors[output_idx].clone().detach()
+                shared_output_tensors.share_memory_()
+                self.output_tensors[tensors_dict_key] = shared_output_tensors
 
                 log.debug('Sending ouput tensors for policy %d to %r', self.policy_id, tensors_dict_key)
                 init_tensors_request = dict(
                     actor_idx=actor_idx, split_idx=split_idx, env_idx=env_idx, agent_idx=agent_idx,
-                    policy_id=self.policy_id,
-                    tensors=self.output_tensors[tensors_dict_key],
+                    tensors=shared_output_tensors,
                     tensor_names=tensor_names, tensor_sizes=tensor_sizes,
                     init_output_tensors=True,
                 )
-                self.actor_queues[actor_idx].put((TaskType.INIT_TENSORS, init_tensors_request))
+                self._initialize_shared_output_tensors(init_tensors_request, actor_idx)
 
             output_idx += 1
 
@@ -227,20 +248,29 @@ class PolicyWorker:
             advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
             self.actor_queues[actor_idx].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
 
-    def _init_input_tensors(self, data):
-        data = AttrDict(data)
+    def _init_input_tensors(self, orig_data):
+        data = AttrDict(orig_data)
+        assert data.policy_id == self.policy_id
+        assert data.policy_worker_idx == self.worker_idx
+
         worker_idx, split_idx = data.worker_idx, data.split_idx
-        log.debug('Policy worker %d initializing input tensors from %d %d', self.policy_id, worker_idx, split_idx)
+        log.debug(
+            'Policy worker %d-%d initializing input tensors from %d %d',
+            self.policy_id, self.worker_idx, worker_idx, split_idx,
+        )
 
         for key, tensors in data.tensors.items():
             env_idx, agent_idx = key
             tensors_dict_key = (worker_idx, split_idx, env_idx, agent_idx)
             self.input_tensors[tensors_dict_key] = tensors
 
-    def _init_output_tensors(self, data):
-        data = AttrDict(data)
+    def _init_output_tensors(self, orig_data):
+        data = AttrDict(orig_data)
         tensors_dict_key = (data.actor_idx, data.split_idx, data.env_idx, data.agent_idx)
-        assert tensors_dict_key not in self.output_tensors
+        log.debug(
+            'Policy worker %d-%d initializing input tensors from %d %d',
+            self.policy_id, self.worker_idx, data.actor_idx, data.split_idx,
+        )
         self.output_tensors[tensors_dict_key] = data.tensors
 
     # noinspection PyProtectedMember
@@ -261,10 +291,11 @@ class PolicyWorker:
 
             log.info('Initialized model on the policy worker %d!', self.worker_idx)
 
-        queues = [self.task_queue._reader, self.weight_queue._reader]
+        queues = [self.policy_queue._reader, self.weight_queue._reader, self.task_queue._reader]
         queues_by_handle = dict()
-        queues_by_handle[self.task_queue._reader._handle] = self.task_queue
+        queues_by_handle[self.policy_queue._reader._handle] = self.policy_queue
         queues_by_handle[self.weight_queue._reader._handle] = self.weight_queue
+        queues_by_handle[self.task_queue._reader._handle] = self.task_queue
 
         last_report = last_cache_cleanup = time.time()
         last_report_samples = 0
