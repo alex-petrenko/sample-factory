@@ -356,9 +356,6 @@ class PolicyWorker:
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.put((TaskType.EMPTY, None))
-        while self.task_queue.qsize() > 0:
-            time.sleep(0.01)
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
