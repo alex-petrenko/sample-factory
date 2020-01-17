@@ -35,7 +35,7 @@ class DictObservationsWrapper(Wrapper):
 
 def make_env_func(cfg, env_config):
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
-    if not hasattr(env, 'num_agents'):
+    if not hasattr(env, 'num_agents') or env.num_agents <= 1:
         env = MultiAgentWrapper(env)
     if not isinstance(env.observation_space, spaces.Dict):
         env = DictObservationsWrapper(env)

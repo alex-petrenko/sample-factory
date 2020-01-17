@@ -712,7 +712,7 @@ class LearnerWorker:
             self._process_training_data(data, timing, wait_stats)
             num_batches_processed += 1
 
-            if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and num_batches_processed < 100):
+            if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and num_batches_processed < 50):
                 torch.cuda.empty_cache()
                 last_cache_cleanup = time.time()
 

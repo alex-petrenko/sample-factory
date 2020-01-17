@@ -163,7 +163,7 @@ class APPO(Algorithm):
         self.last_report = time.time()
         self.report_interval = 3.0  # sec
 
-        self.fps_stats = deque([], maxlen=5)
+        self.fps_stats = deque([], maxlen=10)
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
         self.stats = dict()  # regular (non-averaged) stats
