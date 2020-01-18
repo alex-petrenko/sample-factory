@@ -262,7 +262,7 @@ class VizdoomEnv(gym.Env):
 
         self._num_episodes += 1
 
-        return np.transpose(img, (1, 2, 0))  # TODO - optimize, we don't need to do that
+        return np.transpose(img, (1, 2, 0))
 
     def _convert_actions(self, actions):
         """
@@ -323,8 +323,6 @@ class VizdoomEnv(gym.Env):
             self._actions_flattened = None
         else:
             actions_flattened = self._convert_actions(actions)
-
-        # log.info('Skip: %d, actions: %r', self.skip_frames, actions_flattened)
 
         reward = self.game.make_action(actions_flattened, self.skip_frames)
         state = self.game.get_state()

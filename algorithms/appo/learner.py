@@ -24,7 +24,7 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
 
 class LearnerWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, weight_queues,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues,
     ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
@@ -43,7 +43,10 @@ class LearnerWorker:
 
         self.task_queue = TorchQueue()
         self.report_queue = report_queue
-        self.weight_queues = weight_queues
+
+        # queues corresponding to policy workers using the same policy
+        # we send weight updates via these queues
+        self.policy_worker_queues = policy_worker_queues
 
         self.rollout_tensors = dict()
         self.traj_buffer_ready = dict()
@@ -88,7 +91,7 @@ class LearnerWorker:
         state_dict = self.actor_critic.state_dict()
         policy_version = self.train_step
         weight_update = (policy_version, state_dict, discarding_rate)
-        for q in self.weight_queues:
+        for q in self.policy_worker_queues:
             q.put((TaskType.UPDATE_WEIGHTS, weight_update))
 
     def _calculate_gae(self, buffer):

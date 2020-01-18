@@ -1,10 +1,9 @@
-import random
 import select
 import time
 from queue import Empty
 
 import torch
-from torch.multiprocessing import Process as TorchProcess, Queue as TorchQueue
+from torch.multiprocessing import Process as TorchProcess, Event
 
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, memory_stats
 from algorithms.appo.model import ActorCritic
@@ -15,8 +14,8 @@ from utils.utils import AttrDict, log
 
 class PolicyWorker:
     def __init__(
-            self, worker_idx, policy_id, cfg, obs_space, action_space, policy_queue, actor_queues,
-            weight_queue, report_queue, policy_workers,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, policy_queue, actor_queues,
+        report_queue, policy_worker_queues,
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
@@ -36,14 +35,16 @@ class PolicyWorker:
 
         self.policy_queue = policy_queue
         self.actor_queues = actor_queues
-        self.weight_queue = weight_queue
         self.report_queue = report_queue
 
-        # utility queue that is used to talk directly to this worker
-        self.task_queue = TorchQueue()
+        # queue other components use to talk to this particular worker
+        self.task_queue = policy_worker_queues[policy_id][worker_idx]
 
-        self.all_policy_workers = policy_workers  # reference to the container with all policy workers
+        # queues for all other policy workers, in case we need to talk to them (e.g. send initial tensor buffers)
+        self.policy_worker_queues = policy_worker_queues
 
+        self.initialized_event = Event()
+        self.initialized_event.clear()
         self.terminate = False
 
         self.latest_policy_version = 0
@@ -67,9 +68,7 @@ class PolicyWorker:
 
     def _init(self):
         log.info('GPU worker %d-%d initialized', self.policy_id, self.worker_idx)
-
-    def _terminate(self):
-        pass
+        self.initialized_event.set()
 
     def _store_policy_step_request(self, request):
         worker_idx = request['worker_idx']
@@ -205,7 +204,7 @@ class PolicyWorker:
     def _initialize_shared_output_tensors(self, init_tensors_request, actor_idx):
         msg = (TaskType.INIT_TENSORS, init_tensors_request)
 
-        # we're sending the tensors to the actor
+        # we're sending the tensors to the actor they belong to
         self.actor_queues[actor_idx].put(msg)
 
         # and to all other policy workers that should all share same memory
@@ -215,7 +214,7 @@ class PolicyWorker:
                     # don't send this message to ourselves
                     continue
 
-                self.all_policy_workers[policy_id][policy_worker_idx].task_queue.put(msg)
+                self.policy_worker_queues[policy_id][policy_worker_idx].put(msg)
 
     def _enqueue_policy_outputs(self, request_order, output_tensors, tensor_names, tensor_sizes):
         output_idx = 0
@@ -291,66 +290,70 @@ class PolicyWorker:
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
 
-        queues = [self.policy_queue._reader, self.weight_queue._reader, self.task_queue._reader]
+        queues = [self.policy_queue._reader, self.task_queue._reader]
         queues_by_handle = dict()
         queues_by_handle[self.policy_queue._reader._handle] = self.policy_queue
-        queues_by_handle[self.weight_queue._reader._handle] = self.weight_queue
         queues_by_handle[self.task_queue._reader._handle] = self.task_queue
 
         last_report = last_cache_cleanup = time.time()
         last_report_samples = 0
 
         while not self.terminate:
-            with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
-                ready, _, _ = select.select(queues, [], [])
+            try:
+                with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
+                    ready, _, _ = select.select(queues, [], [])
 
-            with timing.add_time('work'):
-                for readable_queue in ready:
-                    q = queues_by_handle[readable_queue._handle]
+                with timing.add_time('work'):
+                    for readable_queue in ready:
+                        q = queues_by_handle[readable_queue._handle]
 
-                    with timing.add_time('loop'):
-                        while True:
-                            try:
-                                task_type, data = q.get_nowait()
+                        with timing.add_time('loop'):
+                            while True:
+                                try:
+                                    with timing.add_time('queue'):
+                                        task_type, data = q.get_nowait()
 
-                                if task_type == TaskType.INIT:
-                                    self._init()
-                                elif task_type == TaskType.TERMINATE:
-                                    self._terminate()
-                                    self.terminate = True
+                                    if task_type == TaskType.INIT:
+                                        self._init()
+                                    elif task_type == TaskType.TERMINATE:
+                                        self.terminate = True
+                                        break
+                                    elif task_type == TaskType.INIT_TENSORS:
+                                        if 'init_output_tensors' in data:
+                                            self._init_output_tensors(data)
+                                        else:
+                                            self._init_input_tensors(data)
+                                    elif task_type == TaskType.POLICY_STEP:
+                                        self._store_policy_step_request(data)
+                                    elif task_type == TaskType.UPDATE_WEIGHTS:
+                                        with timing.timeit('updates'):
+                                            self._update_weights(data, timing)
+
+                                except Empty:
                                     break
-                                elif task_type == TaskType.INIT_TENSORS:
-                                    if 'init_output_tensors' in data:
-                                        self._init_output_tensors(data)
-                                    else:
-                                        self._init_input_tensors(data)
-                                elif task_type == TaskType.POLICY_STEP:
-                                    self._store_policy_step_request(data)
-                                elif task_type == TaskType.UPDATE_WEIGHTS:
-                                    with timing.timeit('updates'):
-                                        self._update_weights(data, timing)
 
-                            except Empty:
-                                break
+                    with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
+                        self._handle_policy_steps(timing)
 
-                with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
-                    self._handle_policy_steps(timing)
+                    if time.time() - last_report > 3.0 and 'one_step' in timing:
+                        timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
+                        samples_since_last_report = self.total_num_samples - last_report_samples
 
-                if time.time() - last_report > 3.0 and 'one_step' in timing:
-                    timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
-                    samples_since_last_report = self.total_num_samples - last_report_samples
+                        stats = memory_stats('policy_worker', self.device)
 
-                    stats = memory_stats('policy_worker', self.device)
+                        self.report_queue.put(dict(
+                            timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
+                        ))
+                        last_report = time.time()
+                        last_report_samples = self.total_num_samples
 
-                    self.report_queue.put(dict(
-                        timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
-                    ))
-                    last_report = time.time()
-                    last_report_samples = self.total_num_samples
+                    if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
+                        torch.cuda.empty_cache()
+                        last_cache_cleanup = time.time()
 
-                if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
-                    torch.cuda.empty_cache()
-                    last_cache_cleanup = time.time()
+            except KeyboardInterrupt:
+                log.warning('Keyboard interrupt detected on worker %d-%d', self.policy_id, self.worker_idx)
+                self.terminate = True
 
         log.info('Gpu worker timing: %s', timing)
 

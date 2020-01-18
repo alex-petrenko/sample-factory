@@ -467,7 +467,7 @@ class ActorWorker:
 
     def __init__(
         self, cfg, obs_space, action_space, worker_idx, task_queue, policy_queues, report_queue, learner_queues,
-        policy_workers,
+        policy_worker_queues,
     ):
         self.cfg = cfg
         self.obs_space = obs_space
@@ -494,7 +494,7 @@ class ActorWorker:
         self.learner_queues = learner_queues
         self.task_queue = task_queue
 
-        self.policy_workers = policy_workers
+        self.policy_workers_queues = policy_worker_queues
 
         self.critical_error = Event()
         self.process = TorchProcess(target=self._run, daemon=True)
@@ -526,7 +526,7 @@ class ActorWorker:
                     worker_idx=self.worker_idx, split_idx=split_idx, tensors=tensors,
                     policy_id=policy_id, policy_worker_idx=policy_worker_idx,
                 )
-                self.policy_workers[policy_id][policy_worker_idx].task_queue.put((TaskType.INIT_TENSORS, msg))
+                self.policy_workers_queues[policy_id][policy_worker_idx].put((TaskType.INIT_TENSORS, msg))
 
     def _init_policy_output_tensors(self, request_data):
         data = AttrDict(request_data)
@@ -688,6 +688,8 @@ class ActorWorker:
                 log.warning('Terminate process...')
                 self.terminate = True
                 self.critical_error.set()
+            except KeyboardInterrupt:
+                self.terminate = True
 
             if time.time() - last_report > 5.0 and 'one_step' in timing:
                 timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)

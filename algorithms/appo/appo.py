@@ -9,7 +9,7 @@ import torch
 
 import numpy as np
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import Event, Queue as TorchQueue
+from torch.multiprocessing import Queue as TorchQueue
 
 from algorithms.appo.actor_worker import make_env_func, ActorWorker
 from algorithms.appo.policy_worker import PolicyWorker
@@ -163,7 +163,7 @@ class APPO(Algorithm):
         self.last_report = time.time()
         self.report_interval = 3.0  # sec
 
-        self.fps_stats = deque([], maxlen=10)
+        self.fps_stats = deque([], maxlen=5)
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
         self.stats = dict()  # regular (non-averaged) stats
@@ -197,21 +197,21 @@ class APPO(Algorithm):
     def finalize(self):
         pass
 
-    def create_actor_worker(self, idx, actor_queue):
+    def create_actor_worker(self, idx, actor_queue, policy_worker_queues):
         learner_queues = {p: w.task_queue for p, w in self.learner_workers.items()}
 
         return ActorWorker(
             self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
             policy_queues=self.policy_queues, report_queue=self.report_queue, learner_queues=learner_queues,
-            policy_workers=self.policy_workers,
+            policy_worker_queues=policy_worker_queues,
         )
 
     # noinspection PyProtectedMember
-    def init_subset(self, indices, actor_queues):
+    def init_subset(self, indices, actor_queues, policy_worker_queues):
         workers = dict()
         started_reset = dict()
         for i in indices:
-            w = self.create_actor_worker(i, actor_queues[i])
+            w = self.create_actor_worker(i, actor_queues[i], policy_worker_queues)
             w.init()
             time.sleep(self.cfg.worker_init_delay)  # just in case
             w.request_reset()
@@ -256,7 +256,7 @@ class APPO(Algorithm):
                     stuck_worker = w
                     stuck_worker.process.kill()
 
-                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx])
+                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx], policy_worker_queues)
                     new_worker.init()
                     new_worker.request_reset()
                     started_reset[worker_idx] = time.time()
@@ -270,19 +270,18 @@ class APPO(Algorithm):
     def init_workers(self):
         actor_queues = [TorchQueue() for _ in range(self.cfg.num_workers)]
 
-        # TODO: refactor this!! get rid of policy worker task_queue
-        weight_queues = dict()
+        policy_worker_queues = dict()
         for policy_id in range(self.cfg.num_policies):
-            weight_queues[policy_id] = []
+            policy_worker_queues[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
-                weight_queues[policy_id].append(TorchQueue())
+                policy_worker_queues[policy_id].append(TorchQueue())
 
         log.info('Initializing GPU learners...')
         learner_idx = 0
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
-                self.report_queue, weight_queues[policy_id],
+                self.report_queue, policy_worker_queues[policy_id],
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -300,26 +299,30 @@ class APPO(Algorithm):
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker = PolicyWorker(
                     i, policy_id, self.cfg, self.obs_space, self.action_space,
-                    policy_queue, actor_queues, weight_queues[policy_id][i], self.report_queue,
-                    self.policy_workers,
+                    policy_queue, actor_queues, self.report_queue,
+                    policy_worker_queues,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
 
         log.info('Initializing actors...')
 
         self.actor_workers = []
-        max_parallel_init = 5
+        max_parallel_init = self.cfg.init_workers_parallel
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
-            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
+            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues, policy_worker_queues)
             self.actor_workers.extend(workers)
 
         # wait for GPU workers to finish initializing
         for policy_id, workers in self.policy_workers.items():
             for w in workers:
                 w.start_process()
-            for w in workers:
                 w.init()
+        for policy_id, workers in self.policy_workers.items():
+            for w in workers:
+                log.debug('Waiting for policy worker %d-%d to finish initialization...', policy_id, w.worker_idx)
+                w.initialized_event.wait()
+                log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
 
     def process_report(self, report):
         if 'policy_id' in report:
@@ -436,22 +439,26 @@ class APPO(Algorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
+            try:
+                while not self._should_end_training():
+                    for w in self.learner_workers.values():
+                        while True:
+                            try:
+                                report = w.report_queue.get(timeout=0.01)
+                                self.process_report(report)
+                            except Empty:
+                                break
 
-            while not self._should_end_training():
-                for w in self.learner_workers.values():
-                    while True:
-                        try:
-                            report = w.report_queue.get(timeout=0.01)
-                            self.process_report(report)
-                        except Empty:
-                            break
+                    if time.time() - self.last_report > self.report_interval:
+                        self.report()
 
-                if time.time() - self.last_report > self.report_interval:
-                    self.report()
-
-                    now = time.time()
-                    self.total_train_seconds += now - self.last_report
-                    self.last_report = now
+                        now = time.time()
+                        self.total_train_seconds += now - self.last_report
+                        self.last_report = now
+            except Exception:
+                log.exception('Exception in driver loop')
+            except KeyboardInterrupt:
+                log.warning('Keyboard interrupt detected in driver loop, exiting...')
 
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():
