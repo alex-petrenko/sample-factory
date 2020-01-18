@@ -1,4 +1,5 @@
 import math
+import psutil
 import random
 import time
 from collections import OrderedDict
@@ -503,6 +504,19 @@ class ActorWorker:
     def _init(self):
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
+        cpu_count = psutil.cpu_count()
+        cores = None
+        if self.cfg.num_workers <= cpu_count and cpu_count % self.cfg.num_workers == 0:
+            cores_to_use = cpu_count // self.cfg.num_workers
+            cores = list(range(self.worker_idx * cores_to_use, (self.worker_idx + 1) * cores_to_use, 1))
+        elif self.cfg.num_workers > cpu_count and self.cfg.num_workers % cpu_count == 0:
+            cores = [self.worker_idx % cpu_count]
+
+        if cores is not None:
+            psutil.Process().cpu_affinity(cores)
+
+        log.debug('Worker %d uses CPU cores %r', self.worker_idx, psutil.Process().cpu_affinity())
+
         self.env_runners = []
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
@@ -536,7 +550,7 @@ class ActorWorker:
 
     def _enqueue_policy_request(self, split_idx, policy_inputs):
         for policy_id, requests in policy_inputs.items():
-            policy_request = dict(worker_idx=self.worker_idx, split_idx=split_idx, policy_inputs=requests)
+            policy_request = (self.worker_idx, split_idx, requests)
             self.policy_queues[policy_id].put((TaskType.POLICY_STEP, policy_request))
 
     def _ensure_traj_buffers_initialized(self, env_runner, split_idx):
@@ -602,9 +616,13 @@ class ActorWorker:
             print_warning = True
             while env_runner.traj_buffer_ready[:, :, new_traj_buffer_idx].min() == 0:
                 if print_warning:
-                    log.warning('Waiting for tensors %d', new_traj_buffer_idx)
+                    log.warning(
+                        ('Waiting for trajectory buffer %d on actor %d-%d. This means learner is the bottleneck. '
+                         'Increase batch size or simplify the computation graph to improve throughput'),
+                        new_traj_buffer_idx, self.worker_idx, split_idx,
+                    )
                     print_warning = False
-                time.sleep(0.001)
+                time.sleep(0.005)
 
     def _report_stats(self, stats):
         for report in stats:

@@ -428,7 +428,7 @@ class APPO(Algorithm):
 
         if self.cfg.benchmark:
             end |= self.total_env_steps_since_resume >= int(1e6)
-            end |= sum(self.samples_collected) >= int(4e5)
+            end |= sum(self.samples_collected) >= int(5e5)
 
         return end
 

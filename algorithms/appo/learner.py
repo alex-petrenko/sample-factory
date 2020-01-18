@@ -1,5 +1,6 @@
 import glob
 import os
+import random
 import threading
 import time
 from collections import OrderedDict, deque
@@ -54,7 +55,7 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # TODO: debug, remove
-        self.train_in_background = True  # TODO!!!! Debug!!! should always train in separate thread
+        self.train_in_background = True
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
@@ -271,7 +272,14 @@ class LearnerWorker:
 
     def _should_save_summaries(self):
         summaries_every = self.summary_rate_decay.at(self.train_step)
-        return self.train_step - self.last_summary_written > summaries_every
+        if self.train_step - self.last_summary_written < summaries_every:
+            return False
+
+        if random.random() < 0.1:
+            # this is to make sure summaries are saved at random moments in time, to guarantee we have no bias
+            return False
+
+        return True
 
     def _after_optimizer_step(self):
         """A hook to be called after each optimizer step."""
@@ -319,34 +327,13 @@ class LearnerWorker:
                 os.remove(oldest_checkpoint)
 
     @staticmethod
-    def _policy_loss(ratio, adv, clip_ratio):
-        # TODO: get rid of leaky PPO, simplify this function
-
-        positive_clip_ratio = clip_ratio
-        negative_clip_ratio = 1.0 / clip_ratio
-
-        is_adv_positive = (adv > 0.0).float()
-        is_ratio_too_big = (ratio > positive_clip_ratio).float() * is_adv_positive
-
-        is_adv_negative = (adv < 0.0).float()
-        is_ratio_too_small = (ratio < negative_clip_ratio).float() * is_adv_negative
-
-        clipping = is_adv_positive * positive_clip_ratio + is_adv_negative * negative_clip_ratio
-
-        is_ratio_clipped = is_ratio_too_big + is_ratio_too_small
-        is_ratio_not_clipped = 1.0 - is_ratio_clipped
-
-        # total_non_clipped = torch.sum(is_ratio_not_clipped).float()
-        fraction_clipped = is_ratio_clipped.mean()
-
-        objective = ratio * adv
-        leak = 0.0  # currently not used
-        objective_clipped = -leak * ratio * adv + clipping * adv * (1.0 + leak)
-
-        policy_loss = -(objective * is_ratio_not_clipped + objective_clipped * is_ratio_clipped)
-        policy_loss = policy_loss.mean()
-
-        return policy_loss, fraction_clipped
+    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high):
+        clipped_ratio = torch.clamp(ratio, 1.0 / clip_ratio_low, clip_ratio_high)
+        loss_unclipped = ratio * adv
+        loss_clipped = clipped_ratio * adv
+        loss = torch.min(loss_unclipped, loss_clipped)
+        loss = loss.mean()
+        return loss
 
     def _value_loss(self, new_values, old_values, target, clip_value):
         value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
@@ -365,29 +352,29 @@ class LearnerWorker:
         return buffer
 
     def _train(self, cpu_buffer, experience_size, timing):
-        with timing.add_time('tensors_gpu_float'):
-            buffer = self._copy_train_data_to_gpu(cpu_buffer)
+        with torch.no_grad():
+            with timing.add_time('tensors_gpu_float'):
+                buffer = self._copy_train_data_to_gpu(cpu_buffer)
 
-        stats = None
+            rho_hat = c_hat = 1.0  # V-trace parameters
+            # noinspection PyArgumentList
+            rho_hat = torch.Tensor([rho_hat]).to(self.device)
+            # noinspection PyArgumentList
+            c_hat = torch.Tensor([c_hat]).to(self.device)
 
-        rho_hat = c_hat = 1.0  # V-trace parameters
-        # noinspection PyArgumentList
-        rho_hat = torch.Tensor([rho_hat]).to(self.device)
-        # noinspection PyArgumentList
-        c_hat = torch.Tensor([c_hat]).to(self.device)
+        clip_ratio_high = self.cfg.ppo_clip_ratio
+        # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
+        clip_ratio_low = 1.0 / clip_ratio_high
 
-        clip_ratio = self.cfg.ppo_clip_ratio
         clip_value = self.cfg.ppo_clip_value
-
         gamma = self.cfg.gamma
 
-        kl_old_mean = kl_old_max = 0.0
-        value_delta_avg = value_delta_max = 0.0
-        fraction_clipped = 0.0
+        kl_old_mean = 0.0
         rnn_dist = 0.0
-        ratio_mean = ratio_min = ratio_max = 0.0
 
         num_sgd_steps = 0
+
+        stats = None
 
         for epoch in range(self.cfg.ppo_epochs):
             minibatches = self._get_minibatches(experience_size)
@@ -401,11 +388,10 @@ class LearnerWorker:
                 # calculate policy head outside of recurrent loop
                 head_outputs = self.actor_critic.forward_head(mb.obs)
 
-                # indices corresponding to 1st frames of trajectory segments
-                traj_indices = indices[::self.cfg.recurrence]
-
                 # initial rnn states
-                rnn_states = buffer.rnn_states[traj_indices]
+                timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
+                rnn_states = mb.rnn_states[timestep]
+                reset_next_state = torch.zeros([len(timestep), 1]).to(self.device)
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
@@ -415,12 +401,15 @@ class LearnerWorker:
                         timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
                         step_head_outputs = head_outputs[timestep]
 
-                        dones = mb.dones[timestep].unsqueeze(dim=1)
-                        rnn_states = (1.0 - dones) * rnn_states + dones * mb.rnn_states[timestep]
+                        # zero-out RNN states on the episode boundary
+                        rnn_states = (1.0 - reset_next_state) * rnn_states
 
                         core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
 
                         core_outputs.append(core_output)
+
+                        # if done=True for this timestep, we will reset the rnn_state for the next timestep
+                        reset_next_state = mb.dones[timestep].unsqueeze(dim=1)
 
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                 # which is the same shape as the minibatch
@@ -441,8 +430,8 @@ class LearnerWorker:
                 values = result.values.squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
-                    vtrace_c = torch.min(c_hat, ratio)
                     vtrace_rho = torch.min(rho_hat, ratio)
+                    vtrace_c = torch.min(c_hat, ratio)
 
                     vs = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
                     adv = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
@@ -466,28 +455,21 @@ class LearnerWorker:
 
                             delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
                             adv[timestep] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
-                            vs[timestep] = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
+                            next_vs = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
+                            vs[timestep] = next_vs
 
                             next_values = curr_values
-                            next_vs = vs[timestep]
 
                     adv_mean = adv.mean()
                     adv_std = adv.std()
                     adv = (adv - adv_mean) / max(1e-2, adv_std)  # normalize advantage
 
                 with timing.add_time('losses'):
-                    policy_loss, fraction_clipped = self._policy_loss(ratio, adv, clip_ratio)
-                    ratio_mean = torch.abs(1.0 - ratio).mean().detach()
-                    ratio_min = ratio.min().detach()
-                    ratio_max = ratio.max().detach()
-
-                    # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
-                    # log.debug('Learner %d policy_Loss %.7f', self.policy_id, policy_loss.cpu().item())
+                    policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
 
                     targets = vs
                     old_values = mb.values
                     value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
-                    value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
                     # entropy loss
                     kl_prior = action_distribution.kl_prior()
@@ -498,7 +480,6 @@ class LearnerWorker:
 
                     # small KL penalty for being different from the behavior policy
                     kl_old = action_distribution.kl_divergence(old_action_distribution)
-                    kl_old_max = kl_old.max()
                     kl_old_mean = kl_old.mean()
                     kl_penalty = self.kl_coeff * kl_old_mean
 
@@ -544,6 +525,27 @@ class LearnerWorker:
                         stats.adv_max = adv.max()
                         stats.max_abs_logprob = torch.abs(mb.action_logits).max()
 
+                        if epoch == self.cfg.ppo_epochs - 1 and batch_num == len(minibatches) - 1:
+                            # we collect these stats only for the last PPO batch, or every time if we're only doing
+                            # one batch, IMPALA-style
+                            ratio_mean = torch.abs(1.0 - ratio).mean().detach()
+                            ratio_min = ratio.min().detach()
+                            ratio_max = ratio.max().detach()
+                            # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
+
+                            value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
+
+                            stats.kl_divergence = kl_old_mean
+                            stats.kl_max = kl_old.max()
+                            stats.value_delta = value_delta_avg
+                            stats.value_delta_max = value_delta_max
+                            stats.fraction_clipped = ((ratio < clip_ratio_low).float() + (ratio > clip_ratio_high).float()).mean()
+                            stats.rnn_dist = rnn_dist
+                            stats.ratio_mean = ratio_mean
+                            stats.ratio_min = ratio_min
+                            stats.ratio_max = ratio_max
+                            stats.num_sgd_steps = num_sgd_steps
+
                         # this caused numerical issues on some versions of PyTorch with second moment getting to infinity
                         adam_max_second_moment = 0.0
                         for key, tensor_state in self.optimizer.state.items():
@@ -571,20 +573,6 @@ class LearnerWorker:
             elif kl_old_mean < self.cfg.target_kl / 2:
                 self.kl_coeff /= 1.5
             self.kl_coeff = max(self.kl_coeff, 1e-6)
-
-            self.last_batch_stats.kl_divergence = kl_old_mean
-            self.last_batch_stats.kl_max = kl_old_max
-            self.last_batch_stats.value_delta = value_delta_avg
-            self.last_batch_stats.value_delta_max = value_delta_max
-            self.last_batch_stats.fraction_clipped = fraction_clipped
-            self.last_batch_stats.rnn_dist = rnn_dist
-            self.last_batch_stats.ratio_mean = ratio_mean
-            self.last_batch_stats.ratio_min = ratio_min
-            self.last_batch_stats.ratio_max = ratio_max
-            self.last_batch_stats.num_sgd_steps = num_sgd_steps
-            for key, value in self.last_batch_stats.items():
-                if isinstance(value, torch.Tensor):
-                    self.last_batch_stats[key] = value.detach()
 
         del buffer
         return stats
@@ -785,6 +773,9 @@ class LearnerWorker:
             self.training_thread.start()
         else:
             self.initialize(timing)
+            log.error(
+                'train_in_background set to False on learner %d! This is slow, use only for testing!', self.policy_id,
+            )
 
         while not self.terminate:
             while True:

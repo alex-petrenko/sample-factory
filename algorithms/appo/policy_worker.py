@@ -71,8 +71,7 @@ class PolicyWorker:
         self.initialized_event.set()
 
     def _store_policy_step_request(self, request):
-        worker_idx = request['worker_idx']
-        split_idx = request['split_idx']
+        worker_idx, split_idx, _ = request
         self.requests[(worker_idx, split_idx)] = request
 
     def _filter_requests(self):
@@ -107,9 +106,7 @@ class PolicyWorker:
             request_order = []
 
             for request in requests:
-                actor_idx = request['worker_idx']
-                split_idx = request['split_idx']
-                request_data = request['policy_inputs']
+                actor_idx, split_idx, request_data = request
 
                 rollout_step = -1
                 for env_idx, agent_idx, rollout_step in request_data:
@@ -310,8 +307,7 @@ class PolicyWorker:
                         with timing.add_time('loop'):
                             while True:
                                 try:
-                                    with timing.add_time('queue'):
-                                        task_type, data = q.get_nowait()
+                                    task_type, data = q.get_nowait()
 
                                     if task_type == TaskType.INIT:
                                         self._init()
