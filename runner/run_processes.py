@@ -63,7 +63,7 @@ def run(run_description):
             if exp_env_vars is not None:
                 for key, value in exp_env_vars.items():
                     log.info('Adding env variable %r %r', key, value)
-                    envvars[key] = value
+                    envvars[str(key)] = str(value)
 
             process = subprocess.Popen(cmd_tokens, stdout=logfile, stderr=logfile, env=envvars)
             process.process_logfile = logfile
