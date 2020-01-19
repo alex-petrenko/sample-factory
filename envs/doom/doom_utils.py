@@ -3,11 +3,13 @@ from gym.spaces import Discrete
 from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_discrete, \
     doom_action_space_hybrid_no_weap, doom_action_space_experimental, doom_action_space_basic
 from envs.doom.doom_gym import VizdoomEnv
-from envs.doom.wrappers.additional_input import DoomAdditionalInputAndRewards
+from envs.doom.wrappers.additional_input import DoomAdditionalInput
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.exploration import ExplorationWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
+from envs.doom.wrappers.reward_shaping import true_reward_final_position, DoomRewardShapingWrapper, \
+    REWARD_SHAPING_DEATHMATCH_V0, true_reward_frags, REWARD_SHAPING_DEATHMATCH_V1
 from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
@@ -15,7 +17,7 @@ from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrap
 
 class DoomSpec:
     def __init__(
-            self, name, env_spec_file, action_space, reward_scaling=1.0, default_timeout=int(1e9),
+            self, name, env_spec_file, action_space, reward_scaling=1.0, default_timeout=-1,
             num_agents=1, num_bots=0,
             respawn_delay=0,
             extra_wrappers=None,
@@ -35,14 +37,13 @@ class DoomSpec:
         self.respawn_delay = respawn_delay
 
         # expect list of tuples (wrapper_cls, wrapper_kwargs)
-        self.extra_wrappers = self._extra_wrappers_or_default(extra_wrappers)
+        self.extra_wrappers = extra_wrappers
 
-    @staticmethod
-    def _extra_wrappers_or_default(wrappers):
-        if wrappers is None:
-            return [(DoomAdditionalInputAndRewards, {})]  # if no wrappers provided, we use the default one
-        else:
-            return wrappers
+
+ADDITIONAL_INPUT = (DoomAdditionalInput, {})  # health, ammo, etc. as input vector
+STANDARD_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V0, true_reward_func=None))
+BOTS_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V0, true_reward_func=true_reward_frags))
+DEATHMATCH_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V1, true_reward_func=true_reward_final_position))
 
 
 DOOM_ENVS = [
@@ -50,32 +51,40 @@ DOOM_ENVS = [
         'doom_basic', 'basic.cfg',
         Discrete(1 + 3),  # idle, left, right, attack
         0.01, 300,
-        extra_wrappers=[(DoomAdditionalInputAndRewards, {'with_reward_shaping': False})],
     ),
 
     DoomSpec('doom_corridor', 'deadly_corridor.cfg', Discrete(1 + 7), 0.01, 2100),
     DoomSpec('doom_gathering', 'health_gathering.cfg', Discrete(1 + 3), 0.01, 2100),
 
-    DoomSpec('doom_battle', 'D3_battle.cfg', Discrete(1 + 8), 1.0, 2100, extra_wrappers=[]),
-    DoomSpec('doom_battle_tuple_actions', 'D3_battle.cfg', doom_action_space_discrete(), 1.0, 2100),
-    DoomSpec('doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100),
-    DoomSpec('doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100),
-
-    DoomSpec('doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
-
     DoomSpec(
-        'doom_two_colors_easy', 'two_colors_easy.cfg',
-        doom_action_space_basic(),
+        'doom_two_colors_easy', 'two_colors_easy.cfg', doom_action_space_basic(),
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
 
     DoomSpec(
-        'doom_two_colors_hard', 'two_colors_hard.cfg',
-        doom_action_space_basic(),
+        'doom_two_colors_hard', 'two_colors_hard.cfg', doom_action_space_basic(),
         extra_wrappers=[(DoomGatheringRewardShaping, {})],
     ),
 
-    DoomSpec('doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8),
+    DoomSpec('doom_battle', 'D3_battle.cfg', Discrete(1 + 8), 1.0, 2100),
+    DoomSpec(
+        'doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100,
+        extra_wrappers=[ADDITIONAL_INPUT, STANDARD_REWARD_SHAPING],
+    ),
+    DoomSpec(
+        'doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100,
+        extra_wrappers=[ADDITIONAL_INPUT, STANDARD_REWARD_SHAPING],
+    ),
+
+    DoomSpec(
+        'doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8,
+        extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
+    ),
+
+    DoomSpec(
+        'doom_dwango5', 'dwango5_dm.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8,
+        extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
+    ),
 
     DoomSpec(
         'doom_dwango5_bots_experimental',
@@ -83,6 +92,7 @@ DOOM_ENVS = [
         doom_action_space_experimental(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
+        extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING],
     ),
 
     DoomSpec(
@@ -91,9 +101,7 @@ DOOM_ENVS = [
         doom_action_space_experimental(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
-        extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'with_reward_shaping': False}), (ExplorationWrapper, {}),
-        ]
+        extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
     ),
 
     DoomSpec(
@@ -102,26 +110,7 @@ DOOM_ENVS = [
         doom_action_space_experimental(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
-        extra_wrappers=[(DoomAdditionalInputAndRewards, {}), (ExplorationWrapper, {})],
-    ),
-
-    DoomSpec(
-        'doom_dwango5_multi',
-        'dwango5_dm_continuous_weap.cfg',
-        doom_action_space_experimental(),
-        1.0, int(1e9),
-        num_agents=6, num_bots=2,
-    ),
-
-    DoomSpec(
-        'doom_dwango5_multi_v2',
-        'dwango5_dm_continuous_weap.cfg',
-        doom_action_space_experimental(),
-        1.0, int(1e9),
-        num_agents=6, num_bots=2, respawn_delay=2,
-        extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
-        ]
+        extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
     ),
 
     DoomSpec(
@@ -130,9 +119,7 @@ DOOM_ENVS = [
         doom_action_space_experimental(with_use=True),
         1.0, int(1e9),
         num_agents=2, num_bots=0, respawn_delay=2,
-        extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
-        ]
+        extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),
 
     DoomSpec(
@@ -141,9 +128,7 @@ DOOM_ENVS = [
         doom_action_space_experimental(with_use=True),
         1.0, int(1e9),
         num_agents=6, num_bots=2, respawn_delay=2,
-        extra_wrappers=[
-            (DoomAdditionalInputAndRewards, {'reward_shaping_version': 1}),
-        ]
+        extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),
 ]
 
@@ -216,11 +201,12 @@ def make_doom_env_impl(
     timeout = doom_spec.default_timeout
     if episode_horizon is not None and episode_horizon > 0:
         timeout = episode_horizon
-    env = TimeLimitWrapper(env, limit=timeout, random_variation_steps=0)
+    if timeout > 0:
+        env = TimeLimitWrapper(env, limit=timeout, random_variation_steps=0)
 
     pixel_format = cfg.pixel_format if 'pixel_format' in cfg else 'HWC'
     if pixel_format == 'CHW':
-        env = PixelFormatChwWrapper(env)  # TODO: potential optimization, render directly in CHW?
+        env = PixelFormatChwWrapper(env)
 
     if doom_spec.extra_wrappers is not None:
         for wrapper_cls, wrapper_kwargs in doom_spec.extra_wrappers:

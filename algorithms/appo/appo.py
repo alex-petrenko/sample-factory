@@ -161,7 +161,7 @@ class APPO(Algorithm):
         self.total_train_seconds = 0  # TODO: save and load from checkpoint??
 
         self.last_report = time.time()
-        self.report_interval = 3.0  # sec
+        self.report_interval = 5.0  # sec
 
         self.fps_stats = deque([], maxlen=5)
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]

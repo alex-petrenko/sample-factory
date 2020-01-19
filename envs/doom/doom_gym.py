@@ -79,6 +79,8 @@ class VizdoomEnv(gym.Env):
         self.screen_resolution = ScreenResolution.RES_640X480
         self.calc_observation_space()
 
+        self.black_screen = None
+
         # provided as a part of environment definition, since these depend on the scenario and
         # can be quite complex multi-discrete spaces
         self.action_space = action_space
@@ -301,14 +303,14 @@ class VizdoomEnv(gym.Env):
 
     def _vizdoom_variables_bug_workaround(self, info, done):
         """Some variables don't get reset to zero on game.new_episode(). This fixes it (also check overflow?)."""
-        if not done:
-            self._prev_info = copy.deepcopy(info)
+        if done:
+            log.info('DAMAGECOUNT value on done: %r', info['DAMAGECOUNT'])
+
         if self._last_episode_info is not None:
             bugged_vars = ['DEATHCOUNT', 'HITCOUNT', 'DAMAGECOUNT']
             for v in bugged_vars:
-                if v not in info:
-                    continue
-                info[v] -= self._last_episode_info.get(v, 0)
+                if v in info:
+                    info[v] -= self._last_episode_info.get(v, 0)
 
     def step(self, actions):
         """
@@ -332,8 +334,14 @@ class VizdoomEnv(gym.Env):
             game_variables = self._game_variables_dict(state)
             info.update(self.get_info(game_variables))
             self._update_histogram(info)
+            self._prev_info = copy.deepcopy(info)
         else:
-            observation = np.zeros(self.observation_space.shape, dtype=np.uint8)
+            if self.black_screen is None:
+                self.black_screen = np.zeros(self.observation_space.shape, dtype=np.uint8)
+            observation = self.black_screen
+
+            # when done=True Doom does not allow us to call get_info, so we provide info from the last frame
+            info.update(self._prev_info)
 
         self._vizdoom_variables_bug_workaround(info, done)
         return observation, reward, done, info
@@ -491,8 +499,8 @@ class VizdoomEnv(gym.Env):
                     _, rew, _, _ = env.step(actions)
 
                     new_total_rew = total_rew + rew
-                    if new_total_rew != total_rew:
-                        log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
+                    # if new_total_rew != total_rew:
+                    #     log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
                     total_rew = new_total_rew
                     state = doom.game.get_state()
 

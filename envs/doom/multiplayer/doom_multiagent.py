@@ -1,4 +1,5 @@
 import copy
+import os
 import sys
 
 import numpy as np
@@ -8,7 +9,8 @@ from utils.network import is_udp_port_available
 from utils.utils import log
 
 
-DEFAULT_UDP_PORT = 40300
+DEFAULT_UDP_PORT = os.environ.get('DOOM_DEFAULT_UDP_PORT', 40300)
+print('Default UDP port is ', DEFAULT_UDP_PORT)
 
 
 def find_available_port(start_port, increment=1000):
@@ -74,7 +76,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             return
 
         self._create_doom_game(self.mode)
-        port = DEFAULT_UDP_PORT if self.init_info is None else self.init_info.get('port')
+        port = DEFAULT_UDP_PORT if self.init_info is None else self.init_info.get('port', DEFAULT_UDP_PORT)
 
         if self._is_server():
             log.info('Using port %d on host...', port)
@@ -169,7 +171,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     else:
                         bot_name = ''
 
-                    log.info('Adding bot %d %s', i, bot_name)
+                    # log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot{bot_name}')
                 else:
                     # add random bots according to the desired difficulty

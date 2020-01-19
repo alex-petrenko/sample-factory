@@ -328,7 +328,7 @@ class LearnerWorker:
 
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high):
-        clipped_ratio = torch.clamp(ratio, 1.0 / clip_ratio_low, clip_ratio_high)
+        clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
         loss_unclipped = ratio * adv
         loss_clipped = clipped_ratio * adv
         loss = torch.min(loss_unclipped, loss_clipped)
@@ -391,7 +391,6 @@ class LearnerWorker:
                 # initial rnn states
                 timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
                 rnn_states = mb.rnn_states[timestep]
-                reset_next_state = torch.zeros([len(timestep), 1]).to(self.device)
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
@@ -401,15 +400,12 @@ class LearnerWorker:
                         timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
                         step_head_outputs = head_outputs[timestep]
 
-                        # zero-out RNN states on the episode boundary
-                        rnn_states = (1.0 - reset_next_state) * rnn_states
-
                         core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
-
                         core_outputs.append(core_output)
 
-                        # if done=True for this timestep, we will reset the rnn_state for the next timestep
-                        reset_next_state = mb.dones[timestep].unsqueeze(dim=1)
+                        # zero-out RNN states on the episode boundary
+                        dones = mb.dones[timestep].unsqueeze(dim=1)
+                        rnn_states = (1.0 - dones) * rnn_states
 
                 # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                 # which is the same shape as the minibatch

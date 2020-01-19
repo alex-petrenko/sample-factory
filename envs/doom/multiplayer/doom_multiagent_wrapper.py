@@ -22,6 +22,13 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
             log.warning(msg)
 
 
+def udp_port_num(env_config):
+    if env_config is None:
+        return DEFAULT_UDP_PORT
+    port_to_use = DEFAULT_UDP_PORT + 100 * env_config.worker_index + env_config.vector_index
+    return port_to_use
+
+
 class TaskType(Enum):
     INIT, TERMINATE, RESET, STEP, STEP_UPDATE, INFO = range(6)
 
@@ -34,8 +41,13 @@ def init_multiplayer_env(make_env_func, player_id, env_config, init_info=None):
     if env_config is not None and 'vector_index' in env_config:
         env.unwrapped.vector_index = env_config.vector_index
 
-    if init_info is not None:
-        env.unwrapped.init_info = init_info
+    if init_info is None:
+        port_to_use = udp_port_num(env_config)
+        port = find_available_port(port_to_use, increment=1000)
+        log.debug('Using port %d', port)
+        init_info = dict(port=port)
+
+    env.unwrapped.init_info = init_info
 
     env.seed(env.unwrapped.worker_index * 1000 + env.unwrapped.vector_index * 10 + player_id)
     return env
@@ -197,7 +209,7 @@ class MultiAgentEnv:
             ]
 
             try:
-                port_to_use = DEFAULT_UDP_PORT + 100 * self.env_config.worker_index + self.env_config.vector_index
+                port_to_use = udp_port_num(self.env_config)
                 port = find_available_port(port_to_use, increment=1000)
                 log.debug('Using port %d', port)
                 init_info = dict(port=port)
