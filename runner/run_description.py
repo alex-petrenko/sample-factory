@@ -74,7 +74,7 @@ class ParamGrid(ParamGenerator):
 
 
 class Experiment:
-    def __init__(self, name, cmd, param_generator):
+    def __init__(self, name, cmd, param_generator, env_vars=None):
         """
         :param cmd: base command to append the parameters to
         :param param_generator: iterable of parameter dicts
@@ -82,6 +82,7 @@ class Experiment:
         self.base_name = name
         self.cmd = cmd
         self.params = param_generator
+        self.env_vars = env_vars
 
     def generate_experiments(self):
         """Yields tuples of (cmd, experiment_name)"""
@@ -111,7 +112,7 @@ class Experiment:
             cmd_tokens.append(f'--experiment {experiment_name}')
             param_str = ' '.join(cmd_tokens)
 
-            yield param_str, experiment_name
+            yield param_str, experiment_name, self.env_vars
 
 
 class RunDescription:

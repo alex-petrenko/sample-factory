@@ -46,7 +46,7 @@ def run(run_description):
 
     while len(processes) > 0 or next_experiment is not None:
         while can_squeeze_another_process() and next_experiment is not None:
-            cmd, name, root_dir = next_experiment
+            cmd, name, root_dir, exp_env_vars = next_experiment
             cmd_tokens = cmd.split(' ')
 
             best_gpu, best_gpu_available_processes = find_least_busy_gpu()
@@ -60,6 +60,11 @@ def run(run_description):
             logfile = open(join(experiment_dir(name, root_dir), 'log.txt'), 'wb')
             envvars = os.environ.copy()
             envvars['CUDA_VISIBLE_DEVICES'] = f'{best_gpu}'
+            if exp_env_vars is not None:
+                for key, value in exp_env_vars.items():
+                    log.info('Adding env variable %r %r', key, value)
+                    envvars[key] = value
+
             process = subprocess.Popen(cmd_tokens, stdout=logfile, stderr=logfile, env=envvars)
             process.process_logfile = logfile
             process.gpu_id = best_gpu
