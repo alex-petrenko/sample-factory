@@ -112,7 +112,7 @@ class Experiment:
             cmd_tokens.append(f'--experiment {experiment_name}')
             param_str = ' '.join(cmd_tokens)
 
-            yield param_str, experiment_name, self.env_vars
+            yield param_str, experiment_name
 
 
 class RunDescription:
@@ -136,4 +136,4 @@ class RunDescription:
             experiment_cmds = experiment.generate_experiments()
             for experiment_cmd, experiment_name in experiment_cmds:
                 experiment_cmd += f' --experiments_root {root_dir}'
-                yield experiment_cmd, experiment_name, root_dir
+                yield experiment_cmd, experiment_name, root_dir, experiment.env_vars
