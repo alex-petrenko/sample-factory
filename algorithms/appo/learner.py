@@ -55,7 +55,7 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # TODO: debug, remove
-        self.train_in_background = True
+        self.train_in_background = False #TODO
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()

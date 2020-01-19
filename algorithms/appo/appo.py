@@ -122,6 +122,9 @@ class APPO(Algorithm):
         )
         p.add_argument('--init_workers_parallel', default=5, type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
 
+        # PBT stuff
+        p.add_argument('--with_pbt', default=True, type=str2bool, help='Enables population-based training basic features')
+
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
         p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
@@ -150,8 +153,7 @@ class APPO(Algorithm):
             for split_idx in range(self.cfg.worker_num_splits):
                 self.policy_outputs[(worker_idx, split_idx)] = dict()
 
-        self.episode_rewards = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
-        self.episode_lengths = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
+        self.policy_avg_stats = dict()
 
         self.last_timing = dict()
         self.env_steps = dict()
@@ -336,8 +338,11 @@ class APPO(Algorithm):
 
             if 'episodic' in report:
                 s = report['episodic']
-                self.episode_rewards[policy_id].append(s['reward'])
-                self.episode_lengths[policy_id].append(s['len'])
+                for key, value in s.items():
+                    if key not in self.policy_avg_stats:
+                        self.policy_avg_stats[key] = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
+
+                    self.policy_avg_stats[key][policy_id].append(value)
 
             if 'train' in report:
                 self.report_train_summaries(report['train'], policy_id)
@@ -365,18 +370,8 @@ class APPO(Algorithm):
         past_moment, past_frames = self.fps_stats[0]
         fps = (total_env_steps - past_frames) / (now - past_moment)
 
-        avg_reward, avg_length, sample_throughput = dict(), dict(), dict()
+        sample_throughput = dict()
         for policy_id in range(self.cfg.num_policies):
-            if len(self.episode_rewards[policy_id]) >= self.episode_rewards[policy_id].maxlen:
-                avg_reward[policy_id] = np.mean(self.episode_rewards[policy_id])
-            else:
-                avg_reward[policy_id] = math.nan
-
-            if len(self.episode_lengths[policy_id]) >= self.episode_lengths[policy_id].maxlen:
-                avg_length[policy_id] = np.mean(self.episode_lengths[policy_id])
-            else:
-                avg_length[policy_id] = math.nan
-
             self.throughput_stats[policy_id].append((now, self.samples_collected[policy_id]))
             if len(self.throughput_stats[policy_id]) > 1:
                 past_moment, past_samples = self.throughput_stats[policy_id][0]
@@ -384,22 +379,29 @@ class APPO(Algorithm):
             else:
                 sample_throughput[policy_id] = math.nan
 
-        self.print_stats(fps, sample_throughput, avg_reward, total_env_steps)
-        self.report_basic_summaries(fps, sample_throughput, avg_reward, avg_length)
+        self.print_stats(fps, sample_throughput, total_env_steps)
+        self.report_basic_summaries(fps, sample_throughput)
 
-    def print_stats(self, fps, sample_throughput, avg_reward, total_env_steps):
+    def print_stats(self, fps, sample_throughput, total_env_steps):
         samples_per_policy = ', '.join([f'{p}: {s:.1f}' for p, s in sample_throughput.items()])
         log.debug(
             'Fps is %.1f. Total num frames: %d. Throughput: %s. Samples: %d',
             fps, total_env_steps, samples_per_policy, sum(self.samples_collected),
         )
-        log.debug('Avg episode reward: %r', [f'{p}: {r:.3f}' for p, r in avg_reward.items()])
+
+        if 'reward' in self.policy_avg_stats:
+            policy_reward_stats = []
+            for policy_id in range(self.cfg.num_policies):
+                reward_stats = self.policy_avg_stats['reward'][policy_id]
+                if len(reward_stats) > 0:
+                    policy_reward_stats.append((policy_id, f'{np.mean(reward_stats):.3f}'))
+            log.debug('Avg episode reward: %r', policy_reward_stats)
 
     def report_train_summaries(self, stats, policy_id):
         for key, scalar in stats.items():
             self.writers[policy_id].add_scalar(f'train/{key}', scalar, self.env_steps[policy_id])
 
-    def report_basic_summaries(self, fps, sample_throughput, avg_reward, avg_length):
+    def report_basic_summaries(self, fps, sample_throughput):
         memory_mb = memory_consumption_mb()
 
         default_policy = 0
@@ -414,20 +416,20 @@ class APPO(Algorithm):
                 for key, value in self.stats.items():
                     self.writers[policy_id].add_scalar(f'stats/{key}', value, env_steps)
 
-            if math.isnan(avg_reward[policy_id]) or math.isnan(avg_length[policy_id]):
-                # not enough data to report yet
-                continue
+            if not math.isnan(sample_throughput[policy_id]):
+                self.writers[policy_id].add_scalar('0_aux/sample_throughput', sample_throughput[policy_id], env_steps)
 
-            self.writers[policy_id].add_scalar('0_aux/sample_throughput', sample_throughput[policy_id], env_steps)
-            self.writers[policy_id].add_scalar('0_aux/avg_reward', float(avg_reward[policy_id]), env_steps)
-            self.writers[policy_id].add_scalar('0_aux/avg_length', float(avg_length[policy_id]), env_steps)
+            for key, stat in self.policy_avg_stats.items():
+                if len(stat[policy_id]) > 0:
+                    stat_value = np.mean(stat[policy_id])
+                    self.writers[policy_id].add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
 
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
         end |= self.total_train_seconds > self.cfg.train_for_seconds
 
         if self.cfg.benchmark:
-            end |= self.total_env_steps_since_resume >= int(1e6)
+            end |= self.total_env_steps_since_resume >= int(2e6)
             end |= sum(self.samples_collected) >= int(5e5)
 
         return end

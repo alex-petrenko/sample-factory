@@ -303,8 +303,8 @@ class VizdoomEnv(gym.Env):
 
     def _vizdoom_variables_bug_workaround(self, info, done):
         """Some variables don't get reset to zero on game.new_episode(). This fixes it (also check overflow?)."""
-        if done:
-            log.info('DAMAGECOUNT value on done: %r', info['DAMAGECOUNT'])
+        if done and 'DAMAGECOUNT' in info:
+            log.info('DAMAGECOUNT value on done: %r', info.get('DAMAGECOUNT'))
 
         if self._last_episode_info is not None:
             bugged_vars = ['DEATHCOUNT', 'HITCOUNT', 'DAMAGECOUNT']
