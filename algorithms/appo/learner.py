@@ -55,7 +55,7 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # TODO: debug, remove
-        self.train_in_background = False #TODO
+        self.train_in_background = True
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
@@ -236,15 +236,12 @@ class LearnerWorker:
         assert self.cfg.rollout % self.cfg.recurrence == 0
         assert experience_size % self.cfg.batch_size == 0
 
+        if self.cfg.macro_batch == self.cfg.batch_size:
+            return [None]  # single minibatch is actually the entire buffer, we don't need indices
+
         # indices that will start the mini-trajectories from the same episode (for bptt)
         indices = np.arange(0, experience_size, self.cfg.recurrence)
-
-        if self.cfg.macro_batch == self.cfg.batch_size and self.cfg.ppo_epochs == 1:
-            # if it's only one batch, we don't need to randomize anything
-            # it should be pretty random just due to async nature of the algorithm
-            pass
-        else:
-            indices = np.random.permutation(indices)
+        indices = np.random.permutation(indices)
 
         # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
         indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
@@ -258,6 +255,10 @@ class LearnerWorker:
 
     @staticmethod
     def _get_minibatch(buffer, indices):
+        if indices is None:
+            # handle the case of a single batch, where the entire buffer is a minibatch
+            return buffer
+
         mb = AttrDict()
 
         for item, x in buffer.items():
@@ -332,7 +333,8 @@ class LearnerWorker:
         loss_unclipped = ratio * adv
         loss_clipped = clipped_ratio * adv
         loss = torch.min(loss_unclipped, loss_clipped)
-        loss = loss.mean()
+        loss = -loss.mean()
+
         return loss
 
     def _value_loss(self, new_values, old_values, target, clip_value):
@@ -342,9 +344,8 @@ class LearnerWorker:
         value_loss = torch.max(value_original_loss, value_clipped_loss)
         value_loss = value_loss.mean()
         value_loss *= self.cfg.value_loss_coeff
-        value_delta = torch.abs(new_values - old_values)
 
-        return value_loss, value_delta
+        return value_loss
 
     def _copy_train_data_to_gpu(self, buffer):
         for d, k, v in iterate_recursively(buffer):
@@ -358,9 +359,9 @@ class LearnerWorker:
 
             rho_hat = c_hat = 1.0  # V-trace parameters
             # noinspection PyArgumentList
-            rho_hat = torch.Tensor([rho_hat]).to(self.device)
+            rho_hat = torch.Tensor([rho_hat])
             # noinspection PyArgumentList
-            c_hat = torch.Tensor([c_hat]).to(self.device)
+            c_hat = torch.Tensor([c_hat])
 
         clip_ratio_high = self.cfg.ppo_clip_ratio
         # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
@@ -426,26 +427,31 @@ class LearnerWorker:
                 values = result.values.squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
-                    vtrace_rho = torch.min(rho_hat, ratio)
-                    vtrace_c = torch.min(c_hat, ratio)
+                    ratios_cpu = ratio.cpu()
+                    values_cpu = values.cpu()
+                    rewards_cpu = mb.rewards.cpu()  # we only need this on CPU, potential minor optimization
+                    dones_cpu = mb.dones.cpu()
 
-                    vs = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
-                    adv = torch.zeros((num_trajectories * self.cfg.recurrence)).to(self.device)
+                    vtrace_rho = torch.min(rho_hat, ratios_cpu)
+                    vtrace_c = torch.min(c_hat, ratios_cpu)
+
+                    vs = torch.zeros((num_trajectories * self.cfg.recurrence))
+                    adv = torch.zeros((num_trajectories * self.cfg.recurrence))
 
                     last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
-                    next_values = (values[last_timestep] - mb.rewards[last_timestep]) / self.cfg.gamma
+                    next_values = (values_cpu[last_timestep] - rewards_cpu[last_timestep]) / self.cfg.gamma
                     next_vs = next_values
 
                     with timing.add_time('vtrace'):
                         for i in reversed(range(self.cfg.recurrence)):
                             timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
 
-                            rewards = mb.rewards[timestep]
-                            dones = mb.dones[timestep]
+                            rewards = rewards_cpu[timestep]
+                            dones = dones_cpu[timestep]
                             not_done = 1.0 - dones
                             not_done_times_gamma = not_done * gamma
 
-                            curr_values = values[timestep]
+                            curr_values = values_cpu[timestep]
                             curr_vtrace_rho = vtrace_rho[timestep]
                             curr_vtrace_c = vtrace_c[timestep]
 
@@ -459,13 +465,14 @@ class LearnerWorker:
                     adv_mean = adv.mean()
                     adv_std = adv.std()
                     adv = (adv - adv_mean) / max(1e-2, adv_std)  # normalize advantage
+                    adv = adv.to(self.device)
 
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
 
-                    targets = vs
+                    targets = vs.to(self.device)
                     old_values = mb.values
-                    value_loss, value_delta = self._value_loss(values, old_values, targets, clip_value)
+                    value_loss = self._value_loss(values, old_values, targets, clip_value)
 
                     # entropy loss
                     kl_prior = action_distribution.kl_prior()
@@ -529,6 +536,7 @@ class LearnerWorker:
                             ratio_max = ratio.max().detach()
                             # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
 
+                            value_delta = torch.abs(values - old_values)
                             value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
                             stats.kl_divergence = kl_old_mean
@@ -876,3 +884,13 @@ class LearnerWorker:
 # [2020-01-09 20:33:23,892] Train loop timing: init: 1.3945, train_wait: 0.0000, bptt: 2.2262, vtrace: 5.5308, losses: 0.6580, update: 3.6261, train: 19.8292
 # [2020-01-09 20:33:28,787] Collected {0: 1015808}, FPS: 29476.0
 # [2020-01-09 20:33:28,787] Timing: experience: 34.4622
+
+# Version V60
+# [2020-01-19 03:25:14,014] Env runner 0: timing wait_actor: 0.0001, waiting: 9.7151, reset: 41.1152, save_policy_outputs: 0.5734, env_step: 39.1791, overhead: 6.5181, enqueue_policy_requests: 0.1089, complete_rollouts: 0.2901, one_step: 0.0163, work: 47.2741, wait_buffers: 0.2795
+# [2020-01-19 03:25:14,015] Env runner 1: timing wait_actor: 0.0001, waiting: 10.1184, reset: 41.6788, save_policy_outputs: 0.5846, env_step: 39.1234, overhead: 6.4405, enqueue_policy_requests: 0.1021, complete_rollouts: 0.0304, one_step: 0.0154, work: 46.8807, wait_buffers: 0.0202
+# [2020-01-19 03:25:14,178] Updated weights on worker 0, policy_version 251 (0.00032)
+# [2020-01-19 03:25:14,201] Gpu worker timing: init: 1.3160, wait_policy: 0.0009, gpu_waiting: 9.5548, loop: 9.7118, weight_update: 0.0003, updates: 0.0005, deserialize: 1.5404, to_device: 12.7886, forward: 12.9712, postprocess: 4.9893, handle_policy_step: 37.9686, one_step: 0.0000, work: 47.9418
+# [2020-01-19 03:25:14,221] GPU learner timing: extract: 0.0392, buffers: 0.0745, tensors: 11.0697, buff_ready: 0.4808, prepare: 11.7095
+# [2020-01-19 03:25:14,321] Train loop timing: init: 1.4332, train_wait: 0.0451, tensors_gpu_float: 4.3031, bptt: 5.0880, vtrace: 2.4773, losses: 1.9113, update: 7.6270, train: 36.8291
+# [2020-01-19 03:25:14,465] Collected {0: 2015232}, FPS: 35779.2
+# [2020-01-19 03:25:14,465] Timing: experience: 56.3241

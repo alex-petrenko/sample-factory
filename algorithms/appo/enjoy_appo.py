@@ -127,7 +127,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                 'Episode reward: %f, avg reward for %d episodes: %f', episode_reward, len(last_episodes), avg_reward,
             )
 
-            break  # TODO!!!
             if max_frames_reached(num_frames):
                 break
 
