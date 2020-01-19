@@ -9,7 +9,7 @@ from utils.network import is_udp_port_available
 from utils.utils import log
 
 
-DEFAULT_UDP_PORT = os.environ.get('DOOM_DEFAULT_UDP_PORT', 40300)
+DEFAULT_UDP_PORT = int(os.environ.get('DOOM_DEFAULT_UDP_PORT', 40300))
 log.info('Default UDP port is %r', DEFAULT_UDP_PORT)
 
 
