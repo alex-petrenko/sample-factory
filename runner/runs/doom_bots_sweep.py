@@ -30,4 +30,4 @@ _experiments = [
     ),
 ]
 
-RUN_DESCRIPTION = RunDescription('doom_bots_v59_sweep', experiments=_experiments, pause_between_experiments=10, use_gpus=4, experiments_per_gpu=1, max_parallel=4)
+RUN_DESCRIPTION = RunDescription('doom_bots_v60_sweep', experiments=_experiments, pause_between_experiments=120, use_gpus=4, experiments_per_gpu=1, max_parallel=4)
