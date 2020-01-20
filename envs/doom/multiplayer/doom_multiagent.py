@@ -180,7 +180,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                     diff = max(self.easiest_bot, diff)
                     diff = min(self.hardest_bot, diff)
                     bot_name = self._random_bot(diff, used_bots)
-                    log.info('Adding bot %d %s', i, bot_name)
+                    # log.info('Adding bot %d %s', i, bot_name)
                     self.game.send_game_command(f'addbot {bot_name}')
 
         self.timestep = 0
