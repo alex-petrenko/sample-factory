@@ -91,6 +91,7 @@ class ActorCritic(nn.Module):
         mean = self.cfg.obs_subtract_mean
         scale = self.cfg.obs_scale
 
+        obs_dict['obs'] = obs_dict['obs'].float()
         if abs(mean) > EPS and abs(scale - 1.0) > EPS:
             obs_dict['obs'] = (obs_dict['obs'] - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
 
@@ -98,7 +99,7 @@ class ActorCritic(nn.Module):
         x = x.view(-1, self.conv_out_size)
 
         if self.measurements_head is not None:
-            measurements = self.measurements_head(obs_dict['measurements'])
+            measurements = self.measurements_head(obs_dict['measurements'].float())
             x = torch.cat((x, measurements), dim=1)
 
         x = self.linear1(x)

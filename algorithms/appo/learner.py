@@ -126,10 +126,6 @@ class LearnerWorker:
     def _prepare_train_buffer(self, rollouts, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
 
-        # if self.cfg.benchmark:
-        #     log.info('%r', trajectories[0].policy_version)
-        #     log.info('%r', trajectories[-1].policy_version)
-
         with timing.add_time('buffers'):
             buffer = AttrDict()
 
@@ -624,7 +620,7 @@ class LearnerWorker:
                 torch.manual_seed(self.cfg.seed)
                 np.random.seed(self.cfg.seed)
 
-            torch.set_num_threads(1)  # TODO: experimental
+            torch.backends.cudnn.benchmark = True
 
             self.device = device_for_policy(self.policy_id)
             self.init_model()
@@ -894,3 +890,14 @@ class LearnerWorker:
 # [2020-01-19 03:25:14,321] Train loop timing: init: 1.4332, train_wait: 0.0451, tensors_gpu_float: 4.3031, bptt: 5.0880, vtrace: 2.4773, losses: 1.9113, update: 7.6270, train: 36.8291
 # [2020-01-19 03:25:14,465] Collected {0: 2015232}, FPS: 35779.2
 # [2020-01-19 03:25:14,465] Timing: experience: 56.3241
+
+# Version V61, cudnn benchmark=True
+# [2020-01-19 18:19:31,416] Env runner 0: timing wait_actor: 0.0002, waiting: 8.8857, reset: 41.9806, save_policy_outputs: 0.5918, env_step: 38.3737, overhead: 6.3290, enqueue_policy_requests: 0.1026, complete_rollouts: 0.0286, one_step: 0.0141, work: 46.0301, wait_buffers: 0.0181
+# [2020-01-19 18:19:31,420] Env runner 1: timing wait_actor: 0.0002, waiting: 9.0225, reset: 42.5019, save_policy_outputs: 0.5540, env_step: 38.1044, overhead: 6.2374, enqueue_policy_requests: 0.1140, complete_rollouts: 0.2770, one_step: 0.0169, work: 45.8830, wait_buffers: 0.2664
+# [2020-01-19 18:19:31,472] Updated weights on worker 0, policy_version 245 (0.00051)
+# [2020-01-19 18:19:31,587] Updated weights on worker 0, policy_version 246 (0.00053)
+# [2020-01-19 18:19:31,610] Gpu worker timing: init: 1.3633, wait_policy: 0.0037, gpu_waiting: 9.4391, loop: 9.6261, weight_update: 0.0005, updates: 0.0007, deserialize: 1.4722, to_device: 12.5683, forward: 12.8369, postprocess: 4.9932, handle_policy_step: 36.1579, one_step: 0.0000, work: 45.9985
+# [2020-01-19 18:19:31,624] GPU learner timing: extract: 0.0376, buffers: 0.0769, tensors: 11.2689, buff_ready: 0.4423, prepare: 11.8845
+# [2020-01-19 18:19:31,630] Train loop timing: init: 1.4804, train_wait: 0.0481, tensors_gpu_float: 4.1565, bptt: 5.2692, vtrace: 2.2177, losses: 1.7225, update: 7.5387, train: 31.5856
+# [2020-01-19 18:19:31,797] Collected {0: 1966080}, FPS: 36238.5
+# [2020-01-19 18:19:31,797] Timing: experience: 54.2540
