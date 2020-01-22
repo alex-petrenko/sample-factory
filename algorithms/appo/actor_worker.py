@@ -11,10 +11,12 @@ from gym import spaces, Wrapper
 from torch.multiprocessing import Process as TorchProcess, Event
 
 from algorithms.appo.appo_utils import TaskType, set_step_data
+from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from algorithms.utils.multi_env import safe_get
 from envs.create_env import create_env
+from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb
 
@@ -60,11 +62,20 @@ def transform_dict_observations(observations):
     return obs_dict
 
 
+# noinspection PyProtectedMember
+def update_reward_shaping_scheme(env, agent_idx, reward_shaping):
+    if hasattr(env.unwrapped, '_reward_shaping_wrapper'):
+        env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme = reward_shaping
+    elif isinstance(env.unwrapped, MultiAgentEnv):
+        env.unwrapped.set_env_attr(agent_idx, 'unwrapped._reward_shaping_wrapper.reward_shaping_scheme', reward_shaping)
+
+
 class ActorState:
     """State of a single actor in an environment."""
 
-    def __init__(self, cfg, worker_idx, split_idx, env_idx, agent_idx, num_traj_buffers):
+    def __init__(self, cfg, env, worker_idx, split_idx, env_idx, agent_idx, num_traj_buffers, pbt_reward_shaping):
         self.cfg = cfg
+        self.env = env
         self.worker_idx = worker_idx
         self.split_idx = split_idx
         self.env_idx = env_idx
@@ -95,8 +106,19 @@ class ActorState:
         # whether the new episode was started during the current rollout
         self.new_episode = False
 
+        self.pbt_reward_shaping = pbt_reward_shaping
+
     def _sample_random_policy(self):
         return random.randint(0, self.cfg.num_policies - 1)
+
+    def _on_new_policy(self, new_policy_id):
+        """Called when the new policy is sampled for this actor."""
+        self.curr_policy_id = new_policy_id
+        # we're switching to a different policy - reset the rnn hidden state
+        self._reset_rnn_state()
+
+        if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
+            update_reward_shaping_scheme(self.env, self.agent_idx, self.pbt_reward_shaping[self.curr_policy_id])
 
     def _reset_rnn_state(self):
         self.policy_inputs['rnn_states'].fill_(0.0)
@@ -191,9 +213,7 @@ class ActorState:
         if self.new_episode:
             new_policy_id = self._sample_random_policy()
             if new_policy_id != self.curr_policy_id:
-                # we're switching to a different policy - reset the rnn hidden state
-                self.curr_policy_id = new_policy_id
-                self._reset_rnn_state()
+                self._on_new_policy(new_policy_id)
 
             self.new_episode = False
 
@@ -219,7 +239,7 @@ class ActorState:
 
 
 class VectorEnvRunner:
-    def __init__(self, cfg, num_envs, worker_idx, split_idx):
+    def __init__(self, cfg, num_envs, worker_idx, split_idx, pbt_reward_shaping):
         self.cfg = cfg
 
         self.num_envs = num_envs
@@ -238,6 +258,8 @@ class VectorEnvRunner:
         self.num_agents = -1  # queried from env
 
         self.envs, self.actor_states, self.episode_rewards = [], [], []
+
+        self.pbt_reward_shaping = pbt_reward_shaping
 
     def _on_num_agents_known(self):
         """Some extra initialization once num of agents is queried from the env."""
@@ -282,7 +304,8 @@ class VectorEnvRunner:
             actor_states_env, episode_rewards_env = [], []
             for agent_idx in range(self.num_agents):
                 actor_state = ActorState(
-                    self.cfg, self.worker_idx, self.split_idx, env_i, agent_idx, self.num_traj_buffers,
+                    self.cfg, env, self.worker_idx, self.split_idx, env_i, agent_idx, self.num_traj_buffers,
+                    self.pbt_reward_shaping,
                 )
                 actor_states_env.append(actor_state)
                 episode_rewards_env.append(0.0)
@@ -504,6 +527,8 @@ class ActorWorker:
 
         self.policy_workers_queues = policy_worker_queues
 
+        self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
+
         self.critical_error = Event()
         self.process = TorchProcess(target=self._run, daemon=True)
         self.process.start()
@@ -527,7 +552,7 @@ class ActorWorker:
         self.env_runners = []
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
-                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx,
+                self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.reward_shaping,
             )
             env_runner.init()
             self.env_runners.append(env_runner)
@@ -672,6 +697,13 @@ class ActorWorker:
                     time.sleep(delay)
                     self.add_random_delay = False
 
+    def _process_pbt_task(self, pbt_task):
+        task_type, data = pbt_task
+
+        if task_type == PbtTask.UPDATE_REWARD_SCHEME:
+            policy_id, new_reward_shaping_scheme = data
+            self.reward_shaping[policy_id] = new_reward_shaping_scheme
+
     def _run(self):
         log.info('Initializing vector env runner %d...', self.worker_idx)
 
@@ -707,6 +739,8 @@ class ActorWorker:
 
                     with timing.add_time('work'), timing.timeit('one_step'):
                         self._advance_rollouts(data, timing)
+                elif task_type == TaskType.PBT:
+                    self._process_pbt_task(data)
 
             except RuntimeError as exc:
                 log.warning('Error while processing data w: %d, exception: %s', self.worker_idx, exc)

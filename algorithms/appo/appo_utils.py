@@ -8,7 +8,7 @@ from utils.utils import log, memory_consumption_mb
 
 
 class TaskType(Enum):
-    INIT, TERMINATE, RESET, INIT_TENSORS, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, EMPTY = range(9)
+    INIT, TERMINATE, RESET, INIT_TENSORS, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, PBT, EMPTY = range(10)
 
 
 def set_step_data(dictionary, key, data):

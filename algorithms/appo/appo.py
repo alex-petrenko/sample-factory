@@ -14,6 +14,8 @@ from torch.multiprocessing import Queue as TorchQueue
 from algorithms.appo.actor_worker import make_env_func, ActorWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.learner import LearnerWorker
+from algorithms.appo.population_based_training import PopulationBasedTraining
+from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
 
@@ -124,6 +126,9 @@ class APPO(Algorithm):
 
         # PBT stuff
         p.add_argument('--with_pbt', default=True, type=str2bool, help='Enables population-based training basic features')
+        p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
+        p.add_argument('--pbt_replace_fraction', default=0.25, type=float, help='A portion of policies performing worst to be replace by better policies')
+        p.add_argument('--pbt_mutation_rate', default=0.2, type=float, help='Probability that a parameter mutates')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
@@ -132,7 +137,19 @@ class APPO(Algorithm):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        self.obs_space = self.action_space = None
+        tmp_env = make_env_func(self.cfg, env_config=None)
+        self.obs_space = tmp_env.observation_space
+        self.action_space = tmp_env.action_space
+
+        self.reward_shaping_scheme = None
+        if self.cfg.with_pbt:
+            if hasattr(tmp_env.unwrapped, '_reward_shaping_wrapper'):
+                # noinspection PyProtectedMember
+                self.reward_shaping_scheme = tmp_env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme
+            elif isinstance(tmp_env.unwrapped, MultiAgentEnv):
+                self.reward_shaping_scheme = tmp_env.unwrapped.default_reward_shaping
+
+        tmp_env.close()
 
         self.actor_workers = None
 
@@ -177,6 +194,8 @@ class APPO(Algorithm):
             summary_dir = ensure_dir_exists(summary_dir)
             self.writers[key] = SummaryWriter(summary_dir, flush_secs=20)
 
+        self.pbt = PopulationBasedTraining(self.cfg, self.reward_shaping_scheme, self.writers)
+
     def _cfg_dict(self):
         if isinstance(self.cfg, dict):
             return self.cfg
@@ -189,11 +208,6 @@ class APPO(Algorithm):
             json.dump(cfg_dict, json_file, indent=2)
 
     def initialize(self):
-        tmp_env = make_env_func(self.cfg, env_config=None)
-        self.obs_space = tmp_env.observation_space
-        self.action_space = tmp_env.action_space
-        tmp_env.close()
-
         self._save_cfg()
 
     def finalize(self):
@@ -315,7 +329,12 @@ class APPO(Algorithm):
             workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues, policy_worker_queues)
             self.actor_workers.extend(workers)
 
-        # wait for GPU workers to finish initializing
+    def init_pbt(self):
+        if self.cfg.with_pbt:
+            self.pbt.init(self.learner_workers, self.actor_workers)
+
+    def finish_initialization(self):
+        """Actually start policy workers and wait until they're fully initialized."""
         for policy_id, workers in self.policy_workers.items():
             for w in workers:
                 w.start_process()
@@ -436,6 +455,8 @@ class APPO(Algorithm):
 
     def learn(self):
         self.init_workers()
+        self.init_pbt()
+        self.finish_initialization()
 
         log.info('Collecting experience...')
 
@@ -443,13 +464,12 @@ class APPO(Algorithm):
         with timing.timeit('experience'):
             try:
                 while not self._should_end_training():
-                    for w in self.learner_workers.values():
-                        while True:
-                            try:
-                                report = w.report_queue.get(timeout=0.01)
-                                self.process_report(report)
-                            except Empty:
-                                break
+                    while True:
+                        try:
+                            report = self.report_queue.get(timeout=0.1)
+                            self.process_report(report)
+                        except Empty:
+                            break
 
                     if time.time() - self.last_report > self.report_interval:
                         self.report()
@@ -457,6 +477,9 @@ class APPO(Algorithm):
                         now = time.time()
                         self.total_train_seconds += now - self.last_report
                         self.last_report = now
+
+                    self.pbt.update(self.env_steps, self.policy_avg_stats)
+
             except Exception:
                 log.exception('Exception in driver loop')
             except KeyboardInterrupt:
@@ -480,25 +503,3 @@ class APPO(Algorithm):
 
         time.sleep(0.1)
         log.info('Done!')
-
-
-# No training
-# W20 V20 S2 G2: 26591FPS
-# [2019-11-20 19:32:22,965] Gpu worker timing: init: 3.7416, gpu_waiting: 5.6309, deserialize: 5.3061, obs_dict: 0.0868, to_device: 3.9529, forward: 14.0111, serialize: 5.3650, postprocess: 6.7834, policy_step: 31.0437, work: 31.8166
-# [2019-11-20 19:32:22,993] Env runner 0: timing waiting: 0.5965, reset: 20.5919, parse_policy_outputs: 0.0004, env_step: 26.4536, finalize: 3.9813, overhead: 4.7497, format_output: 4.6372, one_step: 0.0234, work: 36.8783
-
-# W20 V20 S1 G2: 24996FPS
-# [2019-11-20 19:49:01,397] Gpu worker timing: init: 3.6439, gpu_waiting: 9.9744, deserialize: 3.5391, obs_dict: 0.0786, to_device: 4.1121, forward: 16.6075, serialize: 2.7663, postprocess: 4.0433, policy_step: 29.2388, work: 29.9234
-# [2019-11-20 19:49:01,404] Env runner 1: timing waiting: 6.4043, reset: 21.3081, parse_policy_outputs: 0.0006, env_step: 24.1964, finalize: 3.8485, overhead: 4.5882, format_output: 4.0478, one_step: 0.0533, work: 33.5044
-
-# W32 V20 S2 (2 GPU workers): 30370FPS
-# [2019-11-20 19:17:19,969] Gpu worker timing: init: 3.7086, gpu_waiting: 3.6520, work: 29.1827
-# [2019-11-20 19:17:19,970] Env runner 1: timing waiting: 4.4399, reset: 21.1310, parse_policy_outputs: 0.0007, env_step: 19.1307, finalize: 3.5949, overhead: 4.1450, format_output: 3.8386, one_step: 0.0311, work: 28.1974
-
-# W32 V40 S2 (2 GPU workers): 30701FPS
-# [2019-11-20 19:24:17,261] Env runner 0: timing waiting: 1.4417, reset: 42.2417, parse_policy_outputs: 0.0015, env_step: 21.1332, finalize: 3.9994, overhead: 4.6047, format_output: 4.0152, one_step: 0.0813, work: 30.7172
-# [2019-11-20 19:24:17,339] Env runner 1: timing waiting: 1.3387, reset: 39.7958, parse_policy_outputs: 0.0026, env_step: 21.2498, finalize: 3.7511, overhead: 4.4223, format_output: 4.2317, one_step: 0.0676, work: 30.8883
-
-# W32 V40 S1 G2: 30529FPS
-# [2019-11-20 19:56:44,631] Gpu worker timing: init: 3.5720, gpu_waiting: 8.4949, deserialize: 4.6235, obs_dict: 0.0809, to_device: 4.2894, forward: 9.3965, serialize: 3.6527, postprocess: 4.4345, policy_step: 23.5292, work: 24.2091
-# [2019-11-20 19:56:44,669] Env runner 0: timing waiting: 4.6958, reset: 44.1553, parse_policy_outputs: 0.0010, env_step: 19.5480, finalize: 3.8980, overhead: 4.5100, format_output: 3.4880, one_step: 0.1341, work: 28.0031

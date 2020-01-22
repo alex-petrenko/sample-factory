@@ -10,11 +10,12 @@ from threading import Thread
 
 import numpy as np
 import torch
-from torch.multiprocessing import Process, Queue as TorchQueue
+from torch.multiprocessing import Process, Queue as TorchQueue, Event as MultiprocessingEvent
 
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy, \
     memory_stats
 from algorithms.appo.model import ActorCritic
+from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
@@ -31,7 +32,13 @@ class LearnerWorker:
 
         self.worker_idx = worker_idx
         self.policy_id = policy_id
+
         self.cfg = cfg
+
+        # PBT-related stuff
+        self.should_save_model = True  # set to true if we need to save the model to disk on the next training iteration
+        self.load_policy_id = None  # non-None when we need to replace our parameters with another policy's parameters
+        self.new_cfg = None  # non-None when we need to update the learning hyperparameters
 
         self.terminate = False
 
@@ -44,6 +51,8 @@ class LearnerWorker:
 
         self.task_queue = TorchQueue()
         self.report_queue = report_queue
+        self.model_saved_event = MultiprocessingEvent()
+        self.model_saved_event.clear()
 
         # queues corresponding to policy workers using the same policy
         # we send weight updates via these queues
@@ -54,7 +63,7 @@ class LearnerWorker:
 
         self.experience_buffer_queue = Queue()
 
-        self.with_training = True  # TODO: debug, remove
+        self.with_training = True  # this only exists for debugging purposes
         self.train_in_background = True
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
@@ -285,8 +294,10 @@ class LearnerWorker:
 
     def _maybe_save(self):
         save_every = self.save_rate_decay.at(self.train_step)
-        if (self.train_step + 1) % save_every == 0 or self.train_step <= 1:
+        if (self.train_step + 1) % save_every == 0 or self.should_save_model:
             self._save()
+            self.model_saved_event.set()
+            self.should_save_model = False
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -577,6 +588,27 @@ class LearnerWorker:
         del buffer
         return stats
 
+    def _update_pbt(self):
+        """To be called from the training loop, same thread that updates the model!"""
+        if self.load_policy_id is not None:
+            assert self.cfg.with_pbt
+
+            log.debug('Learner %d loads policy from %d', self.policy_id, self.load_policy_id)
+            self.load_from_checkpoint(self.load_policy_id)
+            self.load_policy_id = None
+
+        if self.new_cfg is not None:
+            for key, value in self.new_cfg.items():
+                if self.cfg[key] != value:
+                    log.debug('Learner %d replacing cfg parameter %r with new value %r', self.policy_id, key, value)
+                    self.cfg[key] = value
+
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.cfg.learning_rate
+                log.debug('Updated optimizer lr to value %r', param_group['lr'])
+
+            self.new_cfg = None
+
     @staticmethod
     def load_checkpoint(checkpoints, policy_id):
         if len(checkpoints) <= 0:
@@ -590,9 +622,10 @@ class LearnerWorker:
             checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
             return checkpoint_dict
 
-    def _load_state(self, checkpoint_dict):
+    def _load_state(self, checkpoint_dict, load_env_steps=True):
         self.train_step = checkpoint_dict['train_step']
-        self.env_steps = checkpoint_dict['env_steps']
+        if load_env_steps:
+            self.env_steps = checkpoint_dict['env_steps']
         self.kl_coeff = checkpoint_dict['kl_coeff']
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
@@ -603,14 +636,17 @@ class LearnerWorker:
         self.actor_critic.to(self.device)
         self.actor_critic.share_memory()
 
-    def load_from_checkpoint(self):
-        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, self.policy_id))
-        checkpoint_dict = self.load_checkpoint(checkpoints, self.policy_id)
+    def load_from_checkpoint(self, policy_id):
+        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id))
+        checkpoint_dict = self.load_checkpoint(checkpoints, policy_id)
         if checkpoint_dict is None:
             log.debug('Did not load from checkpoint, starting from scratch!')
         else:
             log.debug('Loading model from checkpoint')
-            self._load_state(checkpoint_dict)
+
+            # if we're replacing our policy with another policy (under PBT), let's not reload the env_steps
+            load_env_steps = policy_id == self.policy_id
+            self._load_state(checkpoint_dict, load_env_steps=load_env_steps)
 
     def initialize(self, timing):
         with timing.timeit('init'):
@@ -632,7 +668,7 @@ class LearnerWorker:
                 eps=self.cfg.adam_eps,
             )
 
-            self.load_from_checkpoint()
+            self.load_from_checkpoint(self.policy_id)
 
             self._broadcast_weights(self._discarding_rate())  # sync the very first version of the weights
 
@@ -649,6 +685,8 @@ class LearnerWorker:
             discarding_rate = self._discarding_rate()
 
             if self.with_training:
+                self._update_pbt()
+
                 # log.debug('Training policy %d on %d samples', self.policy_id, samples)
                 train_stats = self._train(buffer, experience_size, timing)
 
@@ -762,6 +800,23 @@ class LearnerWorker:
 
         return rollouts
 
+    def _process_pbt_task(self, pbt_task):
+        task_type, data = pbt_task
+
+        if task_type == PbtTask.SAVE_MODEL:
+            policy_id = data
+            assert policy_id == self.policy_id
+            self.should_save_model = True
+        elif task_type == PbtTask.LOAD_MODEL:
+            policy_id, new_policy_id = data
+            assert policy_id == self.policy_id
+            assert new_policy_id is not None
+            self.load_policy_id = new_policy_id
+        elif task_type == PbtTask.UPDATE_CFG:
+            policy_id, new_cfg = data
+            assert policy_id == self.policy_id
+            self.new_cfg = new_cfg
+
     def _run(self):
         torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -794,6 +849,8 @@ class LearnerWorker:
                         with timing.add_time('extract'):
                             rollouts.extend(self._extract_rollouts(data))
                             # log.debug('Learner %d has %d rollouts', self.policy_id, len(rollouts))
+                    elif task_type == TaskType.PBT:
+                        self._process_pbt_task(data)
                 except Empty:
                     break
 

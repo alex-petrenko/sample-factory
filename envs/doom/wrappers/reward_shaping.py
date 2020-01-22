@@ -5,7 +5,7 @@ from collections import deque
 import gym
 
 from algorithms.utils.algo_utils import EPS
-from utils.utils import AttrDict, log
+from utils.utils import log
 
 NUM_WEAPONS = 10
 
@@ -52,7 +52,7 @@ REWARD_SHAPING_DEATHMATCH_V0 = dict(
 # "zero-sum" scheme for self-play scenarios
 REWARD_SHAPING_DEATHMATCH_V1 = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
 REWARD_SHAPING_DEATHMATCH_V1['delta'].update(dict(
-    FRAGCOUNT=(+1, 0),
+    FRAGCOUNT=(+1, -0.001),
     DEATHCOUNT=(-1, +1),
     HITCOUNT=(0, 0),
     DAMAGECOUNT=(+0.005, -0.005),
@@ -84,7 +84,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
     def __init__(self, env, reward_shaping_scheme=None, true_reward_func=None):
         super().__init__(env)
 
-        self.reward_shaping_scheme = None if reward_shaping_scheme is None else AttrDict(reward_shaping_scheme)
+        self.reward_shaping_scheme = reward_shaping_scheme
         self.true_reward_func = true_reward_func
 
         # without this we reward using BFG and shotguns too much
@@ -108,7 +108,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         reward = 0.0
         deltas = []
 
-        for var_name, rewards in self.reward_shaping_scheme.delta.items():
+        for var_name, rewards in self.reward_shaping_scheme['delta'].items():
             if var_name not in self.prev_vars:
                 continue
 
@@ -138,7 +138,11 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         reward = 0.0
 
         if selected_weapon_ammo > 0 and unholstered:
-            reward = self.reward_shaping_scheme.selected_weapon[selected_weapon]
+            try:
+                reward = self.reward_shaping_scheme['selected_weapon'][selected_weapon]
+            except KeyError:
+                log.error('%r', self.reward_shaping_scheme)
+                log.error('%r', selected_weapon)
             weapon_key = f'weapon{selected_weapon}'
             deltas.append((weapon_key, reward))
             self.reward_structure[weapon_key] = self.reward_structure.get(weapon_key, 0.0) + reward
@@ -152,7 +156,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
 
         # by default these are negative values if no weapon is selected
         selected_weapon = info.get('SELECTED_WEAPON', 0.0)
-        selected_weapon = round(max(0, selected_weapon))
+        selected_weapon = int(max(0, selected_weapon))
         selected_weapon_ammo = float(max(0.0, info.get('SELECTED_WEAPON_AMMO', 0.0)))
         self.selected_weapon.append(selected_weapon)
 
@@ -160,7 +164,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         is_alive = not info.get('DEAD', 0.0)
         just_respawned = was_dead and is_alive
 
-        skip_reward_on_respawn = just_respawned and self.reward_shaping_scheme.skip_reward_on_respawn
+        skip_reward_on_respawn = just_respawned and self.reward_shaping_scheme['skip_reward_on_respawn']
 
         shaping_reward = 0.0
         if not done and not skip_reward_on_respawn:
@@ -215,7 +219,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
             )
 
         # remember new variable values
-        for var_name in self.reward_shaping_scheme.delta.keys():
+        for var_name in self.reward_shaping_scheme['delta'].keys():
             self.prev_vars[var_name] = info.get(var_name, 0.0)
 
         self.prev_dead = not not info.get('DEAD', 0.0)  # float -> bool

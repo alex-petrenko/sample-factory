@@ -94,6 +94,6 @@ def maybe_load_from_checkpoint(cfg):
     if not os.path.isfile(filename):
         log.warning('Saved parameter configuration for experiment %s not found!', cfg.experiment)
         log.warning('Starting experiment from scratch!')
-        return cfg
+        return AttrDict(vars(cfg))
 
     return load_from_checkpoint(cfg)

@@ -30,7 +30,7 @@ def udp_port_num(env_config):
 
 
 class TaskType(Enum):
-    INIT, TERMINATE, RESET, STEP, STEP_UPDATE, INFO = range(6)
+    INIT, TERMINATE, RESET, STEP, STEP_UPDATE, INFO, SET_ATTR = range(7)
 
 
 def init_multiplayer_env(make_env_func, player_id, env_config, init_info=None):
@@ -74,13 +74,11 @@ class MultiAgentEnvWorker:
         env.reset()
         return env
 
-    def _terminate(self, env):
+    @staticmethod
+    def _terminate(env):
         if env is None:
             return
-
-        # log.info('Stop env for player %d...', self.player_id)
         env.close()
-        # log.info('Env with player %d terminated!', self.player_id)
 
     @staticmethod
     def _get_info(env):
@@ -89,6 +87,21 @@ class MultiAgentEnvWorker:
         if hasattr(env.unwrapped, 'get_info_all'):
             info = env.unwrapped.get_info_all()  # info for the new episode
         return info
+
+    def _set_env_attr(self, env, player_id, attr_chain, value):
+        """Allows us to set an arbitrary attribute of the environment, e.g. attr_chain can be unwrapped.foo.bar"""
+        assert player_id == self.player_id
+
+        attrs = attr_chain.split('.')
+        curr_attr = env
+        try:
+            for attr_name in attrs[:-1]:
+                curr_attr = getattr(curr_attr, attr_name)
+        except AttributeError:
+            log.error('Env does not have an attribute %s', attr_chain)
+
+        attr_to_set = attrs[-1]
+        setattr(curr_attr, attr_to_set, value)
 
     def start(self):
         env = None
@@ -107,6 +120,7 @@ class MultiAgentEnvWorker:
                 self.task_queue.task_done()
                 break
 
+            results = None
             if task_type == TaskType.RESET:
                 results = env.reset()
             elif task_type == TaskType.INFO:
@@ -116,6 +130,9 @@ class MultiAgentEnvWorker:
                 action = data
                 env.unwrapped.update_state = task_type == TaskType.STEP_UPDATE
                 results = env.step(action)
+            elif task_type == TaskType.SET_ATTR:
+                player_id, attr_chain, value = data
+                self._set_env_attr(env, player_id, attr_chain, value)
             else:
                 raise Exception(f'Unknown task type {task_type}')
 
@@ -132,6 +149,13 @@ class MultiAgentEnv:
         env = make_env_func(player_id=-1)  # temporary env just to query observation_space and stuff
         self.action_space = env.action_space
         self.observation_space = env.observation_space
+
+        # we can probably do this in a more generic way, but good enough for now
+        self.default_reward_shaping = None
+        if hasattr(env.unwrapped, '_reward_shaping_wrapper'):
+            # noinspection PyProtectedMember
+            self.default_reward_shaping = env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme
+
         env.close()
 
         self.make_env_func = make_env_func
@@ -304,6 +328,17 @@ class MultiAgentEnv:
     def seed(self, seed=None):
         """Does not really make sense for the wrapper. Individual envs will be uniquely seeded on init."""
         pass
+
+    def set_env_attr(self, agent_idx, attr_chain, value):
+        data = (agent_idx, attr_chain, value)
+        worker = self.workers[agent_idx]
+        worker.task_queue.put((data, TaskType.SET_ATTR))
+
+        result = safe_get(worker.result_queue, timeout=0.1)
+        assert result is None
+
+        worker.result_queue.task_done()
+        worker.task_queue.join()
 
 
 class MultiAgentEnvAggregator(MultiEnv):
