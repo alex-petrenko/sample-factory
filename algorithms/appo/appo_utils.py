@@ -103,13 +103,15 @@ def cuda_envvars(policy_id):
     gpu_idx = cuda_index_for_policy(policy_id)
 
     cuda_envvar = 'CUDA_VISIBLE_DEVICES'
-    if cuda_envvar in os.environ:
-        available_gpus = os.environ[cuda_envvar]
-        available_gpus = [int(g) for g in available_gpus.split(',')]
-        if len(available_gpus) > 0:
-            gpu_to_use = available_gpus[gpu_idx]
-            os.environ[cuda_envvar] = str(gpu_to_use)
-            log.info('Set environment var %s to %r', cuda_envvar, os.environ[cuda_envvar])
+    if cuda_envvar not in os.environ:
+        os.environ[cuda_envvar] = ','.join(str(g) for g in range(torch.cuda.device_count()))
+
+    available_gpus = os.environ[cuda_envvar]
+    available_gpus = [int(g) for g in available_gpus.split(',')]
+    if len(available_gpus) > 0:
+        gpu_to_use = available_gpus[gpu_idx]
+        os.environ[cuda_envvar] = str(gpu_to_use)
+        log.info('Set environment var %s to %r', cuda_envvar, os.environ[cuda_envvar])
 
 
 def memory_stats(process, device):
