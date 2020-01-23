@@ -113,6 +113,7 @@
           <option value="torch.Tensor.copy_" />
           <option value="torch.nn" />
           <option value="torch.bool" />
+          <option value="torch.cuda.ipc_collect" />
         </list>
       </option>
     </inspection_tool>

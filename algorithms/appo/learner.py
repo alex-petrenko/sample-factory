@@ -748,6 +748,7 @@ class LearnerWorker:
 
             if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and num_batches_processed < 50):
                 torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
                 last_cache_cleanup = time.time()
 
         log.info('Train loop timing: %s', timing)
