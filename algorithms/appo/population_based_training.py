@@ -158,7 +158,7 @@ class PopulationBasedTraining:
         learner_worker.task_queue.put((TaskType.PBT, save_task))
         log.debug('Wait while learner %d saves the model...', policy_id)
         learner_worker.model_saved_event.wait()
-        log.debug('Learner %d saves the model...', policy_id)
+        log.debug('Learner %d saved the model!', policy_id)
         learner_worker.model_saved_event.clear()
 
     def _learner_load_model(self, policy_id, replacement_policy):
@@ -253,7 +253,6 @@ class PopulationBasedTraining:
         self._save_reward_shaping(policy_id)
         self._learner_update_cfg(policy_id)
         self._actors_update_shaping_scheme(policy_id)
-        self._force_learner_to_save_model(policy_id)
 
     def update(self, env_steps, policy_stats):
         if not self.cfg.with_pbt or self.cfg.num_policies <= 1:

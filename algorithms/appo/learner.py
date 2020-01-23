@@ -74,6 +74,7 @@ class LearnerWorker:
         self.summary_rate_decay = LinearDecay([(0, 50), (1000000, 1000), (10000000, 5000)])
         self.last_summary_written = -1e9
         self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
+        self.last_saved = 0
 
         # some stats we measure in the end of the last training epoch
         self.last_batch_stats = AttrDict()
@@ -294,10 +295,11 @@ class LearnerWorker:
 
     def _maybe_save(self):
         save_every = self.save_rate_decay.at(self.train_step)
-        if (self.train_step + 1) % save_every == 0 or self.should_save_model:
+        if self.train_step - self.last_saved >= save_every or self.should_save_model:
             self._save()
             self.model_saved_event.set()
             self.should_save_model = False
+            self.last_saved = self.train_step
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -324,9 +326,13 @@ class LearnerWorker:
         assert checkpoint is not None
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
+        tmp_filepath = join(checkpoint_dir, 'checkpoint_tmp')
         filepath = join(checkpoint_dir, f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth')
-        log.info('Saving %s...', filepath)
+        log.info('Saving %s...', tmp_filepath)
         torch.save(checkpoint, filepath)
+
+        log.info('Renaming %s to %s', tmp_filepath, filepath)
+        os.rename(tmp_filepath, filepath)
 
         while len(self.get_checkpoints(checkpoint_dir)) > self.cfg.keep_checkpoints:
             oldest_checkpoint = self.get_checkpoints(checkpoint_dir)[0]
