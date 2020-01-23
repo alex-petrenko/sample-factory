@@ -329,8 +329,7 @@ class LearnerWorker:
         tmp_filepath = join(checkpoint_dir, 'checkpoint_tmp')
         filepath = join(checkpoint_dir, f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth')
         log.info('Saving %s...', tmp_filepath)
-        torch.save(checkpoint, filepath)
-
+        torch.save(checkpoint, tmp_filepath)
         log.info('Renaming %s to %s', tmp_filepath, filepath)
         os.rename(tmp_filepath, filepath)
 
