@@ -220,6 +220,11 @@ class VizdoomEnv(gym.Env):
 
         return variable_indices
 
+    def _black_screen(self):
+        if self.black_screen is None:
+            self.black_screen = np.zeros(self.observation_space.shape, dtype=np.uint8)
+        return self.black_screen
+
     def _game_variables_dict(self, state):
         game_variables = state.game_variables
         variables = {}
@@ -250,6 +255,9 @@ class VizdoomEnv(gym.Env):
 
         self.state = self.game.get_state()
         img = self.state.screen_buffer
+        if img is None:
+            log.error('Game returned None screen buffer! This is not supposed to happen!')
+            img = self._black_screen()
 
         # Swap current and previous histogram
         if self.current_histogram is not None and self.previous_histogram is not None:
@@ -267,9 +275,7 @@ class VizdoomEnv(gym.Env):
         return np.transpose(img, (1, 2, 0))
 
     def _convert_actions(self, actions):
-        """
-        Convert actions from gym action space to the action space expected by Doom game.
-        """
+        """Convert actions from gym action space to the action space expected by Doom game."""
 
         if self.composite_action_space:
             # composite action space with multiple subspaces
@@ -336,9 +342,7 @@ class VizdoomEnv(gym.Env):
             self._update_histogram(info)
             self._prev_info = copy.deepcopy(info)
         else:
-            if self.black_screen is None:
-                self.black_screen = np.zeros(self.observation_space.shape, dtype=np.uint8)
-            observation = self.black_screen
+            observation = self._black_screen()
 
             # when done=True Doom does not allow us to call get_info, so we provide info from the last frame
             info.update(self._prev_info)

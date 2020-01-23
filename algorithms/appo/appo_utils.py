@@ -1,3 +1,4 @@
+import os
 from collections import OrderedDict
 from enum import Enum
 
@@ -84,12 +85,31 @@ def extend_array_by(x, extra_len):
     return np.append(x, tail, axis=0)
 
 
-def device_for_policy(policy_id):
+def cuda_index_for_policy(policy_id):
     num_gpus = torch.cuda.device_count()
     gpu_idx = policy_id % num_gpus
+    return gpu_idx
+
+
+def device_for_policy(policy_id):
+    num_gpus = torch.cuda.device_count()
+    gpu_idx = cuda_index_for_policy(policy_id)
     device = torch.device('cuda', index=gpu_idx)
     log.debug('Using GPU #%d (total num gpus: %d) for policy %d...', gpu_idx, num_gpus, policy_id)
     return device
+
+
+def cuda_envvars(policy_id):
+    gpu_idx = cuda_index_for_policy(policy_id)
+
+    cuda_envvar = 'CUDA_VISIBLE_DEVICES'
+    if cuda_envvar in os.environ:
+        available_gpus = os.environ[cuda_envvar]
+        available_gpus = [int(g) for g in available_gpus.split(',')]
+        if len(available_gpus) > 0:
+            gpu_to_use = available_gpus[gpu_idx]
+            os.environ[cuda_envvar] = str(gpu_to_use)
+            log.info('Set environment var %s to %r', cuda_envvar, os.environ[cuda_envvar])
 
 
 def memory_stats(process, device):

@@ -7,7 +7,7 @@ import gym
 from algorithms.utils.algo_utils import EPS
 from utils.utils import log
 
-NUM_WEAPONS = 10
+NUM_WEAPONS = 8
 
 # these are somewhat arbitrary, but can be optimized via PBT
 WEAPON_PREFERENCE = {
@@ -31,7 +31,7 @@ for weapon in range(NUM_WEAPONS):
     # reward for choosing a weapon and sticking to it; really helps learning in the beginning, otherwise the agent
     # just keeps changing weapons all the time, unable to shoot. Towards the later stages of the training agents
     # tend to ignore this, and change weapons at will
-    SELECTED_WEAPON_REWARDS[weapon] = 0.0002 * pref
+    SELECTED_WEAPON_REWARDS[f'SELECTED{weapon}'] = 0.0002 * pref
 
 
 # reward shaping scheme to convert env info into scalar reward
@@ -139,7 +139,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
 
         if selected_weapon_ammo > 0 and unholstered:
             try:
-                reward = self.reward_shaping_scheme['selected_weapon'][selected_weapon]
+                reward = self.reward_shaping_scheme['selected_weapon'][f'SELECTED{weapon}']
             except KeyError:
                 log.error('%r', self.reward_shaping_scheme)
                 log.error('%r', selected_weapon)

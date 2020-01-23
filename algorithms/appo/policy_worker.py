@@ -5,7 +5,7 @@ from queue import Empty
 import torch
 from torch.multiprocessing import Process as TorchProcess, Event
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, memory_stats
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
@@ -271,6 +271,7 @@ class PolicyWorker:
 
     # noinspection PyProtectedMember
     def _run(self):
+        cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()

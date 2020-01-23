@@ -13,7 +13,7 @@ import torch
 from torch.multiprocessing import Process, Queue as TorchQueue, Event as MultiprocessingEvent
 
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy, \
-    memory_stats
+    memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
@@ -818,6 +818,7 @@ class LearnerWorker:
             self.new_cfg = new_cfg
 
     def _run(self):
+        cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()
