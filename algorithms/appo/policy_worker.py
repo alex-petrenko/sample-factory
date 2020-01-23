@@ -5,7 +5,7 @@ from queue import Empty
 import torch
 from torch.multiprocessing import Process as TorchProcess, Event
 
-from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, device_for_policy, memory_stats, cuda_envvars
+from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
 from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
@@ -282,7 +282,9 @@ class PolicyWorker:
 
             torch.set_num_threads(1)
 
-            self.device = device_for_policy(self.policy_id)
+            # we should already see only one CUDA device, because of env vars
+            assert torch.cuda.device_count() == 1
+            self.device = torch.device('cuda', index=0)
             self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
             self.actor_critic.to(self.device)
 

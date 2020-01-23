@@ -8,6 +8,9 @@ import torch
 from utils.utils import log, memory_consumption_mb
 
 
+CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
+
+
 class TaskType(Enum):
     INIT, TERMINATE, RESET, INIT_TENSORS, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, PBT, EMPTY = range(10)
 
@@ -85,39 +88,23 @@ def extend_array_by(x, extra_len):
     return np.append(x, tail, axis=0)
 
 
-def cuda_index_for_policy(policy_id):
-    num_gpus = torch.cuda.device_count()
-    gpu_idx = policy_id % num_gpus
-    return gpu_idx
-
-
-def device_for_policy(policy_id):
-    num_gpus = torch.cuda.device_count()
-    gpu_idx = cuda_index_for_policy(policy_id)
-    device = torch.device('cuda', index=gpu_idx)
-    log.debug('Using GPU #%d (total num gpus: %d) for policy %d...', gpu_idx, num_gpus, policy_id)
-    return device
-
-
 def cuda_envvars(policy_id):
-    cuda_envvar = 'CUDA_VISIBLE_DEVICES'
-    orig_visible_devices = os.environ[f'{cuda_envvar}_backup_']
-    if orig_visible_devices == 'all':
-        del os.environ[cuda_envvar]
-    else:
-        os.environ[cuda_envvar] = orig_visible_devices
+    orig_visible_devices = os.environ[f'{CUDA_ENVVAR}_backup_']
+    available_gpus = [int(g) for g in orig_visible_devices.split(',')]
+    log.info('Available GPUs: %r', available_gpus)
+
+    # it is crucial to proper CUDA_VISIBLE_DEVICES properly before calling any torch.cuda methods, e.g. device_count()
+    # this is why we're forced to use the env vars
+
+    num_gpus = len(available_gpus)
+    if num_gpus == 0:
+        raise RuntimeError('This app requires a GPU and none seem to be available, sorry')
+
+    gpu_idx_to_use = available_gpus[policy_id % num_gpus]
+    os.environ[CUDA_ENVVAR] = str(gpu_idx_to_use)
+    log.info('Set environment var %s to %r for policy %d', CUDA_ENVVAR, os.environ[CUDA_ENVVAR], policy_id)
+
     log.debug('Visible devices: %r', torch.cuda.device_count())
-
-    gpu_idx = cuda_index_for_policy(policy_id)
-    if cuda_envvar not in os.environ:
-        os.environ[cuda_envvar] = ','.join(str(g) for g in range(torch.cuda.device_count()))
-
-    available_gpus = os.environ[cuda_envvar]
-    available_gpus = [int(g) for g in available_gpus.split(',')]
-    if len(available_gpus) > 0:
-        gpu_to_use = available_gpus[gpu_idx]
-        os.environ[cuda_envvar] = str(gpu_to_use)
-        log.info('Set environment var %s to %r', cuda_envvar, os.environ[cuda_envvar])
 
 
 def memory_stats(process, device):

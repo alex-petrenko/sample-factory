@@ -6,24 +6,29 @@ from collections import deque
 from os.path import join
 from queue import Empty
 
-import torch
-
 import numpy as np
+import torch
 from tensorboardX import SummaryWriter
 from torch.multiprocessing import Queue as TorchQueue
 
 from algorithms.appo.actor_worker import make_env_func, ActorWorker
-from algorithms.appo.policy_worker import PolicyWorker
+from algorithms.appo.appo_utils import CUDA_ENVVAR
 from algorithms.appo.learner import LearnerWorker
+from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
+from utils.get_available_gpus import get_available_gpus_without_triggering_pytorch_cuda_initialization
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
 
 
-cuda_envvar = 'CUDA_VISIBLE_DEVICES'
-os.environ[f'{cuda_envvar}_backup_'] = os.environ.get('CUDA_VISIBLE_DEVICES', 'all')
-os.environ[cuda_envvar] = ''
+available_gpus = get_available_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
+
+if CUDA_ENVVAR not in os.environ:
+    os.environ[CUDA_ENVVAR] = available_gpus
+
+os.environ[f'{CUDA_ENVVAR}_backup_'] = os.environ[CUDA_ENVVAR]
+os.environ[CUDA_ENVVAR] = ''
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -469,7 +474,7 @@ class APPO(Algorithm):
                 while not self._should_end_training():
                     while True:
                         try:
-                            report = self.report_queue.get(timeout=0.1)
+                            report = self.report_queue.get(timeout=0.001)
                             self.process_report(report)
                         except Empty:
                             break
@@ -482,6 +487,7 @@ class APPO(Algorithm):
                         self.last_report = now
 
                     self.pbt.update(self.env_steps, self.policy_avg_stats)
+                    time.sleep(0.1)
 
             except Exception:
                 log.exception('Exception in driver loop')

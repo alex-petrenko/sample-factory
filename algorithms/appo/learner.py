@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from torch.multiprocessing import Process, Queue as TorchQueue, Event as MultiprocessingEvent
 
-from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, device_for_policy, \
+from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, \
     memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
 from algorithms.appo.population_based_training import PbtTask
@@ -76,9 +76,6 @@ class LearnerWorker:
         self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
         self.last_saved = 0
 
-        # some stats we measure in the end of the last training epoch
-        self.last_batch_stats = AttrDict()
-
         self.discarded_experience_over_time = deque([], maxlen=30)
         self.discarded_experience_timer = time.time()
         self.num_discarded_rollouts = 0
@@ -133,6 +130,11 @@ class LearnerWorker:
 
         return buffer
 
+    def _mark_rollout_buffer_free(self, rollout):
+        r = rollout
+        traj_buffer_ready = self.traj_buffer_ready[(r['worker_idx'], r['split_idx'])]
+        traj_buffer_ready[r['env_idx'], r['agent_idx'], r['traj_buffer_idx']] = 1
+
     def _prepare_train_buffer(self, rollouts, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
 
@@ -178,11 +180,7 @@ class LearnerWorker:
 
         with timing.add_time('buff_ready'):
             for r in rollouts:
-                r = AttrDict(r)
-
-                # we copied the data from the shared buffer, now we can mark the buffers as free
-                traj_buffer_ready = self.traj_buffer_ready[(r.worker_idx, r.split_idx)]
-                traj_buffer_ready[r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
+                self._mark_rollout_buffer_free(r)
 
         return buffer
 
@@ -214,6 +212,7 @@ class LearnerWorker:
             rollout_min_version = r['t']['policy_version'].min().item()
             if policy_version - rollout_min_version >= self.cfg.max_policy_lag:
                 discard_rollouts += 1
+                self._mark_rollout_buffer_free(r)
             else:
                 break
 
@@ -575,12 +574,9 @@ class LearnerWorker:
                         stats.version_diff_max = version_diff.max()
 
                         # we want this statistic for the last batch of the last epoch
-                        for key, value in self.last_batch_stats.items():
-                            stats[key] = value
-
                         for key, value in stats.items():
                             if isinstance(value, torch.Tensor):
-                                stats[key] = value.detach()
+                                stats[key] = value.detach().cpu()
 
         with torch.no_grad():
             # adjust KL-penalty coefficient if KL divergence at the end of training is high
@@ -614,17 +610,14 @@ class LearnerWorker:
 
             self.new_cfg = None
 
-    @staticmethod
-    def load_checkpoint(checkpoints, policy_id):
+    def load_checkpoint(self, checkpoints):
         if len(checkpoints) <= 0:
             log.warning('No checkpoints found')
             return None
         else:
             latest_checkpoint = checkpoints[-1]
             log.warning('Loading state from checkpoint %s...', latest_checkpoint)
-
-            device = device_for_policy(policy_id)
-            checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
+            checkpoint_dict = torch.load(latest_checkpoint, map_location=self.device)
             return checkpoint_dict
 
     def _load_state(self, checkpoint_dict, load_env_steps=True):
@@ -643,7 +636,7 @@ class LearnerWorker:
 
     def load_from_checkpoint(self, policy_id):
         checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id))
-        checkpoint_dict = self.load_checkpoint(checkpoints, policy_id)
+        checkpoint_dict = self.load_checkpoint(checkpoints)
         if checkpoint_dict is None:
             log.debug('Did not load from checkpoint, starting from scratch!')
         else:
@@ -663,7 +656,9 @@ class LearnerWorker:
 
             torch.backends.cudnn.benchmark = True
 
-            self.device = device_for_policy(self.policy_id)
+            # we should already see only one CUDA device, because of env vars
+            assert torch.cuda.device_count() == 1
+            self.device = torch.device('cuda', index=0)
             self.init_model()
 
             self.optimizer = torch.optim.Adam(

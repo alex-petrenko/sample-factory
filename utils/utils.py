@@ -3,7 +3,6 @@ import argparse
 import logging
 import operator
 import os
-from logging import Logger
 from os.path import join
 
 import numpy as np
