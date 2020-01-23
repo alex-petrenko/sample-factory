@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import time
 from collections import deque
 from os.path import join
@@ -20,6 +21,9 @@ from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
 
 
+cuda_envvar = 'CUDA_VISIBLE_DEVICES'
+os.environ[f'{cuda_envvar}_backup_'] = os.environ.get('CUDA_VISIBLE_DEVICES', 'all')
+os.environ[cuda_envvar] = ''
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -30,8 +34,7 @@ class Algorithm:
 
         p.add_argument('--seed', default=42, type=int, help='Set a fixed seed value')
 
-        p.add_argument('--initial_save_rate', default=1000, type=int,
-                       help='Save model every N train steps in the beginning of training')
+        p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N train steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
 
         p.add_argument('--stats_episodes', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')

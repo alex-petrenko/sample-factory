@@ -100,9 +100,15 @@ def device_for_policy(policy_id):
 
 
 def cuda_envvars(policy_id):
-    gpu_idx = cuda_index_for_policy(policy_id)
-
     cuda_envvar = 'CUDA_VISIBLE_DEVICES'
+    orig_visible_devices = os.environ[f'{cuda_envvar}_backup_']
+    if orig_visible_devices == 'all':
+        del os.environ[cuda_envvar]
+    else:
+        os.environ[cuda_envvar] = orig_visible_devices
+    log.debug('Visible devices: %r', torch.cuda.device_count())
+
+    gpu_idx = cuda_index_for_policy(policy_id)
     if cuda_envvar not in os.environ:
         os.environ[cuda_envvar] = ','.join(str(g) for g in range(torch.cuda.device_count()))
 

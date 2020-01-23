@@ -219,8 +219,8 @@ class LearnerWorker:
 
         if discard_rollouts > 0:
             log.warning(
-                'Discarding %d old rollouts (learner is not fast enough to process experience)',
-                discard_rollouts,
+                'Discarding %d old rollouts (learner %d is not fast enough to process experience)',
+                self.policy_id, discard_rollouts,
             )
             rollouts = rollouts[discard_rollouts:]
             self.num_discarded_rollouts += discard_rollouts

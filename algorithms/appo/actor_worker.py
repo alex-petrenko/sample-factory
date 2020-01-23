@@ -676,8 +676,7 @@ class ActorWorker:
             self.rollout_start = time.time()
 
         runner = self.env_runners[split_idx]
-        with torch.no_grad():
-            policy_request, complete_rollouts, episodic_stats = runner.advance_rollouts(data, timing)
+        policy_request, complete_rollouts, episodic_stats = runner.advance_rollouts(data, timing)
 
         if episodic_stats:
             self._report_stats(episodic_stats)
@@ -713,52 +712,53 @@ class ActorWorker:
         initialized = False
 
         last_report = time.time()
-        while not self.terminate:
-            with timing.add_time('waiting'), timing.timeit('wait_actor'):
-                timeout = 1 if initialized else 1e3
-                task_type, data = safe_get(self.task_queue, timeout=timeout)
+        with torch.no_grad():
+            while not self.terminate:
+                with timing.add_time('waiting'), timing.timeit('wait_actor'):
+                    timeout = 1 if initialized else 1e3
+                    task_type, data = safe_get(self.task_queue, timeout=timeout)
 
-            if task_type == TaskType.INIT:
-                self._init()
-                continue
+                if task_type == TaskType.INIT:
+                    self._init()
+                    continue
 
-            if task_type == TaskType.TERMINATE:
-                self._terminate()
-                break
+                if task_type == TaskType.TERMINATE:
+                    self._terminate()
+                    break
 
-            try:
-                # handling actual workload
-                if task_type == TaskType.RESET:
-                    with timing.add_time('reset'):
-                        self._handle_reset()
-                elif task_type == TaskType.INIT_TENSORS:
-                    self._init_policy_output_tensors(data)
-                elif task_type == TaskType.ROLLOUT_STEP:
-                    if 'work' not in timing:
-                        timing.waiting = 0  # measure waiting only after real work has started
+                try:
+                    # handling actual workload
+                    if task_type == TaskType.RESET:
+                        with timing.add_time('reset'):
+                            self._handle_reset()
+                    elif task_type == TaskType.INIT_TENSORS:
+                        self._init_policy_output_tensors(data)
+                    elif task_type == TaskType.ROLLOUT_STEP:
+                        if 'work' not in timing:
+                            timing.waiting = 0  # measure waiting only after real work has started
 
-                    with timing.add_time('work'), timing.timeit('one_step'):
-                        self._advance_rollouts(data, timing)
-                elif task_type == TaskType.PBT:
-                    self._process_pbt_task(data)
+                        with timing.add_time('work'), timing.timeit('one_step'):
+                            self._advance_rollouts(data, timing)
+                    elif task_type == TaskType.PBT:
+                        self._process_pbt_task(data)
 
-            except RuntimeError as exc:
-                log.warning('Error while processing data w: %d, exception: %s', self.worker_idx, exc)
-                log.warning('Terminate process...')
-                self.terminate = True
-                self.critical_error.set()
-            except KeyboardInterrupt:
-                self.terminate = True
+                except RuntimeError as exc:
+                    log.warning('Error while processing data w: %d, exception: %s', self.worker_idx, exc)
+                    log.warning('Terminate process...')
+                    self.terminate = True
+                    self.critical_error.set()
+                except KeyboardInterrupt:
+                    self.terminate = True
 
-            if time.time() - last_report > 5.0 and 'one_step' in timing:
-                timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
-                memory_mb = memory_consumption_mb()
-                stats = dict(memory_actor=memory_mb)
-                self.report_queue.put(dict(timing=timing_stats, stats=stats))
-                last_report = time.time()
+                if time.time() - last_report > 5.0 and 'one_step' in timing:
+                    timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
+                    memory_mb = memory_consumption_mb()
+                    stats = dict(memory_actor=memory_mb)
+                    self.report_queue.put(dict(timing=timing_stats, stats=stats))
+                    last_report = time.time()
 
-        if self.worker_idx <= 1:
-            log.info('Env runner %d: timing %s', self.worker_idx, timing)
+            if self.worker_idx <= 1:
+                log.info('Env runner %d: timing %s', self.worker_idx, timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
