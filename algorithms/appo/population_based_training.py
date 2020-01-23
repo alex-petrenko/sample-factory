@@ -113,10 +113,15 @@ class PopulationBasedTraining:
             log.debug('Saving policy-specific reward shaping %d to file %s', policy_id, policy_reward_shaping_filename)
             json.dump(self.policy_reward_shaping[policy_id], json_file)
 
-    def _perturb_param(self, param, param_name):
+    def _perturb_param(self, param, param_name, default_param):
         # toss a coin whether we perturb the parameter at all
         if random.random() > self.cfg.pbt_mutation_rate:
             return param
+
+        if random.random() < 0.1:
+            # chance to replace parameter with a default value
+            log.debug('%s changed to default value %r', param_name, default_param)
+            return default_param
 
         if param_name in SPECIAL_PERTURBATION:
             new_value = SPECIAL_PERTURBATION[param_name](param)
@@ -130,16 +135,19 @@ class PopulationBasedTraining:
         log.debug('Param %s changed from %.6f to %.6f', param_name, param, new_value)
         return new_value
 
-    def _perturb(self, old_params):
+    def _perturb(self, old_params, default_params):
         """Params assumed to be a flat dict."""
         params = copy.deepcopy(old_params)
 
         for key, value in params.items():
-            if isinstance(value, tuple):
+            if isinstance(value, (tuple, list)):
                 # this is the case for reward shaping delta params
-                params[key] = tuple(self._perturb_param(p, f'{key}_{i}') for i, p in enumerate(value))
+                params[key] = tuple(
+                    self._perturb_param(p, f'{key}_{i}', default_params[key][i])
+                    for i, p in enumerate(value)
+                )
             else:
-                params[key] = self._perturb_param(value, key)
+                params[key] = self._perturb_param(value, key, default_params[key])
 
         return params
 
@@ -181,7 +189,7 @@ class PopulationBasedTraining:
 
             if isinstance(value, (int, float)):
                 writer.add_scalar(f'zz_pbt/{name}_{key}', value, env_steps)
-            elif isinstance(value, tuple):
+            elif isinstance(value, (tuple, list)):
                 for i, tuple_value in enumerate(value):
                     writer.add_scalar(f'zz_pbt/{name}_{key}_{i}', tuple_value, env_steps)
             else:
@@ -224,13 +232,15 @@ class PopulationBasedTraining:
         replacement_cfg = self.policy_cfg[replacement_policy]
         replacement_shaping = self.policy_reward_shaping[replacement_policy]
 
-        new_cfg = self._perturb(replacement_cfg)
+        new_cfg = self._perturb(replacement_cfg, default_params=self.cfg)
         self.policy_cfg[policy_id] = new_cfg
 
         new_reward_shaping = copy.deepcopy(replacement_shaping)
         for category in REWARD_CATEGORIES_TO_TUNE:
             if category in replacement_shaping:
-                new_reward_shaping[category] = self._perturb(replacement_shaping[category])
+                new_reward_shaping[category] = self._perturb(
+                    replacement_shaping[category], default_params=self.default_reward_shaping[category],
+                )
         self.policy_reward_shaping[policy_id] = new_reward_shaping
 
         # force replacement policy learner to save the model and wait until it's done

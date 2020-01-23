@@ -194,8 +194,8 @@ class PolicyWorker:
             self.workers_paused.clear()
 
         log.info(
-            'Updated weights on worker %d, policy_version %d (%.5f)',
-            self.worker_idx, policy_version, timing.weight_update,
+            'Updated weights on worker %d-%d, policy_version %d (%.5f)',
+            self.policy_id, self.worker_idx, policy_version, timing.weight_update,
         )
 
     def _initialize_shared_output_tensors(self, init_tensors_request, actor_idx):
