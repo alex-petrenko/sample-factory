@@ -100,6 +100,7 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         self.reward_structure = {}
 
         self.verbose = False
+        self.print_once = False
 
         # save a reference to this wrapper in the actual env class, for other wrappers
         self.env.unwrapped._reward_shaping_wrapper = self
@@ -174,8 +175,9 @@ class DoomRewardShapingWrapper(gym.Wrapper):
                 selected_weapon, selected_weapon_ammo, deltas,
             )
 
-            if abs(shaping_reward) > 2.5:
+            if abs(shaping_reward) > 2.5 and not self.print_once:
                 log.info('Large shaping reward %.3f for %r', shaping_reward, deltas)
+                self.print_once = True
 
         if done and 'FRAGCOUNT' in self.reward_structure:
             sorted_rew = sorted(self.reward_structure.items(), key=operator.itemgetter(1))
@@ -194,6 +196,8 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         self.selected_weapon.clear()
 
         self.orig_env_reward = self.total_shaping_reward = 0.0
+
+        self.print_once = False
         return obs
 
     def step(self, action):
