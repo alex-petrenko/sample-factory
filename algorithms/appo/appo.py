@@ -135,8 +135,8 @@ class APPO(Algorithm):
         # PBT stuff
         p.add_argument('--with_pbt', default=True, type=str2bool, help='Enables population-based training basic features')
         p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
-        p.add_argument('--pbt_replace_fraction', default=0.25, type=float, help='A portion of policies performing worst to be replace by better policies')
-        p.add_argument('--pbt_mutation_rate', default=0.2, type=float, help='Probability that a parameter mutates')
+        p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
+        p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')

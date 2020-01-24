@@ -606,7 +606,8 @@ class LearnerWorker:
 
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = self.cfg.learning_rate
-                log.debug('Updated optimizer lr to value %r', param_group['lr'])
+                param_group['betas'] = (self.cfg.adam_beta1, self.cfg.adam_beta2)
+                log.debug('Updated optimizer lr to value %.7f, betas: %r', param_group['lr'], param_group['betas'])
 
             self.new_cfg = None
 
@@ -620,9 +621,9 @@ class LearnerWorker:
             checkpoint_dict = torch.load(latest_checkpoint, map_location=self.device)
             return checkpoint_dict
 
-    def _load_state(self, checkpoint_dict, load_env_steps=True):
-        self.train_step = checkpoint_dict['train_step']
-        if load_env_steps:
+    def _load_state(self, checkpoint_dict, load_progress=True):
+        if load_progress:
+            self.train_step = checkpoint_dict['train_step']
             self.env_steps = checkpoint_dict['env_steps']
         self.kl_coeff = checkpoint_dict['kl_coeff']
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
@@ -643,8 +644,8 @@ class LearnerWorker:
             log.debug('Loading model from checkpoint')
 
             # if we're replacing our policy with another policy (under PBT), let's not reload the env_steps
-            load_env_steps = policy_id == self.policy_id
-            self._load_state(checkpoint_dict, load_env_steps=load_env_steps)
+            load_progress = policy_id == self.policy_id
+            self._load_state(checkpoint_dict, load_progress=load_progress)
 
     def initialize(self, timing):
         with timing.timeit('init'):

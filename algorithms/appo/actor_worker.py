@@ -10,7 +10,7 @@ import torch
 from gym import spaces, Wrapper
 from torch.multiprocessing import Process as TorchProcess, Event
 
-from algorithms.appo.appo_utils import TaskType, set_step_data
+from algorithms.appo.appo_utils import TaskType, set_step_data, cores_for_worker_process
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_agent import MultiAgentWrapper
@@ -537,12 +537,7 @@ class ActorWorker:
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
         cpu_count = psutil.cpu_count()
-        cores = None
-        if self.cfg.num_workers <= cpu_count and cpu_count % self.cfg.num_workers == 0:
-            cores_to_use = cpu_count // self.cfg.num_workers
-            cores = list(range(self.worker_idx * cores_to_use, (self.worker_idx + 1) * cores_to_use, 1))
-        elif self.cfg.num_workers > cpu_count and self.cfg.num_workers % cpu_count == 0:
-            cores = [self.worker_idx % cpu_count]
+        cores = cores_for_worker_process(self.worker_idx, self.cfg.num_workers, cpu_count)
 
         if cores is not None:
             psutil.Process().cpu_affinity(cores)

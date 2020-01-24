@@ -16,15 +16,15 @@ from utils.utils import log, experiment_dir
 
 
 def perturb_float(x):
-    # mutation amount, allow both more subtle and more drastic changes (sample this from some distribution?)
-    amount = 1.2 if random.random() < 0.5 else 1.5
+    # mutation amount
+    amount = 1.2
 
     # mutation direction
     new_value = x / amount if random.random() < 0.5 else x * amount
     return new_value
 
 
-def perturb_discount(x):
+def perturb_exponential_decay(x):
     perturbed = perturb_float(1.0 - x)
     new_value = 1.0 - perturbed
     new_value = max(EPS, new_value)
@@ -35,8 +35,8 @@ class PbtTask(Enum):
     SAVE_MODEL, LOAD_MODEL, UPDATE_CFG, UPDATE_REWARD_SCHEME = range(4)
 
 
-HYPERPARAMS_TO_TUNE = {'learning_rate', 'gamma', 'prior_loss_coeff', 'normalize_advantage'}
-SPECIAL_PERTURBATION = dict(gamma=perturb_discount)
+HYPERPARAMS_TO_TUNE = {'learning_rate', 'prior_loss_coeff', 'adam_beta1'}
+SPECIAL_PERTURBATION = dict(gamma=perturb_exponential_decay, adam_beta1=perturb_exponential_decay)
 REWARD_CATEGORIES_TO_TUNE = {'delta', 'selected_weapon'}
 
 
@@ -80,6 +80,10 @@ class PopulationBasedTraining:
                 for param_name in HYPERPARAMS_TO_TUNE:
                     self.policy_cfg[policy_id][param_name] = self.cfg[param_name]
 
+                if policy_id > 0:  # keep one policy with default settings in the beginning
+                    log.debug('Initial cfg mutation for policy %d', policy_id)
+                    self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[policy_id])
+
         for policy_id in range(self.cfg.num_policies):
             # save the policy-specific reward shaping if it doesn't exist, or else load from file
             policy_reward_shaping_filename = policy_reward_shaping_file(self.cfg, policy_id)
@@ -93,6 +97,9 @@ class PopulationBasedTraining:
                     self.policy_reward_shaping[policy_id] = json_params
             else:
                 self.policy_reward_shaping[policy_id] = copy.deepcopy(self.default_reward_shaping)
+                if policy_id > 0:  # keep one policy with default settings in the beginning
+                    log.debug('Initial rewards mutation for policy %d', policy_id)
+                    self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[policy_id])
 
         # send initial configuration to the system components
         for policy_id in range(self.cfg.num_policies):
@@ -118,7 +125,7 @@ class PopulationBasedTraining:
         if random.random() > self.cfg.pbt_mutation_rate:
             return param
 
-        if random.random() < 0.1:
+        if param != default_param and random.random() < 0.1:
             # chance to replace parameter with a default value
             log.debug('%s changed to default value %r', param_name, default_param)
             return default_param
@@ -150,6 +157,19 @@ class PopulationBasedTraining:
                 params[key] = self._perturb_param(value, key, default_params[key])
 
         return params
+
+    def _perturb_cfg(self, original_cfg):
+        replacement_cfg = copy.deepcopy(original_cfg)
+        return self._perturb(replacement_cfg, default_params=self.cfg)
+
+    def _perturb_reward(self, original_reward_shaping):
+        replacement_shaping = copy.deepcopy(original_reward_shaping)
+        for category in REWARD_CATEGORIES_TO_TUNE:
+            if category in replacement_shaping:
+                replacement_shaping[category] = self._perturb(
+                    replacement_shaping[category], default_params=self.default_reward_shaping[category],
+                )
+        return replacement_shaping
 
     def _force_learner_to_save_model(self, policy_id):
         learner_worker = self.learner_workers[policy_id]
@@ -220,34 +240,39 @@ class PopulationBasedTraining:
         best_policies = policies_sorted[:replace_number]
         worst_policies = policies_sorted[-replace_number:]
 
-        log.debug('PBT best policies: %r, worst policies %r', best_policies, worst_policies)
-
-        if policy_id not in worst_policies:
-            log.debug('Current policy %d is not among the worst policies %r, skip...', policy_id, worst_policies)
+        if policy_id in best_policies:
+            # don't touch the policies that are doing very well
             return
 
-        replacement_policy = random.choice(best_policies)
-        log.debug('Policy %d to be replaced by %d', policy_id, replacement_policy)
+        log.debug('PBT best policies: %r, worst policies %r', best_policies, worst_policies)
 
-        replacement_cfg = self.policy_cfg[replacement_policy]
-        replacement_shaping = self.policy_reward_shaping[replacement_policy]
+        # to make the code below uniform, this means keep our own parameters and cfg
+        # we only take parameters and cfg from another policy if certain conditions are met (see below)
+        replacement_policy = policy_id
 
-        new_cfg = self._perturb(replacement_cfg, default_params=self.cfg)
-        self.policy_cfg[policy_id] = new_cfg
+        if policy_id in worst_policies:
+            log.debug('Current policy %d is among the worst policies %r', policy_id, worst_policies)
 
-        new_reward_shaping = copy.deepcopy(replacement_shaping)
-        for category in REWARD_CATEGORIES_TO_TUNE:
-            if category in replacement_shaping:
-                new_reward_shaping[category] = self._perturb(
-                    replacement_shaping[category], default_params=self.default_reward_shaping[category],
+            replacement_policy_candidate = random.choice(best_policies)
+            reward_delta = true_rewards[replacement_policy_candidate] - true_rewards[policy_id]
+            reward_delta_relative = abs(reward_delta / true_rewards[replacement_policy_candidate])
+
+            if reward_delta > EPS and reward_delta_relative > 0.05:
+                replacement_policy = replacement_policy_candidate
+                log.debug(
+                    'Difference in reward is %.4f (%.4f), policy %d weights to be replaced by %d',
+                    reward_delta, reward_delta_relative, policy_id, replacement_policy,
                 )
-        self.policy_reward_shaping[policy_id] = new_reward_shaping
 
-        # force replacement policy learner to save the model and wait until it's done
-        self._force_learner_to_save_model(replacement_policy)
+        self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[replacement_policy])
+        self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[replacement_policy])
 
-        # now that the latest "replacement" model is saved to disk, we ask the learner to load the replacement policy
-        self._learner_load_model(policy_id, replacement_policy)
+        if replacement_policy != policy_id:
+            # force replacement policy learner to save the model and wait until it's done
+            self._force_learner_to_save_model(replacement_policy)
+
+            # now that the latest "replacement" model is saved to disk, we ask the learner to load the replacement policy
+            self._learner_load_model(policy_id, replacement_policy)
 
         self._save_cfg(policy_id)
         self._save_reward_shaping(policy_id)
