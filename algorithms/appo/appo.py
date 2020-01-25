@@ -37,7 +37,7 @@ class Algorithm:
     def add_cli_args(cls, parser):
         p = parser
 
-        p.add_argument('--seed', default=42, type=int, help='Set a fixed seed value')
+        p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
 
         p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N train steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
@@ -137,6 +137,7 @@ class APPO(Algorithm):
         p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
         p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
+        p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')

@@ -650,7 +650,9 @@ class LearnerWorker:
     def initialize(self, timing):
         with timing.timeit('init'):
             # initialize the Torch modules
-            if self.cfg.seed is not None:
+            if self.cfg.seed is None:
+                log.info('Starting seed is not provided')
+            else:
                 log.info('Setting fixed seed %d', self.cfg.seed)
                 torch.manual_seed(self.cfg.seed)
                 np.random.seed(self.cfg.seed)

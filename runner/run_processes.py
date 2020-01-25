@@ -38,9 +38,10 @@ def run(run_description):
         if len(processes) >= max_parallel:
             return False
 
-        least_busy_gpu, gpu_available_processes = find_least_busy_gpu()
-        if gpu_available_processes <= 0:
-            return False
+        if run_description.experiments_per_gpu > 0:
+            least_busy_gpu, gpu_available_processes = find_least_busy_gpu()
+            if gpu_available_processes <= 0:
+                return False
 
         return True
 
@@ -49,17 +50,20 @@ def run(run_description):
             cmd, name, root_dir, exp_env_vars = next_experiment
             cmd_tokens = cmd.split(' ')
 
-            best_gpu, best_gpu_available_processes = find_least_busy_gpu()
-            log.info(
-                'The least busy gpu is %d where we can run %d more processes',
-                best_gpu, best_gpu_available_processes,
-            )
+            logfile = open(join(experiment_dir(name, root_dir), 'log.txt'), 'wb')
+            envvars = os.environ.copy()
+
+            best_gpu = None
+            if run_description.experiments_per_gpu > 0:
+                best_gpu, best_gpu_available_processes = find_least_busy_gpu()
+                log.info(
+                    'The least busy gpu is %d where we can run %d more processes',
+                    best_gpu, best_gpu_available_processes,
+                )
+                envvars['CUDA_VISIBLE_DEVICES'] = f'{best_gpu}'
 
             log.info('Starting process %s', cmd)
 
-            logfile = open(join(experiment_dir(name, root_dir), 'log.txt'), 'wb')
-            envvars = os.environ.copy()
-            envvars['CUDA_VISIBLE_DEVICES'] = f'{best_gpu}'
             if exp_env_vars is not None:
                 for key, value in exp_env_vars.items():
                     log.info('Adding env variable %r %r', key, value)
@@ -67,11 +71,13 @@ def run(run_description):
 
             process = subprocess.Popen(cmd_tokens, stdout=logfile, stderr=logfile, env=envvars)
             process.process_logfile = logfile
-            process.gpu_id = best_gpu
+            process.gpu_id = -1 if best_gpu is None else best_gpu
             process.proc_cmd = cmd
 
             processes.append(process)
-            processes_per_gpu[process.gpu_id].append(process.proc_cmd)
+
+            if process.gpu_id > 0:
+                processes_per_gpu[process.gpu_id].append(process.proc_cmd)
 
             log.info('Started process %s on GPU %d', process.proc_cmd, process.gpu_id)
             log.info('Waiting for %d seconds before starting next process', run_description.pause_between_experiments)
@@ -85,7 +91,8 @@ def run(run_description):
                 remaining_processes.append(process)
                 continue
             else:
-                processes_per_gpu[process.gpu_id].remove(process.proc_cmd)
+                if process.gpu_id > 0:
+                    processes_per_gpu[process.gpu_id].remove(process.proc_cmd)
                 process.process_logfile.close()
                 log.info('Process %r finished with code %r', process.proc_cmd, process.returncode)
                 if process.returncode != 0:

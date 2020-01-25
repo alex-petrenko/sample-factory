@@ -63,15 +63,15 @@ REWARD_SHAPING_DEATHMATCH_V1['skip_reward_on_respawn'] = True
 
 def true_reward_final_position(info):
     if info['LEADER_GAP'] == 0:
-        # tied with the leader for the win
-        return 0
+        # tied with the leader for the win, we don't reward for ties, only for the win
+        return 0.0
     elif info['FINAL_PLACE'] > 1:
-        # lost the match (don't care about the place)
-        return -1
+        # lost the match (don't care about the place, losing is losing)
+        return 0.0
     else:
         # won the match!
         assert info['FINAL_PLACE'] == 1
-        return 1
+        return 1.0
 
 
 def true_reward_frags(info):

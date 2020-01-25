@@ -5,6 +5,7 @@ from multiprocessing import Process, JoinableQueue
 from queue import Empty, Queue
 
 import cv2
+import gym
 import numpy as np
 
 from algorithms.utils.multi_env import MultiEnv, MsgType
@@ -140,7 +141,7 @@ class MultiAgentEnvWorker:
             self.task_queue.task_done()
 
 
-class MultiAgentEnv:
+class MultiAgentEnv(gym.Env):
     def __init__(self, num_agents, make_env_func, env_config, skip_frames):
         self.num_agents = num_agents
         log.debug('Multi agent env, num agents: %d', self.num_agents)
