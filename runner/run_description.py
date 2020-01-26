@@ -119,7 +119,7 @@ class RunDescription:
     def __init__(
             self,
             run_name, experiments,
-            max_parallel=5, use_gpus=2, experiments_per_gpu=2, pause_between_experiments=0):
+            max_parallel=5, use_gpus=2, experiments_per_gpu=-1, pause_between_experiments=0):
         self.run_name = run_name
         self.experiments = experiments
         self.max_parallel = max_parallel
