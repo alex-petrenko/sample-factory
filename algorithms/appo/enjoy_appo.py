@@ -62,7 +62,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
     policy_id = cfg.policy_index
     checkpoints = LearnerWorker.get_checkpoints(LearnerWorker.checkpoint_dir(cfg, policy_id))
-    checkpoint_dict = LearnerWorker.load_checkpoint(checkpoints, policy_id)
+    checkpoint_dict = LearnerWorker.load_checkpoint(checkpoints, device)
     actor_critic.load_state_dict(checkpoint_dict['model'])
 
     episode_rewards = []

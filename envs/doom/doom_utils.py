@@ -77,6 +77,11 @@ DOOM_ENVS = [
     ),
 
     DoomSpec(
+        'doom_battle_d4', 'D4_battle.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100,
+        extra_wrappers=[ADDITIONAL_INPUT, STANDARD_REWARD_SHAPING],
+    ),
+
+    DoomSpec(
         'doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8,
         extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),

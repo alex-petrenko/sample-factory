@@ -1,6 +1,5 @@
 import json
 import math
-import os
 import time
 from collections import deque
 from os.path import join
@@ -12,23 +11,13 @@ from tensorboardX import SummaryWriter
 from torch.multiprocessing import Queue as TorchQueue
 
 from algorithms.appo.actor_worker import make_env_func, ActorWorker
-from algorithms.appo.appo_utils import CUDA_ENVVAR
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
-from utils.get_available_gpus import get_available_gpus_without_triggering_pytorch_cuda_initialization
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
 
-
-available_gpus = get_available_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
-
-if CUDA_ENVVAR not in os.environ:
-    os.environ[CUDA_ENVVAR] = available_gpus
-
-os.environ[f'{CUDA_ENVVAR}_backup_'] = os.environ[CUDA_ENVVAR]
-os.environ[CUDA_ENVVAR] = ''
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
