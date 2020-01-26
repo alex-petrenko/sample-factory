@@ -7,7 +7,6 @@ from torch.multiprocessing import Process as TorchProcess, Event
 
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
-from algorithms.utils.algo_utils import EPS
 from utils.timing import Timing
 from utils.utils import AttrDict, log
 
@@ -45,14 +44,12 @@ class PolicyWorker:
 
         self.initialized_event = Event()
         self.initialized_event.clear()
+        self.initialized = False
         self.terminate = False
 
         self.latest_policy_version = 0
 
         self.requests = dict()
-        self.workers_paused = set()
-        self.too_many_workers = False
-        self.last_speed_adjustment = time.time()
 
         self.total_num_samples = 0
 
@@ -69,6 +66,7 @@ class PolicyWorker:
     def _init(self):
         log.info('GPU worker %d-%d initialized', self.policy_id, self.worker_idx)
         self.initialized_event.set()
+        self.initialized = True
 
     def _store_policy_step_request(self, request):
         worker_idx, split_idx, _ = request
@@ -76,10 +74,10 @@ class PolicyWorker:
 
     def _filter_requests(self):
         requests, to_remove = [], []
+
         for worker_split, request in self.requests.items():
-            if worker_split not in self.workers_paused:
-                requests.append(request)
-                to_remove.append(worker_split)
+            requests.append(request)
+            to_remove.append(worker_split)
 
             if len(requests) > self.max_requests_allowed:
                 # this is a simple heuristic to allow the policy worker to ramp up gradually
@@ -91,13 +89,7 @@ class PolicyWorker:
 
         return requests
 
-    def _handle_policy_steps(self, timing):
-        requests = self._filter_requests()
-
-        # log.info('Num pending requests: %d', len(requests))
-        if len(requests) <= 0:
-            return
-
+    def _handle_policy_steps(self, requests, timing):
         self.max_requests_allowed += 1
 
         with timing.add_time('deserialize'):
@@ -108,7 +100,6 @@ class PolicyWorker:
             for request in requests:
                 actor_idx, split_idx, request_data = request
 
-                rollout_step = -1
                 for env_idx, agent_idx, rollout_step in request_data:
                     tensors_dict_key = (actor_idx, split_idx, env_idx, agent_idx)
                     input_tensors = self.input_tensors[tensors_dict_key]
@@ -116,17 +107,6 @@ class PolicyWorker:
                     rnn_states.append(input_tensors['rnn_states'])
                     request_order.append(tensors_dict_key)
                     self.total_num_samples += 1
-
-                if rollout_step >= self.cfg.rollout - 1:
-                    if self.cfg.sync_mode or self.too_many_workers:
-                        self.workers_paused.add((actor_idx, split_idx))
-
-                        if self.too_many_workers:
-                            log.warning(
-                                'Paused worker (%d, %d), total %d (%r)',
-                                actor_idx, split_idx, len(self.workers_paused), self.workers_paused,
-                            )
-                            self.too_many_workers = False
 
         with torch.no_grad():
             with timing.add_time('to_device'):
@@ -138,10 +118,10 @@ class PolicyWorker:
 
             with timing.add_time('forward'):
                 policy_outputs = self.actor_critic(observations, rnn_states)
+                policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
 
             for key, value in policy_outputs.items():
                 policy_outputs[key] = value.cpu()
-            policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
 
             # concat all tensors into a single tensor for performance
             output_tensors, tensor_sizes = [], []
@@ -158,8 +138,6 @@ class PolicyWorker:
             with timing.add_time('postprocess'):
                 self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
 
-            del policy_outputs
-
     def _update_weights(self, weight_update, timing):
         if weight_update is None:
             return
@@ -168,30 +146,6 @@ class PolicyWorker:
             policy_version, state_dict, discarding_rate = weight_update
             self.actor_critic.load_state_dict(state_dict)
             self.latest_policy_version = policy_version
-
-        # adjust experience collection rate
-        if time.time() - self.last_speed_adjustment > 30.0:
-            if discarding_rate <= 0:
-                if self.workers_paused:
-                    worker_idx = self.workers_paused.pop()
-                    log.warning(
-                        'Resume experience collection on worker %r (paused %d: %r)',
-                        worker_idx, len(self.workers_paused), self.workers_paused,
-                    )
-
-                    self.last_speed_adjustment = time.time()
-                    self.too_many_workers = False
-
-            elif discarding_rate > EPS:
-                # learner isn't fast enough to process all experience - disable a single worker to reduce
-                # collection rate
-                # We will pause the worker when the entire rollout is collected
-                log.warning('Worker is requested to pause after the end of the next rollout')
-                self.last_speed_adjustment = time.time()
-                self.too_many_workers = True
-
-        if self.cfg.sync_mode:
-            self.workers_paused.clear()
 
         log.info(
             'Updated weights on worker %d-%d, policy_version %d (%.5f)',
@@ -264,7 +218,7 @@ class PolicyWorker:
         data = AttrDict(orig_data)
         tensors_dict_key = (data.actor_idx, data.split_idx, data.env_idx, data.agent_idx)
         log.debug(
-            'Policy worker %d-%d initializing input tensors from %d %d',
+            'Policy worker %d-%d initializing output tensors for %d %d',
             self.policy_id, self.worker_idx, data.actor_idx, data.split_idx,
         )
         self.output_tensors[tensors_dict_key] = data.tensors
@@ -280,8 +234,6 @@ class PolicyWorker:
             # initialize the Torch modules
             log.info('Initializing model on the policy worker %d-%d...', self.policy_id, self.worker_idx)
 
-            torch.set_num_threads(1)
-
             # we should already see only one CUDA device, because of env vars
             assert torch.cuda.device_count() == 1
             self.device = torch.device('cuda', index=0)
@@ -290,7 +242,7 @@ class PolicyWorker:
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
 
-        queues = [self.policy_queue._reader, self.task_queue._reader]
+        queues = [self.task_queue._reader, self.policy_queue._reader]
         queues_by_handle = dict()
         queues_by_handle[self.policy_queue._reader._handle] = self.policy_queue
         queues_by_handle[self.task_queue._reader._handle] = self.task_queue
@@ -312,27 +264,34 @@ class PolicyWorker:
                                 try:
                                     task_type, data = q.get_nowait()
 
-                                    if task_type == TaskType.INIT:
-                                        self._init()
-                                    elif task_type == TaskType.TERMINATE:
-                                        self.terminate = True
-                                        break
-                                    elif task_type == TaskType.INIT_TENSORS:
-                                        if 'init_output_tensors' in data:
-                                            self._init_output_tensors(data)
-                                        else:
-                                            self._init_input_tensors(data)
-                                    elif task_type == TaskType.POLICY_STEP:
+                                    if task_type == TaskType.POLICY_STEP:
                                         self._store_policy_step_request(data)
-                                    elif task_type == TaskType.UPDATE_WEIGHTS:
-                                        with timing.timeit('updates'):
-                                            self._update_weights(data, timing)
+                                    else:
+                                        # task from the task_queue
+                                        if task_type == TaskType.INIT:
+                                            self._init()
+                                        elif task_type == TaskType.TERMINATE:
+                                            self.terminate = True
+                                            break
+                                        elif task_type == TaskType.INIT_TENSORS:
+                                            if 'init_output_tensors' in data:
+                                                self._init_output_tensors(data)
+                                            else:
+                                                self._init_input_tensors(data)
+                                        elif task_type == TaskType.UPDATE_WEIGHTS:
+                                            with timing.timeit('updates'):
+                                                self._update_weights(data, timing)
+
+                                        self.task_queue.task_done()
 
                                 except Empty:
                                     break
 
                     with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
-                        self._handle_policy_steps(timing)
+                        if self.initialized:
+                            requests_to_process = self._filter_requests()
+                            if len(requests_to_process) > 0:
+                                self._handle_policy_steps(requests_to_process, timing)
 
                     if time.time() - last_report > 3.0 and 'one_step' in timing:
                         timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
@@ -354,7 +313,7 @@ class PolicyWorker:
                 log.warning('Keyboard interrupt detected on worker %d-%d', self.policy_id, self.worker_idx)
                 self.terminate = True
 
-        log.info('Gpu worker timing: %s', timing)
+        log.info('Policy worker timing: %s', timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))

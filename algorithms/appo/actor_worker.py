@@ -562,12 +562,23 @@ class ActorWorker:
         # initialize policy input tensors on all policy workers
         for policy_id in range(self.cfg.num_policies):
             for policy_worker_idx in range(self.cfg.policy_workers_per_policy):
-                log.debug('Sending input tensors for policy worker %d-%d...', policy_id, policy_worker_idx)
                 msg = dict(
                     worker_idx=self.worker_idx, split_idx=split_idx, tensors=tensors,
                     policy_id=policy_id, policy_worker_idx=policy_worker_idx,
                 )
+
+                log.debug(
+                    'Sending input tensors from %d-%d for policy worker %d-%d...',
+                    self.worker_idx, split_idx, policy_id, policy_worker_idx,
+                )
                 self.policy_workers_queues[policy_id][policy_worker_idx].put((TaskType.INIT_TENSORS, msg))
+
+                # wait to make sure tensors on this worker are indeed initialized
+                self.policy_workers_queues[policy_id][policy_worker_idx].join()
+                log.debug(
+                    'Policy worker %d-%d received the tensors from %d-%d!',
+                    policy_id, policy_worker_idx, self.worker_idx, split_idx,
+                )
 
     def _init_policy_output_tensors(self, request_data):
         data = AttrDict(request_data)

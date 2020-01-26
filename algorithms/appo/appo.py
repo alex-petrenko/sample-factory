@@ -8,7 +8,7 @@ from queue import Empty
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import Queue as TorchQueue
+from torch.multiprocessing import Queue as TorchQueue, JoinableQueue as TorchJoinableQueue
 
 from algorithms.appo.actor_worker import make_env_func, ActorWorker
 from algorithms.appo.learner import LearnerWorker
@@ -288,7 +288,7 @@ class APPO(Algorithm):
         for policy_id in range(self.cfg.num_policies):
             policy_worker_queues[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
-                policy_worker_queues[policy_id].append(TorchQueue())
+                policy_worker_queues[policy_id].append(TorchJoinableQueue())
 
         log.info('Initializing GPU learners...')
         learner_idx = 0
@@ -313,10 +313,10 @@ class APPO(Algorithm):
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker = PolicyWorker(
                     i, policy_id, self.cfg, self.obs_space, self.action_space,
-                    policy_queue, actor_queues, self.report_queue,
-                    policy_worker_queues,
+                    policy_queue, actor_queues, self.report_queue, policy_worker_queues,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
+                policy_worker.start_process()
 
         log.info('Initializing actors...')
 
@@ -332,13 +332,10 @@ class APPO(Algorithm):
             self.pbt.init(self.learner_workers, self.actor_workers)
 
     def finish_initialization(self):
-        """Actually start policy workers and wait until they're fully initialized."""
+        """Wait until policy workers are fully initialized."""
         for policy_id, workers in self.policy_workers.items():
             for w in workers:
-                w.start_process()
                 w.init()
-        for policy_id, workers in self.policy_workers.items():
-            for w in workers:
                 log.debug('Waiting for policy worker %d-%d to finish initialization...', policy_id, w.worker_idx)
                 w.initialized_event.wait()
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)

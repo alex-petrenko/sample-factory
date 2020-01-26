@@ -862,14 +862,14 @@ class LearnerWorker:
 
             while self.experience_buffer_queue.qsize() > 1:
                 self.processing_experience_batch.clear()
-                self.processing_experience_batch.wait()
+                self.processing_experience_batch.wait(timeout=0.01)
 
             rollouts, work_done = self._process_rollouts(rollouts, timing)
 
             if not self.train_in_background:
                 while not self.experience_buffer_queue.empty():
                     training_data = self.experience_buffer_queue.get()
-                    self.processing_experience_batch.set()
+                    self.processing_experience_batch.set()  # TODO: use condvar instead of an event here
                     self._process_training_data(training_data, timing)
 
             self._experience_collection_rate_stats()
@@ -964,3 +964,13 @@ class LearnerWorker:
 # [2020-01-19 18:19:31,630] Train loop timing: init: 1.4804, train_wait: 0.0481, tensors_gpu_float: 4.1565, bptt: 5.2692, vtrace: 2.2177, losses: 1.7225, update: 7.5387, train: 31.5856
 # [2020-01-19 18:19:31,797] Collected {0: 1966080}, FPS: 36238.5
 # [2020-01-19 18:19:31,797] Timing: experience: 54.2540
+
+# Version V64
+# --env=doom_battle_hybrid --train_for_seconds=360000 --algo=APPO --env_frameskip=4 --use_rnn=True --reward_scale=0.5 --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v64_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2 --init_workers_parallel=7 --max_grad_norm=0.0
+# [2020-01-25 22:44:52,845] Env runner 1: timing wait_actor: 0.0068, waiting: 9.9934, reset: 16.0501, save_policy_outputs: 0.5885, env_step: 38.8288, overhead: 6.5314, enqueue_policy_requests: 0.1232, complete_rollouts: 0.0299, one_step: 0.0167, work: 46.7084, wait_buffers: 0.0195
+# [2020-01-25 22:44:52,846] Env runner 0: timing wait_actor: 0.0002, waiting: 9.6433, reset: 14.8835, save_policy_outputs: 0.5988, env_step: 39.0076, overhead: 6.6748, enqueue_policy_requests: 0.1294, complete_rollouts: 0.0318, one_step: 0.0167, work: 47.0693, wait_buffers: 0.0211
+# [2020-01-25 22:44:53,037] Gpu worker timing: init: 1.3123, wait_policy: 0.0024, gpu_waiting: 9.7236, loop: 10.5022, weight_update: 0.0005, updates: 0.0007, deserialize: 1.5961, to_device: 12.5846, forward: 13.2160, postprocess: 5.1388, handle_policy_step: 36.8111, one_step: 0.0000, work: 47.4999
+# [2020-01-25 22:44:53,048] GPU learner timing: extract: 0.0329, buffers: 0.0760, tensors: 11.2344, buff_ready: 0.4467, prepare: 11.8263
+# [2020-01-25 22:44:53,060] Train loop timing: init: 1.4357, train_wait: 0.1186, tensors_gpu_float: 4.1724, bptt: 5.2798, vtrace: 2.4177, losses: 1.8281, update: 7.7311, train: 32.4878
+# [2020-01-25 22:44:53,219] Collected {0: 2015232}, FPS: 35969.4
+# [2020-01-25 22:44:53,219] Timing: experience: 56.0263

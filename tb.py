@@ -43,7 +43,7 @@ def main():
         f'--port={args.port} '
         f'--logdir={train_dirs} '
         f'--reload_interval={args.reload_interval} '
-        f'--max_reload_threads=4 '
+        f'--max_reload_threads=8 '
         f'--samples_per_plugin="scalars=200"'
     )
 
