@@ -221,6 +221,9 @@ class PopulationBasedTraining:
         self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, 'rew', env_steps)
 
     def _update_policy(self, policy_id, policy_stats):
+        if 'true_reward' not in policy_stats:
+            return
+
         true_rewards = policy_stats['true_reward']
 
         # not enough data to perform PBT yet

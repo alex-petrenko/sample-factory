@@ -100,23 +100,23 @@ DOOM_ENVS = [
         extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING],
     ),
 
-    DoomSpec(
-        'doom_dwango5_bots_exploration',
-        'dwango5_dm_continuous_weap.cfg',
-        doom_action_space_experimental(),
-        1.0, int(1e9),
-        num_agents=1, num_bots=7,
-        extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
-    ),
-
-    DoomSpec(
-        'doom_dwango5_bots_expl_reward',
-        'dwango5_dm_continuous_weap.cfg',
-        doom_action_space_experimental(),
-        1.0, int(1e9),
-        num_agents=1, num_bots=7,
-        extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
-    ),
+    # DoomSpec(
+    #     'doom_dwango5_bots_exploration',
+    #     'dwango5_dm_continuous_weap.cfg',
+    #     doom_action_space_experimental(),
+    #     1.0, int(1e9),
+    #     num_agents=1, num_bots=7,
+    #     extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
+    # ),
+    #
+    # DoomSpec(
+    #     'doom_dwango5_bots_expl_reward',
+    #     'dwango5_dm_continuous_weap.cfg',
+    #     doom_action_space_experimental(),
+    #     1.0, int(1e9),
+    #     num_agents=1, num_bots=7,
+    #     extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
+    # ),
 
     DoomSpec(
         'doom_ssl2_duel',
