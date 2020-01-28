@@ -42,8 +42,8 @@ class PolicyWorker:
         # queues for all other policy workers, in case we need to talk to them (e.g. send initial tensor buffers)
         self.policy_worker_queues = policy_worker_queues
 
-        self.initialized_event = Event()
-        self.initialized_event.clear()
+        self.initialized_model_event = Event()
+        self.initialized_model_event.clear()
         self.initialized = False
         self.terminate = False
 
@@ -65,7 +65,6 @@ class PolicyWorker:
 
     def _init(self):
         log.info('GPU worker %d-%d initialized', self.policy_id, self.worker_idx)
-        self.initialized_event.set()
         self.initialized = True
 
     def _store_policy_step_request(self, request):
@@ -241,6 +240,7 @@ class PolicyWorker:
             self.actor_critic.to(self.device)
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
+            self.initialized_model_event.set()
 
         queues = [self.task_queue._reader, self.policy_queue._reader]
         queues_by_handle = dict()
@@ -317,9 +317,11 @@ class PolicyWorker:
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
+        self.task_queue.join()
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
+        self.task_queue.join()
 
     def join(self):
         self.process.join(timeout=5)

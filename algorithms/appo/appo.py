@@ -317,9 +317,11 @@ class APPO(Algorithm):
                     policy_queue, actor_queues, self.report_queue, policy_worker_queues,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
+                policy_worker.start_process()
 
-            for i in range(self.cfg.policy_workers_per_policy):
-                self.policy_workers[policy_id][i].start_process()
+                log.debug('Wait for policy worker model to initialize!')
+                # if we don't do this sequentially PyTorch sometimes gets stuck
+                policy_worker.initialized_model_event.wait()
 
         log.info('Initializing actors...')
 
@@ -338,9 +340,8 @@ class APPO(Algorithm):
         """Wait until policy workers are fully initialized."""
         for policy_id, workers in self.policy_workers.items():
             for w in workers:
-                w.init()
                 log.debug('Waiting for policy worker %d-%d to finish initialization...', policy_id, w.worker_idx)
-                w.initialized_event.wait()
+                w.init()
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
 
     def process_report(self, report):
