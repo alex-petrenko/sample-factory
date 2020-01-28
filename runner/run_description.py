@@ -116,17 +116,9 @@ class Experiment:
 
 
 class RunDescription:
-    def __init__(
-            self,
-            run_name, experiments,
-            max_parallel=5, use_gpus=2, experiments_per_gpu=-1, pause_between_experiments=0):
+    def __init__(self, run_name, experiments):
         self.run_name = run_name
         self.experiments = experiments
-        self.max_parallel = max_parallel
-
-        self.use_gpus = use_gpus
-        self.experiments_per_gpu = experiments_per_gpu
-        self.pause_between_experiments = pause_between_experiments
 
     def generate_experiments(self):
         """Yields tuples (final cmd for experiment, experiment_name, root_dir)."""

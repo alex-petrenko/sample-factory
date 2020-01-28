@@ -124,7 +124,10 @@ class ActorState:
         self.policy_inputs['rnn_states'].fill_(0.0)
 
     def curr_actions(self):
-        return self.policy_outputs['actions'].type(torch.int32).numpy()
+        actions = self.policy_outputs['actions'].type(torch.int32).numpy()
+        if len(actions) == 1:
+            actions = actions.item()
+        return actions
 
     @staticmethod
     def set_step_data(dictionary, key, data):

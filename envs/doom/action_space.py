@@ -54,7 +54,7 @@ def doom_action_space():
     ))
 
 
-def doom_action_space_hybrid():
+def doom_action_space_discretized():
     return gym.spaces.Tuple((
         Discrete(3),  # noop, forward, backward
         Discrete(3),  # noop, move right, move left
@@ -65,7 +65,7 @@ def doom_action_space_hybrid():
     ))
 
 
-def doom_action_space_hybrid_no_weap():
+def doom_action_space_discretized_no_weap():
     return gym.spaces.Tuple((
         Discrete(3),  # noop, forward, backward
         Discrete(3),  # noop, move right, move left
@@ -75,7 +75,7 @@ def doom_action_space_hybrid_no_weap():
     ))
 
 
-def doom_action_space_no_weap():
+def doom_action_space_continuous_no_weap():
     return gym.spaces.Tuple((
         Discrete(3),  # noop, forward, backward
         Discrete(3),  # noop, move right, move left
@@ -106,7 +106,7 @@ def doom_action_space_discrete_no_weap():
     ))
 
 
-def doom_action_space_experimental(with_use=False):
+def doom_action_space_full_discretized(with_use=False):
     """
         MOVE_FORWARD
         MOVE_BACKWARD

@@ -1,15 +1,14 @@
 from gym.spaces import Discrete
 
-from envs.doom.action_space import doom_action_space, doom_action_space_no_weap, doom_action_space_hybrid_no_weap, \
-    doom_action_space_experimental, doom_action_space_basic
+from envs.doom.action_space import doom_action_space, \
+    doom_action_space_full_discretized, doom_action_space_basic, doom_action_space_discretized_no_weap
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.wrappers.additional_input import DoomAdditionalInput
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
-from envs.doom.wrappers.exploration import ExplorationWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
 from envs.doom.wrappers.reward_shaping import true_reward_final_position, DoomRewardShapingWrapper, \
-    REWARD_SHAPING_DEATHMATCH_V0, true_reward_frags, REWARD_SHAPING_DEATHMATCH_V1
+    REWARD_SHAPING_DEATHMATCH_V0, true_reward_frags, REWARD_SHAPING_DEATHMATCH_V1, REWARD_SHAPING_BATTLE
 from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
@@ -41,7 +40,7 @@ class DoomSpec:
 
 
 ADDITIONAL_INPUT = (DoomAdditionalInput, {})  # health, ammo, etc. as input vector
-STANDARD_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V0, true_reward_func=None))
+BATTLE_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_BATTLE, true_reward_func=None))  # "true" reward None means just the env reward (monster kills)
 BOTS_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V0, true_reward_func=true_reward_frags))
 DEATHMATCH_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V1, true_reward_func=true_reward_final_position))
 
@@ -66,21 +65,6 @@ DOOM_ENVS = [
         extra_wrappers=[(DoomGatheringRewardShaping, {})],
     ),
 
-    DoomSpec('doom_battle', 'D3_battle.cfg', Discrete(1 + 8), 1.0, 2100),
-    DoomSpec(
-        'doom_battle_continuous', 'D3_battle_continuous.cfg', doom_action_space_no_weap(), 1.0, 2100,
-        extra_wrappers=[ADDITIONAL_INPUT, STANDARD_REWARD_SHAPING],
-    ),
-    DoomSpec(
-        'doom_battle_hybrid', 'D3_battle_continuous.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100,
-        extra_wrappers=[ADDITIONAL_INPUT, STANDARD_REWARD_SHAPING],
-    ),
-
-    DoomSpec(
-        'doom_battle_d4', 'D4_battle.cfg', doom_action_space_hybrid_no_weap(), 1.0, 2100,
-        extra_wrappers=[ADDITIONAL_INPUT, STANDARD_REWARD_SHAPING],
-    ),
-
     DoomSpec(
         'doom_dm', 'cig.cfg', doom_action_space(), 1.0, int(1e9), num_agents=8,
         extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
@@ -91,48 +75,49 @@ DOOM_ENVS = [
         extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),
 
+    # <==== Environments used in the paper ====>
+
+    # single-player envs
     DoomSpec(
-        'doom_dwango5_bots_experimental',
+        'doom_battle', 'battle_continuous_turning.cfg', doom_action_space_discretized_no_weap(), 1.0, 2100,
+        extra_wrappers=[ADDITIONAL_INPUT, BATTLE_REWARD_SHAPING],
+    ),
+
+    DoomSpec(
+        'doom_battle2', 'battle2_continuous_turning.cfg', doom_action_space_discretized_no_weap(), 1.0, 2100,
+        extra_wrappers=[ADDITIONAL_INPUT, BATTLE_REWARD_SHAPING],
+    ),
+
+    # multi-player envs with bots as opponents (still only one agent)
+
+    # TODO: duel env with bots?
+
+    DoomSpec(
+        'doom_deathmatch_bots',
         'dwango5_dm_continuous_weap.cfg',
-        doom_action_space_experimental(),
+        doom_action_space_full_discretized(),
         1.0, int(1e9),
         num_agents=1, num_bots=7,
         extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING],
     ),
 
-    # DoomSpec(
-    #     'doom_dwango5_bots_exploration',
-    #     'dwango5_dm_continuous_weap.cfg',
-    #     doom_action_space_experimental(),
-    #     1.0, int(1e9),
-    #     num_agents=1, num_bots=7,
-    #     extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
-    # ),
-    #
-    # DoomSpec(
-    #     'doom_dwango5_bots_expl_reward',
-    #     'dwango5_dm_continuous_weap.cfg',
-    #     doom_action_space_experimental(),
-    #     1.0, int(1e9),
-    #     num_agents=1, num_bots=7,
-    #     extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING, (ExplorationWrapper, {})],
-    # ),
+    # full multiplayer environments for self-play and PBT experiments
 
     DoomSpec(
-        'doom_ssl2_duel',
+        'doom_duel',
         'ssl2.cfg',
-        doom_action_space_experimental(with_use=True),
+        doom_action_space_full_discretized(with_use=True),
         1.0, int(1e9),
         num_agents=2, num_bots=0, respawn_delay=2,
         extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),
 
     DoomSpec(
-        'doom_freedm',
+        'doom_deathmatch_full',
         'freedm.cfg',
-        doom_action_space_experimental(with_use=True),
+        doom_action_space_full_discretized(with_use=True),
         1.0, int(1e9),
-        num_agents=6, num_bots=2, respawn_delay=2,
+        num_agents=4, num_bots=4, respawn_delay=2,
         extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),
 ]

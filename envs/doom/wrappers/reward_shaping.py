@@ -61,6 +61,13 @@ REWARD_SHAPING_DEATHMATCH_V1['delta'].update(dict(
 REWARD_SHAPING_DEATHMATCH_V1['skip_reward_on_respawn'] = True
 
 
+# add reward for ammo pickups, otherwise agent like to run out of ammo
+REWARD_SHAPING_BATTLE = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
+REWARD_SHAPING_BATTLE['delta'].update(dict(
+    AMMO2=(+0.02, -0.001),
+))
+
+
 def true_reward_final_position(info):
     if info['LEADER_GAP'] == 0:
         # tied with the leader for the win, we don't reward for ties, only for the win

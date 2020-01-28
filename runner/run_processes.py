@@ -8,16 +8,16 @@ from os.path import join
 from utils.utils import log, experiment_dir
 
 
-def run(run_description):
+def run(run_description, args):
     experiments = run_description.experiments
-    max_parallel = run_description.max_parallel
+    max_parallel = args.max_parallel
 
     log.info('Starting processes with base cmds: %r', [e.cmd for e in experiments])
     log.info('Max parallel processes is %d', max_parallel)
     log.info('Monitor log files using\n\n\ttail -f train_dir/%s/**/**/log.txt\n\n', run_description.run_name)
 
     processes = []
-    processes_per_gpu = {g: [] for g in range(run_description.use_gpus)}
+    processes_per_gpu = {g: [] for g in range(args.num_gpus)}
 
     experiments = run_description.generate_experiments()
     next_experiment = next(experiments, None)
@@ -26,8 +26,8 @@ def run(run_description):
         least_busy_gpu = None
         gpu_available_processes = 0
 
-        for gpu_id in range(run_description.use_gpus):
-            available_processes = run_description.experiments_per_gpu - len(processes_per_gpu[gpu_id])
+        for gpu_id in range(args.num_gpus):
+            available_processes = args.experiments_per_gpu - len(processes_per_gpu[gpu_id])
             if available_processes > gpu_available_processes:
                 gpu_available_processes = available_processes
                 least_busy_gpu = gpu_id
@@ -38,7 +38,7 @@ def run(run_description):
         if len(processes) >= max_parallel:
             return False
 
-        if run_description.experiments_per_gpu > 0:
+        if args.experiments_per_gpu > 0:
             least_busy_gpu, gpu_available_processes = find_least_busy_gpu()
             if gpu_available_processes <= 0:
                 return False
@@ -54,7 +54,7 @@ def run(run_description):
             envvars = os.environ.copy()
 
             best_gpu = None
-            if run_description.experiments_per_gpu > 0:
+            if args.experiments_per_gpu > 0:
                 best_gpu, best_gpu_available_processes = find_least_busy_gpu()
                 log.info(
                     'The least busy gpu is %d where we can run %d more processes',
@@ -80,8 +80,8 @@ def run(run_description):
                 processes_per_gpu[process.gpu_id].append(process.proc_cmd)
 
             log.info('Started process %s on GPU %d', process.proc_cmd, process.gpu_id)
-            log.info('Waiting for %d seconds before starting next process', run_description.pause_between_experiments)
-            time.sleep(run_description.pause_between_experiments)
+            log.info('Waiting for %d seconds before starting next process', args.pause_between)
+            time.sleep(args.pause_between)
 
             next_experiment = next(experiments, None)
 
