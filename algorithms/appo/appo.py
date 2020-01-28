@@ -299,10 +299,11 @@ class APPO(Algorithm):
                 self.report_queue, policy_worker_queues[policy_id],
             )
             learner_worker.start_process()
-            learner_worker.init()
-
             self.learner_workers[policy_id] = learner_worker
             learner_idx += 1
+
+        for learner_worker in self.learner_workers.values():
+            learner_worker.init()
 
         log.info('Initializing GPU workers...')
         for policy_id in range(self.cfg.num_policies):
