@@ -268,7 +268,10 @@ class PopulationBasedTraining:
                 )
 
         if policy_id == 0:
-            log.debug('Do not ever mutate the 1st policy, leave it for the reference')
+            # Do not ever mutate the 1st policy, leave it for the reference
+            # Still we allow replacements in case it's really bad
+            self.policy_cfg[policy_id] = self.policy_cfg[replacement_policy]
+            self.policy_reward_shaping[policy_id] = self.policy_reward_shaping[replacement_policy]
         else:
             self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[replacement_policy])
             self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[replacement_policy])

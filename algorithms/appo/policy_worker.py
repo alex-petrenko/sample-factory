@@ -320,7 +320,6 @@ class PolicyWorker:
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
-        self.task_queue.join()
 
     def join(self):
         self.process.join(timeout=5)

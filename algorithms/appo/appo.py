@@ -30,6 +30,7 @@ class Algorithm:
 
         p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N train steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
+        p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
 
         p.add_argument('--stats_episodes', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 

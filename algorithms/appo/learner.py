@@ -1,6 +1,7 @@
 import glob
 import os
 import random
+import shutil
 import threading
 import time
 from collections import OrderedDict, deque
@@ -74,7 +75,7 @@ class LearnerWorker:
         self.summary_rate_decay = LinearDecay([(0, 50), (1000000, 1000), (10000000, 5000)])
         self.last_summary_written = -1e9
         self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
-        self.last_saved = 0
+        self.last_saved = self.last_milestone = 0
 
         self.discarded_experience_over_time = deque([], maxlen=30)
         self.discarded_experience_timer = time.time()
@@ -326,7 +327,8 @@ class LearnerWorker:
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
         tmp_filepath = join(checkpoint_dir, 'checkpoint_tmp')
-        filepath = join(checkpoint_dir, f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth')
+        checkpoint_name = f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth'
+        filepath = join(checkpoint_dir, checkpoint_name)
         log.info('Saving %s...', tmp_filepath)
         torch.save(checkpoint, tmp_filepath)
         log.info('Renaming %s to %s', tmp_filepath, filepath)
@@ -337,6 +339,13 @@ class LearnerWorker:
             if os.path.isfile(oldest_checkpoint):
                 log.debug('Removing %s', oldest_checkpoint)
                 os.remove(oldest_checkpoint)
+
+        if self.cfg.save_milestones_sec > 0 and time.time() - self.last_milestone:
+            milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
+            milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
+            log.debug('Saving a milestone %s', milestone_path)
+            shutil.copy(filepath, milestone_path)
+            self.last_milestone = time.time()
 
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high):
