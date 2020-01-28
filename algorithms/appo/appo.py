@@ -317,7 +317,9 @@ class APPO(Algorithm):
                     policy_queue, actor_queues, self.report_queue, policy_worker_queues,
                 )
                 self.policy_workers[policy_id].append(policy_worker)
-                policy_worker.start_process()
+
+            for i in range(self.cfg.policy_workers_per_policy):
+                self.policy_workers[policy_id][i].start_process()
 
         log.info('Initializing actors...')
 
