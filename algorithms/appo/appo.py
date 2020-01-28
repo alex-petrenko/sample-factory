@@ -127,6 +127,7 @@ class APPO(Algorithm):
         p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
         p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
+        p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float, help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')

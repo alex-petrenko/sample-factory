@@ -46,7 +46,6 @@ REWARD_SHAPING_DEATHMATCH_V0 = dict(
         **WEAPON_DELTA_REWARDS,
     ),
     selected_weapon=SELECTED_WEAPON_REWARDS,
-    skip_reward_on_respawn=False,
 )
 
 # "zero-sum" scheme for self-play scenarios
@@ -55,10 +54,9 @@ REWARD_SHAPING_DEATHMATCH_V1['delta'].update(dict(
     FRAGCOUNT=(+1, -0.001),
     DEATHCOUNT=(-1, +1),
     HITCOUNT=(0, 0),
-    DAMAGECOUNT=(+0.005, -0.005),
-    HEALTH=(+0.005, -0.005),
+    DAMAGECOUNT=(+0.01, -0.01),
+    HEALTH=(+0.01, -0.01),
 ))
-REWARD_SHAPING_DEATHMATCH_V1['skip_reward_on_respawn'] = True
 
 
 # add reward for ammo pickups, otherwise agent like to run out of ammo
@@ -172,10 +170,8 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         is_alive = not info.get('DEAD', 0.0)
         just_respawned = was_dead and is_alive
 
-        skip_reward_on_respawn = just_respawned and self.reward_shaping_scheme['skip_reward_on_respawn']
-
         shaping_reward = 0.0
-        if not done and not skip_reward_on_respawn:
+        if not done and not just_respawned:
             shaping_reward, deltas = self._delta_rewards(info)
 
             shaping_reward += self._selected_weapon_rewards(

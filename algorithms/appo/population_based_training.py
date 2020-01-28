@@ -249,10 +249,6 @@ class PopulationBasedTraining:
 
         log.debug('PBT best policies: %r, worst policies %r', best_policies, worst_policies)
 
-        if policy_id == 0:
-            log.debug('Do not ever mutate the 1st policy, leave it for the reference')
-            return
-
         # to make the code below uniform, this means keep our own parameters and cfg
         # we only take parameters and cfg from another policy if certain conditions are met (see below)
         replacement_policy = policy_id
@@ -264,15 +260,18 @@ class PopulationBasedTraining:
             reward_delta = true_rewards[replacement_policy_candidate] - true_rewards[policy_id]
             reward_delta_relative = abs(reward_delta / (true_rewards[replacement_policy_candidate] + EPS))
 
-            if reward_delta > EPS and reward_delta_relative > self.cfg.pbt_replace_reward_gap:
+            if abs(reward_delta) > self.cfg.pbt_replace_reward_gap_absolute and reward_delta_relative > self.cfg.pbt_replace_reward_gap:
                 replacement_policy = replacement_policy_candidate
                 log.debug(
                     'Difference in reward is %.4f (%.4f), policy %d weights to be replaced by %d',
                     reward_delta, reward_delta_relative, policy_id, replacement_policy,
                 )
 
-        self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[replacement_policy])
-        self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[replacement_policy])
+        if policy_id == 0:
+            log.debug('Do not ever mutate the 1st policy, leave it for the reference')
+        else:
+            self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[replacement_policy])
+            self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[replacement_policy])
 
         if replacement_policy != policy_id:
             # force replacement policy learner to save the model and wait until it's done
