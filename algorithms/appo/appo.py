@@ -319,10 +319,6 @@ class APPO(Algorithm):
                 self.policy_workers[policy_id].append(policy_worker)
                 policy_worker.start_process()
 
-                log.debug('Wait for policy worker model to initialize!')
-                # if we don't do this sequentially PyTorch sometimes gets stuck
-                policy_worker.initialized_model_event.wait()
-
         log.info('Initializing actors...')
 
         self.actor_workers = []

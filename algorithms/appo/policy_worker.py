@@ -42,8 +42,6 @@ class PolicyWorker:
         # queues for all other policy workers, in case we need to talk to them (e.g. send initial tensor buffers)
         self.policy_worker_queues = policy_worker_queues
 
-        self.initialized_model_event = Event()
-        self.initialized_model_event.clear()
         self.initialized = False
         self.terminate = False
 
@@ -242,7 +240,6 @@ class PolicyWorker:
             self.actor_critic.to(self.device)
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
-            self.initialized_model_event.set()
 
         queues = [self.task_queue._reader, self.policy_queue._reader]
         queues_by_handle = dict()
