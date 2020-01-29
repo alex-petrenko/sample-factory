@@ -71,15 +71,15 @@ def run(run_description, args):
 
             process = subprocess.Popen(cmd_tokens, stdout=logfile, stderr=logfile, env=envvars)
             process.process_logfile = logfile
-            process.gpu_id = -1 if best_gpu is None else best_gpu
+            process.gpu_id = best_gpu
             process.proc_cmd = cmd
 
             processes.append(process)
 
-            if process.gpu_id > 0:
+            if process.gpu_id is not None:
                 processes_per_gpu[process.gpu_id].append(process.proc_cmd)
 
-            log.info('Started process %s on GPU %d', process.proc_cmd, process.gpu_id)
+            log.info('Started process %s on GPU %r', process.proc_cmd, process.gpu_id)
             log.info('Waiting for %d seconds before starting next process', args.pause_between)
             time.sleep(args.pause_between)
 
@@ -91,7 +91,7 @@ def run(run_description, args):
                 remaining_processes.append(process)
                 continue
             else:
-                if process.gpu_id > 0:
+                if process.gpu_id is not None:
                     processes_per_gpu[process.gpu_id].remove(process.proc_cmd)
                 process.process_logfile.close()
                 log.info('Process %r finished with code %r', process.proc_cmd, process.returncode)
