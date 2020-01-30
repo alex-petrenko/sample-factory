@@ -53,9 +53,6 @@ DOOM_ENVS = [
         0.01, 300,
     ),
 
-    DoomSpec('doom_corridor', 'deadly_corridor.cfg', Discrete(1 + 7), 0.01, 2100),
-    DoomSpec('doom_gathering', 'health_gathering.cfg', Discrete(1 + 3), 0.01, 2100),
-
     DoomSpec(
         'doom_two_colors_easy', 'two_colors_easy.cfg', doom_action_space_basic(),
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
@@ -78,7 +75,23 @@ DOOM_ENVS = [
 
     # <==== Environments used in the paper ====>
 
-    # single-player envs
+    # "basic" single-player envs
+
+    DoomSpec('doom_my_way_home', 'my_way_home.cfg', Discrete(1 + 4), 1.0),
+    DoomSpec('doom_deadly_corridor', 'deadly_corridor.cfg', Discrete(1 + 7), 0.01),
+    DoomSpec('doom_defend_the_center', 'defend_the_center.cfg', Discrete(1 + 3), 1.0),
+    DoomSpec('doom_defend_the_line', 'defend_the_line.cfg', Discrete(1 + 3), 1.0),
+    DoomSpec(
+        'doom_health_gathering', 'health_gathering.cfg', Discrete(1 + 4), 1.0,
+        extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
+    ),
+    DoomSpec(
+        'doom_health_gathering_supreme', 'health_gathering_supreme_no_death_penalty.cfg', Discrete(1 + 4), 1.0,
+        extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
+    ),
+
+
+    # "challenging" single-player envs
     DoomSpec(
         'doom_battle', 'battle_continuous_turning.cfg', doom_action_space_discretized_no_weap(), 1.0, 2100,
         extra_wrappers=[ADDITIONAL_INPUT, BATTLE_REWARD_SHAPING],
