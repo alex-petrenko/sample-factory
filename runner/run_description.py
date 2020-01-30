@@ -57,6 +57,9 @@ class ParamGrid(ParamGenerator):
             return result
 
     def generate_params(self, randomize=True):
+        if len(self.grid) == 0:
+            return dict()
+
         # start with 0th value for every parameter
         total_num_combinations = np.prod([len(p_values) for p_values in self.grid.values()])
 
@@ -81,31 +84,35 @@ class Experiment:
         """
         self.base_name = name
         self.cmd = cmd
-        self.params = param_generator
+        self.params = list(param_generator)
         self.env_vars = env_vars
 
     def generate_experiments(self):
         """Yields tuples of (cmd, experiment_name)"""
-        for experiment_idx, params in enumerate(self.params):
+        num_experiments = 1 if len(self.params) == 0 else len(self.params)
+
+        for experiment_idx in range(num_experiments):
             cmd_tokens = [self.cmd]
             experiment_name_tokens = [self.base_name]
 
             # abbreviations for parameter names that we've used
             param_abbrs = []
 
-            for param, value in params.items():
-                param_str = f'--{param} {value}'
-                cmd_tokens.append(param_str)
+            if len(self.params) > 0:
+                params = self.params[experiment_idx]
+                for param, value in params.items():
+                    param_str = f'--{param} {value}'
+                    cmd_tokens.append(param_str)
 
-                abbr = None
-                for l in range(len(param)):
-                    abbr = param[:l+3]
-                    if abbr not in param_abbrs:
-                        break
+                    abbr = None
+                    for l in range(len(param)):
+                        abbr = param[:l+3]
+                        if abbr not in param_abbrs:
+                            break
 
-                param_abbrs.append(abbr)
-                experiment_name_token = f'{abbr}_{value}'
-                experiment_name_tokens.append(experiment_name_token)
+                    param_abbrs.append(abbr)
+                    experiment_name_token = f'{abbr}_{value}'
+                    experiment_name_tokens.append(experiment_name_token)
 
             experiment_name = f'{experiment_idx:02d}_' + '_'.join(experiment_name_tokens)
 
