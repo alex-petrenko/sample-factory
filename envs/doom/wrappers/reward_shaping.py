@@ -59,11 +59,10 @@ REWARD_SHAPING_DEATHMATCH_V1['delta'].update(dict(
 ))
 
 
-# add reward for ammo pickups, otherwise agent like to run out of ammo
+# just the same reward scheme for consistency, only battle does not have most game variables,
+# so only a very small reward shaping for collecting Health and Ammo will be applied.
+# It works pretty much the same without this.
 REWARD_SHAPING_BATTLE = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
-REWARD_SHAPING_BATTLE['delta'].update(dict(
-    AMMO2=(+0.02, -0.001),
-))
 
 
 def true_reward_final_position(info):
