@@ -104,7 +104,14 @@ DOOM_ENVS = [
 
     # multi-player envs with bots as opponents (still only one agent)
 
-    # TODO: duel env with bots?
+    DoomSpec(
+        'doom_duel_bots',
+        'ssl2.cfg',
+        doom_action_space_full_discretized(with_use=True),
+        1.0, int(1e9),
+        num_agents=1, num_bots=1, respawn_delay=2,
+        extra_wrappers=[ADDITIONAL_INPUT, BOTS_REWARD_SHAPING],
+    ),
 
     DoomSpec(
         'doom_deathmatch_bots',
