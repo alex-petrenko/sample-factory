@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 import time
 from os.path import join
 
@@ -48,7 +49,8 @@ def run(run_description, args):
     while len(processes) > 0 or next_experiment is not None:
         while can_squeeze_another_process() and next_experiment is not None:
             cmd, name, root_dir, exp_env_vars = next_experiment
-            cmd_tokens = cmd.split(' ')
+            cmd_tokens = [sys.executable, '-m']
+            cmd_tokens += cmd.split(' ')
 
             logfile = open(join(experiment_dir(name, root_dir), 'log.txt'), 'wb')
             envvars = os.environ.copy()
@@ -62,7 +64,7 @@ def run(run_description, args):
                 )
                 envvars['CUDA_VISIBLE_DEVICES'] = f'{best_gpu}'
 
-            log.info('Starting process %s', cmd)
+            log.info('Starting process %r', cmd_tokens)
 
             if exp_env_vars is not None:
                 for key, value in exp_env_vars.items():
