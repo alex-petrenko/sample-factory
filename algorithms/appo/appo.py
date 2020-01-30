@@ -183,7 +183,7 @@ class APPO(Algorithm):
         self.report_interval = 5.0  # sec
 
         self.fps_stats = deque([], maxlen=5)
-        self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
+        self.throughput_stats = [deque([], maxlen=5) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
         self.stats = dict()  # regular (non-averaged) stats
 

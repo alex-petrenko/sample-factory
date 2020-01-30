@@ -1,5 +1,6 @@
-# doom-neurobot
-RL for classic Doom deathmatch
+# Sample Factory
+
+High throughput asynchronous reinforcement learning
 
 ## Setup instructions
 

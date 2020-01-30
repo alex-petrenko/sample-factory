@@ -1,5 +1,0 @@
-Conda env with Python 3.6 (not 3.7)
-Install pip install tensorflow-gpu==1.9.0
-Upgrade bazel to 2.0.0
-pip install dm_env
-Install conda install -c anaconda cudatoolkit=9.0

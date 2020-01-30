@@ -5,7 +5,7 @@
     <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
       <option name="ignoredPackages">
         <value>
-          <list size="81">
+          <list size="83">
             <item index="0" class="java.lang.String" itemvalue="traitlets" />
             <item index="1" class="java.lang.String" itemvalue="absl-py" />
             <item index="2" class="java.lang.String" itemvalue="protobuf" />
@@ -87,6 +87,8 @@
             <item index="78" class="java.lang.String" itemvalue="torch" />
             <item index="79" class="java.lang.String" itemvalue="vizdoom" />
             <item index="80" class="java.lang.String" itemvalue="tensorboardX" />
+            <item index="81" class="java.lang.String" itemvalue="chardet" />
+            <item index="82" class="java.lang.String" itemvalue="matplotlib" />
           </list>
         </value>
       </option>

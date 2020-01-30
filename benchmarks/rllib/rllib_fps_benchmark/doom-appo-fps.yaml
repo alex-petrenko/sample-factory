@@ -1,4 +1,4 @@
-env: doom_battle
+env: doom_benchmark
 run: CUSTOM_APPO
 config:
     lr: 0.0001
@@ -10,14 +10,13 @@ config:
     train_batch_size: 2048
     sample_batch_size: 32
     num_sgd_iter: 1
-    num_workers: 40
-    num_envs_per_worker: 16
+    num_workers: 1
+    num_envs_per_worker: 1
     batch_mode: truncate_episodes
     observation_filter: NoFilter
     num_gpus: 1
 
-    num_cpus_per_worker: 0.1
-    compress_observations: False
+    compress_observations: False  # this didn't seem to work in this version of RLLIB
 
     num_data_loader_buffers: 1
     minibatch_buffer_size: 1
@@ -32,7 +31,7 @@ config:
             [128, [3, 3], 2],
         ]
         conv_activation: elu
-        fcnet_activation: elu  # was tanh
+        fcnet_activation: elu  # same as sample factory
 
         use_lstm: False
         max_seq_len: 16
@@ -44,6 +43,6 @@ config:
 
     env_config:
         skip_frames: 4
-        res_w: 96
+        res_w: 128
         res_h: 72
         wide_aspect_ratio: False

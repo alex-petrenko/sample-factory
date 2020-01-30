@@ -12,6 +12,7 @@ from envs.doom.wrappers.reward_shaping import true_reward_final_position, DoomRe
 from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
+from utils.utils import log
 
 
 class DoomSpec:
@@ -120,6 +121,12 @@ DOOM_ENVS = [
         num_agents=4, num_bots=4, respawn_delay=2,
         extra_wrappers=[ADDITIONAL_INPUT, DEATHMATCH_REWARD_SHAPING],
     ),
+
+    # benchmark environment, this is the same doom_battle that we're using in the paper, but without extra input spaces
+    # for measurements, and with a more simple action space, just so it is easier to use with other codebases
+    # we measure throughput with 128x72 input resolution, 4-frameskip and original game resolution of 160x120
+    # (no widescreen)
+    DoomSpec('doom_benchmark', 'battle.cfg', Discrete(1 + 8), 1.0, 2100),
 ]
 
 
@@ -186,6 +193,8 @@ def make_doom_env_impl(
     h, w, channels = env.observation_space.shape
     if w != cfg.res_w or h != cfg.res_h:
         env = ResizeWrapper(env, cfg.res_w, cfg.res_h, grayscale=False)
+
+    log.info('Doom resolution: %s, resize resolution: %r', resolution, (cfg.res_w, cfg.res_h))
 
     # randomly vary episode duration to somewhat decorrelate the experience
     timeout = doom_spec.default_timeout

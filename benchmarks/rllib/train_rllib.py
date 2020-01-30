@@ -6,20 +6,20 @@ from collections import deque
 import numpy as np
 import ray
 import yaml
+from ray.rllib.agents.impala import ImpalaTrainer
 from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
 from ray.rllib.models import ModelCatalog
 from ray.tests.cluster_utils import Cluster
-from ray.tune import Experiment, function
+from ray.tune import Experiment
 from ray.tune.config_parser import make_parser
-from ray.tune.registry import ENV_CREATOR, register_trainable
+from ray.tune.registry import register_trainable
 # noinspection PyProtectedMember
 from ray.tune.tune import _make_scheduler, run
 from ray.tune.util import merge_dicts
 
-from algorithms.models.vizdoom_model import VizdoomVisionNetwork
-from algorithms.pbt.pbt import get_pbt_scheduler
-from algorithms.policies.custom_appo_policy import CustomAPPOTFPolicy
-from algorithms.policies.custom_ppo_policy import CustomPPOTFPolicy
+from benchmarks.rllib.vizdoom_model import VizdoomVisionNetwork
+from benchmarks.rllib.custom_appo_policy import CustomAPPOTFPolicy
+from benchmarks.rllib.custom_ppo_policy import CustomPPOTFPolicy
 from envs.ray_envs import register_doom_envs_rllib
 from utils.utils import log
 
@@ -133,10 +133,10 @@ def create_parser(parser_creator=None):
 
 
 def make_custom_scheduler(args):
-    if args.pbt:
-        return get_pbt_scheduler()
-    else:
-        return _make_scheduler(args)
+    # if args.pbt:
+    #     return get_pbt_scheduler()
+    # else:
+    return _make_scheduler(args)
 
 
 class FpsHelper:
@@ -177,6 +177,9 @@ def run_experiment(args, parser):
             exp = yaml.load(f)
     else:
         raise Exception('No config file!')
+
+    exp = merge_dicts(exp, args.config)
+    log.info('Num workers: %d, num_envs_per_worker: %d', exp['config']['num_workers'], exp['config']['num_envs_per_worker'])
 
     if args.cfg_mixins is not None:
         for cfg_mixin_file in args.cfg_mixins:
@@ -222,78 +225,78 @@ def run_experiment(args, parser):
     if args.stop_seconds > 0:
         exp.spec['stop'] = {'time_total_s': args.stop_seconds}
 
-    if 'multiagent' in exp.spec['config']:
-        # noinspection PyProtectedMember
-        make_env = ray.tune.registry._global_registry.get(ENV_CREATOR, exp.spec['config']['env'])
-        temp_env = make_env(None)
-        obs_space, action_space = temp_env.observation_space, temp_env.action_space
-        temp_env.close()
-        del temp_env
-
-        policies = dict(
-            main=(None, obs_space, action_space, {}),
-            dummy=(None, obs_space, action_space, {}),
-        )
-
-        exp.spec['config']['multiagent'] = {
-            'policies': policies,
-            'policy_mapping_fn': function(lambda agent_id: 'main'),
-            'policies_to_train': ['main'],
-        }
-
-    if args.dbg:
-        exp.spec['config']['num_workers'] = 1
-        exp.spec['config']['num_gpus'] = 1
-        exp.spec['config']['num_envs_per_worker'] = 1
-
-    if 'callbacks' not in exp.spec['config']:
-        exp.spec['config']['callbacks'] = {}
-
-    fps_helper = FpsHelper()
-
-    def on_train_result(info):
-        if 'APPO' in exp.spec['run']:
-            samples = info['result']['info']['num_steps_sampled']
-        else:
-            samples = info['trainer'].optimizer.num_steps_trained
-
-        fps_helper.record(samples)
-        fps = fps_helper.get_fps()
-        info['result']['custom_metrics']['fps'] = fps
-
-        # remove this as currently
-        skip_frames = exp.spec['config']['env_config']['skip_frames']
-        info['result']['custom_metrics']['fps_frameskip'] = fps * skip_frames
-
-    exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
-
-    def on_episode_end(info):
-        episode = info['episode']
-        stats = {
-            'DEATHCOUNT': 0,
-            'FRAGCOUNT': 0,
-            'HITCOUNT': 0,
-            'DAMAGECOUNT': 0,
-            'KDR': 0,
-            'FINAL_PLACE': 0,
-            'LEADER_GAP': 0,
-            'PLAYER_COUNT': 0,
-            'BOT_DIFFICULTY': 0,
-        }
-
-        # noinspection PyProtectedMember
-        agent_to_last_info = episode._agent_to_last_info
-        for agent in agent_to_last_info.keys():
-            agent_info = agent_to_last_info[agent]
-            for stats_key in stats.keys():
-                stats[stats_key] += agent_info.get(stats_key, 0.0)
-
-        for stats_key in stats.keys():
-            stats[stats_key] /= len(agent_to_last_info.keys())
-
-        episode.custom_metrics.update(stats)
-
-    exp.spec['config']['callbacks']['on_episode_end'] = function(on_episode_end)
+    # if 'multiagent' in exp.spec['config']:
+    #     # noinspection PyProtectedMember
+    #     make_env = ray.tune.registry._global_registry.get(ENV_CREATOR, exp.spec['config']['env'])
+    #     temp_env = make_env(None)
+    #     obs_space, action_space = temp_env.observation_space, temp_env.action_space
+    #     temp_env.close()
+    #     del temp_env
+    #
+    #     policies = dict(
+    #         main=(None, obs_space, action_space, {}),
+    #         dummy=(None, obs_space, action_space, {}),
+    #     )
+    #
+    #     exp.spec['config']['multiagent'] = {
+    #         'policies': policies,
+    #         'policy_mapping_fn': function(lambda agent_id: 'main'),
+    #         'policies_to_train': ['main'],
+    #     }
+    #
+    # if args.dbg:
+    #     exp.spec['config']['num_workers'] = 1
+    #     exp.spec['config']['num_gpus'] = 1
+    #     exp.spec['config']['num_envs_per_worker'] = 1
+    #
+    # if 'callbacks' not in exp.spec['config']:
+    #     exp.spec['config']['callbacks'] = {}
+    #
+    # fps_helper = FpsHelper()
+    #
+    # def on_train_result(info):
+    #     if 'APPO' in exp.spec['run']:
+    #         samples = info['result']['info']['num_steps_sampled']
+    #     else:
+    #         samples = info['trainer'].optimizer.num_steps_trained
+    #
+    #     fps_helper.record(samples)
+    #     fps = fps_helper.get_fps()
+    #     info['result']['custom_metrics']['fps'] = fps
+    #
+    #     # remove this as currently
+    #     skip_frames = exp.spec['config']['env_config']['skip_frames']
+    #     info['result']['custom_metrics']['fps_frameskip'] = fps * skip_frames
+    #
+    # exp.spec['config']['callbacks']['on_train_result'] = function(on_train_result)
+    #
+    # def on_episode_end(info):
+    #     episode = info['episode']
+    #     stats = {
+    #         'DEATHCOUNT': 0,
+    #         'FRAGCOUNT': 0,
+    #         'HITCOUNT': 0,
+    #         'DAMAGECOUNT': 0,
+    #         'KDR': 0,
+    #         'FINAL_PLACE': 0,
+    #         'LEADER_GAP': 0,
+    #         'PLAYER_COUNT': 0,
+    #         'BOT_DIFFICULTY': 0,
+    #     }
+    #
+    #     # noinspection PyProtectedMember
+    #     agent_to_last_info = episode._agent_to_last_info
+    #     for agent in agent_to_last_info.keys():
+    #         agent_info = agent_to_last_info[agent]
+    #         for stats_key in stats.keys():
+    #             stats[stats_key] += agent_info.get(stats_key, 0.0)
+    #
+    #     for stats_key in stats.keys():
+    #         stats[stats_key] /= len(agent_to_last_info.keys())
+    #
+    #     episode.custom_metrics.update(stats)
+    #
+    # exp.spec['config']['callbacks']['on_episode_end'] = function(on_episode_end)
 
     extra_kwargs = {}
     if args.pbt:
