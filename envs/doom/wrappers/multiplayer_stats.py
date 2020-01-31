@@ -1,8 +1,6 @@
 import gym
 import numpy as np
 
-from utils.utils import log
-
 
 class MultiplayerStatsWrapper(gym.Wrapper):
     """Add to info things like place in the match, gap to leader, kill-death ratio etc."""
@@ -19,19 +17,19 @@ class MultiplayerStatsWrapper(gym.Wrapper):
             extra_info = {'KDR': float(kdr)}
 
             player_count = int(info.get('PLAYER_COUNT', 1))
-            player_num = int(info.get('PLAYER_NUM', 1))
+            player_num = int(info.get('PLAYER_NUMBER', 0))
             fragcounts = [int(info.get(f'PLAYER{pi}_FRAGCOUNT', -100000)) for pi in range(1, player_count + 1)]
             places = list(np.argsort(fragcounts))
 
-            final_place = places.index(player_num - 1)
+            final_place = places.index(player_num)
             final_place = player_count - final_place  # inverse, because fragcount is sorted in increasing order
             extra_info['FINAL_PLACE'] = final_place
 
             if final_place > 1:
-                extra_info['LEADER_GAP'] = max(fragcounts) - fragcounts[player_num - 1]
+                extra_info['LEADER_GAP'] = max(fragcounts) - fragcounts[player_num]
             elif player_count > 1:
                 # we won, let's log gap to 2nd place
-                assert places.index(player_num - 1) == player_count - 1
+                assert places.index(player_num) == player_count - 1
                 fragcounts.sort(reverse=True)
                 extra_info['LEADER_GAP'] = fragcounts[1] - fragcounts[0]  # should be negative or 0
                 assert extra_info['LEADER_GAP'] <= 0

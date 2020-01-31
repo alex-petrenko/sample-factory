@@ -18,7 +18,7 @@ from algorithms.utils.multi_env import safe_get
 from envs.create_env import create_env
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
-from utils.utils import log, AttrDict, memory_consumption_mb
+from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill
 
 
 class DictObservationsWrapper(Wrapper):
@@ -787,4 +787,5 @@ class ActorWorker:
         self.task_queue.put((TaskType.TERMINATE, None))
 
     def join(self):
-        self.process.join(timeout=2.0)
+        join_or_kill(self.process)
+

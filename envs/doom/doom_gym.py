@@ -318,23 +318,7 @@ class VizdoomEnv(gym.Env):
                 if v in info:
                     info[v] -= self._last_episode_info.get(v, 0)
 
-    def step(self, actions):
-        """
-        Action is either a single value (discrete, one-hot), or a tuple with an action for each of the
-        discrete action subspaces.
-        """
-        info = {'num_frames': self.skip_frames}
-
-        if self._actions_flattened is not None:
-            # provided externally, e.g. via human play
-            actions_flattened = self._actions_flattened
-            self._actions_flattened = None
-        else:
-            actions_flattened = self._convert_actions(actions)
-
-        reward = self.game.make_action(actions_flattened, self.skip_frames)
-        state = self.game.get_state()
-        done = self.game.is_episode_finished()
+    def _process_game_step(self, state, done, info):
         if not done:
             observation = np.transpose(state.screen_buffer, (1, 2, 0))
             game_variables = self._game_variables_dict(state)
@@ -348,6 +332,27 @@ class VizdoomEnv(gym.Env):
             info.update(self._prev_info)
 
         self._vizdoom_variables_bug_workaround(info, done)
+
+        return observation, done, info
+
+    def step(self, actions):
+        """
+        Action is either a single value (discrete, one-hot), or a tuple with an action for each of the
+        discrete action subspaces.
+        """
+        if self._actions_flattened is not None:
+            # provided externally, e.g. via human play
+            actions_flattened = self._actions_flattened
+            self._actions_flattened = None
+        else:
+            actions_flattened = self._convert_actions(actions)
+
+        default_info = {'num_frames': self.skip_frames}
+        reward = self.game.make_action(actions_flattened, self.skip_frames)
+        state = self.game.get_state()
+        done = self.game.is_episode_finished()
+
+        observation, done, info = self._process_game_step(state, done, default_info)
         return observation, reward, done, info
 
     def render(self, mode='human'):

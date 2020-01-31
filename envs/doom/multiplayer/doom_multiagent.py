@@ -194,7 +194,6 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             return super().step(actions)
 
         self._ensure_initialized()
-        info = {}
 
         actions_binary = self._convert_actions(actions)
 
@@ -208,13 +207,6 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         state = self.game.get_state()
         reward = self.game.get_last_reward()
         done = self.game.is_episode_finished()
-        if not done:
-            observation = np.transpose(state.screen_buffer, (1, 2, 0))
-            game_variables = self._game_variables_dict(state)
-            info.update(self.get_info(game_variables))
-        else:
-            observation = np.zeros(self.observation_space.shape, dtype=np.uint8)
 
-        self._vizdoom_variables_bug_workaround(info, done)
-
+        observation, done, info = self._process_game_step(state, done, {})
         return observation, reward, done, info

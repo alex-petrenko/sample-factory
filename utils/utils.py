@@ -148,6 +148,14 @@ def kill(proc_pid):
     process.kill()
 
 
+def join_or_kill(process, timeout=1.0):
+    process.join(timeout)
+    if process.is_alive():
+        log.warning('Process %r could not join, kill it with fire!', process)
+        process.kill()
+        log.warning('Process %r is dead (%r)', process, process.is_alive())
+
+
 # working with filesystem
 
 def ensure_dir_exists(path):

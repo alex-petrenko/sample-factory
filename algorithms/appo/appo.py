@@ -488,11 +488,13 @@ class APPO(Algorithm):
         all_workers.extend(self.learner_workers.values())
 
         time.sleep(1.0)
-        for w in all_workers:
+        for i, w in enumerate(all_workers):
+            log.debug('Closing worker #%d...', i)
             w.close()
             time.sleep(0.01)
-        for w in all_workers:
+        for i, w in enumerate(all_workers):
             w.join()
+            log.debug('Worker #%d joined!', i)
 
         fps = sum(self.env_steps.values()) / timing.experience
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)

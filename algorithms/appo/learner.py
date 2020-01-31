@@ -22,7 +22,7 @@ from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill
 
 
 class LearnerWorker:
@@ -903,7 +903,7 @@ class LearnerWorker:
         self.task_queue.put((TaskType.TERMINATE, None))
 
     def join(self):
-        self.process.join(timeout=5)
+        join_or_kill(self.process)
 
 
 # WITHOUT TRAINING:

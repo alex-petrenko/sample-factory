@@ -8,7 +8,7 @@ from torch.multiprocessing import Process as TorchProcess, Event
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
 from utils.timing import Timing
-from utils.utils import AttrDict, log
+from utils.utils import AttrDict, log, join_or_kill
 
 
 class PolicyWorker:
@@ -322,4 +322,4 @@ class PolicyWorker:
         self.task_queue.put((TaskType.TERMINATE, None))
 
     def join(self):
-        self.process.join(timeout=5)
+        join_or_kill(self.process)
