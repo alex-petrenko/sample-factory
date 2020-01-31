@@ -201,8 +201,7 @@ class ActorState:
 
         if done:
             self.new_episode = True
-            if self.cfg.with_pbt:
-                self.last_episode_true_reward = info.get('true_reward', 0)
+            self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
 
     def finalize_trajectory(self, rollout_step):
         t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
@@ -233,8 +232,7 @@ class ActorState:
     def episodic_stats(self):
         stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
 
-        if self.cfg.with_pbt:
-            stats['true_reward'] = self.last_episode_true_reward
+        stats['true_reward'] = self.last_episode_true_reward
 
         report = dict(episodic=stats, policy_id=self.curr_policy_id)
         self.last_episode_reward = self.last_episode_duration = self.last_episode_true_reward = 0
