@@ -1,3 +1,6 @@
+from envs.dmlab.dmlab_params import add_dmlab_env_args
+
+
 def env_override_defaults(env, parser):
     if env.startswith('doom'):
         from envs.doom.doom_params import doom_override_defaults
@@ -22,3 +25,5 @@ def add_env_args(env, parser):
     if env.startswith('doom'):
         from envs.doom.doom_params import add_doom_env_args
         add_doom_env_args(env, parser)
+    elif env.startswith('dmlab'):
+        add_dmlab_env_args(env, parser)

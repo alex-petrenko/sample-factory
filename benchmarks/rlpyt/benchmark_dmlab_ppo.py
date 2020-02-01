@@ -41,13 +41,14 @@ from rlpyt.spaces.int_box import IntBox
 from rlpyt.utils.logging.context import logger_context
 
 from algorithms.utils.arguments import default_cfg
+from benchmarks.rlpyt.benchmark_doom_ppo import DoomLstmAgent
 from envs.create_env import create_env
 
 
 env_idx = 0  # for debugging
 
 
-class VizdoomEnv(Env):
+class DmlabEnv(Env):
 
     def __init__(self,
                  game=None,
@@ -60,11 +61,11 @@ class VizdoomEnv(Env):
                  repeat_action_probability=0.,
                  horizon=27000,):
 
-        if not game:
-            game = 'doom_battle'
-
-        cfg=default_cfg(env=game)
-        cfg.wide_aspect_ratio = False
+        cfg = default_cfg(env=game)
+        cfg.res_w = 96
+        cfg.res_h = 72
+        cfg.dmlab_throughput_benchmark = True
+        cfg.dmlab_renderer = 'software'
 
         self.env = create_env(game, cfg=cfg)
         self._observation_space = self.env.observation_space
@@ -72,19 +73,10 @@ class VizdoomEnv(Env):
         gym_action_space = self.env.action_space
         self._action_space = IntBox(low=0, high=gym_action_space.n)  # only for discrete space
 
-        time.sleep(4*random.random())  # to prevent crashes on startup
-        self.first_reset = True
-
     def seed(self, seed=None):
         return self.env.seed(seed)
 
     def reset(self):
-        if self.first_reset:
-            global env_idx
-            print('Resetting doom env...', env_idx)
-            env_idx += 1
-            time.sleep(16*random.random())
-            self.first_reset = False
         res = self.env.reset()
         return res
 
@@ -105,77 +97,6 @@ class VizdoomEnv(Env):
 
     def close(self):
         self.env.close()
-
-
-class DoomLstmModel(torch.nn.Module):
-
-    def __init__(
-            self,
-            image_shape,
-            output_size,
-            fc_sizes=512,  # Between conv and lstm.
-            lstm_size=512,
-            use_maxpool=False,
-            channels=None,  # None uses default.
-            kernel_sizes=None,
-            strides=None,
-            paddings=None,
-            ):
-        super().__init__()
-
-        # same model architecture as Sample-Factory
-        self.conv = Conv2dHeadModel(
-            image_shape=image_shape,
-            channels=channels or [32, 64, 128],
-            kernel_sizes=kernel_sizes or [8, 4, 3],
-            strides=strides or [4, 2, 2],
-            paddings=paddings or [0, 1, 1],
-            use_maxpool=use_maxpool,
-            hidden_sizes=fc_sizes,  # Applies nonlinearity at end.
-        )
-        self.lstm = torch.nn.LSTM(self.conv.output_size + output_size + 1, lstm_size)
-        self.pi = torch.nn.Linear(lstm_size, output_size)
-        self.value = torch.nn.Linear(lstm_size, 1)
-
-    def forward(self, image, prev_action, prev_reward, init_rnn_state):
-        """Feedforward layers process as [T*B,H], recurrent ones as [T,B,H].
-        Return same leading dims as input, can be [T,B], [B], or [].
-        (Same forward used for sampling and training.)"""
-
-        img = image.type(torch.float)  # Expect doom_torch.uint8 inputs
-        img = img.mul_(1. / 255)  # From [0-255] to [0-1], in place.
-
-        # Infer (presence of) leading dimensions: [T,B], [B], or [].
-        from rlpyt.utils.tensor import infer_leading_dims, restore_leading_dims
-        lead_dim, T, B, img_shape = infer_leading_dims(img, 3)
-
-        fc_out = self.conv(img.view(T * B, *img_shape))
-        lstm_input = torch.cat([
-            fc_out.view(T, B, -1),
-            prev_action.view(T, B, -1),  # Assumed onehot.
-            prev_reward.view(T, B, 1),
-            ], dim=2)
-        init_rnn_state = None if init_rnn_state is None else tuple(init_rnn_state)
-        lstm_out, (hn, cn) = self.lstm(lstm_input, init_rnn_state)
-        pi = F.softmax(self.pi(lstm_out.view(T * B, -1)), dim=-1)
-        v = self.value(lstm_out.view(T * B, -1)).squeeze(-1)
-
-        # Restore leading dimensions: [T,B], [B], or [], as input.
-        pi, v = restore_leading_dims((pi, v), lead_dim, T, B)
-        # Model should always leave B-dimension in rnn state: [N,B,H].
-        next_rnn_state = RnnState(h=hn, c=cn)
-
-        return pi, v, next_rnn_state
-
-
-class DoomMixin:
-    def make_env_to_model_kwargs(self, env_spaces):
-        return dict(image_shape=env_spaces.observation.shape, output_size=env_spaces.action.n)
-
-
-class DoomLstmAgent(DoomMixin, AlternatingRecurrentCategoricalPgAgent):
-    def __init__(self, ModelCls=DoomLstmModel, **kwargs):
-        super().__init__(ModelCls=ModelCls, **kwargs)
 
 
 def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-1,
@@ -206,18 +127,16 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         # !!!
 
     sampler = Sampler(
-        EnvCls=VizdoomEnv,
+        EnvCls=DmlabEnv,
         env_kwargs=dict(game=game),
         batch_T=n_timestep,
         batch_B=n_env,
-        max_decorrelation_steps=0,
+        max_decorrelation_steps=100000,
     )
     algo = PPO(minibatches=1, epochs=1)
 
     agent = DoomLstmAgent()
 
-    # Maybe AsyncRL could give better performance?
-    # In the current version however PPO + AsyncRL does not seem to be working (not implemented)
     runner = MinibatchRl(
         algo=algo,
         agent=agent,
@@ -228,7 +147,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
     )
     config = dict(game=game)
     name = "ppo_" + game
-    log_dir = "doom_ppo"
+    log_dir = "dmlab_ppo"
 
     with logger_context(log_dir, run_ID, name, config):
         runner.train()
@@ -237,7 +156,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--game', help='Doom game', default='doom_benchmark')
+    parser.add_argument('--game', help='Dmlab game', default='dmlab_benchmark')
     parser.add_argument('--run_ID', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--cuda_idx', help='gpu to use ', type=int, default=None)
     parser.add_argument('--n_parallel', help='number of sampler workers', type=int, default=12)

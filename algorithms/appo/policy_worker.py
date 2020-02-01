@@ -304,7 +304,7 @@ class PolicyWorker:
                         last_report = time.time()
                         last_report_samples = self.total_num_samples
 
-                    if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
+                    if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
                         torch.cuda.empty_cache()
                         last_cache_cleanup = time.time()
 

@@ -110,6 +110,21 @@ class APPO(Algorithm):
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
         p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
         p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
+        p.add_argument(
+            '--min_traj_buffers_per_worker', default=2, type=int,
+            help='How many shared rollout tensors to allocate per actor worker to exchange information between actors and learners'
+                 'Default value of 2 is fine for most workloads, except when differences in 1-step simulation time are extreme, like with some DMLab environments.'
+                 'If you see a lot of warnings about actor workers having to wait for trajectory buffers, try increasing this to 4-6, this should eliminate the problem at a cost of more RAM.'
+                 'TODO: allocate these buffers on demand?',
+        )
+        p.add_argument(
+            '--decorrelate_experience_max_seconds', default=10, type=int,
+            help='Decorrelating experience serves two benefits. First: this is better for learning because samples from workers come from random moments in the episode, becoming more "i.i.d".'
+                 'Second, and more important one: this is good for environments that highly non-uniform one-step times, including long and expensive episode resets. If experience is not decorrelated'
+                 'then training batches will come in bursts e.g. after a bunch of environments finished resets and many iterations on the learner might be required before,'
+                 'which will increase the policy-lag of the new experience collected. The performance of the Sample Factory is best when experience is generated as more-or-less'
+                 'uniform stream. Try increasing this to 100-200 seconds to smoothen the experience distribution in time right from the beginning (it will eventually spread out and settle anyway)',
+        )
 
         p.add_argument('--sync_mode', default=False, type=str2bool, help='Fully synchronous mode to compare against the standard PPO implementation')
 
@@ -121,6 +136,12 @@ class APPO(Algorithm):
                   'and reduces chance of crashes during startup'),
         )
         p.add_argument('--init_workers_parallel', default=5, type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
+        p.add_argument(
+            '--set_workers_cpu_affinity', default=True, type=str2bool,
+            help=('Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
+                  'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
+                  'that can use parallel CPU cores for level generation.'),
+        )
 
         # PBT stuff
         p.add_argument('--with_pbt', default=True, type=str2bool, help='Enables population-based training basic features')

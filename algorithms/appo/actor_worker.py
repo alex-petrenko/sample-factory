@@ -277,7 +277,7 @@ class VectorEnvRunner:
         self.num_traj_buffers *= 3
 
         # make sure we have at least two to swap between so we never actually have to wait
-        self.num_traj_buffers = math.ceil(max(self.num_traj_buffers, 2))
+        self.num_traj_buffers = math.ceil(max(self.num_traj_buffers, self.cfg.min_traj_buffers_per_worker))
 
         self.traj_buffers_initialized = [False] * self.num_traj_buffers
 
@@ -508,10 +508,7 @@ class ActorWorker:
         self.worker_idx = worker_idx
         self.terminate = False
 
-        # random delay in the beginning guarantees that workers will produce complete rollouts more or less
-        # uniformly, improving the overall throughput and reducing policy version gap
-        self.add_random_delay = not self.cfg.benchmark
-        self.rollout_start = None
+        self.num_complete_rollouts = 0
 
         self.vector_size = cfg.num_envs_per_worker
         self.num_splits = cfg.worker_num_splits
@@ -537,11 +534,11 @@ class ActorWorker:
     def _init(self):
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
-        cpu_count = psutil.cpu_count()
-        cores = cores_for_worker_process(self.worker_idx, self.cfg.num_workers, cpu_count)
-
-        if cores is not None:
-            psutil.Process().cpu_affinity(cores)
+        if self.cfg.set_workers_cpu_affinity:
+            cpu_count = psutil.cpu_count()
+            cores = cores_for_worker_process(self.worker_idx, self.cfg.num_workers, cpu_count)
+            if cores is not None:
+                psutil.Process().cpu_affinity(cores)
 
         log.debug('Worker %d uses CPU cores %r', self.worker_idx, psutil.Process().cpu_affinity())
 
@@ -679,29 +676,32 @@ class ActorWorker:
     def _advance_rollouts(self, data, timing):
         split_idx = data['split_idx']
 
-        if self.rollout_start is None:
-            self.rollout_start = time.time()
-
         runner = self.env_runners[split_idx]
         policy_request, complete_rollouts, episodic_stats = runner.advance_rollouts(data, timing)
-
-        if episodic_stats:
-            self._report_stats(episodic_stats)
-
-        with timing.add_time('enqueue_policy_requests'):
-            if policy_request is not None:
-                self._enqueue_policy_request(split_idx, policy_request)
 
         with timing.add_time('complete_rollouts'):
             if complete_rollouts:
                 self._enqueue_complete_rollouts(split_idx, complete_rollouts, timing)
 
-                if self.add_random_delay:
-                    rollout_duration = time.time() - self.rollout_start
-                    delay = random.random() * 3 * rollout_duration
-                    log.info('Rollout took %.3f sec, sleep for %.3f sec', rollout_duration, delay)
+                if self.num_complete_rollouts == 0 and not self.cfg.benchmark:
+                    # we just finished our first complete rollouts, perfect time to wait for experience derorrelation
+                    # this guarantees that there won't be any "old" trajectories when we awaken
+                    delay = (float(self.worker_idx) / self.cfg.num_workers) * self.cfg.decorrelate_experience_max_seconds
+                    log.info(
+                        'Worker %d, sleep for %.3f sec to decorrelate experience collection',
+                        self.worker_idx, delay,
+                    )
                     time.sleep(delay)
-                    self.add_random_delay = False
+                    log.info('Worker %d awakens!', self.worker_idx)
+
+                self.num_complete_rollouts += len(complete_rollouts)
+
+        with timing.add_time('enqueue_policy_requests'):
+            if policy_request is not None:
+                self._enqueue_policy_request(split_idx, policy_request)
+
+        if episodic_stats:
+            self._report_stats(episodic_stats)
 
     def _process_pbt_task(self, pbt_task):
         task_type, data = pbt_task
@@ -765,7 +765,7 @@ class ActorWorker:
                     last_report = time.time()
 
             if self.worker_idx <= 1:
-                log.info('Env runner %d: timing %s', self.worker_idx, timing)
+                log.info('Env runner %d, rollouts %d: timing %s', self.worker_idx, self.num_complete_rollouts, timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))

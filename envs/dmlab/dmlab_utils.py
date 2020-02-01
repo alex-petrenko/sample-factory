@@ -9,15 +9,19 @@ import gym
 import numpy as np
 from gym.utils import seeding
 
-from envs.env_wrappers import TimeLimitWrapper, PixelFormatChwWrapper, RecordingWrapper
-from utils.utils import project_root, ensure_dir_exists
+from envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
+from utils.utils import project_root, ensure_dir_exists, log
 
 ACTION_SET = (
-    (0, 0, 0, 0, 0, 0, 0),  # Idle
-    (0, 0, 0, 1, 0, 0, 0),  # Forward
-    (0, 0, 0, -1, 0, 0, 0),  # Backward
+    (0, 0, 0, 1, 0, 0, 0),    # Forward
+    (0, 0, 0, -1, 0, 0, 0),   # Backward
+    (0, 0, -1, 0, 0, 0, 0),   # Strafe Left
+    (0, 0, 1, 0, 0, 0, 0),    # Strafe Right
     (-20, 0, 0, 0, 0, 0, 0),  # Look Left
-    (20, 0, 0, 0, 0, 0, 0),  # Look Right
+    (20, 0, 0, 0, 0, 0, 0),   # Look Right
+    (-20, 0, 0, 1, 0, 0, 0),  # Look Left + Forward
+    (20, 0, 0, 1, 0, 0, 0),   # Look Right + Forward
+    (0, 0, 0, 0, 1, 0, 0),    # Fire.
 )
 
 
@@ -48,8 +52,9 @@ level_cache = LevelCache(join(project_root(), '.dmlab_cache'))
 
 
 class DmlabGymEnv(gym.Env):
-    def __init__(self, level, action_repeat, extra_cfg=None):
-        self._width = self._height = 84
+    def __init__(self, level, action_repeat, res_w, res_h, benchmark_mode, renderer, extra_cfg=None):
+        self._width = res_w
+        self._height = res_h
         self._main_observation = 'DEBUG.CAMERA_INTERLEAVED.PLAYER_VIEW_NO_RETICLE'
         self._action_repeat = action_repeat
 
@@ -60,8 +65,6 @@ class DmlabGymEnv(gym.Env):
         if extra_cfg is not None:
             config.update(extra_cfg)
         config = {k: str(v) for k, v in config.items()}
-
-        renderer = 'hardware'
 
         self._dmlab = deepmind_lab.Lab(
             level, observation_format, config=config, renderer=renderer, level_cache=level_cache,
@@ -79,10 +82,17 @@ class DmlabGymEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(len(self._action_set))
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=(self._height, self._width, 3), dtype=np.uint8)
 
+        self.benchmark_mode = benchmark_mode
+        if self.benchmark_mode:
+            log.warning('DmLab benchmark mode is true! Use this only for testing, not for actual training runs!')
+
         self.seed()
 
     def seed(self, seed=None):
-        initial_seed = seeding.hash_seed(seed) % 2 ** 32
+        if self.benchmark_mode:
+            initial_seed = 42
+        else:
+            initial_seed = seeding.hash_seed(seed) % 2 ** 32
         self._random_state = np.random.RandomState(seed=initial_seed)
         return [initial_seed]
 
@@ -92,6 +102,12 @@ class DmlabGymEnv(gym.Env):
         return self._last_observation
 
     def step(self, action):
+        if self.benchmark_mode:
+            # the performance of many DMLab environments heavily depends on what agent is actually doing
+            # therefore for purposes of measuring throughput we ignore the actions, this way the agent executes
+            # random policy and we can measure raw throughput more precisely
+            action = self._random_state.randint(0, self.action_space.n)
+
         reward = self._dmlab.step(self._action_list[action], num_steps=self._action_repeat)
         done = not self._dmlab.is_running()
         if not done:
@@ -134,6 +150,12 @@ class DmLabSpec:
 
 
 DMLAB_ENVS = [
+    DmLabSpec('dmlab_benchmark', 'contributed/dmlab30/rooms_collect_good_objects_train'),
+
+    # this is very hard to work with as a benchmark, because FPS fluctuates a lot due to slow resets.
+    # also depends a lot on whether levels are in level cache or not
+    DmLabSpec('dmlab_benchmark_slow_reset', 'contributed/dmlab30/rooms_keys_doors_puzzle'),
+
     DmLabSpec('dmlab_sparse', 'contributed/dmlab30/explore_goal_locations_large'),
     DmLabSpec(
         'dmlab_very_sparse', 'contributed/dmlab30/explore_goal_locations_large', extra_cfg={'minGoalDistance': '10'},
@@ -154,8 +176,10 @@ def dmlab_env_by_name(name):
 # noinspection PyUnusedLocal
 def make_dmlab_env_impl(spec, cfg, **kwargs):
     skip_frames = cfg.env_frameskip
-
-    env = DmlabGymEnv(spec.level, skip_frames, spec.extra_cfg)
+    env = DmlabGymEnv(
+        spec.level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
+        spec.extra_cfg,
+    )
 
     if 'record_to' in cfg and cfg.record_to is not None:
         env = RecordingWrapper(env, cfg.record_to)

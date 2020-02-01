@@ -22,6 +22,6 @@ def add_doom_env_args(env, parser):
     p.add_argument('--num_bots', default=-1, type=int, help='Add classic (non-neural) bots to the match. If default (-1) then use number of bots specified in env cfg')
     p.add_argument('--start_bot_difficulty', default=None, type=int, help='Adjust bot difficulty, useful for evaluation')
     p.add_argument('--res_w', default=128, type=int, help='Game frame width after resize')
-    p.add_argument('--res_h', default=72, type=int, help='Game frame width after resize')
+    p.add_argument('--res_h', default=72, type=int, help='Game frame height after resize')
     p.add_argument('--wide_aspect_ratio', default=True, type=str2bool, help='If true render wide aspect ratio (slower but gives better FOV to the agent)')
 

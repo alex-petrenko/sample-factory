@@ -219,8 +219,8 @@ class LearnerWorker:
 
         if discard_rollouts > 0:
             log.warning(
-                'Discarding %d old rollouts (learner %d is not fast enough to process experience)',
-                self.policy_id, discard_rollouts,
+                'Discarding %d old rollouts, cut by policy lag threshold %d (learner %d)',
+                discard_rollouts, self.cfg.max_policy_lag, self.policy_id,
             )
             rollouts = rollouts[discard_rollouts:]
             self.num_discarded_rollouts += discard_rollouts
@@ -757,7 +757,7 @@ class LearnerWorker:
             self._process_training_data(data, timing, wait_stats)
             num_batches_processed += 1
 
-            if time.time() - last_cache_cleanup > 30.0 or (not self.cfg.benchmark and num_batches_processed < 50):
+            if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and num_batches_processed < 50):
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
                 last_cache_cleanup = time.time()
