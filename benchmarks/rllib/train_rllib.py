@@ -20,7 +20,7 @@ from ray.tune.util import merge_dicts
 from benchmarks.rllib.vizdoom_model import VizdoomVisionNetwork
 from benchmarks.rllib.custom_appo_policy import CustomAPPOTFPolicy
 from benchmarks.rllib.custom_ppo_policy import CustomPPOTFPolicy
-from envs.ray_envs import register_doom_envs_rllib
+from envs.ray_envs import register_doom_envs_rllib, register_dmlab_envs_rllib
 from utils.utils import log
 
 EXAMPLE_USAGE = """
@@ -314,6 +314,7 @@ def run_experiment(args, parser):
 
 def main():
     register_doom_envs_rllib()
+    register_dmlab_envs_rllib()
 
     ModelCatalog.register_custom_model('vizdoom_vision_model', VizdoomVisionNetwork)
 

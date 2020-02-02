@@ -38,7 +38,7 @@ config:
         zero_mean: False
 
     env_config:
-        skip_frames: 4
-        res_w: 128
+        res_w: 96
         res_h: 72
-        wide_aspect_ratio: False
+        renderer: software
+        dmlab_throughput_benchmark: True
