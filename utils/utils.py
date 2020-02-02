@@ -156,6 +156,29 @@ def join_or_kill(process, timeout=1.0):
         log.warning('Process %r is dead (%r)', process, process.is_alive())
 
 
+def list_child_processes():
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+    is_alive = []
+    for child in children:
+        child_process = psutil.Process(child.pid)
+        if child_process.is_running():
+            is_alive.append(child_process)
+
+    return is_alive
+
+
+def kill_processes(processes):
+    for p in processes:
+        try:
+            log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
+            if p.is_running():
+                log.debug('Killing process...')
+                p.kill()
+        except psutil.NoSuchProcess:
+            log.debug('Process %d is already dead', p.pid)
+
+
 # working with filesystem
 
 def ensure_dir_exists(path):

@@ -16,7 +16,8 @@ from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
-from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, ensure_dir_exists
+from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
+    ensure_dir_exists, list_child_processes, kill_processes
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -508,6 +509,8 @@ class APPO(Algorithm):
             all_workers.extend(workers)
         all_workers.extend(self.learner_workers.values())
 
+        child_processes = list_child_processes()
+
         time.sleep(1.0)
         for i, w in enumerate(all_workers):
             log.debug('Closing worker #%d...', i)
@@ -516,6 +519,9 @@ class APPO(Algorithm):
         for i, w in enumerate(all_workers):
             w.join()
             log.debug('Worker #%d joined!', i)
+
+        # VizDoom processes often refuse to die for an unidentified reason, so we're force killing them with a hack
+        kill_processes(child_processes)
 
         fps = sum(self.env_steps.values()) / timing.experience
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
