@@ -902,6 +902,15 @@ class LearnerWorker:
         while self.task_queue.qsize() > 0:
             time.sleep(0.01)
 
+    def save_model(self):
+        self.model_saved_event.clear()
+        save_task = (PbtTask.SAVE_MODEL, self.policy_id)
+        self.task_queue.put((TaskType.PBT, save_task))
+        log.debug('Wait while learner %d saves the model...', self.policy_id)
+        self.model_saved_event.wait()
+        log.debug('Learner %d saved the model!', self.policy_id)
+        self.model_saved_event.clear()
+
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
 

@@ -24,8 +24,8 @@ def main():
     matplotlib.rcParams['text.usetex'] = True
     matplotlib.rcParams['mathtext.fontset'] = 'cm'
     matplotlib.rcParams['font.family'] = 'serif'
-    matplotlib.rcParams['font.size'] = 12
-    plt.rcParams["figure.figsize"] = (10, 6)
+    matplotlib.rcParams['font.size'] = 10
+    plt.rcParams["figure.figsize"] = (3.7, 2.5)
     # requirements
     # 1) dark background
     # 2) both axis should start at 0
@@ -70,9 +70,9 @@ def main():
     #     spine.set_visible(False)
 
     # Title and label
-    plt.title('VizDoom Throughput, FPS', fontsize=20)
-    plt.xlabel('Total num envs', fontsize=16)
-    plt.ylabel('fps, frameskip$=4$', fontsize=16)
+    # plt.title('VizDoom training throughput, System $\#2$', fontsize=20)
+    # plt.xlabel('Total num. environments', fontsize=8)
+    # plt.ylabel('FPS, $frameskip=4$', fontsize=10)
 
     # for spine in ax.spines.values():
     #     spine.set_visible(False)
@@ -81,6 +81,8 @@ def main():
     ax.xaxis.tick_bottom()
     ax.yaxis.tick_left()
     ax.tick_params(which='major', length=0)
+    [i.set_linewidth(0.05) for i in ax.spines.values()]
+
 
     # use logarithmic for x axis! NOT A GOOD IDEA
     # plt.xscale('symlog')
@@ -94,35 +96,46 @@ def main():
 
     # let plot a little bit larger
     # draw dash gray grid lines
-    plt.grid(color='#B3B3B3', linestyle='--', linewidth=1, alpha=0.3)
-    plt.xlim(xmin=0, xmax=1800)
-    plt.ylim(ymin=0, ymax=140000)
+    plt.grid(color='#B3B3B3', linestyle='--', linewidth=0.25, alpha=0.25)
+    plt.xlim(xmin=0, xmax=1750)
+    plt.ylim(ymin=0, ymax=135000)
+    # plt.grid(False)
+
+    plt.ticklabel_format(style='plain', axis='x', scilimits=(0, 0))
+    plt.ticklabel_format(style='sci', axis='y', scilimits=(5, 5))
+
+    plt.xticks([0, 300, 600, 900, 1200, 1500, 1800])
+    plt.yticks([0, 30000, 60000, 90000, 120000, 150000])
+
 
     # plot each line
 
     # color {'b', 'g', 'r', 'c', 'm'}
     # Not good {'y', 'k', 'w'}
     # sample factory
-    sf_plot, = plt.plot(sf_x, sf_y, color='#FF7F0E', label='Sample Factory', marker="o", markersize=3.6)
+    sf_plot, = plt.plot(sf_x, sf_y, color='#FF7F0E', label='SampleFactory', marker="o", markersize=3.2)
 
     # rlpyt
-    rlpyt_plot, = plt.plot(rlpyt_x, rlpyt_y, color='#1F77B4', label='rlpyt', marker="o", markersize=3.6)
+    rlpyt_plot, = plt.plot(rlpyt_x, rlpyt_y, color='#1F77B4', label='rlpyt', marker="o", markersize=3.2)
 
     # plt.plot(rllib_x_p1, rllib_y_p1,  color='skyblue', label='rllib',marker="o")
-    rllib_p1, = plt.plot(rllib_x_p1, rllib_y_p1, color='#2CA02C', marker="o", markersize=3.6)
-    rllib_p2, = plt.plot(rllib_x_p2, rllib_y_p2, color='#2CA02C', marker='x', markersize=3.4, linestyle=":")
+    rllib_p1, = plt.plot(rllib_x_p1, rllib_y_p1, color='#2CA02C', marker="o", markersize=3.2)
+    rllib_p2, = plt.plot(rllib_x_p2, rllib_y_p2, color='#2CA02C', marker='x', markersize=3.0, linestyle=":")
 
     # scalable_agent
-    sa_p1, = plt.plot(sa_x_p1, sa_y_p1, color='#AEC7E8', marker="o", markersize=3.6)  # label='scalable_agent',
-    sa_p2, = plt.plot(sa_x_p2, sa_y_p2, color='#AEC7E8', marker="x", markersize=3.4, linestyle=":")
+    sa_p1, = plt.plot(sa_x_p1, sa_y_p1, color='#AEC7E8', marker="o", markersize=3.2)  # label='scalable_agent',
+    sa_p2, = plt.plot(sa_x_p2, sa_y_p2, color='#AEC7E8', marker="x", markersize=3.0, linestyle=":")
 
     # plot legend
     sa_legend = plt.legend([sf_plot, rlpyt_plot, (rllib_p1, rllib_p2), (sa_p1, sa_p2)],
-                           ['Sample Factory, APPO', 'rlpyt, PPO', 'rllib, IMPALA', 'DeepMind, IMPALA'], numpoints=1,
-                           handler_map={tuple: HandlerTuple(ndivide=None)})
+                           ['SampleFactory', 'rlpyt', 'rllib', 'IMPALA'], numpoints=1,
+                           handler_map={tuple: HandlerTuple(ndivide=None)}, prop={'size': 7})
+    sa_legend.get_frame().set_linewidth(0.25)
+
+    plt.tight_layout()
 
     # plt.show()
-    plt.savefig(os.path.join(os.getcwd(), "result.eps"), format='eps')
+    plt.savefig(os.path.join(os.getcwd(), "../final_plots/throughput_36core_vizdoom.eps"), format='eps')
 
 
 if __name__ == '__main__':

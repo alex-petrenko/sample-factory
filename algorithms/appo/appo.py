@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import time
 from collections import deque
 from os.path import join
@@ -20,6 +21,10 @@ from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_con
     ensure_dir_exists, list_child_processes, kill_processes
 
 torch.multiprocessing.set_sharing_strategy('file_system')
+
+
+def done_filename(cfg):
+    return join(experiment_dir(cfg=cfg), 'done')
 
 
 class Algorithm:
@@ -472,6 +477,10 @@ class APPO(Algorithm):
         return end
 
     def learn(self):
+        if os.path.isfile(done_filename(self.cfg)):
+            log.warning('Training already finished! Remove "done" file to continue training')
+            return
+
         self.init_workers()
         self.init_pbt()
         self.finish_initialization()
@@ -504,6 +513,9 @@ class APPO(Algorithm):
             except KeyboardInterrupt:
                 log.warning('Keyboard interrupt detected in driver loop, exiting...')
 
+        for learner in self.learner_workers.values():
+            learner.save_model()
+
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():
             all_workers.extend(workers)
@@ -511,7 +523,7 @@ class APPO(Algorithm):
 
         child_processes = list_child_processes()
 
-        time.sleep(1.0)
+        time.sleep(0.1)
         for i, w in enumerate(all_workers):
             log.debug('Closing worker #%d...', i)
             w.close()
@@ -526,6 +538,10 @@ class APPO(Algorithm):
         fps = sum(self.env_steps.values()) / timing.experience
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
         log.info('Timing: %s', timing)
+
+        if self._should_end_training():
+            with open(done_filename(self.cfg), 'w') as fobj:
+                fobj.write(f'{self.env_steps}')
 
         time.sleep(0.1)
         log.info('Done!')

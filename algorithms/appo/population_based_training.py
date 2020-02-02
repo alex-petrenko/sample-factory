@@ -173,13 +173,7 @@ class PopulationBasedTraining:
 
     def _force_learner_to_save_model(self, policy_id):
         learner_worker = self.learner_workers[policy_id]
-        learner_worker.model_saved_event.clear()
-        save_task = (PbtTask.SAVE_MODEL, policy_id)
-        learner_worker.task_queue.put((TaskType.PBT, save_task))
-        log.debug('Wait while learner %d saves the model...', policy_id)
-        learner_worker.model_saved_event.wait()
-        log.debug('Learner %d saved the model!', policy_id)
-        learner_worker.model_saved_event.clear()
+        learner_worker.save_model()
 
     def _learner_load_model(self, policy_id, replacement_policy):
         log.debug('Asking learner %d to load model from %d', policy_id, replacement_policy)

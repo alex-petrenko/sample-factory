@@ -653,8 +653,7 @@ class ActorWorker:
             while env_runner.traj_buffer_ready[:, :, new_traj_buffer_idx].min() == 0:
                 if print_warning:
                     log.warning(
-                        ('Waiting for trajectory buffer %d on actor %d-%d. This means learner is the bottleneck. '
-                         'Increase batch size or simplify the computation graph to improve throughput'),
+                        'Waiting for trajectory buffer %d on actor %d-%d',
                         new_traj_buffer_idx, self.worker_idx, split_idx,
                     )
                     print_warning = False
