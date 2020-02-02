@@ -131,7 +131,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         env_kwargs=dict(game=game),
         batch_T=n_timestep,
         batch_B=n_env,
-        max_decorrelation_steps=5000,
+        max_decorrelation_steps=500,
     )
     algo = PPO(minibatches=1, epochs=1)
 
