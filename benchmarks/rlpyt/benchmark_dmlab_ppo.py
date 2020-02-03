@@ -131,8 +131,11 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         env_kwargs=dict(game=game),
         batch_T=n_timestep,
         batch_B=n_env,
-        max_decorrelation_steps=500,
+        max_decorrelation_steps=0,
     )
+    # using decorrelation here completely destroys the performance, because episodes will reset at different times and the learner will wait for 1-2 workers to complete, wasting a lot of time
+    # this should not be an issue with asynchronous implementation, but it is not supported at the moment
+
     algo = PPO(minibatches=1, epochs=1)
 
     agent = DoomLstmAgent()

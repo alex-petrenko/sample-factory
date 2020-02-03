@@ -1,10 +1,11 @@
-import random
-
+from filelock import FileLock, Timeout
 from ray.tune import register_env
 
 from algorithms.utils.arguments import default_cfg
 from envs.dmlab.dmlab_utils import DMLAB_ENVS, make_dmlab_env
 from envs.doom.doom_utils import DOOM_ENVS, make_doom_env
+
+DOOM_LOCK_PATH = '/tmp/doom_rllib_lock'
 
 
 def register_doom_envs_rllib(**kwargs):
@@ -26,10 +27,19 @@ def register_doom_envs_rllib(**kwargs):
 
             env = make_doom_env(spec.name, env_config=env_config, cfg=cfg, **kwargs)
 
-            import time
-            time.sleep(random.random() * 5)
-            print('Env created!!!')
-            env.reset()
+            # we lock the global mutex here, otherwise Doom instances may crash on first reset when too many of them are reset simultaneously
+            lock = FileLock(DOOM_LOCK_PATH)
+            attempt = 0
+            while True:
+                attempt += 1
+                try:
+                    with lock.acquire(timeout=10):
+                        print('Env created, resetting...')
+                        env.reset()
+                        print('Env reset completed! Config:', env_config)
+                        break
+                except Timeout:
+                    print('Another instance of this application currently holds the lock, attempt:', attempt)
 
             return env
 

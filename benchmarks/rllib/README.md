@@ -27,5 +27,5 @@ This is the version the scripts were written for.
 5) Example command line for dmlab throughput test:
 
 ```
-python -m benchmarks.rllib.train_rllib -f=benchmarks/rllib/rllib_fps_benchmark/dmlab-impala-fps.yaml --experiment-name=rllib-impala-fps --config='{"config": {"num_workers": 20, "num_envs_per_worker": 32, "train_batch_size": 2048}}'
+python -m benchmarks.rllib.train_rllib -f=benchmarks/rllib/rllib_fps_benchmark/doom-impala-fps.yaml --experiment-name=rllib-impala-fps --config='{"config": {"num_workers": 20, "num_envs_per_worker": 16}}'
 ```
