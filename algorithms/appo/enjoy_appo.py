@@ -43,8 +43,11 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
 
-    if cfg.record_to is not None:
+    cfg.record_to = None  # TODO
+    if cfg.record_to:
         cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
+    else:
+        cfg.record_to = None
 
     def make_env_func(env_config):
         return create_env(cfg.env, cfg=cfg, env_config=env_config)

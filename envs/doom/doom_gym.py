@@ -35,16 +35,24 @@ def key_to_action_default(key):
     """
     from pynput.keyboard import Key
 
+    # health gathering
     action_table = {
-        Key.up: 0,
-        Key.down: 1,
-        Key.alt: 6,
-        Key.ctrl: 11,
-        Key.shift: 12,
-        Key.space: 13,
-        Key.right: 'turn_right',
-        Key.left: 'turn_left',
+        Key.left: 0,
+        Key.right: 1,
+        Key.up: 2,
+        Key.down: 3,
     }
+
+    # action_table = {
+    #     Key.up: 0,
+    #     Key.down: 1,
+    #     Key.alt: 6,
+    #     Key.ctrl: 11,
+    #     Key.shift: 12,
+    #     Key.space: 13,
+    #     Key.right: 'turn_right',
+    #     Key.left: 'turn_left',
+    # }
 
     return action_table.get(key, None)
 
@@ -508,21 +516,22 @@ class VizdoomEnv(gym.Env):
                     _, rew, _, _ = env.step(actions)
 
                     new_total_rew = total_rew + rew
-                    # if new_total_rew != total_rew:
-                    #     log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
+                    if new_total_rew != total_rew:
+                        log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
                     total_rew = new_total_rew
                     state = doom.game.get_state()
 
                     verbose = True
                     if state is not None and verbose:
                         info = doom.get_info()
-                        # print(
-                        #     'Weapon:', info['SELECTED_WEAPON'],
-                        #     'ready:', info['ATTACK_READY'],
-                        #     'ammo:', info['SELECTED_WEAPON_AMMO'],
-                        #     'pc:', info['PLAYER_COUNT'],
-                        #     'dmg:', info['DAMAGECOUNT'],
-                        # )
+                        print(
+                            'Health:', info['HEALTH'],
+                            # 'Weapon:', info['SELECTED_WEAPON'],
+                            # 'ready:', info['ATTACK_READY'],
+                            # 'ammo:', info['SELECTED_WEAPON_AMMO'],
+                            # 'pc:', info['PLAYER_COUNT'],
+                            # 'dmg:', info['DAMAGECOUNT'],
+                        )
 
                     time_since_last_render = time.time() - last_render_time
                     time_wait = time_between_frames - time_since_last_render

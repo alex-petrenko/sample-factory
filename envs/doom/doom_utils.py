@@ -86,7 +86,7 @@ DOOM_ENVS = [
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
     DoomSpec(
-        'doom_health_gathering_supreme', 'health_gathering_supreme_no_death_penalty.cfg', Discrete(1 + 4), 1.0,
+        'doom_health_gathering_supreme', 'health_gathering_supreme.cfg', Discrete(1 + 4), 1.0,
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
 
