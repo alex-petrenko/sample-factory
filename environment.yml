@@ -1,4 +1,4 @@
-name: doom-rl
+name: sample-factory
 channels:
   - pytorch
   - conda-forge
