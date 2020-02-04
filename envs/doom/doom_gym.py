@@ -262,7 +262,13 @@ class VizdoomEnv(gym.Env):
             self.game.new_episode()
 
         self.state = self.game.get_state()
-        img = self.state.screen_buffer
+        img = None
+        try:
+            img = self.state.screen_buffer
+        except AttributeError:
+            # sometimes Doom does not return screen buffer at all??? Rare bug
+            pass
+
         if img is None:
             log.error('Game returned None screen buffer! This is not supposed to happen!')
             img = self._black_screen()

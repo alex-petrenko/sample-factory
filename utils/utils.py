@@ -176,7 +176,8 @@ def kill_processes(processes):
             #     # do not kill to avoid memleaks
             #     continue
 
-            log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
+            # log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
+            log.debug('Child process name %d %r %r', p.pid, p.name(), p.exe())
             if p.is_running():
                 log.debug('Killing process %s...', p.name())
                 p.kill()
