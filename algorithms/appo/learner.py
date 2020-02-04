@@ -501,12 +501,11 @@ class LearnerWorker:
                     kl_prior = kl_prior.mean()
                     prior_loss = self.cfg.prior_loss_coeff * kl_prior
 
-                    old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
-
                     # small KL penalty for being different from the behavior policy
                     if self.kl_coeff == 0.0:
                         kl_old = kl_old_mean = kl_penalty = 0.0
                     else:
+                        old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
                         kl_old = action_distribution.kl_divergence(old_action_distribution)
                         kl_old_mean = kl_old.mean()
                         kl_penalty = self.kl_coeff * kl_old_mean
@@ -565,7 +564,8 @@ class LearnerWorker:
                             value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
                             stats.kl_divergence = kl_old_mean
-                            stats.kl_max = kl_old.max()
+                            if self.kl_coeff > 0.0:
+                                stats.kl_max = kl_old.max()
                             stats.value_delta = value_delta_avg
                             stats.value_delta_max = value_delta_max
                             stats.fraction_clipped = ((ratio < clip_ratio_low).float() + (ratio > clip_ratio_high).float()).mean()
