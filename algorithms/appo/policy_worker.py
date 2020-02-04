@@ -67,6 +67,9 @@ class PolicyWorker:
 
     def _store_policy_step_request(self, request):
         worker_idx, split_idx, _ = request
+
+        if worker_idx == 0: log.warning('Got message from %d-%d (%r)!', worker_idx, split_idx, request)
+
         self.requests[(worker_idx, split_idx)] = request
 
     def _filter_requests(self):
@@ -193,6 +196,7 @@ class PolicyWorker:
 
         for actor_idx, split_idx in outputs_ready:
             advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
+            if actor_idx == 0: log.warning('Sending message back to %d (%r)!', actor_idx, advance_rollout_request)
             self.actor_queues[actor_idx].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
 
     def _init_input_tensors(self, orig_data):

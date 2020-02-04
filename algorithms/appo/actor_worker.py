@@ -722,7 +722,10 @@ class ActorWorker:
             while not self.terminate:
                 with timing.add_time('waiting'), timing.timeit('wait_actor'):
                     timeout = 1 if initialized else 1e3
+
+                    if self.worker_idx == 0: log.warning('Waiting for msg...')
                     task_type, data = safe_get(self.task_queue, timeout=timeout)
+                    if self.worker_idx == 0: log.warning('Got message %r (%r)!', task_type, data)
 
                 if task_type == TaskType.INIT:
                     self._init()

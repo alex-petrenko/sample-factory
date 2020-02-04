@@ -171,9 +171,14 @@ def list_child_processes():
 def kill_processes(processes):
     for p in processes:
         try:
+            # TODO: need to figure this out
+            # if 'torch_shm_manager' in p.name():
+            #     # do not kill to avoid memleaks
+            #     continue
+
             log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
             if p.is_running():
-                log.debug('Killing process...')
+                log.debug('Killing process %s...', p.name())
                 p.kill()
         except psutil.NoSuchProcess:
             log.debug('Process %d is already dead', p.pid)
