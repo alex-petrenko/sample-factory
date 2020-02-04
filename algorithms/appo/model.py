@@ -91,9 +91,11 @@ class ActorCritic(nn.Module):
         mean = self.cfg.obs_subtract_mean
         scale = self.cfg.obs_scale
 
-        obs_dict['obs'] = obs_dict['obs'].float()
+        if obs_dict['obs'].dtype != torch.float:
+            obs_dict['obs'] = obs_dict['obs'].float()
+
         if abs(mean) > EPS and abs(scale - 1.0) > EPS:
-            obs_dict['obs'] = (obs_dict['obs'] - mean) * (1.0 / scale)  # convert rgb observations to [-1, 1]
+            obs_dict['obs'].sub_(mean).mul_(1.0 / scale)  # convert rgb observations to [-1, 1] in-place
 
         x = self.conv_head(obs_dict['obs'])
         x = x.view(-1, self.conv_out_size)

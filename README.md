@@ -52,7 +52,7 @@ python -m algorithms.appo.enjoy_appo --env=doom_basic --algo=APPO --experiment=d
 Train for 3B env steps (also can be stopped at any time with Ctrl+C and resumed by using the same cmd):
 python -m algorithms.appo.train_appo --env=doom_battle --train_for_env_steps=3000000000 --algo=APPO --env_frameskip=4 --use_rnn=True --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --wide_aspect_ratio=False --num_workers=20 --num_envs_per_worker=20 --num_policies=1  --experiment=doom_battle_w20_v20
 
-Wait until the end, or stop at any point to visualize the policy:
+Run at any point to visualize the experiment:
 python -m algorithms.appo.enjoy_appo --env=doom_battle --algo=APPO --experiment=doom_battle_w20_v20
 
 ```
