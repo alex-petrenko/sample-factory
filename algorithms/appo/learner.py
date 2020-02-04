@@ -504,9 +504,12 @@ class LearnerWorker:
                     old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
 
                     # small KL penalty for being different from the behavior policy
-                    kl_old = action_distribution.kl_divergence(old_action_distribution)
-                    kl_old_mean = kl_old.mean()
-                    kl_penalty = self.kl_coeff * kl_old_mean
+                    if self.kl_coeff == 0.0:
+                        kl_old = kl_old_mean = kl_penalty = 0.0
+                    else:
+                        kl_old = action_distribution.kl_divergence(old_action_distribution)
+                        kl_old_mean = kl_old.mean()
+                        kl_penalty = self.kl_coeff * kl_old_mean
 
                     loss = policy_loss + value_loss + prior_loss + kl_penalty
 
@@ -590,12 +593,13 @@ class LearnerWorker:
                                 stats[key] = value.detach().cpu()
 
         with torch.no_grad():
-            # adjust KL-penalty coefficient if KL divergence at the end of training is high
-            if kl_old_mean > self.cfg.target_kl:
-                self.kl_coeff *= 1.5
-            elif kl_old_mean < self.cfg.target_kl / 2:
-                self.kl_coeff /= 1.5
-            self.kl_coeff = max(self.kl_coeff, 1e-6)
+            if self.kl_coeff > 0.0:
+                # adjust KL-penalty coefficient if KL divergence at the end of training is high
+                if kl_old_mean > self.cfg.target_kl:
+                    self.kl_coeff *= 1.5
+                elif kl_old_mean < self.cfg.target_kl / 2:
+                    self.kl_coeff /= 1.5
+                self.kl_coeff = max(self.kl_coeff, 1e-6)
 
         del buffer
         return stats
