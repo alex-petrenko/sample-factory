@@ -296,6 +296,8 @@ class PolicyWorker:
                             if len(requests_to_process) > 0:
                                 self._handle_policy_steps(requests_to_process, timing)
 
+                    log.debug('Policy worker %d timing %s', self.worker_idx, timing)
+
                     if time.time() - last_report > 3.0 and 'one_step' in timing:
                         timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
                         samples_since_last_report = self.total_num_samples - last_report_samples

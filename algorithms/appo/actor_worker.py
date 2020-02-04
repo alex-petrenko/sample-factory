@@ -748,6 +748,7 @@ class ActorWorker:
 
                         with timing.add_time('work'), timing.timeit('one_step'):
                             self._advance_rollouts(data, timing)
+                            initialized = True
                     elif task_type == TaskType.PBT:
                         self._process_pbt_task(data)
 
