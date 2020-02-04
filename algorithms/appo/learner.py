@@ -65,7 +65,9 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # this only exists for debugging purposes
-        self.train_in_background = True
+        self.with_weight_updates = False  #TODO!!! this only exists for debugging purposes
+        self.train_in_background = True  # this only exists for debugging purposes
+
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
         self.processing_experience_batch = threading.Event()
@@ -720,7 +722,8 @@ class LearnerWorker:
 
                     stats['stats'] = memory_stats('learner', self.device)
 
-                self._broadcast_weights(discarding_rate)
+                if self.with_weight_updates:
+                    self._broadcast_weights(discarding_rate)
 
         self.report_queue.put(stats)
 
