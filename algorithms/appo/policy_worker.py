@@ -257,7 +257,7 @@ class PolicyWorker:
             try:
                 with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
                     log.warning('Policy worker %d waits on select...', self.worker_idx)
-                    ready, _, _ = select.select(queues, [], [], timeout=0.1)
+                    ready, _, _ = select.select(queues, [], [], 0.1)
 
                     #TODO
                     if len(ready) <= 0:
