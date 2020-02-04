@@ -256,7 +256,12 @@ class PolicyWorker:
         while not self.terminate:
             try:
                 with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
-                    ready, _, _ = select.select(queues, [], [])
+                    log.warning('Policy worker %d waits on select...', self.worker_idx)
+                    ready, _, _ = select.select(queues, [], [], timeout=0.1)
+
+                    #TODO
+                    if len(ready) <= 0:
+                        log.warning('Policy worker %d select timed out', self.worker_idx)
 
                 with timing.add_time('work'):
                     for readable_queue in ready:

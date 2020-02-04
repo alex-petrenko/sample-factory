@@ -65,7 +65,7 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # this only exists for debugging purposes
-        self.with_weight_updates = False  #TODO!!! this only exists for debugging purposes
+        self.with_weight_updates = True  # this only exists for debugging purposes
         self.train_in_background = True  # this only exists for debugging purposes
 
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
