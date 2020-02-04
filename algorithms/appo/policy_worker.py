@@ -245,60 +245,73 @@ class PolicyWorker:
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
 
-        queues = [self.task_queue._reader, self.policy_queue._reader]
-        queues_by_handle = dict()
-        queues_by_handle[self.policy_queue._reader._handle] = self.policy_queue
-        queues_by_handle[self.task_queue._reader._handle] = self.task_queue
+        # queues = [self.task_queue._reader, self.policy_queue._reader]
+        # queues_by_handle = dict()
+        # queues_by_handle[self.policy_queue._reader._handle] = self.policy_queue
+        # queues_by_handle[self.task_queue._reader._handle] = self.task_queue
 
         last_report = last_cache_cleanup = time.time()
         last_report_samples = 0
 
         while not self.terminate:
             try:
-                with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
-                    log.warning('Policy worker %d waits on select...', self.worker_idx)
-                    ready, _, _ = select.select(queues, [], [], 0.1)
-
-                    #TODO
-                    if len(ready) <= 0:
-                        log.warning('Policy worker %d select timed out', self.worker_idx)
-                    else:
-                        log.warning('Policy worker %d queues are ready!', len(ready))
+                # with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
+                #     log.warning('Policy worker %d waits on select...', self.worker_idx)
+                #     ready, _, _ = select.select(queues, [], [], 0.1)
+                #
+                #     #TODO
+                #     if len(ready) <= 0:
+                #         log.warning('Policy worker %d select timed out', self.worker_idx)
+                #     else:
+                #         log.warning('Policy worker %d queues are ready!', len(ready))
 
                 with timing.add_time('work'):
-                    for readable_queue in ready:
-                        q = queues_by_handle[readable_queue._handle]
+                    while True:
+                        try:
+                            log.warning('Policy worker calling get_nowait for task_queue')
+                            task_type, data = self.task_queue.get_nowait()
+                            log.warning('Policy worker got message %r', task_type)
 
-                        with timing.add_time('loop'):
-                            while True:
-                                try:
-                                    log.warning('Policy worker calling get_nowait')
-                                    task_type, data = q.get_nowait()
-                                    log.warning('Policy worker got message %r', task_type)
+                            if task_type == TaskType.INIT:
+                                self._init()
+                            elif task_type == TaskType.TERMINATE:
+                                self.terminate = True
+                                break
+                            elif task_type == TaskType.INIT_TENSORS:
+                                if 'init_output_tensors' in data:
+                                    self._init_output_tensors(data)
+                                else:
+                                    self._init_input_tensors(data)
+                            elif task_type == TaskType.UPDATE_WEIGHTS:
+                                with timing.timeit('updates'):
+                                    self._update_weights(data, timing)
 
-                                    if task_type == TaskType.POLICY_STEP:
-                                        self._store_policy_step_request(data)
+                            self.task_queue.task_done()
+                        except Empty:
+                            log.warning('Policy worker got nothing from task queue!')
+                            break
+
+                    with timing.add_time('loop'):
+                        attempt = 0
+                        while True:
+                            try:
+                                log.warning('Policy worker calling get_nowait on policy queue')
+                                with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
+                                    if attempt == 0:
+                                        task_type, data = self.policy_queue.get(block=True, timeout=0.01)
                                     else:
-                                        # task from the task_queue
-                                        if task_type == TaskType.INIT:
-                                            self._init()
-                                        elif task_type == TaskType.TERMINATE:
-                                            self.terminate = True
-                                            break
-                                        elif task_type == TaskType.INIT_TENSORS:
-                                            if 'init_output_tensors' in data:
-                                                self._init_output_tensors(data)
-                                            else:
-                                                self._init_input_tensors(data)
-                                        elif task_type == TaskType.UPDATE_WEIGHTS:
-                                            with timing.timeit('updates'):
-                                                self._update_weights(data, timing)
+                                        task_type, data = self.policy_queue.get_nowait()
 
-                                        self.task_queue.task_done()
+                                attempt += 1
 
-                                except Empty:
-                                    log.warning('Policy worker got nothing!')
-                                    break
+                                log.warning('Policy worker got message %r (%d)', task_type, attempt)
+
+                                if task_type == TaskType.POLICY_STEP:
+                                    self._store_policy_step_request(data)
+
+                            except Empty:
+                                log.warning('Policy worker got nothing from policy queue (%d)!', attempt)
+                                break
 
                     with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
                         if self.initialized:
