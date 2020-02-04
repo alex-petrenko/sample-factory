@@ -67,9 +67,6 @@ class PolicyWorker:
 
     def _store_policy_step_request(self, request):
         worker_idx, split_idx, _ = request
-
-        if worker_idx == 0: log.warning('Got message from %d-%d (%r)!', worker_idx, split_idx, request)
-
         self.requests[(worker_idx, split_idx)] = request
 
     def _filter_requests(self):
@@ -196,7 +193,6 @@ class PolicyWorker:
 
         for actor_idx, split_idx in outputs_ready:
             advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
-            if actor_idx == 0: log.warning('Sending message back to %d (%r)!', actor_idx, advance_rollout_request)
             self.actor_queues[actor_idx].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
 
     def _init_input_tensors(self, orig_data):
@@ -256,14 +252,7 @@ class PolicyWorker:
         while not self.terminate:
             try:
                 with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
-                    log.warning('Policy worker %d waits on select...', self.worker_idx)
                     ready, _, _ = select.select(queues, [], [], 0.1)
-
-                    #TODO
-                    if len(ready) <= 0:
-                        log.warning('Policy worker %d select timed out', self.worker_idx)
-                    else:
-                        log.warning('Policy worker %d queues are ready!', len(ready))
 
                 with timing.add_time('work'):
                     for readable_queue in ready:
@@ -272,9 +261,7 @@ class PolicyWorker:
                         with timing.add_time('loop'):
                             while True:
                                 try:
-                                    log.warning('Policy worker calling get_nowait')
                                     task_type, data = q.get_nowait()
-                                    log.warning('Policy worker got message %r', task_type)
 
                                     if task_type == TaskType.POLICY_STEP:
                                         self._store_policy_step_request(data)
@@ -297,7 +284,6 @@ class PolicyWorker:
                                         self.task_queue.task_done()
 
                                 except Empty:
-                                    log.warning('Policy worker got nothing!')
                                     break
 
                     with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
@@ -305,8 +291,6 @@ class PolicyWorker:
                             requests_to_process = self._filter_requests()
                             if len(requests_to_process) > 0:
                                 self._handle_policy_steps(requests_to_process, timing)
-
-                    log.debug('Policy worker %d timing %s', self.worker_idx, timing)
 
                     if time.time() - last_report > 3.0 and 'one_step' in timing:
                         timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)

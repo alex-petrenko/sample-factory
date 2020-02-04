@@ -587,7 +587,6 @@ class ActorWorker:
     def _enqueue_policy_request(self, split_idx, policy_inputs):
         for policy_id, requests in policy_inputs.items():
             policy_request = (self.worker_idx, split_idx, requests)
-            if self.worker_idx == 0: log.warning('Worker %d enqueues request %r for policy %d!', self.worker_idx, policy_request, policy_id)
             self.policy_queues[policy_id].put((TaskType.POLICY_STEP, policy_request))
 
     def _ensure_traj_buffers_initialized(self, env_runner, split_idx):
@@ -723,10 +722,7 @@ class ActorWorker:
             while not self.terminate:
                 with timing.add_time('waiting'), timing.timeit('wait_actor'):
                     timeout = 1 if initialized else 1e3
-
-                    if self.worker_idx == 0: log.warning('Actor worker %d waiting for msg...', self.worker_idx)
                     task_type, data = safe_get(self.task_queue, timeout=timeout)
-                    if self.worker_idx == 0: log.warning('Got message %r (%r)!', task_type, data)
 
                 if task_type == TaskType.INIT:
                     self._init()
