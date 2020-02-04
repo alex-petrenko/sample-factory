@@ -262,6 +262,8 @@ class PolicyWorker:
                     #TODO
                     if len(ready) <= 0:
                         log.warning('Policy worker %d select timed out', self.worker_idx)
+                    else:
+                        log.warning('Policy worker %d queues are ready!', len(ready))
 
                 with timing.add_time('work'):
                     for readable_queue in ready:
@@ -270,7 +272,9 @@ class PolicyWorker:
                         with timing.add_time('loop'):
                             while True:
                                 try:
+                                    log.warning('Policy worker calling get_nowait')
                                     task_type, data = q.get_nowait()
+                                    log.warning('Policy worker got message %r', task_type)
 
                                     if task_type == TaskType.POLICY_STEP:
                                         self._store_policy_step_request(data)
@@ -293,6 +297,7 @@ class PolicyWorker:
                                         self.task_queue.task_done()
 
                                 except Empty:
+                                    log.warning('Policy worker got nothing!')
                                     break
 
                     with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
