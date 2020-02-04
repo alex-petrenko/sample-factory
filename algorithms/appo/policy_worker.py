@@ -54,7 +54,7 @@ class PolicyWorker:
         if self.cfg.benchmark:
             self.max_requests_allowed = 1e9  # unlimited from the start
         else:
-            self.max_requests_allowed = 10
+            self.max_requests_allowed = 5
 
         self.process = TorchProcess(target=self._run, daemon=True)
 
