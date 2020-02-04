@@ -121,20 +121,20 @@ def build_plot(name, measurement):
     # color {'b', 'g', 'r', 'c', 'm'}
     # Not good {'y', 'k', 'w'}
     # sample factory
-    marker_size = 3.0
-    marker_size_cross = 2.0
+    marker_size = 3.3
+    lw = 2.0
 
-    sf_plot, = plt.plot(x, sf_y, color='#FF7F0E', label='SampleFactory', marker="o", markersize=marker_size)
+    sf_plot, = plt.plot(x, sf_y, color='#FF7F0E', label='SampleFactory', marker="o", markersize=marker_size, linewidth=lw)
 
     # rlpyt
-    rlpyt_plot, = plt.plot(x, rlpyt_y, color='#1F77B4', label='rlpyt', marker="o", markersize=marker_size)
+    rlpyt_plot, = plt.plot(x, rlpyt_y, color='#1F77B4', label='rlpyt', marker="o", markersize=marker_size, linewidth=lw)
 
     # plt.plot(rllib_x_p1, rllib_y_p1,  color='skyblue', label='rllib',marker="o")
-    rllib_p1, = plt.plot(x, rllib_y_p1, color='#2CA02C', marker="o", markersize=marker_size)
+    rllib_p1, = plt.plot(x, rllib_y_p1, color='#2CA02C', marker="o", markersize=marker_size, linewidth=lw)
     # rllib_p2, = plt.plot(rllib_x_p2, rllib_y_p2, color='#2CA02C', marker='x', markersize=marker_size_cross, linestyle=":")
 
     # scalable_agent
-    sa_p1, = plt.plot(x, sa_y_p1, color='#d62728', marker="o", markersize=marker_size)  # label='scalable_agent',
+    sa_p1, = plt.plot(x, sa_y_p1, color='#d62728', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
     # sa_p2, = plt.plot(sa_x_p2, sa_y_p2, color='#d62728', marker="x", markersize=marker_size_cross, linestyle=":")
 
     # plot legend

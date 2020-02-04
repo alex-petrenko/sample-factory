@@ -106,9 +106,14 @@ class LearnerWorker:
             q.put((TaskType.UPDATE_WEIGHTS, weight_update))
 
     def _calculate_gae(self, buffer):
-        rewards = np.asarray(buffer.rewards)  # [E, T]
-        dones = np.asarray(buffer.dones)  # [E, T]
-        values_arr = np.array(buffer.values).squeeze()  # [E, T]
+        """
+        This is leftover from previous version of the algorithm. Should be reimplemented in PyTorch tensors,
+        similar to V-trace.
+        """
+
+        rewards = torch.stack(buffer.rewards).numpy()  # [E, T]
+        dones = torch.stack(buffer.dones).numpy()  # [E, T]
+        values_arr = torch.stack(buffer.values).numpy().squeeze()  # [E, T]
 
         # calculating fake values for the last step in the rollout
         # this will make sure that advantage of the very last action is always zero
@@ -130,6 +135,9 @@ class LearnerWorker:
         buffer.advantages = advantages.transpose((1, 0))  # [T, E] -> [E, T]
         buffer.returns = returns.transpose((1, 0))  # [T, E] -> [E, T]
         buffer.returns = buffer.returns[:, :, np.newaxis]  # [E, T] -> [E, T, 1]
+
+        buffer.advantages = [torch.tensor(buffer.advantages).reshape(-1)]
+        buffer.returns = [torch.tensor(buffer.returns).reshape(-1)]
 
         return buffer
 
@@ -159,18 +167,6 @@ class LearnerWorker:
         if not self.cfg.with_vtrace:
             with timing.add_time('calc_gae'):
                 buffer = self._calculate_gae(buffer)
-
-            # normalize advantages if needed
-            if self.cfg.normalize_advantage:
-                adv_mean = buffer.advantages.mean()
-                adv_std = buffer.advantages.std()
-                # adv_max, adv_min = buffer.advantages.max(), buffer.advantages.min()
-                # adv_max_abs = max(adv_max, abs(adv_min))
-                # log.info(
-                #     'Adv mean %.3f std %.3f, min %.3f, max %.3f, max abs %.3f',
-                #     adv_mean, adv_std, adv_min, adv_max, adv_max_abs,
-                # )
-                buffer.advantages = (buffer.advantages - adv_mean) / max(1e-2, adv_std)
 
         with timing.add_time('tensors'):
             for d, key, value in iterate_recursively(buffer):
@@ -449,40 +445,47 @@ class LearnerWorker:
                 values = result.values.squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
-                    ratios_cpu = ratio.cpu()
-                    values_cpu = values.cpu()
-                    rewards_cpu = mb.rewards.cpu()  # we only need this on CPU, potential minor optimization
-                    dones_cpu = mb.dones.cpu()
+                    if self.cfg.with_vtrace:
+                        ratios_cpu = ratio.cpu()
+                        values_cpu = values.cpu()
+                        rewards_cpu = mb.rewards.cpu()  # we only need this on CPU, potential minor optimization
+                        dones_cpu = mb.dones.cpu()
 
-                    vtrace_rho = torch.min(rho_hat, ratios_cpu)
-                    vtrace_c = torch.min(c_hat, ratios_cpu)
+                        vtrace_rho = torch.min(rho_hat, ratios_cpu)
+                        vtrace_c = torch.min(c_hat, ratios_cpu)
 
-                    vs = torch.zeros((num_trajectories * self.cfg.recurrence))
-                    adv = torch.zeros((num_trajectories * self.cfg.recurrence))
+                        vs = torch.zeros((num_trajectories * self.cfg.recurrence))
+                        adv = torch.zeros((num_trajectories * self.cfg.recurrence))
 
-                    last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
-                    next_values = (values_cpu[last_timestep] - rewards_cpu[last_timestep]) / self.cfg.gamma
-                    next_vs = next_values
+                        last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
+                        next_values = (values_cpu[last_timestep] - rewards_cpu[last_timestep]) / self.cfg.gamma
+                        next_vs = next_values
 
-                    with timing.add_time('vtrace'):
-                        for i in reversed(range(self.cfg.recurrence)):
-                            timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
+                        with timing.add_time('vtrace'):
+                            for i in reversed(range(self.cfg.recurrence)):
+                                timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
 
-                            rewards = rewards_cpu[timestep]
-                            dones = dones_cpu[timestep]
-                            not_done = 1.0 - dones
-                            not_done_times_gamma = not_done * gamma
+                                rewards = rewards_cpu[timestep]
+                                dones = dones_cpu[timestep]
+                                not_done = 1.0 - dones
+                                not_done_times_gamma = not_done * gamma
 
-                            curr_values = values_cpu[timestep]
-                            curr_vtrace_rho = vtrace_rho[timestep]
-                            curr_vtrace_c = vtrace_c[timestep]
+                                curr_values = values_cpu[timestep]
+                                curr_vtrace_rho = vtrace_rho[timestep]
+                                curr_vtrace_c = vtrace_c[timestep]
 
-                            delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
-                            adv[timestep] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
-                            next_vs = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
-                            vs[timestep] = next_vs
+                                delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
+                                adv[timestep] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
+                                next_vs = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
+                                vs[timestep] = next_vs
 
-                            next_values = curr_values
+                                next_values = curr_values
+
+                        targets = vs
+                    else:
+                        # using regular GAE
+                        adv = mb.advantages
+                        targets = mb.returns
 
                     adv_mean = adv.mean()
                     adv_std = adv.std()
@@ -492,7 +495,7 @@ class LearnerWorker:
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
 
-                    targets = vs.to(self.device)
+                    targets = targets.to(self.device)
                     old_values = mb.values
                     value_loss = self._value_loss(values, old_values, targets, clip_value)
 

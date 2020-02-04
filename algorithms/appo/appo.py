@@ -94,8 +94,6 @@ class APPO(Algorithm):
         p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
         p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
 
-        p.add_argument('--normalize_advantage', default=True, type=str2bool, help='Whether to normalize advantages or not (subtract mean and divide by standard deviation)')
-
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function

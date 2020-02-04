@@ -440,7 +440,7 @@ class VectorEnvRunner:
                 # rnn state is already initialized at zero
 
             log.debug(
-                'Reset progress w:%d-%d finished %d/%d initializing envs...',
+                'Reset progress w:%d-%d finished %d/%d, still initializing envs...',
                 self.worker_idx, self.split_idx, env_i + 1, len(self.envs),
             )
 
