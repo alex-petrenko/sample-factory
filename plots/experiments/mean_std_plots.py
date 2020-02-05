@@ -219,6 +219,7 @@ def plot(env, key, interpolated_key):
     # Configuration
     fig, ax = plt.subplots()
 
+    #
     def mkfunc(x, pos):
         if x >= 1e6:
             return '%dM' % int(x * 1e-6)
