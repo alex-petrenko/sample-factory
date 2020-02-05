@@ -1,7 +1,7 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('ppo_epochs', [1]),
+    ('seed', [2222, 3333]),
 ])
 
 _experiments = [
