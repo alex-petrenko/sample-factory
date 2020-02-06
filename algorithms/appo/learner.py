@@ -1005,3 +1005,13 @@ class LearnerWorker:
 # [2020-01-25 22:44:53,060] Train loop timing: init: 1.4357, train_wait: 0.1186, tensors_gpu_float: 4.1724, bptt: 5.2798, vtrace: 2.4177, losses: 1.8281, update: 7.7311, train: 32.4878
 # [2020-01-25 22:44:53,219] Collected {0: 2015232}, FPS: 35969.4
 # [2020-01-25 22:44:53,219] Timing: experience: 56.0263
+
+
+# Version V66
+# --env=doom_benchmark --train_for_seconds=360000 --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v66_test3 --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2 --init_workers_parallel=7
+# [2020-02-05 02:21:08,568][06063] Env runner 0, rollouts 780: timing wait_actor: 0.0002, waiting: 7.0481, reset: 9.3021, save_policy_outputs: 0.5583, env_step: 34.4028, overhead: 6.0476, complete_rollouts: 0.3592, enqueue_policy_requests: 0.1203, one_step: 0.0192, work: 42.1171, wait_buffers: 0.3469
+# [2020-02-05 02:21:08,596][04810] Env runner 1, rollouts 770: timing wait_actor: 0.0001, waiting: 7.4001, reset: 23.0733, save_policy_outputs: 0.5752, env_step: 34.1180, overhead: 5.8824, complete_rollouts: 0.4621, enqueue_policy_requests: 0.1337, one_step: 0.0091, work: 41.799, wait_buffers: 0.4502
+# [2020-02-05 02:21:08,764][04801] Policy worker timing: init: 1.4682, wait_policy: 0.0029, gpu_waiting: 101.1209, weight_update: 0.0003, updates: 0.0004, loop: 9.0389, handle_policy_step: 29.3456, one_step: 0.0000, work: 38.6256, deserialize: 1.2242, to_device: 10.7996, forward: 6.7556, postprocess: 7.2947
+# [2020-02-05 02:21:08,780][04774] GPU learner timing: extract: 0.0555, buffers: 0.0706, tensors: 12.0109, buff_ready: 0.5418, prepare: 12.6917
+# [2020-02-05 02:21:09,082][04715] Collected {0: 1974272}, FPS: 40185.7
+# [2020-02-05 02:21:09,082][04715] Timing: experience: 49.1287

@@ -29,14 +29,14 @@ titles = {
 }
 
 
-def build_plot(name, measurement):
-    # matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['mathtext.fontset'] = 'cm'
-    # matplotlib.rcParams['font.family'] = 'serif'
-    matplotlib.rcParams['font.size'] = 8
+# matplotlib.rcParams['text.usetex'] = True
+matplotlib.rcParams['mathtext.fontset'] = 'cm'
+# matplotlib.rcParams['font.family'] = 'serif'
+matplotlib.rcParams['font.size'] = 8
+plt.rcParams['figure.figsize'] = (10.0, 2.5) #(2.5, 2.0) 7.5， 4
 
-    plt.rcParams['figure.figsize'] = (2.5, 2.0)
 
+def build_plot(name, measurement, ax, count):
     data = pd.read_csv(join('data', measurement['filename']))
 
     x = data.values[:, 0]
@@ -60,9 +60,6 @@ def build_plot(name, measurement):
     # sa_x_p2 = scalable_agent.values[2::, 0]
     # sa_y_p2 = scalable_agent.values[2::, 1]
 
-    # Configuration
-    fig, ax = plt.subplots()
-
     mkfunc = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%dK' % int(x * 1e-3) if x >= 1e3 else '%d' % int(x)
     mkformatter = matplotlib.ticker.FuncFormatter(mkfunc)
     ax.yaxis.set_major_formatter(mkformatter)
@@ -79,10 +76,10 @@ def build_plot(name, measurement):
     # Title and label
     title = titles[name]
     ax.set_title(title, fontsize=8)
-    plt.xlabel('Num. environments', fontsize=8)
+    ax.set_xlabel('Num. environments', fontsize=8)
 
-    # if measurement['y_label']:
-    #     plt.ylabel('FPS, frameskip = 4', fontsize=8)
+    if count == 0:
+        ax.set_ylabel('FPS, frameskip = 4', fontsize=8)
 
     # for spine in ax.spines.values():
     #     spine.set_visible(False)
@@ -104,17 +101,17 @@ def build_plot(name, measurement):
 
     # let plot a little bit larger
     # draw dash gray grid lines
-    plt.grid(color='#B3B3B3', linestyle='--', linewidth=0.25, alpha=0.2, dashes=(15, 10))
+    ax.grid(color='#B3B3B3', linestyle='--', linewidth=0.25, alpha=0.2, dashes=(15, 10))
     ax.xaxis.grid(False)
-    plt.xlim(xmin=0, xmax=measurement['x_max'])
-    plt.ylim(ymin=0, ymax=measurement['y_max'])
+    ax.set_xlim(xmin=0, xmax=measurement['x_max'])
+    ax.set_ylim(ymin=0, ymax=measurement['y_max'])
     # plt.grid(False)
 
-    plt.ticklabel_format(style='plain', axis='x', scilimits=(0, 0))
+    ax.ticklabel_format(style='plain', axis='x', scilimits=(0, 0))
     # plt.ticklabel_format(style='sci', axis='y', scilimits=(5, 5))
 
-    plt.xticks(measurement['x_ticks'])
-    plt.yticks(measurement['y_ticks'])
+    ax.set_xticks(measurement['x_ticks'])
+    ax.set_yticks(measurement['y_ticks'])
 
     # plot each line
 
@@ -124,17 +121,17 @@ def build_plot(name, measurement):
     marker_size = 3.3
     lw = 2.0
 
-    sf_plot, = plt.plot(x, sf_y, color='#FF7F0E', label='SampleFactory', marker="o", markersize=marker_size, linewidth=lw)
+    sf_plot, = ax.plot(x, sf_y, color='#FF7F0E', label='SampleFactory APPO', marker="o", markersize=marker_size, linewidth=lw)
 
     # rlpyt
-    rlpyt_plot, = plt.plot(x, rlpyt_y, color='#1F77B4', label='rlpyt', marker="o", markersize=marker_size, linewidth=lw)
+    rlpyt_plot, = ax.plot(x, rlpyt_y, color='#1F77B4', label='rlpyt PPO', marker="o", markersize=marker_size, linewidth=lw)
 
     # plt.plot(rllib_x_p1, rllib_y_p1,  color='skyblue', label='rllib',marker="o")
-    rllib_p1, = plt.plot(x, rllib_y_p1, color='#2CA02C', marker="o", markersize=marker_size, linewidth=lw)
+    rllib_p1, = ax.plot(x, rllib_y_p1, color='#2CA02C', label='RLlib IMPALA', marker="o", markersize=marker_size, linewidth=lw)
     # rllib_p2, = plt.plot(rllib_x_p2, rllib_y_p2, color='#2CA02C', marker='x', markersize=marker_size_cross, linestyle=":")
 
     # scalable_agent
-    sa_p1, = plt.plot(x, sa_y_p1, color='#d62728', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
+    sa_p1, = ax.plot(x, sa_y_p1, color='#d62728', label='DeepMind IMPALA', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
     # sa_p2, = plt.plot(sa_x_p2, sa_y_p2, color='#d62728', marker="x", markersize=marker_size_cross, linestyle=":")
 
     # plot legend
@@ -142,14 +139,6 @@ def build_plot(name, measurement):
     #                        ['SampleFactory', 'rlpyt', 'rllib', 'IMPALA'], numpoints=1,
     #                        handler_map={tuple: HandlerTuple(ndivide=None)}, prop={'size': 7})
     # sa_legend.get_frame().set_linewidth(0.25)
-
-    plt.tight_layout()
-    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-    plt.margins(0, 0)
-
-    # plt.show()
-    plot_name = measurement['filename'].replace('.', '_')
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/throughput_{plot_name}.eps'), format='eps', bbox_inches='tight', pad_inches=0)
 
 
 def main():
@@ -162,8 +151,31 @@ def main():
     # 6) Markers. Little circles for every data point
     # 7) Dashed lines for missing data
 
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4)
+    count = 0
+
+    ax = (ax1, ax2, ax3, ax4)
     for name, measurement in measurements.items():
-        build_plot(name, measurement)
+        build_plot(name, measurement, ax[count], count)
+        count += 1
+
+    handles, labels = ax[-1].get_legend_handles_labels()
+    # fig.legend(handles, labels, loc='upper center')
+    # lgd = fig.legend(handles, labels, bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left', ncol=4, mode="expand")
+    lgd = fig.legend(handles, labels, bbox_to_anchor=(0.1, 0.88, 0.8, 0.2), loc='lower left', ncol=4, mode="expand")
+    lgd.set_in_layout(True)
+
+    # plt.show()
+    plot_name = 'throughput'
+    # plt.subplots_adjust(wspace=0.05, hspace=0.15)
+    # plt.margins(0, 0)
+    # plt.tight_layout(rect=(0, 0, 1, 1.2))
+    # plt.subplots_adjust(bottom=0.2)
+
+    plt.tight_layout(rect=(0, 0, 1.0, 0.9))
+    # plt.show()
+    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
+    # plt.savefig(os.path.join(os.getcwd(), f'../final_plots/{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0, bbox_extra_artists=(lgd,))
 
 
 if __name__ == '__main__':
