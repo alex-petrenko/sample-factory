@@ -47,6 +47,15 @@ PLOT_NAMES = dict(
     doom_health_gathering_supreme='Health Gathering Supreme',
 )
 
+BASELINES = dict(
+    doom_my_way_home=,
+    doom_deadly_corridor='Deadly Corridor',
+    doom_defend_the_center='Defend the Center',
+    doom_defend_the_line='Defend the Line',
+    doom_health_gathering='Health Gathering',
+    doom_health_gathering_supreme='Health Gathering Supreme',
+)
+
 
 FOLDER_NAME = 'aggregates'
 hide_file = [f for f in os.listdir(os.getcwd()) if not f.startswith('.') and not f.endswith('.py')]

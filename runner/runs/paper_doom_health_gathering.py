@@ -2,7 +2,7 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('seed', [1111, 2222, 3333]),
-    ('env', ['doom_health_gathering_supreme', 'doom_health_gathering']),
+    ('env', ['doom_health_gathering_supreme']),
 ])
 
 _experiments = [
