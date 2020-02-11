@@ -1,25 +1,15 @@
-import glob
+import os
 import pickle
 import sys
-
 from os.path import join
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from utils.utils import log, ensure_dir_exists, experiments_dir
-
-import ast
-import argparse
-import os
-import re
-from pathlib import Path
-
-import pandas as pd
-import numpy as np
-import tensorflow as tf
-from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-from tensorflow.core.util.event_pb2 import Event
 
 # zhehui
 # matplotlib.rcParams['text.usetex'] = True
@@ -27,16 +17,16 @@ matplotlib.rcParams['mathtext.fontset'] = 'cm'
 # matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['font.size'] = 8
 
-plt.rcParams['figure.figsize'] = (5.5, 2) #(2.5, 2.0) 7.5， 4
+plt.rcParams['figure.figsize'] = (5.5, 2.3) #(2.5, 2.0) 7.5， 4
 
 
 B = int(1e9)
 
 EXPERIMENTS = {
-    'doom_battle': dict(is_pbt=False, dir='doom_battle_appo_v56_4p', key='0_aux/avg_reward', x_ticks=[0, B, 2*B, 3*B, 4*B], max_x=4*B, y_ticks=[0, 10, 20, 30, 40, 50], x_label='Env. frames (skip=4)', title='Battle', baseline=(33, 'DFP'), legend='SampleFactory APPO'),
-    'doom_battle2': dict(is_pbt=False, dir='doom_battle2_appo_v65_fs4', key='0_aux/avg_true_reward', x_ticks=[0, B, 2*B, 3*B], max_x=3*B, y_ticks=[0, 5, 10, 15, 20, 25], x_label='Env. frames (skip=4)', title='Battle2', baseline=(17, 'DFP'), legend='SampleFactory APPO'),
-    'doom_deathmatch': dict(is_pbt=True, dir='doom_bots_v63_pbt', key='0_aux/avg_true_reward', x_ticks=[0, B//2, B, 3*B//2, 2*B, 5*B//2], max_x=5*B//2, y_ticks=[0, 20, 40, 60, 80], x_label='Env. frames (skip=2)', title='Deathmatch vs bots', legend='Population mean'),
-    'doom_duel': dict(is_pbt=True, dir='paper_doom_duel_bots_v65_fs2', key='0_aux/avg_true_reward', x_ticks=[0, B//2, B, 3*B//2, 2*B, 5*B//2], max_x=5*B//2, y_ticks=[0, 10, 20, 30, 40], x_label='Env. frames (skip=2)', title='Duel vs bots', legend='Population mean'),
+    'doom_battle': dict(is_pbt=False, dir='doom_battle_appo_v56_4p', key='0_aux/avg_reward', x_ticks=[0, B, 2*B, 3*B, 4*B], max_x=4*B, y_ticks=[0, 10, 20, 30, 40, 50], x_label='Env. frames, skip=4', title='Battle', baselines=((33, 'DFP'), (35, 'DFP+CV')), legend='SampleFactory'),
+    'doom_battle2': dict(is_pbt=False, dir='doom_battle2_appo_v65_fs4', key='0_aux/avg_true_reward', x_ticks=[0, B, 2*B, 3*B], max_x=3*B, y_ticks=[0, 5, 10, 15, 20, 25], x_label='Env. frames, skip=4', title='Battle2', baselines=((17, 'DFP'), ), legend='SampleFactory'),
+    'doom_deathmatch': dict(is_pbt=True, dir='doom_bots_v63_pbt', key='0_aux/avg_true_reward', x_ticks=[0, B//2, B, 3*B//2, 2*B, 5*B//2], max_x=5*B//2, y_ticks=[0, 20, 40, 60, 80], x_label='Env. frames, skip=2', title='Deathmatch vs bots', baselines=((12.6, 'Avg. scripted bot'), (22, 'Best scripted bot')), legend='Population mean'),
+    'doom_duel': dict(is_pbt=True, dir='paper_doom_duel_bots_v65_fs2', key='0_aux/avg_true_reward', x_ticks=[0, B//2, B, 3*B//2, 2*B, 5*B//2], max_x=5*B//2, y_ticks=[0, 10, 20, 30, 40], x_label='Env. frames, skip=2', title='Duel vs bots', baselines=((3.66, 'Avg. scripted bot'), (5, 'Best scripted bot')), legend='Population mean'),
 }
 
 PLOT_NAMES = dict(
@@ -261,12 +251,16 @@ def plot(env, key, interpolated_key, ax, count):
     if EXPERIMENTS[env]['is_pbt']:
         ax.plot(x, y_max, color='#d62728', label='Population best', linewidth=lw_max, antialiased=True)
 
-    if 'baseline' in EXPERIMENTS[env]:
-        baseline = EXPERIMENTS[env]['baseline']
-        baseline_y, baseline_name = baseline
-        ax.plot([x[0], x[-1]], [baseline_y, baseline_y], color=green, label=baseline_name, linewidth=lw_baseline, antialiased=True, linestyle='--')
+    if 'baselines' in EXPERIMENTS[env]:
+        colors = [green, orange]
 
-    ax.legend(prop={'size': 6}, loc='lower right')
+        baselines = EXPERIMENTS[env]['baselines']
+        for baseline_i, baseline in enumerate(baselines):
+            baseline_color = colors[baseline_i]
+            baseline_y, baseline_name = baseline
+            ax.plot([x[0], x[-1]], [baseline_y, baseline_y], color=baseline_color, label=baseline_name, linewidth=lw_baseline, antialiased=True, linestyle='--')
+
+    # ax.legend(prop={'size': 6}, loc='lower right')
 
     # plt.set_tight_layout()
     # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=1, wspace=0)
@@ -309,16 +303,25 @@ def main():
             aggregate(env, experiments, count, ax[count])
             count += 1
 
+        handles, labels = ax[-1].get_legend_handles_labels()
+        lgd = fig.legend(handles, labels, bbox_to_anchor=(0.1, 0.88, 0.8, 0.2), loc='lower left', ncol=4, mode="expand", prop={'size': 6})
+
+        lgd.set_in_layout(True)
+
         # zhehui
         # plt.show()
         # plot_name = f'{env}_{key.replace("/", " ")}'
-        plt.tight_layout()
+        # plt.tight_layout()
         # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=1, wspace=0)
-        plt.subplots_adjust(wspace=0.12, hspace=0.15)
+        # plt.subplots_adjust(wspace=0.12, hspace=0.15)
+
+        plt.tight_layout(rect=(0, 0, 1.0, 0.9))
 
         plt.margins(0, 0)
         plot_name = f'complex_envs_{group_i}'
-        plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0)
+        # plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0, )
+        plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
+
 
     return 0
 

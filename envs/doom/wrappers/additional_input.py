@@ -51,6 +51,8 @@ class DoomAdditionalInput(gym.Wrapper):
         attack_ready = info.get('ATTACK_READY', 0.0)
         num_players = info.get('PLAYER_COUNT', 1) / 5.0
 
+        # TODO add FRAGCOUNT to the input, so agents know when they are winning/losing
+
         measurements = obs_dict['measurements']
 
         i = 0

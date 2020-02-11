@@ -30,6 +30,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             player_id, num_agents, max_num_players, num_bots,
             skip_frames, async_mode=False,
             respawn_delay=0,
+            timelimit=0.0,
             record_to=None):
         super().__init__(
             action_space,
@@ -63,6 +64,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.hardest_bot = 100
         self.easiest_bot = 10
         self.respawn_delay = respawn_delay
+        self.timelimit = timelimit
 
         self.is_multiplayer = True
         self.init_info = None
@@ -90,7 +92,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 f'-host {self.max_num_players}',
                 f'-port {port}',
                 '-deathmatch',  # Deathmatch rules are used for the game.
-                '+timelimit 4.0',  # The game (episode) will end after this many minutes have elapsed.
+                f'+timelimit {self.timelimit}',  # The game (episode) will end after this many minutes have elapsed.
                 '+sv_forcerespawn 1',  # Players will respawn automatically after they die.
                 '+sv_noautoaim 1',  # Autoaim is disabled for all players.
                 '+sv_respawnprotect 1',  # Players will be invulnerable for two second after spawning.

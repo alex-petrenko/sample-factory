@@ -2,7 +2,6 @@ import sys
 import time
 from os.path import join
 
-import cv2
 import numpy as np
 import torch
 
@@ -17,7 +16,7 @@ from utils.utils import log, AttrDict
 
 def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     # allow to override multiplayer settings
-    override_multiplayer_settings = False
+    override_multiplayer_settings = True
 
     num_agents = num_bots = num_humans = -1
     if override_multiplayer_settings:
@@ -107,7 +106,13 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                         last_render_start = time.time()
                         env.render()
 
-                    obs, rew, done, _ = env.step(actions)
+                    obs, rew, done, infos = env.step(actions)
+
+                    if all(done):
+                        log.debug('Finished episode!')
+
+                        for player in [1, 2, 3, 4, 5, 6, 7, 8]:
+                            log.debug('Score for player %d: %r', player, infos[0][f'PLAYER{player}_FRAGCOUNT'])
 
                     episode_reward += np.mean(rew)
                     num_frames += 1

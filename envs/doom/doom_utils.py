@@ -19,7 +19,7 @@ class DoomSpec:
     def __init__(
             self, name, env_spec_file, action_space, reward_scaling=1.0, default_timeout=-1,
             num_agents=1, num_bots=0,
-            respawn_delay=0,
+            respawn_delay=0, timelimit=4.0,
             extra_wrappers=None,
     ):
         self.name = name
@@ -35,6 +35,7 @@ class DoomSpec:
         self.num_bots = num_bots
 
         self.respawn_delay = respawn_delay
+        self.timelimit = timelimit
 
         # expect list of tuples (wrapper_cls, wrapper_kwargs)
         self.extra_wrappers = extra_wrappers
@@ -178,6 +179,8 @@ def make_doom_env_impl(
             doom_spec.action_space, doom_spec.env_spec_file, skip_frames=skip_frames, async_mode=async_mode,
         )
     else:
+        timelimit = cfg.timelimit if cfg.timelimit is not None else doom_spec.timelimit
+
         from envs.doom.multiplayer.doom_multiagent import VizdoomEnvMultiplayer
         env = VizdoomEnvMultiplayer(
             doom_spec.action_space, doom_spec.env_spec_file,
@@ -185,6 +188,7 @@ def make_doom_env_impl(
             skip_frames=skip_frames,
             async_mode=async_mode,
             respawn_delay=doom_spec.respawn_delay,
+            timelimit=timelimit,
         )
 
     record_to = cfg.record_to if 'record_to' in cfg else None

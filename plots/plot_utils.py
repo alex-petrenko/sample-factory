@@ -5,6 +5,11 @@ import shutil
 import matplotlib
 
 
+BLUE = '#1F77B4'
+ORANGE = '#FF7F0E'
+GREEN = '#2CA02C'
+
+
 def copy_plot_themes():
     stylelib_path = os.path.join(matplotlib.get_configdir(), "stylelib")
     curr_dir = os.path.dirname(os.path.abspath(__file__))

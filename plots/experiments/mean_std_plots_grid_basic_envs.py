@@ -6,6 +6,7 @@ from os.path import join
 import matplotlib
 import matplotlib.pyplot as plt
 
+from plots.plot_utils import GREEN, BLUE
 from utils.utils import log, ensure_dir_exists
 
 import ast
@@ -26,16 +27,16 @@ matplotlib.rcParams['mathtext.fontset'] = 'cm'
 # matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['font.size'] = 8
 
-plt.rcParams['figure.figsize'] = (8.20, 4.1) #(2.5, 2.0) 7.5， 4
+plt.rcParams['figure.figsize'] = (1.5*8.20, 2) #(2.5, 2.0) 7.5， 4
 
 
 ENVS_LIST = [
     ('doom_my_way_home', None),
     ('doom_deadly_corridor', None),
     ('doom_defend_the_center', None),
-    ('doom_defend_the_line', None),
     ('doom_health_gathering', 'supreme'),
     ('doom_health_gathering_supreme', None),
+    ('doom_defend_the_line', None),
 ]
 
 PLOT_NAMES = dict(
@@ -48,14 +49,13 @@ PLOT_NAMES = dict(
 )
 
 BASELINES = dict(
-    doom_my_way_home=,
-    doom_deadly_corridor='Deadly Corridor',
-    doom_defend_the_center='Defend the Center',
-    doom_defend_the_line='Defend the Line',
-    doom_health_gathering='Health Gathering',
-    doom_health_gathering_supreme='Health Gathering Supreme',
+    doom_my_way_home=0.98,
+    doom_deadly_corridor=210,
+    doom_defend_the_center=23.5,
+    doom_health_gathering=20,
+    doom_health_gathering_supreme=19,
+    doom_defend_the_line=28,
 )
-
 
 FOLDER_NAME = 'aggregates'
 hide_file = [f for f in os.listdir(os.getcwd()) if not f.startswith('.') and not f.endswith('.py')]
@@ -197,7 +197,7 @@ def write_csv(dpath, subpath, key, fname, aggregations, steps, aggregation_ops):
     df.to_csv(path / file_name, sep=';')
 
 
-def aggregate(env, experiments, output, count, axes):
+def aggregate(env, experiments, count, ax):
     print("Started aggregation {}".format(env))
 
     curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -214,14 +214,10 @@ def aggregate(env, experiments, output, count, axes):
             pickle.dump(interpolated_keys, fobj)
 
     for key in interpolated_keys.keys():
-        plot(env, key, interpolated_keys[key], axes, count)
+        plot(env, key, interpolated_keys[key], ax, count)
 
 
-def plot(env, key, interpolated_key, axes, count):
-    i = int(count / 3)
-    j = int(count % 3)
-    ax = axes[i, j]
-
+def plot(env, key, interpolated_key, ax, count):
     # zhehui
     # set title
     title_text = PLOT_NAMES[env]
@@ -265,9 +261,9 @@ def plot(env, key, interpolated_key, axes, count):
     # plt.xlabel(xlabel_text, fontsize=8)
     # zhehui
     # if they are bottom plots, add Environment Frames
-    if i == 1:
-        ax.set_xlabel('Environment Frames', fontsize=8)
-    if j == 0:
+    # if i == 1:
+    ax.set_xlabel('Env. frames, skip=4', fontsize=8)
+    if count == 0:
         ax.set_ylabel('Average return', fontsize=8)
 
     # hide tick of axis
@@ -281,8 +277,8 @@ def plot(env, key, interpolated_key, axes, count):
     x_delta = 0.05 * x[-1]
     ax.set_xlim(xmin=-x_delta, xmax=x[-1] + x_delta)
 
-    y_delta = 0.06 * np.max(y_mean)
-    ax.set_ylim(ymin=min(np.min(y_mean) - y_delta, 0.0), ymax=np.max(y_mean) + y_delta)
+    y_delta = 0.06 * max(np.max(y_mean), BASELINES[env])
+    ax.set_ylim(ymin=min(np.min(y_mean) - y_delta, 0.0), ymax=max(np.max(y_mean), BASELINES[env]) + y_delta)
     # plt.grid(False)
 
     # plt.ticklabel_format(style='sci', axis='x', scilimits=(8, 8))
@@ -290,9 +286,17 @@ def plot(env, key, interpolated_key, axes, count):
 
     marker_size = 0
     lw = 1.4
+    lw_baseline = 0.7
 
-    sf_plot, = ax.plot(x, y_mean, color='#FF7F0E', label='SampleFactory', linewidth=lw, antialiased=True)
-    ax.fill_between(x, y_minus_std, y_plus_std, color='#FF7F0E', alpha=0.25, antialiased=True, linewidth=0.0)
+    sf_plot, = ax.plot(x, y_mean, color=BLUE, label='SampleFactory', linewidth=lw, antialiased=True)
+    ax.fill_between(x, y_minus_std, y_plus_std, color=BLUE, alpha=0.25, antialiased=True, linewidth=0.0)
+
+    baseline_y = BASELINES[env]
+    if baseline_y is not None:
+        baseline_name = 'A2C'
+        ax.plot([x[0], x[-1]], [baseline_y, baseline_y], color=GREEN, label=baseline_name, linewidth=lw_baseline, antialiased=True, linestyle='--')
+
+    ax.legend(prop={'size': 6}, loc='lower right')
 
     # plt.set_tight_layout()
     # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=1, wspace=0)
@@ -355,11 +359,12 @@ def main():
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
 
     # zhehui
-    fig, axes = plt.subplots(2, 3, sharex=True)
+    fig, (ax1, ax2, ax3, ax4, ax5, ax6) = plt.subplots(1, 6)
+    ax = (ax1, ax2, ax3, ax4, ax5, ax6)
 
     count = 0
     for env, experiments in experiments_by_env.items():
-        aggregate(env, experiments, args.output, count, axes)
+        aggregate(env, experiments, count, ax[count])
         count += 1
 
     # zhehui
