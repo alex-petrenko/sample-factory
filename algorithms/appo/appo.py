@@ -1,5 +1,6 @@
 import json
 import math
+import multiprocessing
 import os
 import time
 from collections import deque
@@ -83,7 +84,7 @@ class APPO(Algorithm):
 
         p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-        p.add_argument('--num_workers', default=16, type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
+        p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
         p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
@@ -108,7 +109,7 @@ class APPO(Algorithm):
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
-        p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor')
+        p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-20 range for Atari/VizDoom')
         p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
@@ -134,12 +135,7 @@ class APPO(Algorithm):
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 
-        p.add_argument(
-            '--worker_init_delay', default=0.1, type=float,
-            help=('With some envs, especially multi-player Doom envs, it helps to add a delay when creating workers. It prevents too many envs from being initialized at the same time,'
-                  'and reduces chance of crashes during startup'),
-        )
-        p.add_argument('--init_workers_parallel', default=5, type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
+        p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
             help=('Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
@@ -249,59 +245,60 @@ class APPO(Algorithm):
 
     # noinspection PyProtectedMember
     def init_subset(self, indices, actor_queues, policy_worker_queues):
+        reset_timelimit_seconds = 20  # fail worker if not a single env was reset in that time
+
         workers = dict()
-        started_reset = dict()
+        last_env_initialized = dict()
         for i in indices:
             w = self.create_actor_worker(i, actor_queues[i], policy_worker_queues)
             w.init()
-            time.sleep(self.cfg.worker_init_delay)  # just in case
             w.request_reset()
             workers[i] = w
-            started_reset[i] = time.time()
+            last_env_initialized[i] = time.time()
 
-        fastest_reset_time = None
+        total_num_envs = self.cfg.num_workers * self.cfg.num_envs_per_worker
+        envs_initialized = 0
         workers_finished = set()
 
         while len(workers_finished) < len(workers):
-            for w in workers.values():
-                if w.task_queue.qsize() > 0:
-                    time.sleep(0.05)
-                    continue
+            failed_worker = -1
 
-                if len(workers_finished) <= 0:
-                    fastest_reset_time = time.time() - started_reset[w.worker_idx]
-                    log.debug('Fastest reset in %.3f seconds', fastest_reset_time)
+            try:
+                report = self.report_queue.get(timeout=1.0)
 
-                if not w.critical_error.is_set():
-                    workers_finished.add(w.worker_idx)
+                if 'initialized_env' in report:
+                    worker_idx, split_idx, env_i = report['initialized_env']
+                    last_env_initialized[worker_idx] = time.time()
+                    envs_initialized += 1
 
-            if workers_finished:
-                log.warning('Workers finished: %r', workers_finished)
+                    log.debug(
+                        'Progress for %d workers: %d/%d envs initialized...', len(indices), envs_initialized, total_num_envs,
+                    )
+                elif 'finished_reset' in report:
+                    workers_finished.add(report['finished_reset'])
+                elif 'critical_error' in report:
+                    failed_worker = report['critical_error']
+            except Empty:
+                pass
 
             for worker_idx, w in workers.items():
                 if worker_idx in workers_finished:
                     continue
 
-                time_passed = time.time() - started_reset[w.worker_idx]
-                if fastest_reset_time is None:
-                    timeout = False
-                else:
-                    timeout = time_passed > max(fastest_reset_time * 1.5, fastest_reset_time + 10)
+                time_passed = time.time() - last_env_initialized[worker_idx]
+                timeout = time_passed > reset_timelimit_seconds
 
-                is_process_alive = w.process.is_alive() and not w.critical_error.is_set()
-
-                if timeout or not is_process_alive:
-                    # if it takes more than 1.5x the usual time to reset, this worker is probably stuck
-                    log.error('Worker %d seems to be stuck (%.3f). Reset!', w.worker_idx, time_passed)
-                    log.debug('Status: %r %r', is_process_alive, w.critical_error.is_set())
+                if timeout or failed_worker == worker_idx or not w.process.is_alive():
+                    log.error('Worker %d is stuck or failed (%.3f). Reset!', w.worker_idx, time_passed)
+                    log.debug('Status: %r', w.process.is_alive())
                     stuck_worker = w
                     stuck_worker.process.kill()
 
                     new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx], policy_worker_queues)
                     new_worker.init()
                     new_worker.request_reset()
-                    started_reset[worker_idx] = time.time()
 
+                    last_env_initialized[worker_idx] = time.time()
                     workers[worker_idx] = new_worker
                     del stuck_worker
 
@@ -512,7 +509,10 @@ class APPO(Algorithm):
                 log.warning('Keyboard interrupt detected in driver loop, exiting...')
 
         for learner in self.learner_workers.values():
-            learner.save_model()
+            # timeout is needed here because some environments may crash on KeyboardInterrupt (e.g. VizDoom)
+            # Therefore the learner train loop will never do another iteration and will never save the model.
+            # This is not an issue with normal exit, e.g. due to desired number of frames reached.
+            learner.save_model(timeout=2.0)
 
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():
@@ -522,13 +522,13 @@ class APPO(Algorithm):
         child_processes = list_child_processes()
 
         time.sleep(0.1)
+        log.debug('Closing workers...')
         for i, w in enumerate(all_workers):
-            log.debug('Closing worker #%d...', i)
             w.close()
             time.sleep(0.01)
         for i, w in enumerate(all_workers):
             w.join()
-            log.debug('Worker #%d joined!', i)
+        log.debug('Workers joined!')
 
         # VizDoom processes often refuse to die for an unidentified reason, so we're force killing them with a hack
         kill_processes(child_processes)
@@ -541,5 +541,5 @@ class APPO(Algorithm):
             with open(done_filename(self.cfg), 'w') as fobj:
                 fobj.write(f'{self.env_steps}')
 
-        time.sleep(0.1)
+        time.sleep(0.5)
         log.info('Done!')

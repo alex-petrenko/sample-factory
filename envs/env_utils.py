@@ -18,3 +18,7 @@ def create_multi_env(num_envs, num_workers, make_env_func, stats_episodes):
     tmp_env.close()
 
     return multi_env
+
+
+class EnvCriticalError(Exception):
+    pass

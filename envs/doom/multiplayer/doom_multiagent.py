@@ -1,6 +1,8 @@
 import copy
 import os
+import random
 import sys
+import time
 
 import numpy as np
 
@@ -136,12 +138,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
             self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
 
-        try:
-            self.game.init()
-        except Exception:
-            log.warning('game.init() threw exception. Terminate process')
-            sys.exit(1)
-
+        self._game_init(with_locking=False)  # locking is handled by the multi-agent wrapper
         log.info('Initialized w:%d v:%d player:%d', self.worker_index, self.vector_index, self.player_id)
         self.initialized = True
 

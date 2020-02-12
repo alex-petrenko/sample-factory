@@ -1,4 +1,6 @@
 import math
+import signal
+
 import psutil
 import random
 import time
@@ -431,7 +433,7 @@ class VectorEnvRunner:
         actor_state.output_tensor_names = tensor_names
         actor_state.output_tensor_sizes = tensor_sizes
 
-    def reset(self):
+    def reset(self, report_queue):
         for env_i, e in enumerate(self.envs):
             observations = e.reset()
             for agent_i, obs in enumerate(observations):
@@ -439,10 +441,11 @@ class VectorEnvRunner:
                 actor_state.set_step_data(actor_state.policy_inputs, 'obs', obs)
                 # rnn state is already initialized at zero
 
-            log.debug(
-                'Reset progress w:%d-%d finished %d/%d, still initializing envs...',
-                self.worker_idx, self.split_idx, env_i + 1, len(self.envs),
-            )
+            # log.debug(
+            #     'Reset progress w:%d-%d finished %d/%d, still initializing envs...',
+            #     self.worker_idx, self.split_idx, env_i + 1, len(self.envs),
+            # )
+            report_queue.put(dict(initialized_env=(self.worker_idx, self.split_idx, env_i)))
 
         policy_request = self._format_policy_request()
         return policy_request
@@ -527,7 +530,6 @@ class ActorWorker:
 
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
-        self.critical_error = Event()
         self.process = TorchProcess(target=self._run, daemon=True)
         self.process.start()
 
@@ -665,12 +667,12 @@ class ActorWorker:
 
     def _handle_reset(self):
         for split_idx, env_runner in enumerate(self.env_runners):
-            policy_inputs = env_runner.reset()
+            policy_inputs = env_runner.reset(self.report_queue)
             self._init_policy_input_tensors(split_idx, env_runner.policy_input_tensors())
             self._enqueue_policy_request(split_idx, policy_inputs)
-            time.sleep(random.random() * 0.1)  # helps with Doom issues
 
         log.info('Finished reset for worker %d', self.worker_idx)
+        self.report_queue.put(dict(finished_reset=self.worker_idx))
 
     def _advance_rollouts(self, data, timing):
         split_idx = data['split_idx']
@@ -711,6 +713,9 @@ class ActorWorker:
 
     def _run(self):
         log.info('Initializing vector env runner %d...', self.worker_idx)
+
+        # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -753,7 +758,7 @@ class ActorWorker:
                     log.warning('Error while processing data w: %d, exception: %s', self.worker_idx, exc)
                     log.warning('Terminate process...')
                     self.terminate = True
-                    self.critical_error.set()
+                    self.report_queue.put(dict(critical_error=self.worker_idx))
                 except KeyboardInterrupt:
                     self.terminate = True
 
@@ -769,13 +774,9 @@ class ActorWorker:
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.put((TaskType.EMPTY, None))
-        while self.task_queue.qsize() > 0:
-            time.sleep(0.01)
 
     def request_reset(self):
         self.task_queue.put((TaskType.RESET, None))
-        self.task_queue.put((TaskType.EMPTY, None))
 
     def request_step(self, split, actions):
         data = (split, actions)

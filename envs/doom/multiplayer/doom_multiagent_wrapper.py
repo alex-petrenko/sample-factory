@@ -5,10 +5,13 @@ from multiprocessing import Process, JoinableQueue
 from queue import Empty, Queue
 
 import cv2
+import filelock
 import gym
 import numpy as np
+from filelock import FileLock
 
 from algorithms.utils.multi_env import MultiEnv, MsgType
+from envs.doom.doom_gym import doom_lock_file
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log, kill
@@ -161,8 +164,7 @@ class MultiAgentEnv(gym.Env):
 
         self.make_env_func = make_env_func
 
-        self.safe_init = env_config is not None and env_config.get('safe_init', True)
-        self.safe_init = False  # override
+        self.safe_init = env_config is not None and env_config.get('safe_init', False)
 
         if self.safe_init:
             sleep_seconds = env_config.worker_index * 1.0
@@ -226,50 +228,41 @@ class MultiAgentEnv(gym.Env):
         if self.initialized:
             return
 
-        num_attempts = 25
-        attempt = 0
-        for attempt in range(num_attempts):
-            self.workers = [
-                MultiAgentEnvWorker(i, self.make_env_func, self.env_config) for i in range(self.num_agents)
-            ]
+        self.workers = [
+            MultiAgentEnvWorker(i, self.make_env_func, self.env_config) for i in range(self.num_agents)
+        ]
 
+        init_attempt = 0
+        while True:
+            init_attempt += 1
             try:
                 port_to_use = udp_port_num(self.env_config)
                 port = find_available_port(port_to_use, increment=1000)
                 log.debug('Using port %d', port)
                 init_info = dict(port=port)
 
-                for i, worker in enumerate(self.workers):
-                    worker.task_queue.put((init_info, TaskType.INIT))
-                    if self.safe_init:
-                        time.sleep(1.0)  # just in case
-                    else:
-                        time.sleep(0.01)
+                lock_file = doom_lock_file(max_parallel=20)
+                lock = FileLock(lock_file)
+                with lock.acquire(timeout=10):
+                    for i, worker in enumerate(self.workers):
+                        worker.task_queue.put((init_info, TaskType.INIT))
+                        if self.safe_init:
+                            time.sleep(1.0)  # just in case
+                        else:
+                            time.sleep(0.05)
 
-                for i, worker in enumerate(self.workers):
-                    worker.result_queue.get(timeout=5)
-                    worker.result_queue.task_done()
-                    worker.task_queue.join()
-            except Exception as exc:
-                for worker in self.workers:
-                    if isinstance(worker.process, threading.Thread):
-                        log.info('We cannot really kill a thread, so let the whole process die')
-                        raise RuntimeError('Critical error: worker stuck on initialization. Abort!')
-                    else:
-                        log.info('Killing process %r', worker.process.pid)
-                        kill(worker.process.pid)
-                del self.workers
-                log.warning('Could not initialize env, try again! Error: %r', exc)
-                time.sleep(1)
+                    for i, worker in enumerate(self.workers):
+                        worker.result_queue.get(timeout=5)
+                        worker.result_queue.task_done()
+                        worker.task_queue.join()
+            except filelock.Timeout:
+                continue
+            except Exception:
+                raise RuntimeError('Critical error: worker stuck on initialization. Abort!')
             else:
                 break
 
-        if attempt >= num_attempts:
-            log.error('Could not initialize env even after %d attempts. Fail!', attempt)
-            raise RuntimeError('Critical error: worker stuck on initialization, num attempts exceeded. Abort!')
-
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
-        log.debug('Took %d attempts!\n', attempt + 1)
         self.initialized = True
 
     def info(self):

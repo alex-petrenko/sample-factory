@@ -2,6 +2,7 @@ import glob
 import os
 import random
 import shutil
+import signal
 import threading
 import time
 from collections import OrderedDict, deque
@@ -845,6 +846,9 @@ class LearnerWorker:
             self.new_cfg = new_cfg
 
     def _run(self):
+        # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -912,13 +916,15 @@ class LearnerWorker:
         while self.task_queue.qsize() > 0:
             time.sleep(0.01)
 
-    def save_model(self):
+    def save_model(self, timeout=None):
         self.model_saved_event.clear()
         save_task = (PbtTask.SAVE_MODEL, self.policy_id)
         self.task_queue.put((TaskType.PBT, save_task))
         log.debug('Wait while learner %d saves the model...', self.policy_id)
-        self.model_saved_event.wait()
-        log.debug('Learner %d saved the model!', self.policy_id)
+        if self.model_saved_event.wait(timeout=timeout):
+            log.debug('Learner %d saved the model!', self.policy_id)
+        else:
+            log.warning('Model saving request timed out!')
         self.model_saved_event.clear()
 
     def close(self):
@@ -1005,7 +1011,6 @@ class LearnerWorker:
 # [2020-01-25 22:44:53,060] Train loop timing: init: 1.4357, train_wait: 0.1186, tensors_gpu_float: 4.1724, bptt: 5.2798, vtrace: 2.4177, losses: 1.8281, update: 7.7311, train: 32.4878
 # [2020-01-25 22:44:53,219] Collected {0: 2015232}, FPS: 35969.4
 # [2020-01-25 22:44:53,219] Timing: experience: 56.0263
-
 
 # Version V66
 # --env=doom_benchmark --train_for_seconds=360000 --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v66_test3 --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2 --init_workers_parallel=7

@@ -1,4 +1,5 @@
 import select
+import signal
 import time
 from queue import Empty
 
@@ -222,6 +223,9 @@ class PolicyWorker:
 
     # noinspection PyProtectedMember
     def _run(self):
+        # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
 

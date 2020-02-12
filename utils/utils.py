@@ -161,9 +161,12 @@ def list_child_processes():
     children = current_process.children(recursive=True)
     is_alive = []
     for child in children:
-        child_process = psutil.Process(child.pid)
-        if child_process.is_running():
-            is_alive.append(child_process)
+        try:
+            child_process = psutil.Process(child.pid)
+            if child_process.is_running():
+                is_alive.append(child_process)
+        except psutil.NoSuchProcess:
+            pass
 
     return is_alive
 
@@ -171,10 +174,10 @@ def list_child_processes():
 def kill_processes(processes):
     for p in processes:
         try:
-            # TODO: need to figure this out
-            # if 'torch_shm_manager' in p.name():
-            #     # do not kill to avoid memleaks
-            #     continue
+            if 'torch_shm_manager' in p.name():
+                # do not kill to avoid permanent memleaks
+                # https://pytorch.org/docs/stable/multiprocessing.html#file-system-file-system
+                continue
 
             # log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
             log.debug('Child process name %d %r %r', p.pid, p.name(), p.exe())
@@ -182,7 +185,8 @@ def kill_processes(processes):
                 log.debug('Killing process %s...', p.name())
                 p.kill()
         except psutil.NoSuchProcess:
-            log.debug('Process %d is already dead', p.pid)
+            # log.debug('Process %d is already dead', p.pid)
+            pass
 
 
 # working with filesystem

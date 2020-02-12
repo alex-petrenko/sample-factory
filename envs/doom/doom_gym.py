@@ -9,11 +9,32 @@ from threading import Thread
 import cv2
 import gym
 import numpy as np
+from filelock import FileLock, Timeout
 from gym.utils import seeding
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
 from algorithms.spaces.discretized import Discretized
 from utils.utils import log
+
+
+def doom_lock_file(max_parallel):
+    """
+    Doom instances tend to have problems starting when a lot of them are initialized in parallel.
+    This is not a problem during normal execution once the envs are initialized.
+
+    The "sweet spot" for the number of envs that can be initialized in parallel is about 5-10.
+    Here we use file locking mechanism to ensure that only a limited amount of envs are being initialized at the same
+    time.
+    This tends to be more of a problem for multiplayer envs.
+
+    This also has an advantage of working across completely independent process groups, e.g. different experiments.
+    """
+    lock_filename = f'doom_{random.randrange(0, max_parallel):03d}.lockfile'
+
+    import tempfile
+    tmp_dir = tempfile.gettempdir()
+    lock_path = join(tmp_dir, lock_filename)
+    return lock_path
 
 
 def key_to_action_default(key):
@@ -173,6 +194,33 @@ class VizdoomEnv(gym.Env):
 
         self._set_game_mode(mode)
 
+    def _game_init(self, with_locking=True, max_parallel=10):
+        lock_file = lock = None
+        if with_locking:
+            lock_file = doom_lock_file(max_parallel)
+            lock = FileLock(lock_file)
+
+        init_attempt = 0
+        while True:
+            init_attempt += 1
+            try:
+                if with_locking:
+                    with lock.acquire(timeout=10):
+                        self.game.init()
+                else:
+                    self.game.init()
+
+                break
+            except Timeout:
+                if with_locking:
+                    log.debug(
+                        'Another process currently holds the lock %s, attempt: %d', lock_file, init_attempt,
+                    )
+            except Exception as exc:
+                log.warning('VizDoom game.init() threw an exception %r. Terminate process...', exc)
+                from envs.env_utils import EnvCriticalError
+                raise EnvCriticalError()
+
     def initialize(self):
         self._create_doom_game(self.mode)
 
@@ -196,8 +244,7 @@ class VizdoomEnv(gym.Env):
             self.game.add_game_args('+am_thingcolor_item 00ff00')
             # self.game.add_game_args("+am_thingcolor_citem 00ff00")
 
-        self.game.init()
-
+        self._game_init()
         self.initialized = True
 
     def _ensure_initialized(self):
