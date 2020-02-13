@@ -108,7 +108,7 @@ class LearnerWorker:
 
     def _calculate_gae(self, buffer):
         """
-        This is leftover from previous version of the algorithm. Should be reimplemented in PyTorch tensors,
+        This is leftover from previous version of the algorithm. Should probably be reimplemented in PyTorch tensors,
         similar to V-trace.
         """
 

@@ -1,13 +1,16 @@
+import queue
 import select
 import signal
+import threading
 import time
 from queue import Empty
 
 import torch
-from torch.multiprocessing import Process as TorchProcess, Event
+from torch.multiprocessing import Process as TorchProcess
 
 from algorithms.appo.appo_utils import TaskType, dict_of_lists_append, memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
+from algorithms.utils.multi_env import safe_get
 from utils.timing import Timing
 from utils.utils import AttrDict, log, join_or_kill
 
@@ -42,6 +45,11 @@ class PolicyWorker:
 
         # queues for all other policy workers, in case we need to talk to them (e.g. send initial tensor buffers)
         self.policy_worker_queues = policy_worker_queues
+
+        self.inference_thread = threading.Thread(target=self._inference_loop)
+        self.inference_queue = queue.Queue()
+        self.inference_queue_cv = threading.Condition()
+        self.policy_lock = threading.Lock()
 
         self.initialized = False
         self.terminate = False
@@ -87,6 +95,31 @@ class PolicyWorker:
 
         return requests
 
+    def _calc_and_enqueue_actions(self, request_order, observations, rnn_states, num_samples, timing):
+        with torch.no_grad():
+            with self.policy_lock:
+                with timing.add_time('forward'):
+                    policy_outputs = self.actor_critic(observations, rnn_states)
+                    policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
+
+            for key, value in policy_outputs.items():
+                policy_outputs[key] = value.cpu()
+
+            # concat all tensors into a single tensor for performance
+            output_tensors, tensor_sizes = [], []
+            tensor_names = sorted(tuple(policy_outputs.keys()))
+            for key in tensor_names:
+                value = policy_outputs[key].float()
+                if len(value.shape) == 1:
+                    value.unsqueeze_(dim=1)
+                output_tensors.append(value)
+                tensor_sizes.append(value.shape[-1])
+
+            output_tensors = torch.cat(output_tensors, dim=1)
+
+            with timing.add_time('postprocess'):
+                self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
+
     def _handle_policy_steps(self, requests, timing):
         self.max_requests_allowed += 1
 
@@ -114,27 +147,42 @@ class PolicyWorker:
                 rnn_states = torch.stack(rnn_states).to(self.device).float()
                 num_samples = rnn_states.shape[0]
 
-            with timing.add_time('forward'):
-                policy_outputs = self.actor_critic(observations, rnn_states)
-                policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
+            with self.inference_queue_cv:
+                while self.inference_queue.qsize() >= 1:
+                    # log.debug('Waiting for inference queue...')
+                    self.inference_queue_cv.wait(timeout=0.1)
+                # log.debug('Submitting a batch of size %d', len(request_order))
+                self.inference_queue.put((request_order, observations, rnn_states, num_samples))
 
-            for key, value in policy_outputs.items():
-                policy_outputs[key] = value.cpu()
+    def _inference_loop(self):
+        timing = Timing()
 
-            # concat all tensors into a single tensor for performance
-            output_tensors, tensor_sizes = [], []
-            tensor_names = sorted(tuple(policy_outputs.keys()))
-            for key in tensor_names:
-                value = policy_outputs[key].float()
-                if len(value.shape) == 1:
-                    value.unsqueeze_(dim=1)
-                output_tensors.append(value)
-                tensor_sizes.append(value.shape[-1])
+        with self.policy_lock:
+            # initialize the Torch modules
+            log.info('Initializing model on the policy worker %d-%d...', self.policy_id, self.worker_idx)
 
-            output_tensors = torch.cat(output_tensors, dim=1)
+            torch.set_num_threads(1)
 
-            with timing.add_time('postprocess'):
-                self._enqueue_policy_outputs(request_order, output_tensors, tensor_names, tensor_sizes)
+            # we should already see only one CUDA device, because of env vars
+            assert torch.cuda.device_count() == 1
+            self.device = torch.device('cuda', index=0)
+            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+            self.actor_critic.to(self.device)
+
+        log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
+
+        while not self.terminate:
+            data = safe_get(self.inference_queue)
+            with self.inference_queue_cv:
+                self.inference_queue_cv.notify()
+
+            if data is None:
+                break
+
+            request_order, observations, rnn_states, num_samples = data
+            self._calc_and_enqueue_actions(request_order, observations, rnn_states, num_samples, timing)
+
+        log.info('Inference loop timing: %s', timing)
 
     def _update_weights(self, weight_update, timing):
         if weight_update is None:
@@ -142,8 +190,9 @@ class PolicyWorker:
 
         with timing.timeit('weight_update'):
             policy_version, state_dict, discarding_rate = weight_update
-            self.actor_critic.load_state_dict(state_dict)
-            self.latest_policy_version = policy_version
+            with self.policy_lock:
+                self.actor_critic.load_state_dict(state_dict)
+                self.latest_policy_version = policy_version
 
         log.info(
             'Updated weights on worker %d-%d, policy_version %d (%.5f)',
@@ -232,18 +281,8 @@ class PolicyWorker:
         timing = Timing()
 
         with timing.timeit('init'):
-            # initialize the Torch modules
-            log.info('Initializing model on the policy worker %d-%d...', self.policy_id, self.worker_idx)
-
             torch.set_num_threads(1)
-
-            # we should already see only one CUDA device, because of env vars
-            assert torch.cuda.device_count() == 1
-            self.device = torch.device('cuda', index=0)
-            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
-            self.actor_critic.to(self.device)
-
-            log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
+            self.inference_thread.start()
 
         queues = [self.task_queue._reader, self.policy_queue._reader]
         queues_by_handle = dict()
@@ -317,6 +356,9 @@ class PolicyWorker:
                 self.terminate = True
 
         log.info('Policy worker timing: %s', timing)
+        self.inference_queue.put(None)
+        log.info('Joining the inference thread...')
+        self.inference_thread.join()
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
