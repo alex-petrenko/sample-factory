@@ -1020,3 +1020,13 @@ class LearnerWorker:
 # [2020-02-05 02:21:08,780][04774] GPU learner timing: extract: 0.0555, buffers: 0.0706, tensors: 12.0109, buff_ready: 0.5418, prepare: 12.6917
 # [2020-02-05 02:21:09,082][04715] Collected {0: 1974272}, FPS: 40185.7
 # [2020-02-05 02:21:09,082][04715] Timing: experience: 49.1287
+
+# Version V66
+# --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v66_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-02-11 20:59:56,337][28791] Env runner 0, rollouts 800: timing wait_actor: 0.0002, waiting: 6.1882, reset: 15.3720, save_policy_outputs: 0.5901, env_step: 34.3711, overhead: 6.1186, complete_rollouts: 0.6102, enqueue_policy_requests: 0.1157, one_step: 0.0151, work: 42.4098, wait_buffers: 0.5976
+# [2020-02-11 20:59:56,293][28793] Env runner 1, rollouts 790: timing wait_actor: 0.0022, waiting: 6.3542, reset: 14.9161, save_policy_outputs: 0.5772, env_step: 34.3059, overhead: 6.0034, complete_rollouts: 0.6385, enqueue_policy_requests: 0.1143, one_step: 0.0155, work: 42.2383, wait_buffers: 0.6263
+# [2020-02-11 20:59:56,322][28790] Policy worker timing: init: 1.9307, wait_policy: 0.0000, gpu_waiting: 25.3407, weight_update: 0.0004, updates: 0.0007, loop: 8.7840, handle_policy_step: 29.2553, one_step: 0.0023, work: 38.2444, deserialize: 1.1606, to_device: 10.8993, forward: 6.6921, postprocess: 7.1333
+# [2020-02-11 20:59:56,358][28767] GPU learner timing: extract: 0.0488, buffers: 0.0732, tensors: 12.1752, buff_ready: 0.4165, prepare: 12.7439
+# [2020-02-11 20:59:56,391][28767] Train loop timing: init: 1.3657, train_wait: 0.0968, tensors_gpu_float: 4.1287, bptt: 5.5166, vtrace: 2.6644, losses: 0.6868, clip: 6.1476, update: 12.7627, train: 31.3387
+# [2020-02-11 20:59:56,606][28705] Collected {0: 2015232}, FPS: 41630.1
+# [2020-02-11 20:59:56,606][28705] Timing: experience: 48.4080

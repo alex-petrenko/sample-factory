@@ -257,7 +257,7 @@ class APPO(Algorithm):
             last_env_initialized[i] = time.time()
 
         total_num_envs = self.cfg.num_workers * self.cfg.num_envs_per_worker
-        envs_initialized = 0
+        envs_initialized = [0] * self.cfg.num_workers
         workers_finished = set()
 
         while len(workers_finished) < len(workers):
@@ -269,10 +269,11 @@ class APPO(Algorithm):
                 if 'initialized_env' in report:
                     worker_idx, split_idx, env_i = report['initialized_env']
                     last_env_initialized[worker_idx] = time.time()
-                    envs_initialized += 1
+                    envs_initialized[worker_idx] += 1
 
                     log.debug(
-                        'Progress for %d workers: %d/%d envs initialized...', len(indices), envs_initialized, total_num_envs,
+                        'Progress for %d workers: %d/%d envs initialized...',
+                        len(indices), sum(envs_initialized), total_num_envs,
                     )
                 elif 'finished_reset' in report:
                     workers_finished.add(report['finished_reset'])
@@ -289,6 +290,8 @@ class APPO(Algorithm):
                 timeout = time_passed > reset_timelimit_seconds
 
                 if timeout or failed_worker == worker_idx or not w.process.is_alive():
+                    envs_initialized[worker_idx] = 0
+
                     log.error('Worker %d is stuck or failed (%.3f). Reset!', w.worker_idx, time_passed)
                     log.debug('Status: %r', w.process.is_alive())
                     stuck_worker = w

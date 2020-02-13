@@ -439,6 +439,12 @@ class VizdoomEnv(gym.Env):
             return None
 
     def close(self):
+        try:
+            if self.game is not None:
+                self.game.close()
+        except RuntimeError as exc:
+            log.warning('Runtime error in VizDoom game close(): %r', exc)
+
         if self.viewer is not None:
             self.viewer.close()
 
