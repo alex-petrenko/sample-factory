@@ -13,6 +13,7 @@ from gym import spaces, Wrapper
 from torch.multiprocessing import Process as TorchProcess, Event
 
 from algorithms.appo.appo_utils import TaskType, set_step_data, cores_for_worker_process
+from algorithms.appo.model import get_hidden_size
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.multi_agent import MultiAgentWrapper
@@ -87,7 +88,7 @@ class ActorState:
 
         # start with zeros in the RNN state
         self.policy_inputs = dict()
-        self.set_step_data(self.policy_inputs, 'rnn_states', torch.zeros([self.cfg.hidden_size]))
+        self.set_step_data(self.policy_inputs, 'rnn_states', torch.zeros([get_hidden_size(self.cfg)]))
         self.policy_output_tensors = None  # to be initialized by worker
         self.output_tensor_names = self.output_tensor_sizes = None
         self.policy_outputs = dict()

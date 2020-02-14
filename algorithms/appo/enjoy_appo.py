@@ -7,7 +7,7 @@ import torch
 
 from algorithms.appo.actor_worker import transform_dict_observations
 from algorithms.appo.learner import LearnerWorker
-from algorithms.appo.model import ActorCritic
+from algorithms.appo.model import ActorCritic, get_hidden_size
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
@@ -80,7 +80,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
             obs = env.reset()
 
             done = [False] * len(obs)
-            rnn_states = torch.zeros([env.num_agents, cfg.hidden_size], dtype=torch.float32, device=device)
+            rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
 
             episode_reward = 0
 

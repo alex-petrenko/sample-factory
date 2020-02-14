@@ -9,6 +9,13 @@ from utils.utils import AttrDict
 from utils.utils import log
 
 
+def get_hidden_size(cfg):
+    if cfg.rnn_type == 'lstm':
+        return cfg.hidden_size * 2
+    else:
+        return cfg.hidden_size
+
+
 class ActorCritic(nn.Module):
     def __init__(self, obs_space, action_space, cfg):
         super().__init__()
@@ -73,7 +80,15 @@ class ActorCritic(nn.Module):
         fc_output_size = self.hidden_size
 
         if cfg.use_rnn:
-            self.core = nn.GRUCell(fc_output_size, self.hidden_size)
+            self.is_gru = False
+
+            if cfg.rnn_type == 'gru':
+                self.core = nn.GRUCell(fc_output_size, self.hidden_size)
+                self.is_gru = True
+            elif cfg.rnn_type == 'lstm':
+                self.core = nn.LSTMCell(fc_output_size, self.hidden_size)
+            else:
+                raise RuntimeError(f'Unknown RNN type {cfg.rnn_type}')
         else:
             self.core = nn.Sequential(
                 nn.Linear(fc_output_size, self.hidden_size),
@@ -110,7 +125,13 @@ class ActorCritic(nn.Module):
 
     def forward_core(self, head_output, rnn_states):
         if self.cfg.use_rnn:
-            x = new_rnn_states = self.core(head_output, rnn_states)
+            if self.is_gru:
+                x = new_rnn_states = self.core(head_output, rnn_states)
+            else:
+                h, c = torch.split(rnn_states, self.cfg.hidden_size, dim=1)
+                h, c = self.core(head_output, (h, c))
+                x = h
+                new_rnn_states = torch.cat((h, c), dim=1)
         else:
             x = self.core(head_output)
             new_rnn_states = torch.zeros(x.shape[0])

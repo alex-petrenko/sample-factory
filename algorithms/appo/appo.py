@@ -88,6 +88,7 @@ class APPO(Algorithm):
 
         p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
+        p.add_argument('--rnn_type', default='gru', type=str, help='Type of RNN cell to use')
 
         p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
