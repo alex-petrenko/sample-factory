@@ -1,4 +1,5 @@
 import argparse
+import copy
 import json
 import os
 import sys
@@ -55,8 +56,23 @@ def parse_args(argv=None, evaluation=False):
 
     # parse all the arguments (algo, env, and optionally evaluation)
     args = parser.parse_args(argv)
-
     args.command_line = ' '.join(argv)
+
+    # following is the trick to get only the args passed from the command line
+    # We copy the parser and set the default value of None for every argument. Since one cannot pass None
+    # from command line, we can differentiate between args passed from command line and args that got initialized
+    # from their default values. This will allow us later to load missing values from the config file without
+    # overriding anything passed from the command line
+    no_defaults_parser = copy.deepcopy(parser)
+    for arg_name in vars(args).keys():
+        no_defaults_parser.set_defaults(**{arg_name: None})
+    cli_args = no_defaults_parser.parse_args(argv)
+
+    for arg_name in list(vars(cli_args).keys()):
+        if cli_args.__dict__[arg_name] is None:
+            del cli_args.__dict__[arg_name]
+
+    args.cli_args = cli_args
 
     return args
 
@@ -74,16 +90,18 @@ def load_from_checkpoint(cfg):
     with open(filename, 'r') as json_file:
         json_params = json.load(json_file)
         log.warning('Loading existing experiment configuration from %s', filename)
-        log.warning(
-            'Command-line parameters will be ignored!\n'
-            'If you want to resume experiment with different parameters, you should edit %s!',
-            filename,
-        )
         loaded_cfg = AttrDict(json_params)
+
+    # override the parameters in config file with values passed from command line
+    for key, value in vars(cfg.cli_args).items():
+        if loaded_cfg[key] != value:
+            log.debug('Overriding arg %r with value %r passed from command line', key, value)
+            loaded_cfg[key] = value
 
     # incorporate extra CLI parameters that were not present in JSON file
     for key, value in vars(cfg).items():
         if key not in loaded_cfg:
+            log.debug('Adding new argument %r=%r that is not in the saved config file!', key, value)
             loaded_cfg[key] = value
 
     return loaded_cfg

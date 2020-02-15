@@ -1,7 +1,7 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('seed', [1111, 2222, 3333]),
+    ('seed', [1111, 2222, 3333, 4444]),
 ])
 
 _experiments = [
@@ -13,4 +13,4 @@ _experiments = [
 ]
 
 
-RUN_DESCRIPTION = RunDescription('paper_doom_battle_appo_v66_fs4', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription('paper_doom_battle_appo_v67_fs4', experiments=_experiments)

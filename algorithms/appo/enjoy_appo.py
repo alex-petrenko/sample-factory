@@ -15,23 +15,7 @@ from utils.utils import log, AttrDict
 
 
 def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
-    # allow to override multiplayer settings
-    override_multiplayer_settings = True
-
-    num_agents = num_bots = num_humans = -1
-    if override_multiplayer_settings:
-        num_agents = cfg.num_agents
-        num_bots = cfg.num_bots
-        num_humans = cfg.num_humans
-    start_bot_difficulty = cfg.start_bot_difficulty
-
     cfg = load_from_checkpoint(cfg)
-
-    if override_multiplayer_settings:
-        cfg.num_agents = num_agents
-        cfg.num_bots = num_bots
-        cfg.num_humans = num_humans
-    cfg.start_bot_difficulty = start_bot_difficulty
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
     if render_action_repeat is None:
