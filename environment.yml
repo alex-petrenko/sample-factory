@@ -18,4 +18,5 @@ dependencies:
     - tensorboardx==1.8
     - tensorflow-gpu==1.15.0
     - gym==0.12.5
+    - filelock
 

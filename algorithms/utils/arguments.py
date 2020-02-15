@@ -72,7 +72,7 @@ def parse_args(argv=None, evaluation=False):
         if cli_args.__dict__[arg_name] is None:
             del cli_args.__dict__[arg_name]
 
-    args.cli_args = cli_args
+    args.cli_args = vars(cli_args)
 
     return args
 
