@@ -26,7 +26,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
 
-    cfg.record_to = None  # TODO
     if cfg.record_to:
         cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
     else:
@@ -59,10 +58,10 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     def max_frames_reached(frames):
         return max_num_frames is not None and frames > max_num_frames
 
+    obs = env.reset()
+
     with torch.no_grad():
         for _ in range(max_num_episodes):
-            obs = env.reset()
-
             done = [False] * len(obs)
             rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
 
@@ -94,9 +93,10 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                     if all(done):
                         log.debug('Finished episode!')
-
                         for player in [1, 2, 3, 4, 5, 6, 7, 8]:
-                            log.debug('Score for player %d: %r', player, infos[0][f'PLAYER{player}_FRAGCOUNT'])
+                            key = f'PLAYER{player}_FRAGCOUNT'
+                            if key in infos[0]:
+                                log.debug('Score for player %d: %r', player, infos[0][key])
 
                     episode_reward += np.mean(rew)
                     num_frames += 1

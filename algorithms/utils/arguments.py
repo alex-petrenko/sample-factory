@@ -93,8 +93,8 @@ def load_from_checkpoint(cfg):
         loaded_cfg = AttrDict(json_params)
 
     # override the parameters in config file with values passed from command line
-    for key, value in vars(cfg.cli_args).items():
-        if loaded_cfg[key] != value:
+    for key, value in cfg.cli_args.items():
+        if key in loaded_cfg and loaded_cfg[key] != value:
             log.debug('Overriding arg %r with value %r passed from command line', key, value)
             loaded_cfg[key] = value
 
