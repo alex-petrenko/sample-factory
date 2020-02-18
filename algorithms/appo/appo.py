@@ -80,9 +80,9 @@ class APPO(Algorithm):
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
         p.add_argument('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
 
-        p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting')
+        p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False')
 
-        p.add_argument('--rollout', default=64, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
+        p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
         p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
@@ -114,7 +114,7 @@ class APPO(Algorithm):
         p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
-        p.add_argument('--macro_batch', default=6144, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
+        p.add_argument('--macro_batch', default=2048, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
         p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
         p.add_argument(
             '--min_traj_buffers_per_worker', default=2, type=int,
@@ -145,7 +145,7 @@ class APPO(Algorithm):
         )
 
         # PBT stuff
-        p.add_argument('--with_pbt', default=True, type=str2bool, help='Enables population-based training basic features')
+        p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
         p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
         p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
@@ -246,7 +246,7 @@ class APPO(Algorithm):
 
     # noinspection PyProtectedMember
     def init_subset(self, indices, actor_queues, policy_worker_queues):
-        reset_timelimit_seconds = 20  # fail worker if not a single env was reset in that time
+        reset_timelimit_seconds = 30  # fail worker if not a single env was reset in that time
 
         workers = dict()
         last_env_initialized = dict()
