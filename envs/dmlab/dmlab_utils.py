@@ -52,7 +52,7 @@ level_cache = LevelCache(join(project_root(), '.dmlab_cache'))
 
 
 class DmlabGymEnv(gym.Env):
-    def __init__(self, level, action_repeat, res_w, res_h, benchmark_mode, renderer, extra_cfg=None):
+    def __init__(self, level, action_repeat, res_w, res_h, benchmark_mode, renderer, gpu_index, extra_cfg=None):
         self._width = res_w
         self._height = res_h
         self._main_observation = 'DEBUG.CAMERA_INTERLEAVED.PLAYER_VIEW_NO_RETICLE'
@@ -61,7 +61,7 @@ class DmlabGymEnv(gym.Env):
         self._random_state = None
 
         observation_format = [self._main_observation, 'DEBUG.POS.TRANS']
-        config = {'width': self._width, 'height': self._height}
+        config = {'width': self._width, 'height': self._height, 'gpuDeviceIndex': str(gpu_index)}
         if extra_cfg is not None:
             config.update(extra_cfg)
         config = {k: str(v) for k, v in config.items()}
@@ -178,7 +178,7 @@ def make_dmlab_env_impl(spec, cfg, **kwargs):
     skip_frames = cfg.env_frameskip
     env = DmlabGymEnv(
         spec.level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
-        spec.extra_cfg,
+        cfg.dmlab_gpu_index, spec.extra_cfg,
     )
 
     if 'record_to' in cfg and cfg.record_to is not None:

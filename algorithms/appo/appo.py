@@ -204,7 +204,9 @@ class APPO(Algorithm):
         self.last_report = time.time()
         self.report_interval = 5.0  # sec
 
-        self.fps_stats = deque([], maxlen=5)
+        self.avg_stats_intervals = (2, 12, 60)  # 10 seconds, 1 minute, 5 minutes
+
+        self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
         self.throughput_stats = [deque([], maxlen=5) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
         self.stats = dict()  # regular (non-averaged) stats
@@ -408,8 +410,10 @@ class APPO(Algorithm):
         if len(self.fps_stats) <= 1:
             return
 
-        past_moment, past_frames = self.fps_stats[0]
-        fps = (total_env_steps - past_frames) / (now - past_moment)
+        fps = []
+        for avg_interval in self.avg_stats_intervals:
+            past_moment, past_frames = self.fps_stats[max(0, len(self.fps_stats) - avg_interval)]
+            fps.append((total_env_steps - past_frames) / (now - past_moment))
 
         sample_throughput = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -421,13 +425,18 @@ class APPO(Algorithm):
                 sample_throughput[policy_id] = math.nan
 
         self.print_stats(fps, sample_throughput, total_env_steps)
-        self.report_basic_summaries(fps, sample_throughput)
+        self.report_basic_summaries(fps[0], sample_throughput)
 
     def print_stats(self, fps, sample_throughput, total_env_steps):
+        fps_str = []
+        for interval, fps_value in zip(self.avg_stats_intervals, fps):
+            fps_str.append(f'{int(interval * self.report_interval)} sec: {fps_value:.1f}')
+        fps_str = f'({", ".join(fps_str)})'
+
         samples_per_policy = ', '.join([f'{p}: {s:.1f}' for p, s in sample_throughput.items()])
         log.debug(
-            'Fps is %.1f. Total num frames: %d. Throughput: %s. Samples: %d',
-            fps, total_env_steps, samples_per_policy, sum(self.samples_collected),
+            'Fps is %s. Total num frames: %d. Throughput: %s. Samples: %d',
+            fps_str, total_env_steps, samples_per_policy, sum(self.samples_collected),
         )
 
         if 'reward' in self.policy_avg_stats:

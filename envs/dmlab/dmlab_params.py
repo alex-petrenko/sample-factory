@@ -15,3 +15,4 @@ def add_dmlab_env_args(env, parser):
     p.add_argument('--res_h', default=72, type=int, help='Game frame height after resize')
     p.add_argument('--dmlab_throughput_benchmark', default=False, type=str2bool, help='Execute random policy for performance measurements')
     p.add_argument('--dmlab_renderer', default='hardware', type=str, help='Type of renderer (GPU vs CPU)')
+    p.add_argument('--dmlab_gpu_index', default=0, type=int, help='Index of the GPU to use for rendering, only works in hardware mode')
