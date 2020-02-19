@@ -1,4 +1,5 @@
 import os
+import random
 import shutil
 import time
 from os.path import join
@@ -176,9 +177,16 @@ def dmlab_env_by_name(name):
 # noinspection PyUnusedLocal
 def make_dmlab_env_impl(spec, cfg, **kwargs):
     skip_frames = cfg.env_frameskip
+
+    gpu_idx = 0
+    if len(cfg.dmlab_gpus) > 0:
+        # choose randomly from available GPUs for the lack of better mechanism
+        # this is not ideal, of course, but for the large number of envs should distribute evenly across GPUs
+        gpu_idx = cfg.dmlab_gpus[random.randrange(0, len(cfg.dmlab_gpus))]
+
     env = DmlabGymEnv(
         spec.level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
-        cfg.dmlab_gpu_index, spec.extra_cfg,
+        gpu_idx, spec.extra_cfg,
     )
 
     if 'record_to' in cfg and cfg.record_to is not None:
