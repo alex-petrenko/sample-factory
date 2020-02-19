@@ -232,8 +232,11 @@ class ResizeWrapper(gym.core.Wrapper):
         if self.grayscale:
             new_shape = [self.h, self.w, 1] if self.add_channel_dim else [self.h, self.w]
         else:
-            channels = old_space.shape[-1]
-            new_shape = [self.h, self.w, channels]
+            if len(old_space.shape) > 2:
+                channels = old_space.shape[-1]
+                new_shape = [self.h, self.w, channels]
+            else:
+                new_shape = [self.h, self.w, 1] if self.add_channel_dim else [self.h, self.w]
 
         return spaces.Box(low, high, shape=new_shape, dtype=old_space.dtype)
 
