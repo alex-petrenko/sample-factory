@@ -143,6 +143,7 @@ class APPO(Algorithm):
                   'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
                   'that can use parallel CPU cores for level generation.'),
         )
+        p.add_argument('--reset_timeout_seconds', default=60, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
         # PBT stuff
         p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
@@ -248,7 +249,7 @@ class APPO(Algorithm):
 
     # noinspection PyProtectedMember
     def init_subset(self, indices, actor_queues, policy_worker_queues):
-        reset_timelimit_seconds = 30  # fail worker if not a single env was reset in that time
+        reset_timelimit_seconds = self.cfg.reset_timeout_seconds  # fail worker if not a single env was reset in that time
 
         workers = dict()
         last_env_initialized = dict()
