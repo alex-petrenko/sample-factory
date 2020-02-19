@@ -180,9 +180,10 @@ def make_dmlab_env_impl(spec, cfg, **kwargs):
 
     gpu_idx = 0
     if len(cfg.dmlab_gpus) > 0:
-        # choose randomly from available GPUs for the lack of better mechanism
-        # this is not ideal, of course, but for the large number of envs should distribute evenly across GPUs
-        gpu_idx = cfg.dmlab_gpus[random.randrange(0, len(cfg.dmlab_gpus))]
+        if kwargs.get('env_config') is not None:
+            vector_index = kwargs['env_config']['vector_index']
+            gpu_idx = cfg.dmlab_gpus[vector_index % len(cfg.dmlab_gpus)]
+            log.debug('Using GPU %d for DMLab rendering!', gpu_idx)
 
     env = DmlabGymEnv(
         spec.level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
