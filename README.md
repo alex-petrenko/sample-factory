@@ -4,18 +4,6 @@ High throughput asynchronous reinforcement learning
 
 ## Setup instructions
 
-- Install miniconda for python 3.7 on Ubuntu 18.04: https://docs.conda.io/en/latest/miniconda.html
-
-- Clone the repo: `git clone https://github.com/alex-petrenko/sample-factory.git`
-
-- Create and activate conda env:
-
-```
-cd sample-factory
-conda env create -f environment.yml
-conda activate sample-factory
-```
-
 - Install VizDoom system dependencies (from here https://github.com/mwydmuch/ViZDoom/blob/master/doc/Building.md#linux_deps):
 
 ```
@@ -31,7 +19,17 @@ sudo apt install libboost-all-dev
 sudo apt install python3-dev python3-pip
 ```
 
-- Install additional python dependencies: `pip install -r requirements.txt`
+- Install miniconda for python 3.7 on Ubuntu 18.04: https://docs.conda.io/en/latest/miniconda.html
+
+- Clone the repo: `git clone https://github.com/alex-petrenko/sample-factory.git`
+
+- Create and activate conda env:
+
+```
+cd sample-factory
+conda env create -f environment.yml
+conda activate sample-factory
+```
 
 ## Running experiments
 

@@ -1,4 +1,4 @@
-name: sample-factory-fast
+name: sample-factory
 channels:
   - pytorch
   - conda-forge
@@ -59,3 +59,4 @@ dependencies:
     - psutil==5.6.3
     - colorlog==4.0.2
     - filelock==3.0.12
+    - git+https://github.com/alex-petrenko/ViZDoom@doom_bot_project#egg=vizdoom

@@ -59,7 +59,7 @@ def test_env_performance(make_env, env_type, verbose=False):
     env.close()
 
 
-def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=30000):
+def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=100000):
     t = Timing()
     frames = 0
 
@@ -91,16 +91,11 @@ class TestDoom(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env_singleplayer(env_config):
-        return make_doom_env('doom_battle_hybrid', cfg=default_doom_cfg(), env_config=env_config)
-
-    @staticmethod
-    def make_env_bots(env_config):
-        log.info('Create host env with cfg: %r', env_config)
-        return make_doom_env('doom_dwango5_bots', cfg=default_doom_cfg(), env_config=env_config)
+        return make_doom_env('doom_benchmark', cfg=default_doom_cfg(), env_config=env_config)
 
     @staticmethod
     def make_env_bots_hybrid_actions(env_config, **kwargs):
-        return make_doom_env('doom_dwango5_bots_hybrid', cfg=default_doom_cfg(), env_config=env_config, **kwargs)
+        return make_doom_env('doom_deathmatch_bots', cfg=default_doom_cfg(), env_config=env_config, **kwargs)
 
     def test_doom_env(self):
         self.assertIsNotNone(self.make_env_singleplayer(None))
@@ -111,14 +106,11 @@ class TestDoom(TestCase):
     def test_doom_performance_multi(self):
         test_multi_env_performance(self.make_env_singleplayer, 'doom', num_envs=200, num_workers=20)
 
-    def test_doom_performance_bots(self):
-        test_env_performance(self.make_env_bots, 'doom')
-
     def test_doom_performance_bots_hybrid_actions(self):
         test_env_performance(self.make_env_bots_hybrid_actions, 'doom')
 
     def test_doom_performance_bots_multi(self):
-        test_multi_env_performance(self.make_env_bots, 'doom', num_envs=200, num_workers=20)
+        test_multi_env_performance(self.make_env_bots_hybrid_actions, 'doom', num_envs=200, num_workers=20)
 
     def test_doom_two_color(self):
         test_env_performance(
