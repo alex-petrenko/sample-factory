@@ -113,13 +113,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
             self.game.add_game_args(f'+name AI{self.player_id}_host +colorset 0')
 
-            # Warning! This does not work, see https://github.com/mwydmuch/ViZDoom/issues/402
-            # if self.record_to is not None:
-            #     # reportedly this does not work with bots
-            #     demo_path = self.demo_path(self._num_episodes)
-            #     log.debug('Recording multiplayer demo to %s', demo_path)
-            #     self.game.add_game_args(f'-record {demo_path}')
-
+            if self.record_to is not None:
+                # reportedly this does not work with bots
+                demo_path = self.demo_path(self._num_episodes)
+                log.debug('Recording multiplayer demo to %s', demo_path)
+                self.game.add_game_args(f'-record {demo_path}')
         else:
             # Join existing game.
             self.game.add_game_args(
@@ -131,6 +129,8 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             # colors:
             # 0 - green, 1 - gray, 2 - brown, 3 - red, 4 - light gray, 5 - light brown, 6 - light red, 7 - light blue
             self.game.add_game_args(f'+name AI{self.player_id} +colorset 0')
+
+        self.game.set_episode_timeout(int(self.timelimit * 60 * self.game.get_ticrate()))
 
         self._game_init(with_locking=False)  # locking is handled by the multi-agent wrapper
         log.info('Initialized w:%d v:%d player:%d', self.worker_index, self.vector_index, self.player_id)
@@ -200,6 +200,13 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         state = self.game.get_state()
         reward = self.game.get_last_reward()
         done = self.game.is_episode_finished()
+
+        if self.record_to is not None:
+            # send 'stop recording' command 1 tick before the end of the episode
+            # otherwise it does not get saved to disk
+            if self.game.get_episode_time() + 1 == self.game.get_episode_timeout():
+                log.debug('Calling stop recording command!')
+                self.game.send_game_command('stop')
 
         observation, done, info = self._process_game_step(state, done, {})
         return observation, reward, done, info

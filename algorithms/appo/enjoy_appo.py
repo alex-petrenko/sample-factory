@@ -1,3 +1,4 @@
+import datetime
 import sys
 import time
 from os.path import join
@@ -27,7 +28,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg.num_envs = 1
 
     if cfg.record_to:
-        cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}')
+        tstamp = datetime.datetime.now().strftime('%Y_%m_%d--%H_%M_%S')
+        cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}', tstamp)
     else:
         cfg.record_to = None
 
@@ -40,6 +42,10 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     is_multiagent = hasattr(env, 'num_agents') and env.num_agents > 1
     if not is_multiagent:
         env = MultiAgentWrapper(env)
+
+    if hasattr(env.unwrapped, 'reset_on_init'):
+        # reset call ruins the demo recording for VizDoom
+        env.unwrapped.reset_on_init = False
 
     actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
     device = torch.device('cuda')

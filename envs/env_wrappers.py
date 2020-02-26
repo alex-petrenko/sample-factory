@@ -436,8 +436,8 @@ class ClipRewardWrapper(gym.RewardWrapper):
 class RecordingWrapper(gym.core.Wrapper):
     def __init__(self, env, record_to, player_id):
         super().__init__(env)
-        tstamp = datetime.datetime.now().strftime('%Y_%m_%d--%H_%M_%S')
-        self._record_to = join(record_to, tstamp)
+
+        self._record_to = record_to
         self._episode_recording_dir = None
         self._record_id = 0
         self._frame_id = 0
