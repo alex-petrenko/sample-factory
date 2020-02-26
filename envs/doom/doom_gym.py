@@ -296,16 +296,16 @@ class VizdoomEnv(gym.Env):
     def reset(self):
         self._ensure_initialized()
 
-        if self._num_episodes > 0:
-            if self.record_to is not None and not self.is_multiplayer:
-                # does not work in multiplayer (uses different mechanism)
-                if not os.path.exists(self.record_to):
-                    os.makedirs(self.record_to)
+        if self.record_to is not None and not self.is_multiplayer:
+            # does not work in multiplayer (uses different mechanism)
+            if not os.path.exists(self.record_to):
+                os.makedirs(self.record_to)
 
-                demo_path = self.demo_path(self._num_episodes)
-                log.warning('Recording episode demo to %s', demo_path)
-                self.game.new_episode(demo_path)
-            else:
+            demo_path = self.demo_path(self._num_episodes)
+            log.warning('Recording episode demo to %s', demo_path)
+            self.game.new_episode(demo_path)
+        else:
+            if self._num_episodes > 0:
                 # no demo recording (default)
                 self.game.new_episode()
 

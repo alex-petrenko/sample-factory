@@ -1,4 +1,5 @@
 import datetime
+import os
 import sys
 import time
 from os.path import join
@@ -28,8 +29,10 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg.num_envs = 1
 
     if cfg.record_to:
-        tstamp = datetime.datetime.now().strftime('%Y_%m_%d--%H_%M_%S')
+        tstamp = datetime.datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
         cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}', tstamp)
+        if not os.path.isdir(cfg.record_to):
+            os.makedirs(cfg.record_to)
     else:
         cfg.record_to = None
 
