@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from torch.nn import functional
 
 from algorithms.ppo.agent_ppo import calc_num_elements
 from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
@@ -75,7 +74,10 @@ class ActorCritic(nn.Module):
         log.debug('Policy head output size: %r', self.head_out_size)
 
         self.hidden_size = cfg.hidden_size
-        self.linear1 = nn.Linear(self.head_out_size, self.hidden_size)
+        self.fc_layer = nn.Sequential(
+            nn.Linear(self.head_out_size, self.hidden_size),
+            nonlinearity(),
+        )
 
         fc_output_size = self.hidden_size
 
@@ -119,8 +121,7 @@ class ActorCritic(nn.Module):
             measurements = self.measurements_head(obs_dict['measurements'].float())
             x = torch.cat((x, measurements), dim=1)
 
-        x = self.linear1(x)
-        x = functional.elu(x)  # activation before LSTM/GRU? Should we do it or not?
+        x = self.fc_layer(x)
         return x
 
     def forward_core(self, head_output, rnn_states):
@@ -141,6 +142,7 @@ class ActorCritic(nn.Module):
     def forward_tail(self, core_output, with_action_distribution=False):
         values = self.critic_linear(core_output)
         action_logits = self.dist_linear(core_output)
+
         dist = get_action_distribution(self.action_space, raw_logits=action_logits)
 
         # for non-trivial action spaces it is faster to do these together
@@ -160,7 +162,6 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs_dict, rnn_states):
         x = self.forward_head(obs_dict)
-
         x, new_rnn_states = self.forward_core(x, rnn_states)
         result = self.forward_tail(x)
         result.rnn_states = new_rnn_states

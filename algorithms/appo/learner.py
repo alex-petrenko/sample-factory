@@ -395,6 +395,8 @@ class LearnerWorker:
         num_sgd_steps = 0
 
         stats = None
+        if not self.with_training:
+            return stats
 
         for epoch in range(self.cfg.ppo_epochs):
             minibatches = self._get_minibatches(experience_size)
@@ -710,28 +712,27 @@ class LearnerWorker:
         with timing.add_time('train'):
             discarding_rate = self._discarding_rate()
 
-            if self.with_training:
-                self._update_pbt()
+            self._update_pbt()
 
-                # log.debug('Training policy %d on %d samples', self.policy_id, samples)
-                train_stats = self._train(buffer, experience_size, timing)
+            # log.debug('Training policy %d on %d samples', self.policy_id, samples)
+            train_stats = self._train(buffer, experience_size, timing)
 
-                if train_stats is not None:
-                    stats['train'] = train_stats
+            if train_stats is not None:
+                stats['train'] = train_stats
 
-                    if wait_stats is not None:
-                        wait_avg, wait_min, wait_max = wait_stats
-                        stats['train']['wait_avg'] = wait_avg
-                        stats['train']['wait_min'] = wait_min
-                        stats['train']['wait_max'] = wait_max
+                if wait_stats is not None:
+                    wait_avg, wait_min, wait_max = wait_stats
+                    stats['train']['wait_avg'] = wait_avg
+                    stats['train']['wait_min'] = wait_min
+                    stats['train']['wait_max'] = wait_max
 
-                    stats['train']['discarded_rollouts'] = self.num_discarded_rollouts
-                    stats['train']['discarding_rate'] = discarding_rate
+                stats['train']['discarded_rollouts'] = self.num_discarded_rollouts
+                stats['train']['discarding_rate'] = discarding_rate
 
-                    stats['stats'] = memory_stats('learner', self.device)
+                stats['stats'] = memory_stats('learner', self.device)
 
-                if self.with_weight_updates:
-                    self._broadcast_weights(discarding_rate)
+            if self.with_weight_updates:
+                self._broadcast_weights(discarding_rate)
 
         self.report_queue.put(stats)
 
@@ -822,9 +823,6 @@ class LearnerWorker:
             rollout_data['split_idx'] = split_idx
             rollout_data['traj_buffer_idx'] = traj_buffer_idx
             rollouts.append(rollout_data)
-
-        if not self.with_training:
-            return []
 
         return rollouts
 
