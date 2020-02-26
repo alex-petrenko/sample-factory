@@ -115,7 +115,7 @@ class PolicyWorker:
                 num_samples = rnn_states.shape[0]
 
             with timing.add_time('forward'):
-                policy_outputs = self.actor_critic(observations, rnn_states, timing)
+                policy_outputs = self.actor_critic(observations, rnn_states)
                 policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
 
             for key, value in policy_outputs.items():

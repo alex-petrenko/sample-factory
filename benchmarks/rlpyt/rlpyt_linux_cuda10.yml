@@ -16,3 +16,4 @@ dependencies:
   - vizdoom
   - tensorboardX
   - colorlog
+  - filelock
