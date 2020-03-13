@@ -32,34 +32,51 @@ class ActorCritic(nn.Module):
                 obs_shape[key] = space.shape
         else:
             obs_shape.obs = obs_space.shape
-        input_ch = obs_shape.obs[0]
-        log.debug('Num input channels: %d', input_ch)
 
-        if cfg.encoder == 'convnet_simple':
-            conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
-        elif cfg.encoder == 'convnet_impala':
-            conv_filters = [[input_ch, 16, 8, 4], [16, 32, 4, 2]]
-        elif cfg.encoder == 'minigrid_convnet_tiny':
-            conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
-        else:
-            raise NotImplementedError(f'Unknown encoder {cfg.encoder}')
+        if cfg.encoder_type == 'conv':
+            input_ch = obs_shape.obs[0]
+            log.debug('Num input channels: %d', input_ch)
 
-        conv_layers = []
-        for layer in conv_filters:
-            if layer == 'maxpool_2x2':
-                conv_layers.append(nn.MaxPool2d((2, 2)))
-            elif isinstance(layer, (list, tuple)):
-                inp_ch, out_ch, filter_size, stride = layer
-                conv_layers.append(nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride))
-                conv_layers.append(nonlinearity())
+            if cfg.encoder == 'convnet_simple':
+                conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
+            elif cfg.encoder == 'convnet_impala':
+                conv_filters = [[input_ch, 16, 8, 4], [16, 32, 4, 2]]
+            elif cfg.encoder == 'minigrid_convnet_tiny':
+                conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
             else:
-                raise NotImplementedError(f'Layer {layer} not supported!')
+                raise NotImplementedError(f'Unknown encoder {cfg.encoder}')
 
-        self.conv_head = nn.Sequential(*conv_layers)
-        self.conv_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
-        log.debug('Convolutional layer output size: %r', self.conv_out_size)
+            conv_layers = []
+            for layer in conv_filters:
+                if layer == 'maxpool_2x2':
+                    conv_layers.append(nn.MaxPool2d((2, 2)))
+                elif isinstance(layer, (list, tuple)):
+                    inp_ch, out_ch, filter_size, stride = layer
+                    conv_layers.append(nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride))
+                    conv_layers.append(nonlinearity())
+                else:
+                    raise NotImplementedError(f'Layer {layer} not supported!')
 
-        self.head_out_size = self.conv_out_size
+            self.conv_head = nn.Sequential(*conv_layers)
+            self.encoder_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+            log.debug('Convolutional layer output size: %r', self.encoder_out_size)
+
+            self.head_out_size = self.encoder_out_size
+
+        elif cfg.encoder_type == 'fc':
+            assert len(obs_shape.obs) == 1
+
+            fc_encoder_output_size = 256
+            encoder_layers = [
+                nn.Linear(obs_shape.obs[0], fc_encoder_output_size),
+                nonlinearity(),
+            ]
+
+            # it's not really conv_head here, but we kept the name to be able to load previously trained models
+            self.conv_head = nn.Sequential(*encoder_layers)
+            self.head_out_size = self.encoder_out_size = fc_encoder_output_size
+        else:
+            raise NotImplementedError('Unknown encoder type')
 
         self.measurements_head = None
         if 'measurements' in obs_shape:
@@ -113,7 +130,7 @@ class ActorCritic(nn.Module):
             obs_dict['obs'].sub_(mean).mul_(1.0 / scale)  # convert rgb observations to [-1, 1] in-place
 
         x = self.conv_head(obs_dict['obs'])
-        x = x.view(-1, self.conv_out_size)
+        x = x.view(-1, self.encoder_out_size)
 
         if self.measurements_head is not None:
             measurements = self.measurements_head(obs_dict['measurements'].float())

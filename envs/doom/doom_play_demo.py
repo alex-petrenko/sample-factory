@@ -7,7 +7,7 @@ from os.path import join
 import cv2
 
 from algorithms.utils.arguments import default_cfg
-from envs.doom.doom_utils import make_doom_env
+from envs.doom.doom_utils import make_doom_env, doom_env_by_name, make_doom_env_impl
 from utils.utils import log
 
 
@@ -17,8 +17,15 @@ def main():
     parser.add_argument('--demo_path', type=str, default=None, required=True)
     args = parser.parse_args()
 
+    spec = doom_env_by_name(args.env)
     cfg = default_cfg(env=args.env)
-    env = make_doom_env(args.env, cfg=cfg, custom_resolution='1920x1080')
+    if spec.num_agents <= 1:
+        env = make_doom_env(args.env, cfg=cfg, custom_resolution='1280x720')
+    else:
+        env = make_doom_env_impl(
+            spec, cfg=cfg, custom_resolution='1280x720',
+            player_id=0, num_agents=spec.num_agents, max_num_players=spec.num_agents, num_bots=spec.num_bots,
+        )
 
     mode = 'replay'
     env.unwrapped.mode = mode

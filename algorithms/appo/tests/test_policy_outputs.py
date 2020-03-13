@@ -6,7 +6,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 import torch
 
-from algorithms.appo.appo_utils import set_step_data, TaskType
+from algorithms.appo.appo_utils import TaskType
 from utils.timing import Timing
 from utils.utils import log
 

@@ -13,6 +13,9 @@ def create_env(env, **kwargs):
     elif env.startswith('dmlab_'):
         from envs.dmlab.dmlab_utils import make_dmlab_env
         return make_dmlab_env(env, **kwargs)
+    elif env.startswith('quadrotor_'):
+        from envs.quadrotors.quad_utils import make_quadrotor_env
+        return make_quadrotor_env(env, **kwargs)
     else:
         raise Exception('Unsupported env {0}'.format(env))
 

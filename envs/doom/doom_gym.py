@@ -288,7 +288,7 @@ class VizdoomEnv(gym.Env):
         return variables
 
     def demo_path(self, episode_idx):
-        demo_name = f'ep_{episode_idx:03d}_rec.lmp'
+        demo_name = f'e{episode_idx:03d}.lmp'
         demo_path = join(self.record_to, demo_name)
         demo_path = os.path.normpath(demo_path)
         return demo_path

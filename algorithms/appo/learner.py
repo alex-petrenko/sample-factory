@@ -28,7 +28,7 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_o
 
 class LearnerWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues, traj_buffers,
     ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
@@ -47,6 +47,9 @@ class LearnerWorker:
         self.obs_space = obs_space
         self.action_space = action_space
 
+        self.rollout_tensors = traj_buffers.tensor_trajectories
+        self.traj_tensors_available = traj_buffers.is_traj_tensor_available
+
         self.device = None
         self.actor_critic = None
         self.optimizer = None
@@ -59,9 +62,6 @@ class LearnerWorker:
         # queues corresponding to policy workers using the same policy
         # we send weight updates via these queues
         self.policy_worker_queues = policy_worker_queues
-
-        self.rollout_tensors = dict()
-        self.traj_buffer_ready = dict()
 
         self.experience_buffer_queue = Queue()
 
@@ -144,8 +144,7 @@ class LearnerWorker:
 
     def _mark_rollout_buffer_free(self, rollout):
         r = rollout
-        traj_buffer_ready = self.traj_buffer_ready[(r['worker_idx'], r['split_idx'])]
-        traj_buffer_ready[r['env_idx'], r['agent_idx'], r['traj_buffer_idx']] = 1
+        self.traj_tensors_available[r.worker_idx, r.split_idx][r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
 
     def _prepare_train_buffer(self, rollouts, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
@@ -794,20 +793,6 @@ class LearnerWorker:
         discarding_rate = delta_rollouts / delta_time
         return discarding_rate
 
-    def _init_rollout_tensors(self, data):
-        data = AttrDict(data)
-        assert self.policy_id == data.policy_id
-
-        worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
-        for env_agent, rollout_data in data.tensors.items():
-            env_idx, agent_idx = env_agent
-            tensor_dict_key = (worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx)
-            assert tensor_dict_key not in self.rollout_tensors
-
-            self.rollout_tensors[tensor_dict_key] = rollout_data
-
-        self.traj_buffer_ready[(worker_idx, split_idx)] = data.is_ready_tensor
-
     def _extract_rollouts(self, data):
         data = AttrDict(data)
         worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
@@ -815,14 +800,13 @@ class LearnerWorker:
         rollouts = []
         for rollout_data in data.rollouts:
             env_idx, agent_idx = rollout_data['env_idx'], rollout_data['agent_idx']
-            tensor_dict_key = (worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx)
-            tensors = self.rollout_tensors[tensor_dict_key]
+            tensors = self.rollout_tensors.index((worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx))
 
             rollout_data['t'] = tensors
             rollout_data['worker_idx'] = worker_idx
             rollout_data['split_idx'] = split_idx
             rollout_data['traj_buffer_idx'] = traj_buffer_idx
-            rollouts.append(rollout_data)
+            rollouts.append(AttrDict(rollout_data))
 
         return rollouts
 
@@ -867,18 +851,16 @@ class LearnerWorker:
                 try:
                     task_type, data = self.task_queue.get_nowait()
 
-                    if task_type == TaskType.INIT:
+                    if task_type == TaskType.TRAIN:
+                        with timing.add_time('extract'):
+                            rollouts.extend(self._extract_rollouts(data))
+                            # log.debug('Learner %d has %d rollouts', self.policy_id, len(rollouts))
+                    elif task_type == TaskType.INIT:
                         self._init()
                     elif task_type == TaskType.TERMINATE:
                         log.info('GPU learner timing: %s', timing)
                         self._terminate()
                         break
-                    elif task_type == TaskType.INIT_TENSORS:
-                        self._init_rollout_tensors(data)
-                    elif task_type == TaskType.TRAIN:
-                        with timing.add_time('extract'):
-                            rollouts.extend(self._extract_rollouts(data))
-                            # log.debug('Learner %d has %d rollouts', self.policy_id, len(rollouts))
                     elif task_type == TaskType.PBT:
                         self._process_pbt_task(data)
                 except Empty:
@@ -1020,7 +1002,7 @@ class LearnerWorker:
 # [2020-02-05 02:21:09,082][04715] Timing: experience: 49.1287
 
 # Version V66
-# --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v66_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v66_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
 # [2020-02-11 20:59:56,337][28791] Env runner 0, rollouts 800: timing wait_actor: 0.0002, waiting: 6.1882, reset: 15.3720, save_policy_outputs: 0.5901, env_step: 34.3711, overhead: 6.1186, complete_rollouts: 0.6102, enqueue_policy_requests: 0.1157, one_step: 0.0151, work: 42.4098, wait_buffers: 0.5976
 # [2020-02-11 20:59:56,293][28793] Env runner 1, rollouts 790: timing wait_actor: 0.0022, waiting: 6.3542, reset: 14.9161, save_policy_outputs: 0.5772, env_step: 34.3059, overhead: 6.0034, complete_rollouts: 0.6385, enqueue_policy_requests: 0.1143, one_step: 0.0155, work: 42.2383, wait_buffers: 0.6263
 # [2020-02-11 20:59:56,322][28790] Policy worker timing: init: 1.9307, wait_policy: 0.0000, gpu_waiting: 25.3407, weight_update: 0.0004, updates: 0.0007, loop: 8.7840, handle_policy_step: 29.2553, one_step: 0.0023, work: 38.2444, deserialize: 1.1606, to_device: 10.8993, forward: 6.6921, postprocess: 7.1333
@@ -1028,3 +1010,22 @@ class LearnerWorker:
 # [2020-02-11 20:59:56,391][28767] Train loop timing: init: 1.3657, train_wait: 0.0968, tensors_gpu_float: 4.1287, bptt: 5.5166, vtrace: 2.6644, losses: 0.6868, clip: 6.1476, update: 12.7627, train: 31.3387
 # [2020-02-11 20:59:56,606][28705] Collected {0: 2015232}, FPS: 41630.1
 # [2020-02-11 20:59:56,606][28705] Timing: experience: 48.4080
+
+# Version V68 (numpy arrays with dtype=object to access shared memory, only on rollout workers and policy workers)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v68_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-03-12 22:29:09,957][23631] Env runner 0, rollouts 158: timing wait_actor: 0.0002, waiting: 7.2795, reset: 12.1278, save_policy_outputs: 1.1250, env_step: 34.8071, overhead: 1.1319, complete_rollouts: 0.0164, enqueue_policy_requests: 0.1276, one_step: 0.0149, work: 39.2881, wait_buffers: 0.2515
+# [2020-03-12 22:29:09,924][23633] Env runner 1, rollouts 156: timing wait_actor: 0.0001, waiting: 7.6706, reset: 11.9427, save_policy_outputs: 1.1427, env_step: 34.4569, overhead: 1.1118, complete_rollouts: 0.0118, enqueue_policy_requests: 0.1344, one_step: 0.0124, work: 38.9358, wait_buffers: 0.2657
+# [2020-03-12 22:29:09,941][23630] Policy worker timing: init: 1.7136, wait_policy: 0.0002, gpu_waiting: 21.7480, weight_update: 0.0005, updates: 0.0007, loop: 8.7113, handle_policy_step: 28.6445, one_step: 0.0000, work: 37.5484, deser_obs: 1.0180, deserialize: 2.9807, to_device: 10.7819, forward: 5.8863, postprocess: 5.8134
+# [2020-03-12 22:29:09,950][23614] GPU learner timing: extract: 1.9862, buffers: 0.0629, tensors: 11.8466, buff_ready: 0.4987, prepare: 12.6664
+# [2020-03-12 22:29:10,025][23614] Train loop timing: init: 1.3608, train_wait: 0.0635, tensors_gpu_float: 4.5027, bptt: 5.7046, vtrace: 2.5041, losses: 0.6139, clip: 6.1590, update: 13.3305, train: 32.2863
+# [2020-03-12 22:29:10,191][23524] Collected {0: 2015232}, FPS: 43408.0
+# [2020-03-12 22:29:10,191][23524] Timing: experience: 46.4254
+
+# Version V68 (numpy arrays with dtype=object to access shared memory, on all components)
+# [2020-03-12 22:42:27,060][04045] GPU learner timing: extract: 0.2020, buffers: 0.0660, tensors: 12.2419, buff_ready: 0.5300, prepare: 12.9209
+# [2020-03-12 22:42:27,090][04063] Policy worker timing: init: 1.9041, wait_policy: 0.0002, gpu_waiting: 23.8118, weight_update: 0.0005, updates: 0.0007, loop: 8.5428, handle_policy_step: 27.3458, one_step: 0.0000, work: 36.0643, deserialize: 1.1677, to_device: 10.7167, forward: 6.2745, postprocess: 5.8543
+# [2020-03-12 22:42:27,092][04067] Env runner 1, rollouts 156: timing wait_actor: 0.0002, waiting: 7.1287, reset: 13.0993, save_policy_outputs: 1.1169, env_step: 34.5407, overhead: 1.1547, complete_rollouts: 0.0118, enqueue_policy_requests: 0.1266, one_step: 0.0144, work: 38.8725, wait_buffers: 0.1057
+# [2020-03-12 22:42:27,115][04064] Env runner 0, rollouts 160: timing wait_actor: 0.0002, waiting: 6.6063, reset: 10.6103, save_policy_outputs: 1.1426, env_step: 35.0822, overhead: 1.1878, complete_rollouts: 0.0122, enqueue_policy_requests: 0.1226, one_step: 0.0180, work: 39.4019
+# [2020-03-12 22:42:27,142][04045] Train loop timing: init: 1.3917, train_wait: 0.0137, tensors_gpu_float: 4.8263, bptt: 6.0634, vtrace: 2.4377, losses: 0.6723, clip: 6.4343, update: 13.3916, train: 33.3124
+# [2020-03-12 22:42:27,360][03950] Collected {0: 2015232}, FPS: 43998.9
+# [2020-03-12 22:42:27,360][03950] Timing: experience: 45.8019

@@ -1,44 +1,45 @@
+import copy
 import os
-import psutil
 from collections import OrderedDict
-from enum import Enum
 
+import gym
 import numpy as np
 import torch
+from gym import spaces, Wrapper
 
+from algorithms.utils.multi_agent import MultiAgentWrapper
+from envs.create_env import create_env
 from utils.utils import log, memory_consumption_mb
-
 
 CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
 
 
-class TaskType(Enum):
-    INIT, TERMINATE, RESET, INIT_TENSORS, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, PBT, EMPTY = range(10)
+class TaskType:
+    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, UPDATE_WEIGHTS, PBT, EMPTY = range(9)
 
 
-def set_step_data(dictionary, key, data):
-    if isinstance(data, np.ndarray):
-        torch_data = torch.from_numpy(data)
-    elif isinstance(data, torch.Tensor):
-        torch_data = data
-    elif isinstance(data, (int, float, bool, list, tuple, np.float32)):
-        torch_data = torch.tensor(data)
-    else:
-        raise RuntimeError('Unsupported data type!')
+class DictObservationsWrapper(Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.num_agents = env.num_agents
+        self.observation_space = gym.spaces.Dict(dict(obs=self.observation_space))
 
-    if key not in dictionary:
-        dictionary[key] = torch_data.cpu().clone().detach()  # this is slow, but we do it only once
-        dictionary[key].share_memory_()
-    else:
-        dictionary[key].copy_(torch_data)
+    def reset(self, **kwargs):
+        obs = self.env.reset(**kwargs)
+        return [dict(obs=o) for o in obs]
+
+    def step(self, action):
+        obs, rew, done, info = self.env.step(action)
+        return [dict(obs=o) for o in obs], rew, done, info
 
 
-def dict_of_lists_append(dict_of_lists, new_data):
-    for key, x in new_data.items():
-        if key in dict_of_lists:
-            dict_of_lists[key].append(x)
-        else:
-            dict_of_lists[key] = [x]
+def make_env_func(cfg, env_config):
+    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
+    if not hasattr(env, 'num_agents') or env.num_agents <= 1:
+        env = MultiAgentWrapper(env)
+    if not isinstance(env.observation_space, spaces.Dict):
+        env = DictObservationsWrapper(env)
+    return env
 
 
 def iterate_recursively(d):
@@ -52,6 +53,22 @@ def iterate_recursively(d):
             yield from iterate_recursively(v)
         else:
             yield d, k, v
+
+
+def copy_dict_structure(d):
+    """Copy dictionary layout without copying the actual values (populated with Nones)."""
+    d_copy = type(d)()
+    _copy_dict_structure_func(d, d_copy)
+    return d_copy
+
+
+def _copy_dict_structure_func(d, d_copy):
+    for key, value in d.items():
+        if isinstance(value, (dict, OrderedDict)):
+            d_copy[key] = type(value)()
+            _copy_dict_structure_func(value, d_copy[key])
+        else:
+            d_copy[key] = None
 
 
 def iter_dicts_recursively(d1, d2):

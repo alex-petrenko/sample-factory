@@ -30,7 +30,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
     if cfg.record_to:
         tstamp = datetime.datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
-        cfg.record_to = join(cfg.record_to, f'{cfg.env}_{cfg.experiment}', tstamp)
+        cfg.record_to = join(cfg.record_to, f'{cfg.experiment}', tstamp)
         if not os.path.isdir(cfg.record_to):
             os.makedirs(cfg.record_to)
     else:

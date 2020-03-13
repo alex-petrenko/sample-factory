@@ -11,6 +11,9 @@ def env_override_defaults(env, parser):
     elif env.startswith('atari'):
         from envs.atari.atari_params import atari_override_defaults
         atari_override_defaults(env, parser)
+    elif env.startswith('quad'):
+        from envs.quadrotors.quadrotor_params import quadrotors_override_defaults
+        quadrotors_override_defaults(env, parser)
 
 
 def add_env_args(env, parser):

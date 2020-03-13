@@ -50,7 +50,7 @@ def doom_action_space():
         Discrete(3),  # noop, prev_weapon, next_weapon
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
-        Box(-1.0, 1.0, (1,)),
+        Box(float(-1.0), float(1.0), (1,)),
     ))
 
 
@@ -81,7 +81,7 @@ def doom_action_space_continuous_no_weap():
         Discrete(3),  # noop, move right, move left
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
-        Box(-1.0, 1.0, (1,)),
+        Box(float(-1.0), float(1.0), (1,)),
     ))
 
 

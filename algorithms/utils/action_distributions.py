@@ -1,10 +1,11 @@
 import gym
+import numpy as np
 import torch
-from torch.nn import functional
 from torch.distributions import Categorical
+from torch.nn import functional
 
 from algorithms.memento.mem_wrapper import MemActionSpace
-from utils.utils import log, AttrDict
+from utils.utils import log
 
 
 def calc_num_logits(action_space):
@@ -13,6 +14,9 @@ def calc_num_logits(action_space):
         return action_space.n
     elif isinstance(action_space, gym.spaces.Tuple):
         return sum(space.n for space in action_space.spaces)
+    elif isinstance(action_space, gym.spaces.Box):
+        # regress one mean and one standard deviation for every action
+        return np.prod(action_space.shape) * 2
     else:
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
 
@@ -32,6 +36,9 @@ def get_action_distribution(action_space, raw_logits, mask=None):
         return CategoricalActionDistribution(raw_logits)
     elif isinstance(action_space, gym.spaces.Tuple):
         return TupleActionDistribution(action_space, logits_flat=raw_logits, mask=mask)
+    elif isinstance(action_space, gym.spaces.Box):
+        # continuous action spaces
+        return ContinuousActionDistribution(params=raw_logits)
     else:
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
 
@@ -199,3 +206,11 @@ class TupleActionDistribution:
     def dbg_print(self):
         for d in self.distributions:
             d.dbg_print()
+
+
+class ContinuousActionDistribution:
+    def __init__(self, params):
+        num_actions = params.shape[-1] // 2
+        means, stddevs = torch.split(params, num_actions)
+        self.distribution = torch.distributions.normal.Normal(means, stddevs)
+

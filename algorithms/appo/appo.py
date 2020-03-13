@@ -12,10 +12,12 @@ import torch
 from tensorboardX import SummaryWriter
 from torch.multiprocessing import Queue as TorchQueue, JoinableQueue as TorchJoinableQueue
 
-from algorithms.appo.actor_worker import make_env_func, ActorWorker
+from algorithms.appo.actor_worker import ActorWorker
+from algorithms.appo.appo_utils import make_env_func
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
+from algorithms.appo.trajectory_buffers import TrajectoryBuffers
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
@@ -61,6 +63,7 @@ class Algorithm:
         p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
 
         # policy size and configuration
+        p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder')
         p.add_argument('--encoder', default='convnet_simple', type=str, help='Type of the policy head (e.g. convolutional encoder)')
         p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
 
@@ -163,6 +166,7 @@ class APPO(Algorithm):
         tmp_env = make_env_func(self.cfg, env_config=None)
         self.obs_space = tmp_env.observation_space
         self.action_space = tmp_env.action_space
+        self.num_agents = tmp_env.num_agents
 
         self.reward_shaping_scheme = None
         if self.cfg.with_pbt:
@@ -174,6 +178,9 @@ class APPO(Algorithm):
 
         tmp_env.close()
 
+        # shared memory allocation
+        self.traj_buffers = TrajectoryBuffers(self.cfg, self.num_agents, self.obs_space, self.action_space)
+
         self.actor_workers = None
 
         self.report_queue = TorchQueue()
@@ -183,9 +190,6 @@ class APPO(Algorithm):
         self.learner_workers = dict()
 
         self.workers_by_handle = None
-
-        self.trajectories = dict()
-        self.currently_training = set()
 
         self.policy_inputs = [[] for _ in range(self.cfg.num_policies)]
         self.policy_outputs = dict()
@@ -238,23 +242,23 @@ class APPO(Algorithm):
     def finalize(self):
         pass
 
-    def create_actor_worker(self, idx, actor_queue, policy_worker_queues):
+    def create_actor_worker(self, idx, actor_queue):
         learner_queues = {p: w.task_queue for p, w in self.learner_workers.items()}
 
         return ActorWorker(
-            self.cfg, self.obs_space, self.action_space, idx, task_queue=actor_queue,
-            policy_queues=self.policy_queues, report_queue=self.report_queue, learner_queues=learner_queues,
-            policy_worker_queues=policy_worker_queues,
+            self.cfg, self.obs_space, self.action_space, self.num_agents, idx, self.traj_buffers,
+            task_queue=actor_queue, policy_queues=self.policy_queues,
+            report_queue=self.report_queue, learner_queues=learner_queues,
         )
 
     # noinspection PyProtectedMember
-    def init_subset(self, indices, actor_queues, policy_worker_queues):
+    def init_subset(self, indices, actor_queues):
         reset_timelimit_seconds = self.cfg.reset_timeout_seconds  # fail worker if not a single env was reset in that time
 
         workers = dict()
         last_env_initialized = dict()
         for i in indices:
-            w = self.create_actor_worker(i, actor_queues[i], policy_worker_queues)
+            w = self.create_actor_worker(i, actor_queues[i])
             w.init()
             w.request_reset()
             workers[i] = w
@@ -301,7 +305,7 @@ class APPO(Algorithm):
                     stuck_worker = w
                     stuck_worker.process.kill()
 
-                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx], policy_worker_queues)
+                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx])
                     new_worker.init()
                     new_worker.request_reset()
 
@@ -326,7 +330,7 @@ class APPO(Algorithm):
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
-                self.report_queue, policy_worker_queues[policy_id],
+                self.report_queue, policy_worker_queues[policy_id], self.traj_buffers,
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -343,8 +347,8 @@ class APPO(Algorithm):
 
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker = PolicyWorker(
-                    i, policy_id, self.cfg, self.obs_space, self.action_space,
-                    policy_queue, actor_queues, self.report_queue, policy_worker_queues,
+                    i, policy_id, self.cfg, self.obs_space, self.action_space, self.traj_buffers,
+                    policy_queue, actor_queues, self.report_queue, policy_worker_queues[policy_id][i],
                 )
                 self.policy_workers[policy_id].append(policy_worker)
                 policy_worker.start_process()
@@ -355,7 +359,7 @@ class APPO(Algorithm):
         max_parallel_init = self.cfg.init_workers_parallel
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
-            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues, policy_worker_queues)
+            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
             self.actor_workers.extend(workers)
 
     def init_pbt(self):

@@ -174,7 +174,7 @@ def list_child_processes():
 def kill_processes(processes):
     for p in processes:
         try:
-            if 'torch_shm_manager' in p.name():
+            if 'torch_shm' in p.name():
                 # do not kill to avoid permanent memleaks
                 # https://pytorch.org/docs/stable/multiprocessing.html#file-system-file-system
                 continue
