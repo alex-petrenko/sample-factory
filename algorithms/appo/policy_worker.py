@@ -23,8 +23,8 @@ def dict_of_lists_append(dict_of_lists, new_data, index):
 
 class PolicyWorker:
     def __init__(
-            self, worker_idx, policy_id, cfg, obs_space, action_space, traj_buffers, policy_queue, actor_queues,
-            report_queue, task_queue,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, traj_buffers, policy_queue, actor_queues,
+        report_queue, task_queue, policy_lock,
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
@@ -37,7 +37,8 @@ class PolicyWorker:
 
         self.device = None
         self.actor_critic = None
-        self.shared_model = None
+        self.shared_model_weights = None
+        self.policy_lock = policy_lock
 
         self.policy_queue = policy_queue
         self.actor_queues = actor_queues
@@ -51,8 +52,9 @@ class PolicyWorker:
 
         self.traj_buffers = traj_buffers
         self.tensors_individual_transitions = self.traj_buffers.tensors_individual_transitions
+        self.policy_versions = traj_buffers.policy_versions
 
-        self.latest_policy_version = 0
+        self.latest_policy_version = -1
 
         self.requests = []
 
@@ -119,20 +121,6 @@ class PolicyWorker:
 
         self.requests = []
 
-    def _update_weights(self, weight_update, timing):
-        if weight_update is None:
-            return
-
-        with timing.timeit('weight_update'):
-            policy_version, state_dict, discarding_rate = weight_update
-            self.actor_critic.load_state_dict(state_dict)
-            self.latest_policy_version = policy_version
-
-        log.info(
-            'Updated weights on worker %d-%d, policy_version %d (%.5f)',
-            self.policy_id, self.worker_idx, policy_version, timing.weight_update,
-        )
-
     def _enqueue_policy_outputs(self, requests, output_tensors):
         output_idx = 0
         outputs_ready = set()
@@ -150,6 +138,25 @@ class PolicyWorker:
         for actor_idx, split_idx in outputs_ready:
             advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
             self.actor_queues[actor_idx].put((TaskType.ROLLOUT_STEP, advance_rollout_request))
+
+    def _init_model(self, init_model_data):
+        policy_version, state_dict = init_model_data
+        self.actor_critic.load_state_dict(state_dict)
+        self.shared_model_weights = state_dict
+        self.latest_policy_version = policy_version
+
+    def _update_weights(self, timing):
+        learner_policy_version = self.policy_versions[self.policy_id].item()
+        if self.latest_policy_version < learner_policy_version and self.shared_model_weights is not None:
+            with timing.timeit('weight_update'):
+                with self.policy_lock:
+                    self.actor_critic.load_state_dict(self.shared_model_weights)
+
+            self.latest_policy_version = learner_policy_version
+            log.info(
+                'Updated weights on worker %d-%d, policy_version %d (%.5f)',
+                self.policy_id, self.worker_idx, self.latest_policy_version, timing.weight_update,
+            )
 
     # noinspection PyProtectedMember
     def _run(self):
@@ -183,10 +190,12 @@ class PolicyWorker:
             try:
                 try:
                     with timing.timeit('wait_policy'), timing.add_time('wait_policy_total'):
-                        policy_requests = self.policy_queue.get_many(timeout=0.01)
+                        policy_requests = self.policy_queue.get_many(timeout=0.005)
                     self.requests.extend(policy_requests)
                 except Empty:
                     pass
+
+                self._update_weights(timing)
 
                 with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
                     if self.initialized:
@@ -203,20 +212,20 @@ class PolicyWorker:
                     elif task_type == TaskType.TERMINATE:
                         self.terminate = True
                         break
-                    elif task_type == TaskType.UPDATE_WEIGHTS:
-                        with timing.timeit('updates'):
-                            self._update_weights(data, timing)
+                    elif task_type == TaskType.INIT_MODEL:
+                        self._init_model(data)
 
                     self.task_queue.task_done()
                 except Empty:
                     pass
 
-                if time.time() - last_report > 3.0 and 'one_step' in timing and len(request_count) > 0:
+                if time.time() - last_report > 3.0 and 'one_step' in timing:
                     timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
                     samples_since_last_report = self.total_num_samples - last_report_samples
 
                     stats = memory_stats('policy_worker', self.device)
-                    stats['avg_request_count'] = np.mean(request_count)
+                    if len(request_count) > 0:
+                        stats['avg_request_count'] = np.mean(request_count)
 
                     self.report_queue.put(dict(
                         timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,

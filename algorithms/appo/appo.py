@@ -363,11 +363,14 @@ class APPO(Algorithm):
                 policy_worker_queues[policy_id].append(TorchJoinableQueue())
 
         log.info('Initializing GPU learners...')
+        policy_locks = [multiprocessing.Lock() for _ in range(self.cfg.num_policies)]
+
         learner_idx = 0
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
                 self.report_queue, policy_worker_queues[policy_id], self.traj_buffers,
+                policy_locks[policy_id],
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -386,6 +389,7 @@ class APPO(Algorithm):
                 policy_worker = PolicyWorker(
                     i, policy_id, self.cfg, self.obs_space, self.action_space, self.traj_buffers,
                     policy_queue, actor_queues, self.report_queue, policy_worker_queues[policy_id][i],
+                    policy_locks[policy_id],
                 )
                 self.policy_workers[policy_id].append(policy_worker)
                 policy_worker.start_process()

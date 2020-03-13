@@ -30,6 +30,7 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_o
 class LearnerWorker:
     def __init__(
         self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues, traj_buffers,
+        policy_lock,
     ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
@@ -50,10 +51,12 @@ class LearnerWorker:
 
         self.rollout_tensors = traj_buffers.tensor_trajectories
         self.traj_tensors_available = traj_buffers.is_traj_tensor_available
+        self.policy_versions = traj_buffers.policy_versions
 
         self.device = None
         self.actor_critic = None
         self.optimizer = None
+        self.policy_lock = policy_lock
 
         self.task_queue = fast_queue.Queue()
         self.report_queue = report_queue
@@ -71,7 +74,6 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # this only exists for debugging purposes
-        self.with_weight_updates = True  # this only exists for debugging purposes
         self.train_in_background = True  # this only exists for debugging purposes
 
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
@@ -105,12 +107,12 @@ class LearnerWorker:
     def _terminate(self):
         self.terminate = True
 
-    def _broadcast_weights(self, discarding_rate):
+    def _broadcast_model_weights(self):
         state_dict = self.actor_critic.state_dict()
         policy_version = self.train_step
-        weight_update = (policy_version, state_dict, discarding_rate)
+        model_state = (policy_version, state_dict)
         for q in self.policy_worker_queues:
-            q.put((TaskType.UPDATE_WEIGHTS, weight_update))
+            q.put((TaskType.INIT_MODEL, model_state))
 
     def _calculate_gae(self, buffer):
         """
@@ -529,7 +531,9 @@ class LearnerWorker:
                         with timing.add_time('clip'):
                             torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
-                    self.optimizer.step()
+                    with self.policy_lock:
+                        self.optimizer.step()
+
                     num_sgd_steps += 1
 
                 with torch.no_grad():
@@ -700,7 +704,7 @@ class LearnerWorker:
 
             self.load_from_checkpoint(self.policy_id)
 
-            self._broadcast_weights(self._discarding_rate())  # sync the very first version of the weights
+            self._broadcast_model_weights()  # sync the very first version of the weights
 
         self.train_thread_initialized.set()
 
@@ -718,6 +722,7 @@ class LearnerWorker:
 
             # log.debug('Training policy %d on %d samples', self.policy_id, samples)
             train_stats = self._train(buffer, experience_size, timing)
+            self.policy_versions[self.policy_id] = self.train_step
 
             if train_stats is not None:
                 stats['train'] = train_stats
@@ -732,9 +737,6 @@ class LearnerWorker:
                 stats['train']['discarding_rate'] = discarding_rate
 
                 stats['stats'] = memory_stats('learner', self.device)
-
-            if self.with_weight_updates:
-                self._broadcast_weights(discarding_rate)
 
         self.report_queue.put(stats)
 

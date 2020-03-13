@@ -128,6 +128,9 @@ class TrajectoryBuffers:
         self.policy_output_tensors.share_memory_()
         self.policy_output_tensors = to_numpy(self.policy_output_tensors, 4)
 
+        self.policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
+        self.policy_versions.share_memory_()
+
     def calc_num_trajectory_buffers(self):
         # calculate how many buffers are required per env runner to collect one "macro batch" for training
         # once macro batch is collected, all buffers will be released
