@@ -1,8 +1,9 @@
-import select
 import signal
+import time
+from collections import deque
 from queue import Empty
 
-import time
+import numpy as np
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
@@ -22,8 +23,8 @@ def dict_of_lists_append(dict_of_lists, new_data, index):
 
 class PolicyWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, traj_buffers, policy_queue, actor_queues,
-        report_queue, task_queue,
+            self, worker_idx, policy_id, cfg, obs_space, action_space, traj_buffers, policy_queue, actor_queues,
+            report_queue, task_queue,
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
@@ -174,69 +175,64 @@ class PolicyWorker:
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
 
-        queues = [self.task_queue._reader, self.policy_queue._reader]
-        queues_by_handle = dict()
-        queues_by_handle[self.policy_queue._reader._handle] = self.policy_queue
-        queues_by_handle[self.task_queue._reader._handle] = self.task_queue
-
         last_report = last_cache_cleanup = time.time()
         last_report_samples = 0
+        request_count = deque(maxlen=20)
 
         while not self.terminate:
             try:
-                with timing.add_time('gpu_waiting'), timing.timeit('wait_policy'):
-                    ready, _, _ = select.select(queues, [], [], 0.1)
+                try:
+                    with timing.timeit('wait_policy'), timing.add_time('wait_policy_total'):
+                        policy_requests = self.policy_queue.get_many(timeout=0.01)
+                    self.requests.extend(policy_requests)
+                except Empty:
+                    pass
 
-                with timing.add_time('work'):
-                    for readable_queue in ready:
-                        q = queues_by_handle[readable_queue._handle]
+                with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
+                    if self.initialized:
+                        if len(self.requests) > 0:
+                            request_count.append(len(self.requests))
+                            self._handle_policy_steps(timing)
 
-                        with timing.add_time('loop'):
-                            while True:
-                                try:
-                                    task_type, data = q.get_nowait()
+                try:
+                    task_type, data = self.task_queue.get_nowait()
 
-                                    if task_type == TaskType.POLICY_STEP:
-                                        self.requests.append(data)
-                                    else:
-                                        # task from the task_queue
-                                        if task_type == TaskType.INIT:
-                                            self._init()
-                                        elif task_type == TaskType.TERMINATE:
-                                            self.terminate = True
-                                            break
-                                        elif task_type == TaskType.UPDATE_WEIGHTS:
-                                            with timing.timeit('updates'):
-                                                self._update_weights(data, timing)
+                    # task from the task_queue
+                    if task_type == TaskType.INIT:
+                        self._init()
+                    elif task_type == TaskType.TERMINATE:
+                        self.terminate = True
+                        break
+                    elif task_type == TaskType.UPDATE_WEIGHTS:
+                        with timing.timeit('updates'):
+                            self._update_weights(data, timing)
 
-                                        self.task_queue.task_done()
+                    self.task_queue.task_done()
+                except Empty:
+                    pass
 
-                                except Empty:
-                                    break
+                if time.time() - last_report > 3.0 and 'one_step' in timing and len(request_count) > 0:
+                    timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
+                    samples_since_last_report = self.total_num_samples - last_report_samples
 
-                    with timing.timeit('one_step'), timing.add_time('handle_policy_step'):
-                        if self.initialized:
-                            if len(self.requests) > 0:
-                                self._handle_policy_steps(timing)
+                    stats = memory_stats('policy_worker', self.device)
+                    stats['avg_request_count'] = np.mean(request_count)
 
-                    if time.time() - last_report > 3.0 and 'one_step' in timing:
-                        timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
-                        samples_since_last_report = self.total_num_samples - last_report_samples
+                    self.report_queue.put(dict(
+                        timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
+                    ))
+                    last_report = time.time()
+                    last_report_samples = self.total_num_samples
 
-                        stats = memory_stats('policy_worker', self.device)
-
-                        self.report_queue.put(dict(
-                            timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
-                        ))
-                        last_report = time.time()
-                        last_report_samples = self.total_num_samples
-
-                    if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
-                        torch.cuda.empty_cache()
-                        last_cache_cleanup = time.time()
+                if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
+                    torch.cuda.empty_cache()
+                    last_cache_cleanup = time.time()
 
             except KeyboardInterrupt:
                 log.warning('Keyboard interrupt detected on worker %d-%d', self.policy_id, self.worker_idx)
+                self.terminate = True
+            except:
+                log.exception('Unknown exception on policy worker')
                 self.terminate = True
 
         log.info('Policy worker timing: %s', timing)

@@ -1,17 +1,17 @@
 import random
 import signal
+import time
 from collections import OrderedDict
+from queue import Empty
 
 import numpy as np
 import psutil
-import time
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
 from algorithms.appo.appo_utils import TaskType, cores_for_worker_process, make_env_func
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.algo_utils import num_env_steps
-from algorithms.utils.multi_env import safe_get
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill
@@ -474,8 +474,7 @@ class ActorWorker:
     def _enqueue_policy_request(self, split_idx, policy_inputs):
         for policy_id, requests in policy_inputs.items():
             policy_request = (self.worker_idx, split_idx, requests)
-            # TODO: replace with fast queue
-            self.policy_queues[policy_id].put((TaskType.POLICY_STEP, policy_request))
+            self.policy_queues[policy_id].put(policy_request)
 
     def _enqueue_complete_rollouts(self, split_idx, complete_rollouts):
         """Send complete rollouts from VectorEnv to the learner."""
@@ -562,37 +561,47 @@ class ActorWorker:
         torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()
-        initialized = False
 
         last_report = time.time()
         with torch.no_grad():
             while not self.terminate:
-                with timing.add_time('waiting'), timing.timeit('wait_actor'):
-                    timeout = 1 if initialized else 1e3
-                    task_type, data = safe_get(self.task_queue, timeout=timeout)
-
-                if task_type == TaskType.INIT:
-                    self._init()
-                    continue
-
-                if task_type == TaskType.TERMINATE:
-                    self._terminate()
-                    break
-
                 try:
-                    # handling actual workload
-                    if task_type == TaskType.ROLLOUT_STEP:
-                        if 'work' not in timing:
-                            timing.waiting = 0  # measure waiting only after real work has started
+                    try:
+                        with timing.add_time('waiting'), timing.timeit('wait_actor'):
+                            tasks = self.task_queue.get_many(timeout=0.1)
+                    except Empty:
+                        tasks = []
 
-                        with timing.add_time('work'), timing.timeit('one_step'):
-                            self._advance_rollouts(data, timing)
-                            initialized = True
-                    elif task_type == TaskType.RESET:
-                            with timing.add_time('reset'):
-                                self._handle_reset()
-                    elif task_type == TaskType.PBT:
-                        self._process_pbt_task(data)
+                    for task in tasks:
+                        task_type, data = task
+
+                        if task_type == TaskType.INIT:
+                            self._init()
+                            continue
+
+                        if task_type == TaskType.TERMINATE:
+                            self._terminate()
+                            break
+
+                        # handling actual workload
+                        if task_type == TaskType.ROLLOUT_STEP:
+                            if 'work' not in timing:
+                                timing.waiting = 0  # measure waiting only after real work has started
+
+                            with timing.add_time('work'), timing.timeit('one_step'):
+                                self._advance_rollouts(data, timing)
+                        elif task_type == TaskType.RESET:
+                                with timing.add_time('reset'):
+                                    self._handle_reset()
+                        elif task_type == TaskType.PBT:
+                            self._process_pbt_task(data)
+
+                    if time.time() - last_report > 5.0 and 'one_step' in timing:
+                        timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
+                        memory_mb = memory_consumption_mb()
+                        stats = dict(memory_actor=memory_mb)
+                        self.report_queue.put(dict(timing=timing_stats, stats=stats))
+                        last_report = time.time()
 
                 except RuntimeError as exc:
                     log.warning('Error while processing data w: %d, exception: %s', self.worker_idx, exc)
@@ -601,16 +610,12 @@ class ActorWorker:
                     self.report_queue.put(dict(critical_error=self.worker_idx))
                 except KeyboardInterrupt:
                     self.terminate = True
+                except:
+                    log.exception('Unknown exception in rollout worker')
+                    self.terminate = True
 
-                if time.time() - last_report > 5.0 and 'one_step' in timing:
-                    timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
-                    memory_mb = memory_consumption_mb()
-                    stats = dict(memory_actor=memory_mb)
-                    self.report_queue.put(dict(timing=timing_stats, stats=stats))
-                    last_report = time.time()
-
-            if self.worker_idx <= 1:
-                log.info('Env runner %d, rollouts %d: timing %s', self.worker_idx, self.num_complete_rollouts, timing)
+        if self.worker_idx <= 1:
+            log.info('Env runner %d, rollouts %d: timing %s', self.worker_idx, self.num_complete_rollouts, timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))

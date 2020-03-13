@@ -23,6 +23,8 @@ from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes
 
+import fast_queue
+
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -37,20 +39,26 @@ class Algorithm:
 
         p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
 
-        p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N train steps in the beginning of training')
+        p.add_argument('--initial_save_rate', default=1000, type=int,
+                       help='Save model every N train steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
-        p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
+        p.add_argument('--save_milestones_sec', default=-1, type=int,
+                       help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
 
-        p.add_argument('--stats_episodes', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
+        p.add_argument('--stats_episodes', default=100, type=int,
+                       help='How many episodes to average to measure performance (avg. reward etc)')
 
         p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
 
-        p.add_argument('--train_for_env_steps', default=int(1e10), type=int, help='Stop after all policies are trained for this many env steps')
+        p.add_argument('--train_for_env_steps', default=int(1e10), type=int,
+                       help='Stop after all policies are trained for this many env steps')
         p.add_argument('--train_for_seconds', default=int(1e10), type=int, help='Stop training after this many seconds')
 
         # observation preprocessing
-        p.add_argument('--obs_subtract_mean', default=0.0, type=float, help='Observation preprocessing, mean value to subtract from observation (e.g. 128.0 for 8-bit RGB)')
-        p.add_argument('--obs_scale', default=1.0, type=float, help='Observation preprocessing, divide observation tensors by this scalar (e.g. 128.0 for 8-bit RGB)')
+        p.add_argument('--obs_subtract_mean', default=0.0, type=float,
+                       help='Observation preprocessing, mean value to subtract from observation (e.g. 128.0 for 8-bit RGB)')
+        p.add_argument('--obs_scale', default=1.0, type=float,
+                       help='Observation preprocessing, divide observation tensors by this scalar (e.g. 128.0 for 8-bit RGB)')
 
         # RL
         p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')
@@ -60,12 +68,15 @@ class Algorithm:
                   'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
                   'Loss values become too high which requires a smaller learning rate, etc.'),
         )
-        p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
+        p.add_argument('--reward_clip', default=10.0, type=float,
+                       help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
 
         # policy size and configuration
         p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder')
-        p.add_argument('--encoder', default='convnet_simple', type=str, help='Type of the policy head (e.g. convolutional encoder)')
-        p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
+        p.add_argument('--encoder', default='convnet_simple', type=str,
+                       help='Type of the policy head (e.g. convolutional encoder)')
+        p.add_argument('--hidden_size', default=512, type=int,
+                       help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -79,46 +90,62 @@ class APPO(Algorithm):
         p = parser
         super().add_cli_args(p)
 
-        p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
+        p.add_argument('--adam_eps', default=1e-6, type=float,
+                       help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
         p.add_argument('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
 
-        p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False')
+        p.add_argument('--gae_lambda', default=0.95, type=float,
+                       help='Generalized Advantage Estimation discounting (only used when V-trace is False')
 
-        p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
+        p.add_argument('--rollout', default=32, type=int,
+                       help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-        p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
+        p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int,
+                       help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-        p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
+        p.add_argument('--recurrence', default=32, type=int,
+                       help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
         p.add_argument('--rnn_type', default='gru', type=str, help='Type of RNN cell to use')
 
-        p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
-        p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
+        p.add_argument('--ppo_clip_ratio', default=1.1, type=float,
+                       help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
+        p.add_argument('--ppo_clip_value', default=0.2, type=float,
+                       help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
-        p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
-        p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
+        p.add_argument('--ppo_epochs', default=4, type=int,
+                       help='Number of training epochs before a new batch of experience is collected')
+        p.add_argument('--target_kl', default=0.02, type=float,
+                       help='Target distance from behavior policy at the end of training on each experience batch')
 
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
         p.add_argument(
             '--prior_loss_coeff', default=0.001, type=float,
-            help=('Coefficient for the exploration component of the loss function. Typically this is entropy maximization, but here we use KL-divergence between our policy and a prior.'
-                  'By default prior is a uniform distribution, and this is numerically equivalent to maximizing entropy.'
-                  'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
+            help=(
+                'Coefficient for the exploration component of the loss function. Typically this is entropy maximization, but here we use KL-divergence between our policy and a prior.'
+                'By default prior is a uniform distribution, and this is numerically equivalent to maximizing entropy.'
+                'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
         )
-        p.add_argument('--initial_kl_coeff', default=0.0001, type=float, help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
+        p.add_argument('--initial_kl_coeff', default=0.0001, type=float,
+                       help='Initial value of KL-penalty coefficient. This is adjusted during the training such that policy change stays close to target_kl')
         p.add_argument('--kl_coeff_large', default=0.0, type=float, help='Loss coefficient for the quadratic KL term')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
-        p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-20 range for Atari/VizDoom')
-        p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
+        p.add_argument('--num_envs_per_worker', default=2, type=int,
+                       help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-20 range for Atari/VizDoom')
+        p.add_argument('--worker_num_splits', default=2, type=int,
+                       help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
-        p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
-        p.add_argument('--macro_batch', default=2048, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
-        p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
+        p.add_argument('--policy_workers_per_policy', default=1, type=int,
+                       help='Number of GPU workers that compute policy forward pass (per policy)')
+        p.add_argument('--macro_batch', default=2048, type=int,
+                       help='Amount of experience to collect per policy before passing experience to the learner')
+        p.add_argument('--max_policy_lag', default=25, type=int,
+                       help='Max policy lag in policy versions. Discard all experience that is older than this.')
         p.add_argument(
             '--min_traj_buffers_per_worker', default=2, type=int,
             help='How many shared rollout tensors to allocate per actor worker to exchange information between actors and learners'
@@ -135,30 +162,40 @@ class APPO(Algorithm):
                  'uniform stream. Try increasing this to 100-200 seconds to smoothen the experience distribution in time right from the beginning (it will eventually spread out and settle anyway)',
         )
 
-        p.add_argument('--sync_mode', default=False, type=str2bool, help='Fully synchronous mode to compare against the standard PPO implementation')
+        p.add_argument('--sync_mode', default=False, type=str2bool,
+                       help='Fully synchronous mode to compare against the standard PPO implementation')
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 
-        p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
+        p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int,
+                       help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
-            help=('Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
-                  'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
-                  'that can use parallel CPU cores for level generation.'),
+            help=(
+                'Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
+                'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
+                'that can use parallel CPU cores for level generation.'),
         )
-        p.add_argument('--reset_timeout_seconds', default=60, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
+        p.add_argument('--reset_timeout_seconds', default=60, type=int,
+                       help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
         # PBT stuff
-        p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
-        p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
-        p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
+        p.add_argument('--with_pbt', default=False, type=str2bool,
+                       help='Enables population-based training basic features')
+        p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int,
+                       help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
+        p.add_argument('--pbt_replace_fraction', default=0.3, type=float,
+                       help='A portion of policies performing worst to be replace by better policies (rounded up)')
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
-        p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
-        p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float, help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
+        p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float,
+                       help='Relative gap in true reward when replacing weights of the policy with a better performing one')
+        p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float,
+                       help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
-        p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
+        p.add_argument('--sampler_only', default=False, type=str2bool,
+                       help='Do not send experience to the learner, measuring sampling throughput')
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -317,7 +354,7 @@ class APPO(Algorithm):
 
     # noinspection PyUnresolvedReferences
     def init_workers(self):
-        actor_queues = [TorchQueue() for _ in range(self.cfg.num_workers)]
+        actor_queues = [fast_queue.Queue() for _ in range(self.cfg.num_workers)]
 
         policy_worker_queues = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -342,7 +379,7 @@ class APPO(Algorithm):
         for policy_id in range(self.cfg.num_policies):
             self.policy_workers[policy_id] = []
 
-            policy_queue = TorchQueue()
+            policy_queue = fast_queue.Queue()
             self.policy_queues[policy_id] = policy_queue
 
             for i in range(self.cfg.policy_workers_per_policy):
@@ -485,7 +522,7 @@ class APPO(Algorithm):
 
         if self.cfg.benchmark:
             end |= self.total_env_steps_since_resume >= int(2e6)
-            end |= sum(self.samples_collected) >= int(5e5)
+            end |= sum(self.samples_collected) >= int(1e6)
 
         return end
 

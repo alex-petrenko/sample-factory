@@ -16,7 +16,7 @@ def produce(q, p_idx, num_messages):
     i = 0
     while i < num_messages:
         try:
-            q.put_nowait(make_msg(i))
+            q.put(make_msg(i), timeout=0.01)
 
             if i % 1000 == 0:
                 log.info('Produce: %d %d', i, p_idx)
@@ -33,7 +33,7 @@ def produce(q, p_idx, num_messages):
 def consume(q, p_idx, consume_many):
     while True:
         try:
-            msgs = q.get_many_nowait(consume_many)
+            msgs = q.get_many(consume_many, timeout=0.01)
 
             for msg in msgs:
                 if msg[0] % 1000 == 0:

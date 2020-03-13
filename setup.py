@@ -5,9 +5,9 @@ from setuptools import setup, Extension
 extensions = [
     Extension(
         name='fast_queue',
-        sources=['fast_queue.pyx', 'cpp_fast_queue/lib/fast_queue.cpp'],
+        sources=['fast_queue.pyx', 'cpp_fast_queue/cpp_lib/fast_queue.cpp'],
         language='c++',
-        include_dirs=['cpp_fast_queue/lib'],
+        include_dirs=['cpp_fast_queue/cpp_lib'],
     ),
 ]
 

@@ -12,8 +12,9 @@ from threading import Thread
 
 import numpy as np
 import torch
-from torch.multiprocessing import Process, Queue as TorchQueue, Event as MultiprocessingEvent
+from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
+import fast_queue
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, \
     memory_stats, cuda_envvars
 from algorithms.appo.model import ActorCritic
@@ -54,8 +55,12 @@ class LearnerWorker:
         self.actor_critic = None
         self.optimizer = None
 
-        self.task_queue = TorchQueue()
+        self.task_queue = fast_queue.Queue()
         self.report_queue = report_queue
+
+        self.initialized_event = MultiprocessingEvent()
+        self.initialized_event.clear()
+
         self.model_saved_event = MultiprocessingEvent()
         self.model_saved_event.clear()
 
@@ -95,6 +100,7 @@ class LearnerWorker:
         log.info('Waiting for GPU learner to initialize...')
         self.train_thread_initialized.wait()
         log.info('GPU learner %d initialized', self.worker_idx)
+        self.initialized_event.set()
 
     def _terminate(self):
         self.terminate = True
@@ -200,10 +206,9 @@ class LearnerWorker:
     def _process_rollouts(self, rollouts, timing):
         # log.info('Pending rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
         rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
-        work_done = False
 
         if len(rollouts) < rollouts_in_macro_batch:
-            return rollouts, work_done
+            return rollouts
 
         discard_rollouts = 0
         policy_version = self.train_step
@@ -231,9 +236,7 @@ class LearnerWorker:
             self._process_macro_batch(rollouts_to_process, timing)
             # log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
 
-            work_done = True
-
-        return rollouts, work_done
+        return rollouts
 
     def _get_minibatches(self, experience_size):
         """Generating minibatches for training."""
@@ -849,20 +852,21 @@ class LearnerWorker:
         while not self.terminate:
             while True:
                 try:
-                    task_type, data = self.task_queue.get_nowait()
+                    tasks = self.task_queue.get_many(timeout=0.005)
 
-                    if task_type == TaskType.TRAIN:
-                        with timing.add_time('extract'):
-                            rollouts.extend(self._extract_rollouts(data))
-                            # log.debug('Learner %d has %d rollouts', self.policy_id, len(rollouts))
-                    elif task_type == TaskType.INIT:
-                        self._init()
-                    elif task_type == TaskType.TERMINATE:
-                        log.info('GPU learner timing: %s', timing)
-                        self._terminate()
-                        break
-                    elif task_type == TaskType.PBT:
-                        self._process_pbt_task(data)
+                    for task_type, data in tasks:
+                        if task_type == TaskType.TRAIN:
+                            with timing.add_time('extract'):
+                                rollouts.extend(self._extract_rollouts(data))
+                                # log.debug('Learner %d has %d rollouts', self.policy_id, len(rollouts))
+                        elif task_type == TaskType.INIT:
+                            self._init()
+                        elif task_type == TaskType.TERMINATE:
+                            log.info('GPU learner timing: %s', timing)
+                            self._terminate()
+                            break
+                        elif task_type == TaskType.PBT:
+                            self._process_pbt_task(data)
                 except Empty:
                     break
 
@@ -870,7 +874,7 @@ class LearnerWorker:
                 self.processing_experience_batch.clear()
                 self.processing_experience_batch.wait(timeout=0.01)
 
-            rollouts, work_done = self._process_rollouts(rollouts, timing)
+            rollouts = self._process_rollouts(rollouts, timing)
 
             if not self.train_in_background:
                 while not self.experience_buffer_queue.empty():
@@ -880,21 +884,13 @@ class LearnerWorker:
 
             self._experience_collection_rate_stats()
 
-            if not work_done:
-                # if we didn't do anything let's sleep to prevent wasting CPU time
-                time.sleep(0.005)
-
         if self.train_in_background:
             self.experience_buffer_queue.put(None)
             self.training_thread.join()
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.put((TaskType.EMPTY, None))
-
-        # wait until we finished initializing
-        while self.task_queue.qsize() > 0:
-            time.sleep(0.01)
+        self.initialized_event.wait()
 
     def save_model(self, timeout=None):
         self.model_saved_event.clear()
@@ -1011,21 +1007,22 @@ class LearnerWorker:
 # [2020-02-11 20:59:56,606][28705] Collected {0: 2015232}, FPS: 41630.1
 # [2020-02-11 20:59:56,606][28705] Timing: experience: 48.4080
 
-# Version V68 (numpy arrays with dtype=object to access shared memory, only on rollout workers and policy workers)
-# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v68_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
-# [2020-03-12 22:29:09,957][23631] Env runner 0, rollouts 158: timing wait_actor: 0.0002, waiting: 7.2795, reset: 12.1278, save_policy_outputs: 1.1250, env_step: 34.8071, overhead: 1.1319, complete_rollouts: 0.0164, enqueue_policy_requests: 0.1276, one_step: 0.0149, work: 39.2881, wait_buffers: 0.2515
-# [2020-03-12 22:29:09,924][23633] Env runner 1, rollouts 156: timing wait_actor: 0.0001, waiting: 7.6706, reset: 11.9427, save_policy_outputs: 1.1427, env_step: 34.4569, overhead: 1.1118, complete_rollouts: 0.0118, enqueue_policy_requests: 0.1344, one_step: 0.0124, work: 38.9358, wait_buffers: 0.2657
-# [2020-03-12 22:29:09,941][23630] Policy worker timing: init: 1.7136, wait_policy: 0.0002, gpu_waiting: 21.7480, weight_update: 0.0005, updates: 0.0007, loop: 8.7113, handle_policy_step: 28.6445, one_step: 0.0000, work: 37.5484, deser_obs: 1.0180, deserialize: 2.9807, to_device: 10.7819, forward: 5.8863, postprocess: 5.8134
-# [2020-03-12 22:29:09,950][23614] GPU learner timing: extract: 1.9862, buffers: 0.0629, tensors: 11.8466, buff_ready: 0.4987, prepare: 12.6664
-# [2020-03-12 22:29:10,025][23614] Train loop timing: init: 1.3608, train_wait: 0.0635, tensors_gpu_float: 4.5027, bptt: 5.7046, vtrace: 2.5041, losses: 0.6139, clip: 6.1590, update: 13.3305, train: 32.2863
-# [2020-03-12 22:29:10,191][23524] Collected {0: 2015232}, FPS: 43408.0
-# [2020-03-12 22:29:10,191][23524] Timing: experience: 46.4254
+# Version V69 (numpy arrays with dtype=object to access shared memory, on all components)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v69_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-03-13 02:01:33,655][11226] Env runner 0, rollouts 800: timing wait_actor: 0.0001, waiting: 6.8923, reset: 9.7055, save_policy_outputs: 1.1013, env_step: 34.8643, overhead: 2.6461, complete_rollouts: 0.0163, enqueue_policy_requests: 0.1268, one_step: 0.0149, work: 40.6362, wait_buffers: 0.0416
+# [2020-03-13 02:01:33,717][11228] Env runner 1, rollouts 780: timing wait_actor: 0.0056, waiting: 7.2380, reset: 12.4794, save_policy_outputs: 1.1331, env_step: 34.3026, overhead: 2.6869, complete_rollouts: 0.0106, enqueue_policy_requests: 0.1320, one_step: 0.0149, work: 40.2842, wait_buffers: 0.2142
+# [2020-03-13 02:01:33,701][11225] Policy worker timing: init: 1.7734, wait_policy: 0.0050, gpu_waiting: 23.6931, weight_update: 0.0005, updates: 0.0007, loop: 9.1436, handle_policy_step: 28.1835, one_step: 0.0000, work: 37.5288, deserialize: 1.2307, to_device: 11.0009, forward: 6.2592, postprocess: 6.3423
+# [2020-03-13 02:01:33,711][11207] GPU learner timing: extract: 0.2552, buffers: 0.0665, tensors: 12.2804, buff_ready: 0.4470, prepare: 12.8576
+# [2020-03-13 02:01:33,739][11207] Train loop timing: init: 1.3547, train_wait: 0.0001, tensors_gpu_float: 4.7140, bptt: 6.1209, vtrace: 2.3818, losses: 0.7224, clip: 6.4046, update: 13.7435, train: 33.4576
+# [2020-03-13 02:01:33,937][11111] Collected {0: 2007040}, FPS: 42423.2
+# [2020-03-13 02:01:33,937][11111] Timing: experience: 47.3100
 
-# Version V68 (numpy arrays with dtype=object to access shared memory, on all components)
-# [2020-03-12 22:42:27,060][04045] GPU learner timing: extract: 0.2020, buffers: 0.0660, tensors: 12.2419, buff_ready: 0.5300, prepare: 12.9209
-# [2020-03-12 22:42:27,090][04063] Policy worker timing: init: 1.9041, wait_policy: 0.0002, gpu_waiting: 23.8118, weight_update: 0.0005, updates: 0.0007, loop: 8.5428, handle_policy_step: 27.3458, one_step: 0.0000, work: 36.0643, deserialize: 1.1677, to_device: 10.7167, forward: 6.2745, postprocess: 5.8543
-# [2020-03-12 22:42:27,092][04067] Env runner 1, rollouts 156: timing wait_actor: 0.0002, waiting: 7.1287, reset: 13.0993, save_policy_outputs: 1.1169, env_step: 34.5407, overhead: 1.1547, complete_rollouts: 0.0118, enqueue_policy_requests: 0.1266, one_step: 0.0144, work: 38.8725, wait_buffers: 0.1057
-# [2020-03-12 22:42:27,115][04064] Env runner 0, rollouts 160: timing wait_actor: 0.0002, waiting: 6.6063, reset: 10.6103, save_policy_outputs: 1.1426, env_step: 35.0822, overhead: 1.1878, complete_rollouts: 0.0122, enqueue_policy_requests: 0.1226, one_step: 0.0180, work: 39.4019
-# [2020-03-12 22:42:27,142][04045] Train loop timing: init: 1.3917, train_wait: 0.0137, tensors_gpu_float: 4.8263, bptt: 6.0634, vtrace: 2.4377, losses: 0.6723, clip: 6.4343, update: 13.3916, train: 33.3124
-# [2020-03-12 22:42:27,360][03950] Collected {0: 2015232}, FPS: 43998.9
-# [2020-03-12 22:42:27,360][03950] Timing: experience: 45.8019
+# Version V70 (new queues)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v70_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-03-13 05:41:33,867][27104] Env runner 0, rollouts 810: timing wait_actor: 0.0000, waiting: 4.8948, reset: 12.3130, save_policy_outputs: 1.1351, env_step: 34.4284, overhead: 2.6341, complete_rollouts: 0.0115, enqueue_policy_requests: 0.1613, one_step: 0.0143, work: 40.2222
+# [2020-03-13 05:41:33,869][27106] Env runner 1, rollouts 790: timing wait_actor: 0.0000, waiting: 5.6380, reset: 10.6275, save_policy_outputs: 1.0901, env_step: 33.9549, overhead: 2.5067, complete_rollouts: 0.0110, enqueue_policy_requests: 0.1773, one_step: 0.0327, work: 39.5129
+# [2020-03-13 05:41:33,829][27103] Policy worker timing: init: 1.7287, wait_policy_total: 16.8390, wait_policy: 0.0022, handle_policy_step: 41.4499, one_step: 0.0043, weight_update: 0.0004, updates: 0.0007, deserialize: 1.4689, to_device: 13.1793, forward: 11.4226, postprocess: 10.6741
+# [2020-03-13 05:41:33,839][27085] GPU learner timing: extract: 0.2827, buffers: 0.0705, tensors: 11.6516, buff_ready: 0.5000, prepare: 12.3128
+# [2020-03-13 05:41:33,853][27085] Train loop timing: init: 1.3051, train_wait: 0.0000, tensors_gpu_float: 4.5831, bptt: 6.0317, vtrace: 2.4454, losses: 0.7526, clip: 6.2237, update: 13.2196, train: 32.9858
+# [2020-03-13 05:41:34,053][26983] Collected {0: 2015232}, FPS: 44822.8
+# [2020-03-13 05:41:34,053][26983] Timing: experience: 44.9600

@@ -131,3 +131,5 @@ train_dir_old/**
 *.swo
 *~
 
+cmake-build*
+fast_queue.cpp

@@ -4,6 +4,7 @@
 
 import ctypes
 import multiprocessing
+import time
 
 from ctypes import c_size_t
 from multiprocessing import context
@@ -69,9 +70,9 @@ class Queue:
         """
         return self.closed.value
 
-    def put_nowait(self, x):
+    def put(self, x, block=True, timeout=float(1e3)):
         x = _ForkingPickler.dumps(x).tobytes()
-        status = Q.queue_put(<void *>q_addr(self), <void *>buf_addr(self), <void *>bytes_to_ptr(x), len(x))
+        status = Q.queue_put(<void *>q_addr(self), <void *>buf_addr(self), <void *>bytes_to_ptr(x), len(x), int(block), timeout)
 
         if status == Q.Q_SUCCESS:
             pass
@@ -80,10 +81,10 @@ class Queue:
         else:
             raise Exception(f'Unexpected queue error {status}')
 
-    def get_nowait(self):
-        return self.get_many_nowait(max_messages_to_get=1)[0]
+    def put_nowait(self, x):
+        return self.put(x, block=False)
 
-    def get_many_nowait(self, max_messages_to_get=int(1e9)):
+    def get_many(self, block=True, timeout=float(1e3), max_messages_to_get=int(1e9)):
         messages_read = ctypes.c_size_t(0)
         cdef size_t messages_read_ptr = ctypes.addressof(messages_read)
 
@@ -101,6 +102,7 @@ class Queue:
             <size_t *>messages_read_ptr,
             <size_t *>bytes_read_ptr,
             <size_t *>messages_size_ptr,
+            int(block), timeout,
         )
 
         if status == Q.Q_MSG_BUFFER_TOO_SMALL and messages_read.value <= 0:
@@ -125,6 +127,15 @@ class Queue:
             raise Empty()
         else:
             raise Exception(f'Unexpected queue error {status}')
+
+    def get_many_nowait(self, max_messages_to_get=int(1e9)):
+        return self.get_many(block=False, max_messages_to_get=max_messages_to_get)
+
+    def get(self, block=True, timeout=float(1e3)):
+        return self.get_many(block=block, timeout=timeout, max_messages_to_get=1)[0]
+
+    def get_nowait(self):
+        return self.get(block=False)
 
     def parse_messages(self, num_messages, total_bytes, msg_buffer):
         messages = [None] * num_messages
