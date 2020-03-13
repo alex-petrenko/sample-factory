@@ -109,13 +109,13 @@ class ActorState:
             actions = actions.item()
         return actions
 
-    def record_env_step(self, reward, done, info, rollout_step, traj_buffer_idx):
+    def record_env_step(self, reward, done, info, traj_buffer_idx, rollout_step):
         # policy inputs (obs) and policy outputs (actions, values, ...) for the current rollout step
         # are already added to the trajectory buffer
         # the only job remaining is to add auxiliary data: rewards, done flags, etc.
 
-        self.traj_tensors['rewards'][traj_buffer_idx, rollout_step] = float(reward)
-        self.traj_tensors['dones'][traj_buffer_idx, rollout_step] = done
+        self.traj_tensors['rewards'][traj_buffer_idx, rollout_step][0] = float(reward)
+        self.traj_tensors['dones'][traj_buffer_idx, rollout_step][0] = done
 
         env_steps = num_env_steps([info])
         self.rollout_env_steps += env_steps
@@ -265,7 +265,7 @@ class VectorEnvRunner:
             actor_state = env_actor_states[agent_i]
 
             actor_state.record_env_step(
-                rewards[agent_i], dones[agent_i], infos[agent_i], self.rollout_step, self.traj_buffer_idx,
+                rewards[agent_i], dones[agent_i], infos[agent_i], self.traj_buffer_idx, self.rollout_step,
             )
 
             actor_state.last_obs = new_obs[agent_i]

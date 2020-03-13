@@ -112,8 +112,8 @@ class LearnerWorker:
         similar to V-trace.
         """
 
-        rewards = torch.stack(buffer.rewards).numpy()  # [E, T]
-        dones = torch.stack(buffer.dones).numpy()  # [E, T]
+        rewards = torch.stack(buffer.rewards).numpy().squeeze()  # [E, T]
+        dones = torch.stack(buffer.dones).numpy().squeeze()  # [E, T]
         values_arr = torch.stack(buffer.values).numpy().squeeze()  # [E, T]
 
         # calculating fake values for the last step in the rollout
@@ -173,7 +173,7 @@ class LearnerWorker:
                 d[key] = torch.cat(value, dim=0)
 
             # will squeeze actions only in simple categorical case
-            tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values']
+            tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
             for tensor_name in tensors_to_squeeze:
                 buffer[tensor_name].squeeze_()
 

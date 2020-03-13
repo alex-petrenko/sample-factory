@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from gym import spaces
 
-from algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively
+from algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively, iterate_recursively
 from algorithms.appo.model import get_hidden_size
 from algorithms.utils.action_distributions import calc_num_logits
 from utils.utils import log
@@ -31,6 +31,13 @@ def to_numpy_func(t, arr):
     else:
         for i in range(t.shape[0]):
             to_numpy_func(t[i], arr[i])
+
+
+def ensure_memory_shared(*tensors):
+    """To prevent programming errors, ensure all tensors are in shared memory."""
+    for tensor_dict in tensors:
+        for _, _, t in iterate_recursively(tensor_dict):
+            assert t.is_shared()
 
 
 class PolicyOutput:
@@ -66,8 +73,8 @@ class TrajectoryBuffers:
             raise Exception('Only Dict observations spaces are supported')
 
         # env outputs
-        self.tensors['rewards'] = self.init_tensor(torch.float32, [])
-        self.tensors['dones'] = self.init_tensor(torch.bool, [])
+        self.tensors['rewards'] = self.init_tensor(torch.float32, [1])
+        self.tensors['dones'] = self.init_tensor(torch.bool, [1])
 
         # policy outputs
         policy_outputs = [
@@ -84,6 +91,8 @@ class TrajectoryBuffers:
 
         for po in policy_outputs:
             self.tensors[po.name] = self.init_tensor(torch.float32, [po.size])
+
+        ensure_memory_shared(self.tensors)
 
         self.tensors_individual_transitions = self.tensor_dict_to_numpy(len(self.tensor_dimensions()))
         self.tensor_trajectories = self.tensor_dict_to_numpy(len(self.tensor_dimensions()) - 1)
