@@ -426,16 +426,16 @@ class LearnerWorker:
                     core_outputs = []
                     for i in range(recurrence):
                         # indices of head outputs corresponding to the current timestep
-                        with timing.add_time('head_out_index'):
-                            step_head_outputs = head_outputs[i::recurrence]
+                        step_head_outputs = head_outputs[i::recurrence]
 
                         with timing.add_time('forward_core'):
                             core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
                             core_outputs.append(core_output)
 
                         # zero-out RNN states on the episode boundary
-                        dones = mb.dones[i::recurrence].unsqueeze(dim=1)
-                        rnn_states = (1.0 - dones) * rnn_states
+                        with timing.add_time('bptt_dones'):
+                            dones = mb.dones[i::recurrence].unsqueeze(dim=1)
+                            rnn_states = (1.0 - dones) * rnn_states
 
                 with timing.add_time('tail'):
                     # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
@@ -1031,3 +1031,13 @@ class LearnerWorker:
 # [2020-03-14 00:43:41,782][11353] GPU learner timing: extract: 0.1827, buffers: 0.0695, tensors: 8.7560, buff_ready: 0.3020, tensors_gpu_float: 5.9617, prepare: 15.1426
 # [2020-03-14 00:43:41,916][11262] Collected {0: 2015232}, FPS: 46341.4
 # [2020-03-14 00:43:41,916][11262] Timing: experience: 43.4867
+
+# Version V76 (Pytorch 1.4, faster indexing, faster batching. Improvements mostly in the learner)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v76_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-03-14 05:20:45,029][09278] Env runner 0, rollouts 810: timing wait_actor: 0.0000, waiting: 1.4923, reset: 11.3817, save_policy_outputs: 1.0137, env_step: 36.3330, overhead: 3.8381, complete_rollouts: 0.0150, enqueue_policy_requests: 0.1605, one_step: 0.0148, work: 43.4425
+# [2020-03-14 05:20:45,041][09279] Env runner 1, rollouts 780: timing wait_actor: 0.0070, waiting: 1.7666, reset: 13.1651, save_policy_outputs: 1.0001, env_step: 36.2509, overhead: 3.8008, complete_rollouts: 0.0194, enqueue_policy_requests: 0.1582, one_step: 0.0160, work: 43.1787
+# [2020-03-14 05:20:45,276][09277] Policy worker avg. requests 2.54, timing: init: 1.7812, wait_policy_total: 17.5261, wait_policy: 0.0022, handle_policy_step: 42.9551, one_step: 0.0022, deserialize: 1.7076, obs_to_device: 5.0701, stack: 14.8308, forward: 14.4700, postprocess: 5.5982, weight_update: 0.0004
+# [2020-03-14 05:20:45,383][09251] GPU learner timing: extract: 0.1829, buffers: 0.0667, batching: 5.2437, buff_ready: 0.2342, tensors_gpu_float: 7.8419, squeeze: 0.0156, prepare: 13.4659, batcher_mem: 5.1972
+# [2020-03-14 05:20:45,689][09251] Train loop timing: init: 1.3501, train_wait: 0.2603, forward_head: 10.0923, head_out_index: 0.0729, forward_core: 4.5256, bptt: 12.1633, tail: 0.7243, vtrace: 1.7064, losses: 0.4411, clip: 8.5073, update: 14.8810, train: 42.8166
+# [2020-03-14 05:20:45,814][09212] Collected {0: 2015232}, FPS: 44886.8
+# [2020-03-14 05:20:45,815][09212] Timing: experience: 44.8958
