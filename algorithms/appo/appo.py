@@ -90,34 +90,26 @@ class APPO(Algorithm):
         p = parser
         super().add_cli_args(p)
 
-        p.add_argument('--adam_eps', default=1e-6, type=float,
-                       help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
+        p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
         p.add_argument('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
 
         p.add_argument('--gae_lambda', default=0.95, type=float,
                        help='Generalized Advantage Estimation discounting (only used when V-trace is False')
 
-        p.add_argument('--rollout', default=32, type=int,
-                       help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
+        p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
-        p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int,
-                       help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
+        p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-        p.add_argument('--recurrence', default=32, type=int,
-                       help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
+        p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
         p.add_argument('--rnn_type', default='gru', type=str, help='Type of RNN cell to use')
 
-        p.add_argument('--ppo_clip_ratio', default=1.1, type=float,
-                       help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
-        p.add_argument('--ppo_clip_value', default=0.2, type=float,
-                       help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
+        p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
+        p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
-        p.add_argument('--ppo_epochs', default=4, type=int,
-                       help='Number of training epochs before a new batch of experience is collected')
-        p.add_argument('--target_kl', default=0.02, type=float,
-                       help='Target distance from behavior policy at the end of training on each experience batch')
+        p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
+        p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
 
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
@@ -126,17 +118,12 @@ class APPO(Algorithm):
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
-        p.add_argument('--num_envs_per_worker', default=2, type=int,
-                       help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-20 range for Atari/VizDoom')
-        p.add_argument('--worker_num_splits', default=2, type=int,
-                       help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
+        p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-20 range for Atari/VizDoom')
+        p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
-        p.add_argument('--policy_workers_per_policy', default=1, type=int,
-                       help='Number of GPU workers that compute policy forward pass (per policy)')
-        p.add_argument('--macro_batch', default=2048, type=int,
-                       help='Amount of experience to collect per policy before passing experience to the learner')
-        p.add_argument('--max_policy_lag', default=25, type=int,
-                       help='Max policy lag in policy versions. Discard all experience that is older than this.')
+        p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
+        p.add_argument('--macro_batch', default=2048, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
+        p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
         p.add_argument(
             '--min_traj_buffers_per_worker', default=2, type=int,
             help='How many shared rollout tensors to allocate per actor worker to exchange information between actors and learners'
@@ -153,13 +140,9 @@ class APPO(Algorithm):
                  'uniform stream. Try increasing this to 100-200 seconds to smoothen the experience distribution in time right from the beginning (it will eventually spread out and settle anyway)',
         )
 
-        p.add_argument('--sync_mode', default=False, type=str2bool,
-                       help='Fully synchronous mode to compare against the standard PPO implementation')
-
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 
-        p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int,
-                       help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
+        p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
             help=(
@@ -186,8 +169,7 @@ class APPO(Algorithm):
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
-        p.add_argument('--sampler_only', default=False, type=str2bool,
-                       help='Do not send experience to the learner, measuring sampling throughput')
+        p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
 
     def __init__(self, cfg):
         super().__init__(cfg)
