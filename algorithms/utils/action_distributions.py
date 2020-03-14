@@ -4,7 +4,6 @@ import torch
 from torch.distributions import Categorical
 from torch.nn import functional
 
-from algorithms.memento.mem_wrapper import MemActionSpace
 from utils.utils import log
 
 
@@ -21,7 +20,7 @@ def calc_num_logits(action_space):
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
 
 
-def get_action_distribution(action_space, raw_logits, mask=None):
+def get_action_distribution(action_space, raw_logits):
     """
     Create the distribution object based on provided action space and unprocessed logits.
     :param action_space: Gym action space object
@@ -30,12 +29,10 @@ def get_action_distribution(action_space, raw_logits, mask=None):
     """
     assert calc_num_logits(action_space) == raw_logits.shape[-1]
 
-    if isinstance(action_space, MemActionSpace):
-        return CategoricalActionDistribution(raw_logits, prior_probs=action_space.prior_probs)
     if isinstance(action_space, gym.spaces.Discrete):
-        return CategoricalActionDistribution(raw_logits)
+        return CategoricalActionDistribution(functional.log_softmax(raw_logits, dim=1))
     elif isinstance(action_space, gym.spaces.Tuple):
-        return TupleActionDistribution(action_space, logits_flat=raw_logits, mask=mask)
+        return TupleActionDistribution(action_space, logits_flat=raw_logits)
     elif isinstance(action_space, gym.spaces.Box):
         # continuous action spaces
         return ContinuousActionDistribution(params=raw_logits)
@@ -59,24 +56,13 @@ class CategoricalActionDistribution(Categorical):
 
     """
 
-    def __init__(self, raw_logits, prior_probs=None):
+    def __init__(self, raw_logits):
         """
         Ctor.
         :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
         """
         log_probabilities = functional.log_softmax(raw_logits, dim=1)
         super().__init__(logits=log_probabilities)
-
-        num_categories = raw_logits.shape[-1]
-
-        if prior_probs is None:
-            # use uniform prior by default
-            self.prior_probs = torch.empty(num_categories, device=raw_logits.device)
-            self.prior_probs.fill_(1.0 / num_categories)
-        else:
-            self.prior_probs = torch.tensor(prior_probs, device=raw_logits.device)
-
-        self.log_prior_probs = self.prior_probs.log()
 
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
@@ -93,16 +79,12 @@ class CategoricalActionDistribution(Categorical):
     def _kl_symmetric(self, other_log_probs):
         return 0.5 * (self._kl(other_log_probs) + self._kl_inverse(other_log_probs))
 
-    def kl_prior(self):
-        return self._kl_symmetric(self.log_prior_probs)
-
     def kl_divergence(self, other):
-        return self._kl_symmetric(other.logits)
+        return self._kl(other.logits)
 
     def dbg_print(self):
         dbg_info = dict(
             entropy=self.entropy().mean(),
-            kl_prior=self.kl_prior().mean(),
             min_logit=self.logits.min(),
             max_logit=self.logits.max(),
             min_prob=self.probs.min(),
@@ -132,18 +114,14 @@ class TupleActionDistribution:
 
     """
 
-    def __init__(self, action_space, logits_flat, mask):
+    def __init__(self, action_space, logits_flat):
         self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
         assert len(self.split_logits) == len(action_space.spaces)
 
         self.distributions = []
         for i, space in enumerate(action_space.spaces):
-            if mask is None or i in mask:
-                self.distributions.append(get_action_distribution(space, self.split_logits[i]))
-            else:
-                random_logits = torch.ones_like(self.split_logits[i])
-                self.distributions.append(get_action_distribution(space, random_logits))
+            self.distributions.append(get_action_distribution(space, self.split_logits[i]))
 
     @staticmethod
     def _flatten_actions(list_of_action_batches):
@@ -186,12 +164,6 @@ class TupleActionDistribution:
         entropy = entropies.sum(dim=1)
         return entropy
 
-    def kl_prior(self):
-        kls = [d.kl_prior().unsqueeze(dim=1) for d in self.distributions]
-        kls = torch.cat(kls, dim=1)
-        kl = kls.sum(dim=1)
-        return kl
-
     def kl_divergence(self, other):
         kls = [
             d.kl_divergence(other_d).unsqueeze(dim=1)
@@ -213,4 +185,3 @@ class ContinuousActionDistribution:
         num_actions = params.shape[-1] // 2
         means, stddevs = torch.split(params, num_actions)
         self.distribution = torch.distributions.normal.Normal(means, stddevs)
-

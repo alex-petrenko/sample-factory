@@ -93,8 +93,6 @@ class LearnerWorker:
         self.discarded_experience_timer = time.time()
         self.num_discarded_rollouts = 0
 
-        self.kl_coeff = self.cfg.initial_kl_coeff
-
         self.process = Process(target=self._run, daemon=True)
 
     def start_process(self):
@@ -323,7 +321,6 @@ class LearnerWorker:
         checkpoint = {
             'train_step': self.train_step,
             'env_steps': self.env_steps,
-            'kl_coeff': self.kl_coeff,
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         }
@@ -388,37 +385,36 @@ class LearnerWorker:
             # noinspection PyArgumentList
             c_hat = torch.Tensor([c_hat])
 
-        clip_ratio_high = self.cfg.ppo_clip_ratio
-        # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
-        clip_ratio_low = 1.0 / clip_ratio_high
+            clip_ratio_high = self.cfg.ppo_clip_ratio
+            # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
+            clip_ratio_low = 1.0 / clip_ratio_high
 
-        clip_value = self.cfg.ppo_clip_value
-        gamma = self.cfg.gamma
+            clip_value = self.cfg.ppo_clip_value
+            gamma = self.cfg.gamma
 
-        kl_old_mean = 0.0
-        rnn_dist = 0.0
+            num_sgd_steps = 0
 
-        num_sgd_steps = 0
-
-        stats = None
-        if not self.with_training:
-            return stats
+            stats = None
+            if not self.with_training:
+                return stats
 
         for epoch in range(self.cfg.ppo_epochs):
             minibatches = self._get_minibatches(experience_size)
 
             for batch_num in range(len(minibatches)):
-                indices = minibatches[batch_num]
+                with timing.add_time('head'):
+                    indices = minibatches[batch_num]
 
-                # current minibatch consisting of short trajectory segments with length == recurrence
-                mb = self._get_minibatch(buffer, indices)
+                    # current minibatch consisting of short trajectory segments with length == recurrence
+                    mb = self._get_minibatch(buffer, indices)
 
-                # calculate policy head outside of recurrent loop
-                head_outputs = self.actor_critic.forward_head(mb.obs)
+                    # calculate policy head outside of recurrent loop
+                    with timing.add_time('forward_head'):
+                        head_outputs = self.actor_critic.forward_head(mb.obs)
 
-                # initial rnn states
-                timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
-                rnn_states = mb.rnn_states[timestep]
+                    # initial rnn states
+                    timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
+                    rnn_states = mb.rnn_states[timestep]
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
@@ -435,23 +431,24 @@ class LearnerWorker:
                         dones = mb.dones[timestep].unsqueeze(dim=1)
                         rnn_states = (1.0 - dones) * rnn_states
 
-                # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
-                # which is the same shape as the minibatch
-                core_outputs = torch.stack(core_outputs)
-                num_timesteps, num_trajectories = core_outputs.shape[:2]
-                assert num_timesteps == self.cfg.recurrence
-                assert num_timesteps * num_trajectories == self.cfg.batch_size
-                core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
-                assert core_outputs.shape[0] == head_outputs.shape[0]
+                with timing.add_time('tail'):
+                    # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
+                    # which is the same shape as the minibatch
+                    core_outputs = torch.stack(core_outputs)
+                    num_timesteps, num_trajectories = core_outputs.shape[:2]
+                    assert num_timesteps == self.cfg.recurrence
+                    assert num_timesteps * num_trajectories == self.cfg.batch_size
+                    core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
+                    assert core_outputs.shape[0] == head_outputs.shape[0]
 
-                # calculate policy tail outside of recurrent loop
-                result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
+                    # calculate policy tail outside of recurrent loop
+                    result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
 
-                action_distribution = result.action_distribution
-                log_prob_actions = action_distribution.log_prob(mb.actions)
-                ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
+                    action_distribution = result.action_distribution
+                    log_prob_actions = action_distribution.log_prob(mb.actions)
+                    ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
-                values = result.values.squeeze()
+                    values = result.values.squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
                     if self.cfg.with_vtrace:
@@ -509,20 +506,10 @@ class LearnerWorker:
                     value_loss = self._value_loss(values, old_values, targets, clip_value)
 
                     # entropy loss
-                    kl_prior = action_distribution.kl_prior()
-                    kl_prior = kl_prior.mean()
-                    prior_loss = self.cfg.prior_loss_coeff * kl_prior
+                    entropy = action_distribution.entropy()
+                    entropy_loss = self.cfg.entropy_loss_coeff * entropy.mean()
 
-                    # small KL penalty for being different from the behavior policy
-                    if self.kl_coeff == 0.0:
-                        kl_old = kl_old_mean = kl_penalty = 0.0
-                    else:
-                        old_action_distribution = get_action_distribution(self.actor_critic.action_space, mb.action_logits)
-                        kl_old = action_distribution.kl_divergence(old_action_distribution)
-                        kl_old_mean = kl_old.mean()
-                        kl_penalty = self.kl_coeff * kl_old_mean
-
-                    loss = policy_loss + value_loss + prior_loss + kl_penalty
+                    loss = policy_loss + value_loss + entropy_loss
 
                 with timing.add_time('update'):
                     # update the weights
@@ -557,12 +544,9 @@ class LearnerWorker:
                         stats.loss = loss
                         stats.value = result.values.mean()
                         stats.entropy = action_distribution.entropy().mean()
-                        stats.kl_prior = kl_prior
                         stats.policy_loss = policy_loss
                         stats.value_loss = value_loss
-                        stats.prior_loss = prior_loss
-                        stats.kl_coeff = self.kl_coeff
-                        stats.kl_penalty = kl_penalty
+                        stats.entropy_loss = entropy_loss
                         stats.adv_min = adv.min()
                         stats.adv_max = adv.max()
                         stats.max_abs_logprob = torch.abs(mb.action_logits).max()
@@ -578,13 +562,17 @@ class LearnerWorker:
                             value_delta = torch.abs(values - old_values)
                             value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
+                            # calculate KL-divergence with the behaviour policy action distribution
+                            old_action_distribution = get_action_distribution(
+                                self.actor_critic.action_space, mb.action_logits,
+                            )
+                            kl_old = action_distribution.kl_divergence(old_action_distribution)
+                            kl_old_mean = kl_old.mean()
+
                             stats.kl_divergence = kl_old_mean
-                            if self.kl_coeff > 0.0:
-                                stats.kl_max = kl_old.max()
                             stats.value_delta = value_delta_avg
                             stats.value_delta_max = value_delta_max
                             stats.fraction_clipped = ((ratio < clip_ratio_low).float() + (ratio > clip_ratio_high).float()).mean()
-                            stats.rnn_dist = rnn_dist
                             stats.ratio_mean = ratio_mean
                             stats.ratio_min = ratio_min
                             stats.ratio_max = ratio_max
@@ -606,16 +594,6 @@ class LearnerWorker:
                             if isinstance(value, torch.Tensor):
                                 stats[key] = value.detach().cpu()
 
-        with torch.no_grad():
-            if self.kl_coeff > 0.0:
-                # adjust KL-penalty coefficient if KL divergence at the end of training is high
-                if kl_old_mean > self.cfg.target_kl:
-                    self.kl_coeff *= 1.5
-                elif kl_old_mean < self.cfg.target_kl / 2:
-                    self.kl_coeff /= 1.5
-                self.kl_coeff = max(self.kl_coeff, 1e-6)
-
-        del buffer
         return stats
 
     def _update_pbt(self):
@@ -655,7 +633,6 @@ class LearnerWorker:
         if load_progress:
             self.train_step = checkpoint_dict['train_step']
             self.env_steps = checkpoint_dict['env_steps']
-        self.kl_coeff = checkpoint_dict['kl_coeff']
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
@@ -873,6 +850,8 @@ class LearnerWorker:
                         elif task_type == TaskType.INIT:
                             self._init()
                         elif task_type == TaskType.TERMINATE:
+                            time.sleep(0.3)
+                            log.info('GPU learner timing: %s', timing)
                             self._terminate()
                             break
                         elif task_type == TaskType.PBT:
@@ -899,9 +878,6 @@ class LearnerWorker:
         if self.train_in_background:
             self.experience_buffer_queue.put(None)
             self.training_thread.join()
-
-        time.sleep(0.3)
-        log.info('GPU learner timing: %s', timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
