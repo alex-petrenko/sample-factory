@@ -205,7 +205,7 @@ class VizdoomEnv(gym.Env):
             init_attempt += 1
             try:
                 if with_locking:
-                    with lock.acquire(timeout=10):
+                    with lock.acquire(timeout=20):
                         self.game.init()
                 else:
                     self.game.init()

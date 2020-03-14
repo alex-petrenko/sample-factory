@@ -76,24 +76,26 @@ class PolicyWorker:
         return requests
 
     def _handle_policy_steps(self, timing):
-        with timing.add_time('deserialize'):
-            observations = AttrDict()
-            rnn_states = []
-
-            traj_tensors = self.traj_buffers.tensors_individual_transitions
-            for request in self.requests:
-                actor_idx, split_idx, request_data = request
-
-                for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
-                    index = actor_idx, split_idx, env_idx, agent_idx, traj_buffer_idx, rollout_step
-                    dict_of_lists_append(observations, traj_tensors['obs'], index)
-                    rnn_states.append(traj_tensors['rnn_states'][index])
-                    self.total_num_samples += 1
-
         with torch.no_grad():
-            with timing.add_time('to_device'):
+            with timing.add_time('deserialize'):
+                observations = AttrDict()
+                rnn_states = []
+
+                traj_tensors = self.traj_buffers.tensors_individual_transitions
+                for request in self.requests:
+                    actor_idx, split_idx, request_data = request
+
+                    for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
+                        index = actor_idx, split_idx, env_idx, agent_idx, traj_buffer_idx, rollout_step
+                        dict_of_lists_append(observations, traj_tensors['obs'], index)
+                        rnn_states.append(traj_tensors['rnn_states'][index])
+                        self.total_num_samples += 1
+
+            with timing.add_time('stack'):
                 for key, x in observations.items():
-                    observations[key] = torch.stack(x).to(self.device).float()
+                    x_stacked = torch.stack(x)
+                    with timing.add_time('obs_to_device'):
+                        observations[key] = x_stacked.to(self.device).float()
 
                 rnn_states = torch.stack(rnn_states).to(self.device).float()
                 num_samples = rnn_states.shape[0]
@@ -164,7 +166,7 @@ class PolicyWorker:
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        psutil.Process().nice(min(self.cfg.default_niceness + 5, 20))
+        psutil.Process().nice(min(self.cfg.default_niceness + 9, 20))
 
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')

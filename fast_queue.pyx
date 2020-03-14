@@ -39,7 +39,7 @@ cpdef size_t bytes_to_ptr(b):
 
 
 class Queue:
-    def __init__(self, max_size_bytes=100000):
+    def __init__(self, max_size_bytes=200000):
         self.max_size_bytes = max_size_bytes
         self.max_bytes_to_read = self.max_size_bytes  # by default, read the whole queue if necessary
 

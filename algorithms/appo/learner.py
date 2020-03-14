@@ -1,8 +1,5 @@
 import glob
 import os
-
-import filelock
-import psutil
 import random
 import shutil
 import signal
@@ -14,8 +11,8 @@ from queue import Empty, Queue
 from threading import Thread
 
 import numpy as np
+import psutil
 import torch
-from filelock import FileLock
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
 import fast_queue
@@ -78,11 +75,12 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # this only exists for debugging purposes
-        self.train_in_background = True  # this only exists for debugging purposes
+        self.train_in_background = False  # this only exists for debugging purposes
 
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
-        self.processing_experience_batch = threading.Event()
+
+        self.processing_experience_batch = threading.Condition()
 
         self.train_step = self.env_steps = 0
 
@@ -182,7 +180,7 @@ class LearnerWorker:
 
         with timing.add_time('tensors'):
             for d, key, value in iterate_recursively(buffer):
-                d[key] = torch.cat(value, dim=0)
+                d[key] = torch.cat(value, dim=0).pin_memory()
 
             # will squeeze actions only in simple categorical case
             tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
@@ -192,6 +190,9 @@ class LearnerWorker:
         with timing.add_time('buff_ready'):
             for r in rollouts:
                 self._mark_rollout_buffer_free(r)
+
+        with timing.add_time('tensors_gpu_float'):
+            buffer = self._copy_train_data_to_gpu(buffer)
 
         return buffer
 
@@ -379,11 +380,8 @@ class LearnerWorker:
             d[k] = v.to(self.device).float()
         return buffer
 
-    def _train(self, cpu_buffer, experience_size, timing):
+    def _train(self, buffer, experience_size, timing):
         with torch.no_grad():
-            with timing.add_time('tensors_gpu_float'):
-                buffer = self._copy_train_data_to_gpu(cpu_buffer)
-
             rho_hat = c_hat = 1.0  # V-trace parameters
             # noinspection PyArgumentList
             rho_hat = torch.Tensor([rho_hat])
@@ -756,7 +754,8 @@ class LearnerWorker:
             with timing.timeit('train_wait'):
                 data = safe_get(self.experience_buffer_queue)
 
-            self.processing_experience_batch.set()
+            with self.processing_experience_batch:
+                self.processing_experience_batch.notify_all()
 
             if self.terminate:
                 break
@@ -881,16 +880,18 @@ class LearnerWorker:
                 except Empty:
                     break
 
-            while self.experience_buffer_queue.qsize() > 1:
-                self.processing_experience_batch.clear()
-                self.processing_experience_batch.wait(timeout=0.01)
+            while self.experience_buffer_queue.qsize() >= 1:
+                with self.processing_experience_batch:
+                    self.processing_experience_batch.wait(timeout=0.01)
 
-            rollouts = self._process_rollouts(rollouts, timing)
+            with torch.no_grad():
+                rollouts = self._process_rollouts(rollouts, timing)
 
             if not self.train_in_background:
                 while not self.experience_buffer_queue.empty():
                     training_data = self.experience_buffer_queue.get()
-                    self.processing_experience_batch.set()  # TODO: use condvar instead of an event here
+                    with self.processing_experience_batch:
+                        self.processing_experience_batch.notify_all()
                     self._process_training_data(training_data, timing)
 
             self._experience_collection_rate_stats()
