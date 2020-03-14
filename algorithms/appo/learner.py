@@ -397,6 +397,7 @@ class LearnerWorker:
 
             clip_value = self.cfg.ppo_clip_value
             gamma = self.cfg.gamma
+            recurrence = self.cfg.recurrence
 
             num_sgd_steps = 0
 
@@ -418,21 +419,22 @@ class LearnerWorker:
                     head_outputs = self.actor_critic.forward_head(mb.obs)
 
                 # initial rnn states
-                with timing.add_time('rnn_indices'):
-                    rnn_states = mb.rnn_states[::self.cfg.recurrence]
+                rnn_states = mb.rnn_states[::recurrence]
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
                     core_outputs = []
-                    for i in range(self.cfg.recurrence):
+                    for i in range(recurrence):
                         # indices of head outputs corresponding to the current timestep
-                        step_head_outputs = head_outputs[i::self.cfg.recurrence]
+                        with timing.add_time('head_out_index'):
+                            step_head_outputs = head_outputs[i::recurrence]
 
-                        core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
-                        core_outputs.append(core_output)
+                        with timing.add_time('forward_core'):
+                            core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
+                            core_outputs.append(core_output)
 
                         # zero-out RNN states on the episode boundary
-                        dones = mb.dones[i::self.cfg.recurrence].unsqueeze(dim=1)
+                        dones = mb.dones[i::recurrence].unsqueeze(dim=1)
                         rnn_states = (1.0 - dones) * rnn_states
 
                 with timing.add_time('tail'):
@@ -440,7 +442,7 @@ class LearnerWorker:
                     # which is the same shape as the minibatch
                     core_outputs = torch.stack(core_outputs)
                     num_timesteps, num_trajectories = core_outputs.shape[:2]
-                    assert num_timesteps == self.cfg.recurrence
+                    assert num_timesteps == recurrence
                     assert num_timesteps * num_trajectories == self.cfg.batch_size
                     core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
                     assert core_outputs.shape[0] == head_outputs.shape[0]
@@ -464,30 +466,27 @@ class LearnerWorker:
                         vtrace_rho = torch.min(rho_hat, ratios_cpu)
                         vtrace_c = torch.min(c_hat, ratios_cpu)
 
-                        vs = torch.zeros((num_trajectories * self.cfg.recurrence))
-                        adv = torch.zeros((num_trajectories * self.cfg.recurrence))
+                        vs = torch.zeros((num_trajectories * recurrence))
+                        adv = torch.zeros((num_trajectories * recurrence))
 
-                        last_timestep = np.arange(self.cfg.recurrence - 1, self.cfg.batch_size, self.cfg.recurrence)
-                        next_values = (values_cpu[last_timestep] - rewards_cpu[last_timestep]) / self.cfg.gamma
+                        next_values = (values_cpu[recurrence - 1::recurrence] - rewards_cpu[recurrence - 1::recurrence]) / gamma
                         next_vs = next_values
 
                         with timing.add_time('vtrace'):
                             for i in reversed(range(self.cfg.recurrence)):
-                                timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
-
-                                rewards = rewards_cpu[timestep]
-                                dones = dones_cpu[timestep]
+                                rewards = rewards_cpu[i::recurrence]
+                                dones = dones_cpu[i::recurrence]
                                 not_done = 1.0 - dones
                                 not_done_times_gamma = not_done * gamma
 
-                                curr_values = values_cpu[timestep]
-                                curr_vtrace_rho = vtrace_rho[timestep]
-                                curr_vtrace_c = vtrace_c[timestep]
+                                curr_values = values_cpu[i::recurrence]
+                                curr_vtrace_rho = vtrace_rho[i::recurrence]
+                                curr_vtrace_c = vtrace_c[i::recurrence]
 
                                 delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
-                                adv[timestep] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
+                                adv[i::recurrence] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
                                 next_vs = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
-                                vs[timestep] = next_vs
+                                vs[i::recurrence] = next_vs
 
                                 next_values = curr_values
 
