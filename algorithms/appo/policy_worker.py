@@ -166,7 +166,7 @@ class PolicyWorker:
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        psutil.Process().nice(min(self.cfg.default_niceness + 9, 20))
+        psutil.Process().nice(min(self.cfg.default_niceness + 5, 20))
 
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')

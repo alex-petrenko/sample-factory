@@ -1032,7 +1032,7 @@ class LearnerWorker:
 # [2020-03-13 02:01:33,937][11111] Collected {0: 2007040}, FPS: 42423.2
 # [2020-03-13 02:01:33,937][11111] Timing: experience: 47.3100
 
-# Version V70 (new queues)
+# Version V70 (fast C++ queues)
 # python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True  --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v70_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
 # [2020-03-13 05:41:33,867][27104] Env runner 0, rollouts 810: timing wait_actor: 0.0000, waiting: 4.8948, reset: 12.3130, save_policy_outputs: 1.1351, env_step: 34.4284, overhead: 2.6341, complete_rollouts: 0.0115, enqueue_policy_requests: 0.1613, one_step: 0.0143, work: 40.2222
 # [2020-03-13 05:41:33,869][27106] Env runner 1, rollouts 790: timing wait_actor: 0.0000, waiting: 5.6380, reset: 10.6275, save_policy_outputs: 1.0901, env_step: 33.9549, overhead: 2.5067, complete_rollouts: 0.0110, enqueue_policy_requests: 0.1773, one_step: 0.0327, work: 39.5129
@@ -1041,3 +1041,13 @@ class LearnerWorker:
 # [2020-03-13 05:41:33,853][27085] Train loop timing: init: 1.3051, train_wait: 0.0000, tensors_gpu_float: 4.5831, bptt: 6.0317, vtrace: 2.4454, losses: 0.7526, clip: 6.2237, update: 13.2196, train: 32.9858
 # [2020-03-13 05:41:34,053][26983] Collected {0: 2015232}, FPS: 44822.8
 # [2020-03-13 05:41:34,053][26983] Timing: experience: 44.9600
+
+# Version V73 (process priority + to(device) in background thread on the learner)
+# Policy #0 lag: (min: 1.0, avg: 4.4, max: 9.0)
+# [2020-03-14 00:43:41,047][11371] Env runner 0, rollouts 800: timing wait_actor: 0.0005, waiting: 1.5608, reset: 15.0341, save_policy_outputs: 1.0898, env_step: 35.9769, overhead: 2.7699, complete_rollouts: 0.0159, enqueue_policy_requests: 0.1750, one_step: 0.0156, work: 41.9856
+# [2020-03-14 00:43:41,071][11372] Env runner 1, rollouts 780: timing wait_actor: 0.0000, waiting: 1.6715, reset: 15.3323, save_policy_outputs: 1.1191, env_step: 35.8312, overhead: 2.7640, complete_rollouts: 0.0153, enqueue_policy_requests: 0.1592, one_step: 0.0149, work: 41.9102, wait_buffers: 0.1198
+# [2020-03-14 00:43:41,310][11370] Policy worker avg. requests 4.36, timing: init: 1.7793, wait_policy_total: 16.5541, wait_policy: 0.0001, handle_policy_step: 41.6576, one_step: 0.0042, deserialize: 1.7135, obs_to_device: 5.2590, stack: 14.9778, forward: 13.9429, postprocess: 5.5726, weight_update: 0.0005
+# [2020-03-14 00:43:41,481][11353] Train loop timing: init: 1.3224, train_wait: 0.0000, bptt: 11.2281, vtrace: 1.6551, losses: 0.8895, clip: 6.6278, update: 14.9070, train: 42.3450
+# [2020-03-14 00:43:41,782][11353] GPU learner timing: extract: 0.1827, buffers: 0.0695, tensors: 8.7560, buff_ready: 0.3020, tensors_gpu_float: 5.9617, prepare: 15.1426
+# [2020-03-14 00:43:41,916][11262] Collected {0: 2015232}, FPS: 46341.4
+# [2020-03-14 00:43:41,916][11262] Timing: experience: 43.4867
