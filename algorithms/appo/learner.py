@@ -1,5 +1,8 @@
 import glob
 import os
+
+import filelock
+import psutil
 import random
 import shutil
 import signal
@@ -12,6 +15,7 @@ from threading import Thread
 
 import numpy as np
 import torch
+from filelock import FileLock
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
 import fast_queue
@@ -57,6 +61,8 @@ class LearnerWorker:
         self.actor_critic = None
         self.optimizer = None
         self.policy_lock = policy_lock
+
+        self.high_priority_core_lock = None
 
         self.task_queue = fast_queue.Queue()
         self.report_queue = report_queue
@@ -778,6 +784,7 @@ class LearnerWorker:
                 torch.cuda.ipc_collect()
                 last_cache_cleanup = time.time()
 
+        time.sleep(0.3)
         log.info('Train loop timing: %s', timing)
         del self.actor_critic
         del self.device
@@ -832,9 +839,36 @@ class LearnerWorker:
             assert policy_id == self.policy_id
             self.new_cfg = new_cfg
 
+    def try_set_affinity(self):
+        max_attempts = psutil.cpu_count()
+        attempt = 0
+        desired_core = self.policy_id
+
+        while attempt < max_attempts:
+            attempt += 1
+            lock = FileLock(f'/tmp/high_priority_core_{desired_core}')
+            log.debug('Trying to claim core %d for the learner %d!', desired_core, self.policy_id)
+            try:
+                lock.acquire(timeout=0.05)
+            except filelock.Timeout:
+                log.warning('Could not claim core %d, trying other cores...', desired_core)
+                desired_core = (desired_core + 1) % psutil.cpu_count()
+            else:
+                self.high_priority_core_lock = lock
+                psutil.Process().cpu_affinity([desired_core])
+                log.debug('Successfully claimed core %d for learner %d', desired_core, self.policy_id)
+                break
+
     def _run(self):
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        try:
+            psutil.Process().nice(self.cfg.default_niceness)
+        except psutil.AccessDenied:
+            log.error('Low niceness requires sudo!!!')
+
+        self.try_set_affinity()
 
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
@@ -864,7 +898,6 @@ class LearnerWorker:
                         elif task_type == TaskType.INIT:
                             self._init()
                         elif task_type == TaskType.TERMINATE:
-                            log.info('GPU learner timing: %s', timing)
                             self._terminate()
                             break
                         elif task_type == TaskType.PBT:
@@ -889,6 +922,12 @@ class LearnerWorker:
         if self.train_in_background:
             self.experience_buffer_queue.put(None)
             self.training_thread.join()
+
+        if self.high_priority_core_lock is not None:
+            self.high_priority_core_lock.release()
+
+        time.sleep(0.3)
+        log.info('GPU learner timing: %s', timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))

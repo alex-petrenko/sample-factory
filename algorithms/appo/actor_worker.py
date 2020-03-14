@@ -448,13 +448,15 @@ class ActorWorker:
     def _init(self):
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
+        curr_process = psutil.Process()
         if self.cfg.set_workers_cpu_affinity:
             cpu_count = psutil.cpu_count()
             cores = cores_for_worker_process(self.worker_idx, self.cfg.num_workers, cpu_count)
             if cores is not None:
-                psutil.Process().cpu_affinity(cores)
+                curr_process.cpu_affinity(cores)
 
-        log.debug('Worker %d uses CPU cores %r', self.worker_idx, psutil.Process().cpu_affinity())
+        log.debug('Worker %d uses CPU cores %r', self.worker_idx, curr_process.cpu_affinity())
+        curr_process.nice(min(self.cfg.default_niceness + 10, 20))
 
         self.env_runners = []
         for split_idx in range(self.num_splits):
@@ -615,6 +617,7 @@ class ActorWorker:
                     self.terminate = True
 
         if self.worker_idx <= 1:
+            time.sleep(0.1)
             log.info('Env runner %d, rollouts %d: timing %s', self.worker_idx, self.num_complete_rollouts, timing)
 
     def init(self):

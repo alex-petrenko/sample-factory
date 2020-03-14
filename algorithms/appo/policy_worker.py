@@ -1,3 +1,4 @@
+import psutil
 import signal
 import time
 from collections import deque
@@ -163,6 +164,8 @@ class PolicyWorker:
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+        psutil.Process().nice(min(self.cfg.default_niceness + 5, 20))
+
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -244,6 +247,7 @@ class PolicyWorker:
                 log.exception('Unknown exception on policy worker')
                 self.terminate = True
 
+        time.sleep(0.2)
         log.info('Policy worker avg. requests %.2f, timing: %s', np.mean(request_count), timing)
 
     def init(self):
