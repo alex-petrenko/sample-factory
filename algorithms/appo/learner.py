@@ -408,35 +408,31 @@ class LearnerWorker:
             minibatches = self._get_minibatches(experience_size)
 
             for batch_num in range(len(minibatches)):
-                with timing.add_time('head'):
-                    with timing.add_time('head_indices'):
-                        indices = minibatches[batch_num]
+                indices = minibatches[batch_num]
 
-                        # current minibatch consisting of short trajectory segments with length == recurrence
-                        mb = self._get_minibatch(gpu_buffer, indices)
+                # current minibatch consisting of short trajectory segments with length == recurrence
+                mb = self._get_minibatch(gpu_buffer, indices)
 
-                    # calculate policy head outside of recurrent loop
-                    with timing.add_time('forward_head'):
-                        head_outputs = self.actor_critic.forward_head(mb.obs)
+                # calculate policy head outside of recurrent loop
+                with timing.add_time('forward_head'):
+                    head_outputs = self.actor_critic.forward_head(mb.obs)
 
-                    # initial rnn states
-                    with timing.add_time('rnn_indices'):
-                        timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
-                        rnn_states = mb.rnn_states[timestep]
+                # initial rnn states
+                with timing.add_time('rnn_indices'):
+                    rnn_states = mb.rnn_states[::self.cfg.recurrence]
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
                     core_outputs = []
                     for i in range(self.cfg.recurrence):
                         # indices of head outputs corresponding to the current timestep
-                        timestep = np.arange(i, self.cfg.batch_size, self.cfg.recurrence)
-                        step_head_outputs = head_outputs[timestep]
+                        step_head_outputs = head_outputs[i::self.cfg.recurrence]
 
                         core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
                         core_outputs.append(core_output)
 
                         # zero-out RNN states on the episode boundary
-                        dones = mb.dones[timestep].unsqueeze(dim=1)
+                        dones = mb.dones[i::self.cfg.recurrence].unsqueeze(dim=1)
                         rnn_states = (1.0 - dones) * rnn_states
 
                 with timing.add_time('tail'):
