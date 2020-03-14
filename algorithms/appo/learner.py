@@ -75,7 +75,7 @@ class LearnerWorker:
         self.experience_buffer_queue = Queue()
 
         self.with_training = True  # this only exists for debugging purposes
-        self.train_in_background = False  # this only exists for debugging purposes
+        self.train_in_background = True  # this only exists for debugging purposes
 
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
@@ -180,7 +180,7 @@ class LearnerWorker:
 
         with timing.add_time('tensors'):
             for d, key, value in iterate_recursively(buffer):
-                d[key] = torch.cat(value, dim=0).pin_memory()
+                d[key] = torch.cat(value, dim=0)
 
             # will squeeze actions only in simple categorical case
             tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
