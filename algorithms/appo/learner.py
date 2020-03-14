@@ -409,18 +409,20 @@ class LearnerWorker:
 
             for batch_num in range(len(minibatches)):
                 with timing.add_time('head'):
-                    indices = minibatches[batch_num]
+                    with timing.add_time('head_indices'):
+                        indices = minibatches[batch_num]
 
-                    # current minibatch consisting of short trajectory segments with length == recurrence
-                    mb = self._get_minibatch(gpu_buffer, indices)
+                        # current minibatch consisting of short trajectory segments with length == recurrence
+                        mb = self._get_minibatch(gpu_buffer, indices)
 
                     # calculate policy head outside of recurrent loop
                     with timing.add_time('forward_head'):
                         head_outputs = self.actor_critic.forward_head(mb.obs)
 
                     # initial rnn states
-                    timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
-                    rnn_states = mb.rnn_states[timestep]
+                    with timing.add_time('rnn_indices'):
+                        timestep = np.arange(0, self.cfg.batch_size, self.cfg.recurrence)
+                        rnn_states = mb.rnn_states[timestep]
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
