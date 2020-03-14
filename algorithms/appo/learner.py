@@ -16,8 +16,8 @@ import torch
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
 import fast_queue
-from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, iterate_recursively, \
-    memory_stats, cuda_envvars
+from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars, \
+    TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
 from algorithms.appo.model import ActorCritic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
@@ -73,6 +73,9 @@ class LearnerWorker:
         self.policy_worker_queues = policy_worker_queues
 
         self.experience_buffer_queue = Queue()
+
+        self.tensor_batch_pool = ObjectPool()
+        self.tensor_batcher = TensorBatcher(self.tensor_batch_pool)
 
         self.with_training = True  # this only exists for debugging purposes
         self.train_in_background = True  # this only exists for debugging purposes
@@ -176,23 +179,24 @@ class LearnerWorker:
             with timing.add_time('calc_gae'):
                 buffer = self._calculate_gae(buffer)
 
-        with timing.add_time('tensors'):
-            for d, key, value in iterate_recursively(buffer):
-                d[key] = torch.cat(value, dim=0)
-
-            # will squeeze actions only in simple categorical case
-            tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
-            for tensor_name in tensors_to_squeeze:
-                buffer[tensor_name].squeeze_()
+        with timing.add_time('batching'):
+            buffer = self.tensor_batcher.cat(buffer, timing)
 
         with timing.add_time('buff_ready'):
             for r in rollouts:
                 self._mark_rollout_buffer_free(r)
 
         with timing.add_time('tensors_gpu_float'):
-            buffer = self._copy_train_data_to_gpu(buffer)
+            gpu_buffer = self._copy_train_data_to_gpu(buffer)
 
-        return buffer
+        with timing.add_time('squeeze'):
+            # will squeeze actions only in simple categorical case
+            tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
+            for tensor_name in tensors_to_squeeze:
+                gpu_buffer[tensor_name].squeeze_()
+
+        self.tensor_batch_pool.put(buffer)
+        return gpu_buffer
 
     def _process_macro_batch(self, rollouts, timing):
         assert self.cfg.macro_batch % self.cfg.rollout == 0
@@ -373,11 +377,13 @@ class LearnerWorker:
         return value_loss
 
     def _copy_train_data_to_gpu(self, buffer):
-        for d, k, v in iterate_recursively(buffer):
-            d[k] = v.to(self.device).float()
-        return buffer
+        gpu_buffer = copy_dict_structure(buffer)
+        for d, gpu_d, k, v, _ in iter_dicts_recursively(buffer, gpu_buffer):
+            gpu_tensor = v.detach().to(self.device, copy=True)
+            gpu_d[k] = gpu_tensor.float()
+        return gpu_buffer
 
-    def _train(self, buffer, experience_size, timing):
+    def _train(self, gpu_buffer, experience_size, timing):
         with torch.no_grad():
             rho_hat = c_hat = 1.0  # V-trace parameters
             # noinspection PyArgumentList
@@ -406,7 +412,7 @@ class LearnerWorker:
                     indices = minibatches[batch_num]
 
                     # current minibatch consisting of short trajectory segments with length == recurrence
-                    mb = self._get_minibatch(buffer, indices)
+                    mb = self._get_minibatch(gpu_buffer, indices)
 
                     # calculate policy head outside of recurrent loop
                     with timing.add_time('forward_head'):
@@ -824,6 +830,7 @@ class LearnerWorker:
 
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
+        torch.set_num_threads(1)
 
         timing = Timing()
 

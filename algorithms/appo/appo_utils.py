@@ -1,6 +1,7 @@
 import copy
 import os
-from collections import OrderedDict
+import threading
+from collections import OrderedDict, deque
 
 import gym
 import numpy as np
@@ -158,3 +159,46 @@ def cores_for_worker_process(worker_idx, num_workers, cpu_count):
             cores = list(range(worker_idx_modulo * cores_to_use, (worker_idx_modulo + 1) * cores_to_use, 1))
 
     return cores
+
+
+class TensorBatcher:
+    def __init__(self, batch_pool):
+        self.batch_pool = batch_pool
+
+    def cat(self, dict_of_tensor_arrays, timing):
+        tensor_batch = self.batch_pool.get()
+        if tensor_batch is None:
+            tensor_batch = copy_dict_structure(dict_of_tensor_arrays)
+            log.info('Allocating new CPU tensor batch (could not get from the pool)')
+
+            for d1, cache_d, key, tensor_arr, _ in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
+                cache_d[key] = torch.cat(tensor_arr, dim=0)
+
+        else:
+            with timing.add_time('batcher_mem'):
+                for d1, cache_d, key, tensor_arr, cache_t in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
+                    offset = 0
+                    for t in tensor_arr:
+                        first_dim = t.shape[0]
+                        cache_t[offset:offset + first_dim].copy_(t)
+                        offset += first_dim
+
+        return tensor_batch
+
+
+class ObjectPool:
+    def __init__(self):
+        self.pool = deque([], maxlen=10)
+        self.lock = threading.Lock()
+
+    def get(self):
+        with self.lock:
+            if len(self.pool) <= 0:
+                return None
+
+            obj = self.pool.pop()
+            return obj
+
+    def put(self, obj):
+        with self.lock:
+            self.pool.append(obj)
