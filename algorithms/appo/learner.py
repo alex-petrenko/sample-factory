@@ -531,6 +531,7 @@ class LearnerWorker:
                         with timing.add_time('clip'):
                             torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
+                    curr_policy_version = self.train_step  # policy version before the weight update
                     with self.policy_lock:
                         self.optimizer.step()
 
@@ -593,7 +594,6 @@ class LearnerWorker:
                             adam_max_second_moment = max(tensor_state['exp_avg_sq'].max().item(), adam_max_second_moment)
                         stats.adam_max_second_moment = adam_max_second_moment
 
-                        curr_policy_version = self.train_step
                         version_diff = curr_policy_version - mb.policy_version
                         stats.version_diff_avg = version_diff.mean()
                         stats.version_diff_min = version_diff.min()

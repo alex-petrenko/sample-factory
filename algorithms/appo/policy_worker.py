@@ -184,7 +184,7 @@ class PolicyWorker:
 
         last_report = last_cache_cleanup = time.time()
         last_report_samples = 0
-        request_count = deque(maxlen=20)
+        request_count = deque(maxlen=50)
 
         while not self.terminate:
             try:
@@ -244,7 +244,7 @@ class PolicyWorker:
                 log.exception('Unknown exception on policy worker')
                 self.terminate = True
 
-        log.info('Policy worker timing: %s', timing)
+        log.info('Policy worker avg. requests %.2f, timing: %s', np.mean(request_count), timing)
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))

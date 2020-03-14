@@ -21,7 +21,7 @@ from algorithms.appo.trajectory_buffers import TrajectoryBuffers
 from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
-    ensure_dir_exists, list_child_processes, kill_processes
+    ensure_dir_exists, list_child_processes, kill_processes, AttrDict
 
 import fast_queue
 
@@ -235,6 +235,7 @@ class APPO(Algorithm):
                 self.policy_outputs[(worker_idx, split_idx)] = dict()
 
         self.policy_avg_stats = dict()
+        self.policy_lag = [dict() for _ in range(self.cfg.num_policies)]
 
         self.last_timing = dict()
         self.env_steps = dict()
@@ -480,9 +481,16 @@ class APPO(Algorithm):
         fps_str = f'({", ".join(fps_str)})'
 
         samples_per_policy = ', '.join([f'{p}: {s:.1f}' for p, s in sample_throughput.items()])
+
+        lag_stats = self.policy_lag[0]
+        lag = AttrDict()
+        for key in ['min', 'avg', 'max']:
+            lag[key] = lag_stats.get(f'version_diff_{key}', -1)
+        policy_lag_str = f'min: {lag.min:.1f}, avg: {lag.avg:.1f}, max: {lag.max:.1f}'
+
         log.debug(
-            'Fps is %s. Total num frames: %d. Throughput: %s. Samples: %d',
-            fps_str, total_env_steps, samples_per_policy, sum(self.samples_collected),
+            'Fps is %s. Total num frames: %d. Throughput: %s. Samples: %d. Policy #0 lag: (%s)',
+            fps_str, total_env_steps, samples_per_policy, sum(self.samples_collected), policy_lag_str,
         )
 
         if 'reward' in self.policy_avg_stats:
@@ -496,6 +504,8 @@ class APPO(Algorithm):
     def report_train_summaries(self, stats, policy_id):
         for key, scalar in stats.items():
             self.writers[policy_id].add_scalar(f'train/{key}', scalar, self.env_steps[policy_id])
+            if 'version_diff' in key:
+                self.policy_lag[policy_id][key] = scalar.item()
 
     def report_basic_summaries(self, fps, sample_throughput):
         memory_mb = memory_consumption_mb()
