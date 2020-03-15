@@ -13,4 +13,4 @@ _experiments = [
 ]
 
 
-RUN_DESCRIPTION = RunDescription('paper_doom_battle_appo_v76_fs4', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription('paper_doom_battle_appo_v78_fs4', experiments=_experiments)
