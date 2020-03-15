@@ -399,6 +399,7 @@ class LearnerWorker:
             gamma = self.cfg.gamma
             recurrence = self.cfg.recurrence
 
+            force_summaries = False
             num_sgd_steps = 0
 
             stats = None
@@ -419,7 +420,9 @@ class LearnerWorker:
                     head_outputs = self.actor_critic.forward_head(mb.obs)
 
                 # initial rnn states
-                rnn_states = mb.rnn_states[::recurrence]
+                with timing.add_time('bptt_initial'):
+                    rnn_states = mb.rnn_states[::recurrence]
+                    is_same_episode = 1.0 - mb.dones.unsqueeze(dim=1)
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
@@ -433,9 +436,9 @@ class LearnerWorker:
                             core_outputs.append(core_output)
 
                         # zero-out RNN states on the episode boundary
-                        with timing.add_time('bptt_dones'):
-                            dones = mb.dones[i::recurrence].unsqueeze(dim=1)
-                            rnn_states = (1.0 - dones) * rnn_states
+                        with timing.add_time('bptt_rnn_states'):
+                            is_same_episode_step = is_same_episode[i::recurrence]
+                            rnn_states.mul_(is_same_episode_step)
 
                 with timing.add_time('tail'):
                     # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
@@ -510,9 +513,14 @@ class LearnerWorker:
 
                     # entropy loss
                     entropy = action_distribution.entropy()
-                    entropy_loss = self.cfg.entropy_loss_coeff * entropy.mean()
+                    entropy_loss = -self.cfg.entropy_loss_coeff * entropy.mean()
 
                     loss = policy_loss + value_loss + entropy_loss
+
+                    high_loss = 5.0
+                    if abs(policy_loss.item()) > high_loss or abs(value_loss.item()) > high_loss or abs(entropy_loss.item()) > high_loss:
+                        log.warning('High loss value: %.4f %.4f %.4f %.4f', loss.item(), policy_loss.item(), value_loss.item(), entropy_loss.item())
+                        force_summaries = True
 
                 with timing.add_time('update'):
                     # update the weights
@@ -534,7 +542,7 @@ class LearnerWorker:
 
                     # collect and report summaries
                     with_summaries = self._should_save_summaries()
-                    if with_summaries:
+                    if with_summaries or force_summaries:
                         self.last_summary_written = self.train_step
                         stats = AttrDict()
 
