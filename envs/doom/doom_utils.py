@@ -3,6 +3,7 @@ from gym.spaces import Discrete
 from envs.doom.action_space import doom_action_space, \
     doom_action_space_full_discretized, doom_action_space_basic, doom_action_space_discretized_no_weap
 from envs.doom.doom_gym import VizdoomEnv
+from envs.doom.doom_model import register_models
 from envs.doom.wrappers.additional_input import DoomAdditionalInput
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
@@ -13,6 +14,9 @@ from envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGa
 from envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
 from utils.utils import log
+
+
+VIZDOOM_INITIALIZED = False
 
 
 class DoomSpec:
@@ -283,6 +287,8 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
 
 
 def make_doom_env(env_name, **kwargs):
+    ensure_initialized()
+
     spec = doom_env_by_name(env_name)
 
     if spec.num_agents > 1 or spec.num_bots > 0:
@@ -290,3 +296,13 @@ def make_doom_env(env_name, **kwargs):
         return make_doom_multiplayer_env(spec, **kwargs)
     else:
         return make_doom_env_impl(spec, **kwargs)
+
+
+def ensure_initialized():
+    global VIZDOOM_INITIALIZED
+    if VIZDOOM_INITIALIZED:
+        return
+
+    register_models()
+
+    VIZDOOM_INITIALIZED = True

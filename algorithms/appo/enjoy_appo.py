@@ -9,7 +9,8 @@ import torch
 
 from algorithms.appo.actor_worker import transform_dict_observations
 from algorithms.appo.learner import LearnerWorker
-from algorithms.appo.model import ActorCritic, get_hidden_size
+from algorithms.appo.model import ActorCritic, create_actor_critic
+from algorithms.appo.model_utils import get_hidden_size
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
@@ -50,7 +51,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
         # reset call ruins the demo recording for VizDoom
         env.unwrapped.reset_on_init = False
 
-    actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
+    actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
     device = torch.device('cuda')
     actor_critic.to(device)
 

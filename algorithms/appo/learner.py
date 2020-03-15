@@ -18,7 +18,7 @@ from torch.multiprocessing import Process, Event as MultiprocessingEvent
 import fast_queue
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars, \
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
-from algorithms.appo.model import ActorCritic
+from algorithms.appo.model import create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
@@ -649,7 +649,7 @@ class LearnerWorker:
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
 
     def init_model(self):
-        self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+        self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space)
         self.actor_critic.to(self.device)
         self.actor_critic.share_memory()
 

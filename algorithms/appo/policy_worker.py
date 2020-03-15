@@ -1,15 +1,15 @@
-import psutil
 import signal
 import time
 from collections import deque
 from queue import Empty
 
 import numpy as np
+import psutil
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
 from algorithms.appo.appo_utils import TaskType, memory_stats, cuda_envvars
-from algorithms.appo.model import ActorCritic
+from algorithms.appo.model import create_actor_critic
 from utils.timing import Timing
 from utils.utils import AttrDict, log, join_or_kill
 
@@ -166,7 +166,7 @@ class PolicyWorker:
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        psutil.Process().nice(min(self.cfg.default_niceness + 5, 20))
+        psutil.Process().nice(min(self.cfg.default_niceness + 2, 20))
 
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
@@ -182,7 +182,7 @@ class PolicyWorker:
             # we should already see only one CUDA device, because of env vars
             assert torch.cuda.device_count() == 1
             self.device = torch.device('cuda', index=0)
-            self.actor_critic = ActorCritic(self.obs_space, self.action_space, self.cfg)
+            self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space)
             self.actor_critic.to(self.device)
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)

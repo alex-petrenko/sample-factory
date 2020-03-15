@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from algorithms.appo.learner import LearnerWorker
-from algorithms.appo.model import ActorCritic
+from algorithms.appo.model import create_actor_critic
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
@@ -73,7 +73,7 @@ def multi_agent_match(policy_indices, max_num_episodes=int(1e9), max_num_frames=
 
     device = torch.device('cuda')
     for rival in RIVALS:
-        rival.actor_critic = ActorCritic(env.observation_space, env.action_space, rival.cfg)
+        rival.actor_critic = create_actor_critic(rival.cfg, env.observation_space, env.action_space)
         rival.actor_critic.to(device)
 
         policy_id = rival.policy_index

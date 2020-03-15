@@ -73,10 +73,11 @@ class Algorithm:
 
         # policy size and configuration
         p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder')
-        p.add_argument('--encoder', default='convnet_simple', type=str,
-                       help='Type of the policy head (e.g. convolutional encoder)')
-        p.add_argument('--hidden_size', default=512, type=int,
-                       help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
+        p.add_argument('--encoder_subtype', default='convnet_simple', type=str, help='Specific encoder design (see model.py)')
+        p.add_argument('--encoder_custom', default=None, type=str, help='Use custom encoder class from the registry (see model_utils.py)')
+        p.add_argument('--fc_after_encoder', default=True, type=str2bool, help='Whether to add a fully-connected layer immediately after encoder')
+        p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
+        p.add_argument('--nonlinearity', default='elu', type=str, help='Type of nonlinearity to use')
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -114,7 +115,7 @@ class APPO(Algorithm):
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
-        p.add_argument('--entropy_loss_coeff', default=0.001, type=float, help='Coefficient for the exploration component of the loss function.')
+        p.add_argument('--entropy_loss_coeff', default=0.005, type=float, help='Coefficient for the exploration component of the loss function.')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
@@ -150,7 +151,7 @@ class APPO(Algorithm):
                 'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
                 'that can use parallel CPU cores for level generation.'),
         )
-        p.add_argument('--reset_timeout_seconds', default=60, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
+        p.add_argument('--reset_timeout_seconds', default=90, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
         p.add_argument('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
 

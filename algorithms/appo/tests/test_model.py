@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import torch
 
-from algorithms.appo.model import ActorCritic
+from algorithms.appo.model import create_actor_critic
 from algorithms.utils.arguments import default_cfg
 from envs.create_env import create_env
 from utils.timing import Timing
@@ -18,7 +18,7 @@ class TestModel(TestCase):
         torch.set_num_threads(1)
         # torch.backends.cudnn.benchmark = True
 
-        actor_critic = ActorCritic(env.observation_space, env.action_space, cfg)
+        actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
         device = torch.device('cuda')
         actor_critic.to(device)
 

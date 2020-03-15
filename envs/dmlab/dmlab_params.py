@@ -2,9 +2,15 @@ from utils.utils import str2bool
 
 
 def dmlab_override_defaults(env, parser):
-    """Currently use same parameters as Doom."""
-    from envs.doom.doom_params import doom_override_defaults
-    doom_override_defaults(env, parser)
+    parser.set_defaults(
+        encoder_type='conv',
+        encoder_subtype='convnet_simple',
+        encoder_custom=None,
+        hidden_size=512,
+        obs_subtract_mean=128.0,
+        obs_scale=128.0,
+        env_frameskip=4,
+    )
 
 
 # noinspection PyUnusedLocal

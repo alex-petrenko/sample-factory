@@ -5,7 +5,7 @@ import torch
 from gym import spaces
 
 from algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively, iterate_recursively
-from algorithms.appo.model import get_hidden_size
+from algorithms.appo.model_utils import get_hidden_size
 from algorithms.utils.action_distributions import calc_num_logits
 from utils.utils import log
 

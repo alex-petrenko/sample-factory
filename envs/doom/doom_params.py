@@ -1,11 +1,12 @@
-# noinspection PyUnusedLocal
 from utils.utils import str2bool
 
 
 def doom_override_defaults(env, parser):
     """RL params specific to Doom envs."""
     parser.set_defaults(
-        encoder='convnet_simple',
+        encoder_type='conv',
+        encoder_subtype='convnet_simple',
+        encoder_custom='vizdoom',
         hidden_size=512,
         obs_subtract_mean=128.0,
         obs_scale=128.0,
