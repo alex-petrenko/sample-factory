@@ -6,7 +6,7 @@ from gym import spaces
 
 from algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively, iterate_recursively
 from algorithms.appo.model_utils import get_hidden_size
-from algorithms.utils.action_distributions import calc_num_logits
+from algorithms.utils.action_distributions import calc_num_logits, calc_num_actions
 from utils.utils import log
 
 
@@ -53,9 +53,7 @@ class TrajectoryBuffers:
         self.envs_per_split = cfg.num_envs_per_worker // cfg.worker_num_splits
         self.num_traj_buffers = self.calc_num_trajectory_buffers()
 
-        num_actions = 1
-        if isinstance(action_space, spaces.Tuple):
-            num_actions = len(action_space.spaces)
+        num_actions = calc_num_actions(action_space)
         num_action_logits = calc_num_logits(action_space)
 
         hidden_size = get_hidden_size(self.cfg)

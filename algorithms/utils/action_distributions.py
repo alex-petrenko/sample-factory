@@ -1,10 +1,26 @@
+import math
+
 import gym
 import numpy as np
 import torch
-from torch.distributions import Categorical
+from torch.distributions import Categorical, Normal, Independent
 from torch.nn import functional
 
 from utils.utils import log
+
+
+def calc_num_actions(action_space):
+    if isinstance(action_space, gym.spaces.Discrete):
+        return 1
+    elif isinstance(action_space, gym.spaces.Tuple):
+        return len(action_space.spaces)
+    elif isinstance(action_space, gym.spaces.Box):
+        if len(action_space.shape) != 1:
+            raise Exception('Non-trivial shape Box action spaces not currently supported. Try to flatten it.')
+
+        return action_space.shape[0]
+    else:
+        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
 
 
 def calc_num_logits(action_space):
@@ -34,7 +50,6 @@ def get_action_distribution(action_space, raw_logits):
     elif isinstance(action_space, gym.spaces.Tuple):
         return TupleActionDistribution(action_space, logits_flat=raw_logits)
     elif isinstance(action_space, gym.spaces.Box):
-        # continuous action spaces
         return ContinuousActionDistribution(params=raw_logits)
     else:
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
@@ -113,7 +128,6 @@ class TupleActionDistribution:
     Entropy of such a distribution is just a sum of entropies of individual distributions.
 
     """
-
     def __init__(self, action_space, logits_flat):
         self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
@@ -180,8 +194,20 @@ class TupleActionDistribution:
             d.dbg_print()
 
 
-class ContinuousActionDistribution:
+# noinspection PyAbstractClass
+class ContinuousActionDistribution(Independent):
+    dist_min_clamp = math.log(1e-6)
+    dist_max_clamp = math.log(1e6)
+
     def __init__(self, params):
         num_actions = params.shape[-1] // 2
-        means, stddevs = torch.split(params, num_actions)
-        self.distribution = torch.distributions.normal.Normal(means, stddevs)
+        means, log_std = torch.split(params, num_actions, dim=1)
+        log_std = log_std.clamp(self.dist_min_clamp, self.dist_max_clamp)
+        stddev = log_std.exp()
+
+        normal_dist = Normal(means, stddev)
+        super().__init__(normal_dist, 1)
+
+    def kl_divergence(self, other):
+        kl = torch.distributions.kl.kl_divergence(self, other)
+        return kl

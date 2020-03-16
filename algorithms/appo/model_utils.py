@@ -115,6 +115,8 @@ class MlpEncoder(nn.Module):
 
     def forward(self, obs_dict):
         normalize_obs(obs_dict, self.cfg)
+        x = self.mlp_head(obs_dict['obs'])
+        return x
 
 
 def create_encoder(cfg, obs_space):

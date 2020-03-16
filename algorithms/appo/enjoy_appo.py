@@ -9,7 +9,7 @@ import torch
 
 from algorithms.appo.actor_worker import transform_dict_observations
 from algorithms.appo.learner import LearnerWorker
-from algorithms.appo.model import ActorCritic, create_actor_critic
+from algorithms.appo.model import create_actor_critic
 from algorithms.appo.model_utils import get_hidden_size
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent import MultiAgentWrapper

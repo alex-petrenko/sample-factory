@@ -9,7 +9,7 @@ def fc_after_encoder_size(cfg):
     return cfg.hidden_size  # make configurable?
 
 
-class ActorCritic(nn.Module):
+class _ActorCritic(nn.Module):
     def __init__(self, encoder, core, action_space, cfg):
         super().__init__()
 
@@ -98,4 +98,4 @@ def create_actor_critic(cfg, obs_space, action_space):
 
     core = create_core(cfg, core_input_size)
 
-    return ActorCritic(encoder, core, action_space, cfg)
+    return _ActorCritic(encoder, core, action_space, cfg)

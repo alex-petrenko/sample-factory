@@ -77,8 +77,8 @@ class LearnerWorker:
         self.tensor_batch_pool = ObjectPool()
         self.tensor_batcher = TensorBatcher(self.tensor_batch_pool)
 
-        self.with_training = True  # this only exists for debugging purposes
-        self.train_in_background = True  # this only exists for debugging purposes
+        self.with_training = True  # set to False for debugging no-training regime
+        self.train_in_background = True  # set to False for debugging the learner
 
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
@@ -391,7 +391,7 @@ class LearnerWorker:
             # noinspection PyArgumentList
             c_hat = torch.Tensor([c_hat])
 
-            clip_ratio_high = self.cfg.ppo_clip_ratio
+            clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
             # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
             clip_ratio_low = 1.0 / clip_ratio_high
 

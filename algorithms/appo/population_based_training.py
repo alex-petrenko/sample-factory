@@ -35,8 +35,10 @@ class PbtTask(Enum):
     SAVE_MODEL, LOAD_MODEL, UPDATE_CFG, UPDATE_REWARD_SCHEME = range(4)
 
 
-HYPERPARAMS_TO_TUNE = {'learning_rate', 'prior_loss_coeff', 'adam_beta1'}
+HYPERPARAMS_TO_TUNE = {'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value'}
 SPECIAL_PERTURBATION = dict(gamma=perturb_exponential_decay, adam_beta1=perturb_exponential_decay)
+
+# this is currently for VizDoom environments only. Should be moved to some config file?
 REWARD_CATEGORIES_TO_TUNE = {'delta', 'selected_weapon'}
 
 
@@ -163,6 +165,9 @@ class PopulationBasedTraining:
         return self._perturb(replacement_cfg, default_params=self.cfg)
 
     def _perturb_reward(self, original_reward_shaping):
+        if original_reward_shaping is None:
+            return None
+
         replacement_shaping = copy.deepcopy(original_reward_shaping)
         for category in REWARD_CATEGORIES_TO_TUNE:
             if category in replacement_shaping:

@@ -55,10 +55,8 @@ class Algorithm:
         p.add_argument('--train_for_seconds', default=int(1e10), type=int, help='Stop training after this many seconds')
 
         # observation preprocessing
-        p.add_argument('--obs_subtract_mean', default=0.0, type=float,
-                       help='Observation preprocessing, mean value to subtract from observation (e.g. 128.0 for 8-bit RGB)')
-        p.add_argument('--obs_scale', default=1.0, type=float,
-                       help='Observation preprocessing, divide observation tensors by this scalar (e.g. 128.0 for 8-bit RGB)')
+        p.add_argument('--obs_subtract_mean', default=0.0, type=float, help='Observation preprocessing, mean value to subtract from observation (e.g. 128.0 for 8-bit RGB)')
+        p.add_argument('--obs_scale', default=1.0, type=float, help='Observation preprocessing, divide observation tensors by this scalar (e.g. 128.0 for 8-bit RGB)')
 
         # RL
         p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')
@@ -95,8 +93,7 @@ class APPO(Algorithm):
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
         p.add_argument('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
 
-        p.add_argument('--gae_lambda', default=0.95, type=float,
-                       help='Generalized Advantage Estimation discounting (only used when V-trace is False')
+        p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False')
 
         p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
 
@@ -106,16 +103,15 @@ class APPO(Algorithm):
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
         p.add_argument('--rnn_type', default='gru', type=str, help='Type of RNN cell to use')
 
-        p.add_argument('--ppo_clip_ratio', default=1.1, type=float, help='We use unbiased clip(x, e, 1/e) instead of clip(x, 1+e, 1-e) in the paper')
+        p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
-        p.add_argument('--ppo_epochs', default=4, type=int, help='Number of training epochs before a new batch of experience is collected')
-        p.add_argument('--target_kl', default=0.02, type=float, help='Target distance from behavior policy at the end of training on each experience batch')
+        p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
 
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
-        p.add_argument('--entropy_loss_coeff', default=0.005, type=float, help='Coefficient for the exploration component of the loss function.')
+        p.add_argument('--entropy_loss_coeff', default=0.003, type=float, help='Coefficient for the exploration component of the loss function.')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
@@ -156,17 +152,12 @@ class APPO(Algorithm):
         p.add_argument('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
 
         # PBT stuff
-        p.add_argument('--with_pbt', default=False, type=str2bool,
-                       help='Enables population-based training basic features')
-        p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int,
-                       help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
-        p.add_argument('--pbt_replace_fraction', default=0.3, type=float,
-                       help='A portion of policies performing worst to be replace by better policies (rounded up)')
+        p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
+        p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
+        p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
-        p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float,
-                       help='Relative gap in true reward when replacing weights of the policy with a better performing one')
-        p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float,
-                       help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
+        p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
+        p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float, help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
