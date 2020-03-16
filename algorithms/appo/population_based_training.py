@@ -217,7 +217,8 @@ class PopulationBasedTraining:
     def _write_pbt_summaries(self, policy_id, env_steps):
         writer = self.summary_writers[policy_id]
         self._write_dict_summaries(self.policy_cfg[policy_id], writer, 'cfg', env_steps)
-        self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, 'rew', env_steps)
+        if self.policy_reward_shaping[policy_id] is not None:
+            self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, 'rew', env_steps)
 
     def _update_policy(self, policy_id, policy_stats):
         if 'true_reward' not in policy_stats:
