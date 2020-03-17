@@ -154,6 +154,7 @@ class APPO(Algorithm):
         # PBT stuff
         p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
         p.add_argument('--pbt_period_env_steps', default=int(8e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
+        p.add_argument('--pbt_start_mutation', default=int(1e7), type=int, help='Allow initial diversification, start PBT after this many env steps')
         p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
         p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
