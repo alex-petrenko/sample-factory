@@ -38,9 +38,6 @@ class PbtTask(Enum):
 HYPERPARAMS_TO_TUNE = {'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value'}
 SPECIAL_PERTURBATION = dict(gamma=perturb_exponential_decay, adam_beta1=perturb_exponential_decay)
 
-# this is currently for VizDoom environments only. Should be moved to some config file?
-REWARD_CATEGORIES_TO_TUNE = {'delta', 'selected_weapon'}
-
 
 def policy_cfg_file(cfg, policy_id):
     return join(experiment_dir(cfg=cfg), f'policy_{policy_id:02d}_cfg.json')
@@ -64,6 +61,12 @@ class PopulationBasedTraining:
         self.last_pbt_summaries = 0
 
         self.learner_workers = self.actor_workers = None
+
+        self.reward_categories_to_tune = []
+        if cfg.env.startswith('doom_'):
+            self.reward_categories_to_tune = ['delta', 'selected_weapon']
+        elif cfg.env.startswith('quadrotor_'):
+            self.reward_categories_to_tune = ['quad_rewards']
 
     def init(self, learner_workers, actor_workers):
         self.learner_workers = learner_workers
@@ -169,7 +172,7 @@ class PopulationBasedTraining:
             return None
 
         replacement_shaping = copy.deepcopy(original_reward_shaping)
-        for category in REWARD_CATEGORIES_TO_TUNE:
+        for category in self.reward_categories_to_tune:
             if category in replacement_shaping:
                 replacement_shaping[category] = self._perturb(
                     replacement_shaping[category], default_params=self.default_reward_shaping[category],
@@ -308,8 +311,7 @@ class PopulationBasedTraining:
         # also periodically dump a pbt summary even if we didn't change anything
         now = time.time()
         if now - self.last_pbt_summaries > 10 * 60:
-            self.last_pbt_summaries = now
-
             for policy_id in range(self.cfg.num_policies):
                 if policy_id in env_steps:
                     self._write_pbt_summaries(policy_id, env_steps[policy_id])
+                    self.last_pbt_summaries = now

@@ -1,5 +1,7 @@
 from gym_art.quadrotor.quadrotor import QuadrotorEnv
 
+from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
+
 
 def make_quadrotor_env(env_name, **kwargs):
     quad = 'Crazyflie'
@@ -15,10 +17,7 @@ def make_quadrotor_env(env_name, **kwargs):
 
     sense_noise = 'default'
 
-    rew_coeff = dict(
-        pos=1.0, pos_log_weight=0.0, pos_linear_weight=1.0, effort=0.05, spin=0.1,
-        vel=0.0, crash=1.0, orient=1.0, yaw=0.0,
-    )
+    rew_coeff = DEFAULT_QUAD_REWARD_SHAPING['quad_rewards']
 
     dynamics_change = dict(noise=dict(thrust_noise_ratio=0.05), damp=dict(vel=0, omega_quadratic=0))
 
@@ -28,4 +27,5 @@ def make_quadrotor_env(env_name, **kwargs):
         sense_noise=sense_noise, init_random_state=True, ep_time=episode_duration, rew_coeff=rew_coeff,
     )
 
+    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=DEFAULT_QUAD_REWARD_SHAPING)
     return env
