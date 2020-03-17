@@ -305,8 +305,9 @@ class PopulationBasedTraining:
                 self._write_pbt_summaries(policy_id, env_steps[policy_id])
                 self.last_update[policy_id] = env_steps[policy_id]
 
+        # also periodically dump a pbt summary even if we didn't change anything
         now = time.time()
-        if now - self.last_pbt_summaries > 60 * 60:
+        if now - self.last_pbt_summaries > 10 * 60:
             self.last_pbt_summaries = now
 
             for policy_id in range(self.cfg.num_policies):
