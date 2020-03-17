@@ -296,6 +296,9 @@ class PopulationBasedTraining:
             if policy_id not in env_steps:
                 continue
 
+            if env_steps[policy_id] < self.cfg.pbt_start_mutation:
+                continue
+
             steps_since_last_update = env_steps[policy_id] - self.last_update[policy_id]
             if steps_since_last_update > self.cfg.pbt_period_env_steps:
                 self._update_policy(policy_id, policy_stats)
