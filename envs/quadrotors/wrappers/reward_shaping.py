@@ -31,11 +31,9 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
             env_reward_shaping[key] = weight
 
         obs, rew, done, info = self.env.step(action)
-        if obs is None:
-            return obs, rew, done, info
 
         rew_dict = info['rewards']
-        self.cumulative_distance_reward += rew_dict['rew_pos']
+        self.cumulative_distance_reward += rew_dict['rewraw_main']
 
         if done:
             true_reward = self.cumulative_distance_reward
