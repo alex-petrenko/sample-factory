@@ -1,5 +1,5 @@
 import os
-import random
+import os
 import shutil
 import time
 from os.path import join
@@ -10,6 +10,8 @@ import gym
 import numpy as np
 from gym.utils import seeding
 
+from envs.dmlab.dmlab30 import LEVEL_MAPPING, dmlab30_num_envs
+from envs.dmlab.wrappers.reward_shaping import DmlabRewardShapingWrapper
 from envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
 from utils.utils import project_root, ensure_dir_exists, log
 
@@ -60,6 +62,9 @@ class DmlabGymEnv(gym.Env):
         self._action_repeat = action_repeat
 
         self._random_state = None
+
+        self.level = level
+        self.level_name = level.split('/')[-1]
 
         observation_format = [self._main_observation, 'DEBUG.POS.TRANS']
         config = {'width': self._width, 'height': self._height, 'gpuDeviceIndex': str(gpu_index)}
@@ -153,14 +158,15 @@ class DmLabSpec:
 DMLAB_ENVS = [
     DmLabSpec('dmlab_benchmark', 'contributed/dmlab30/rooms_collect_good_objects_train'),
 
+    # train a single agent for all 30 DMLab tasks
+    DmLabSpec('dmlab_30', None),
+
     # this is very hard to work with as a benchmark, because FPS fluctuates a lot due to slow resets.
     # also depends a lot on whether levels are in level cache or not
     DmLabSpec('dmlab_benchmark_slow_reset', 'contributed/dmlab30/rooms_keys_doors_puzzle'),
 
     DmLabSpec('dmlab_sparse', 'contributed/dmlab30/explore_goal_locations_large'),
-    DmLabSpec(
-        'dmlab_very_sparse', 'contributed/dmlab30/explore_goal_locations_large', extra_cfg={'minGoalDistance': '10'},
-    ),
+    DmLabSpec('dmlab_very_sparse', 'contributed/dmlab30/explore_goal_locations_large', extra_cfg={'minGoalDistance': '10'}),
     DmLabSpec('dmlab_sparse_doors', 'contributed/dmlab30/explore_obstructed_goals_large'),
     DmLabSpec('dmlab_nonmatch', 'contributed/dmlab30/rooms_select_nonmatching_object'),
     DmLabSpec('dmlab_watermaze', 'contributed/dmlab30/rooms_watermaze'),
@@ -174,8 +180,23 @@ def dmlab_env_by_name(name):
     raise Exception('Unknown DMLab env')
 
 
+def get_task_id(env_config):
+    if env_config is None:
+        return 0
+    else:
+        num_envs = dmlab30_num_envs()
+        return env_config['env_id'] % num_envs
+
+
+def task_id_to_level(task_id):
+    assert 0 <= task_id < dmlab30_num_envs()
+    level_name = tuple(LEVEL_MAPPING.keys())[task_id]
+    log.debug('Level name %s', level_name)
+    return f'contributed/dmlab30/{level_name}'
+
+
 # noinspection PyUnusedLocal
-def make_dmlab_env_impl(spec, cfg, **kwargs):
+def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
     skip_frames = cfg.env_frameskip
 
     gpu_idx = 0
@@ -185,8 +206,14 @@ def make_dmlab_env_impl(spec, cfg, **kwargs):
             gpu_idx = cfg.dmlab_gpus[vector_index % len(cfg.dmlab_gpus)]
             log.debug('Using GPU %d for DMLab rendering!', gpu_idx)
 
+    if spec.level is None:
+        task_id = get_task_id(env_config)
+        level = task_id_to_level(task_id)
+    else:
+        level = spec.level
+
     env = DmlabGymEnv(
-        spec.level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
+        level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
         gpu_idx, spec.extra_cfg,
     )
 
@@ -196,6 +223,7 @@ def make_dmlab_env_impl(spec, cfg, **kwargs):
     if cfg.pixel_format == 'CHW':
         env = PixelFormatChwWrapper(env)
 
+    env = DmlabRewardShapingWrapper(env)
     return env
 
 

@@ -13,12 +13,11 @@ from tensorboardX import SummaryWriter
 from torch.multiprocessing import Queue as TorchQueue, JoinableQueue as TorchJoinableQueue
 
 from algorithms.appo.actor_worker import ActorWorker
-from algorithms.appo.appo_utils import make_env_func
+from algorithms.appo.appo_utils import make_env_func, iterate_recursively
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
 from algorithms.appo.trajectory_buffers import TrajectoryBuffers
-from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict
@@ -177,8 +176,13 @@ class APPO(Algorithm):
             if hasattr(tmp_env.unwrapped, '_reward_shaping_wrapper'):
                 # noinspection PyProtectedMember
                 self.reward_shaping_scheme = tmp_env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme
-            elif isinstance(tmp_env.unwrapped, MultiAgentEnv):
-                self.reward_shaping_scheme = tmp_env.unwrapped.default_reward_shaping
+            else:
+                try:
+                    from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
+                    if isinstance(tmp_env.unwrapped, MultiAgentEnv):
+                        self.reward_shaping_scheme = tmp_env.unwrapped.default_reward_shaping
+                except ImportError:
+                    pass
 
         tmp_env.close()
 
@@ -395,7 +399,8 @@ class APPO(Algorithm):
 
             if 'episodic' in report:
                 s = report['episodic']
-                for key, value in s.items():
+                for _, key, value in iterate_recursively(s):
+                    # log.debug('Policy stats: %s %r', key, value)
                     if key not in self.policy_avg_stats:
                         self.policy_avg_stats[key] = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
 

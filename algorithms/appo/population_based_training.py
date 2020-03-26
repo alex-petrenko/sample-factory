@@ -130,8 +130,8 @@ class PopulationBasedTraining:
         if random.random() > self.cfg.pbt_mutation_rate:
             return param
 
-        if param != default_param and random.random() < 0.1:
-            # chance to replace parameter with a default value
+        if param != default_param and random.random() < 0.05:
+            # small chance to replace parameter with a default value
             log.debug('%s changed to default value %r', param_name, default_param)
             return default_param
 
@@ -269,6 +269,8 @@ class PopulationBasedTraining:
                     'Difference in reward is %.4f (%.4f), policy %d weights to be replaced by %d',
                     reward_delta, reward_delta_relative, policy_id, replacement_policy,
                 )
+            else:
+                log.debug('Difference in reward is not enough %.3f %.3f', abs(reward_delta), reward_delta_relative)
 
         if policy_id == 0:
             # Do not ever mutate the 1st policy, leave it for the reference

@@ -12,7 +12,6 @@ from torch.multiprocessing import Process as TorchProcess
 from algorithms.appo.appo_utils import TaskType, cores_for_worker_process, make_env_func
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.algo_utils import num_env_steps
-from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill
 
@@ -36,10 +35,21 @@ def transform_dict_observations(observations):
 
 # noinspection PyProtectedMember
 def update_reward_shaping_scheme(env, agent_idx, reward_shaping):
+    """
+    Sending the updated reward shaping scheme to the environment, whether it's a single-agent env or a multi-agent env.
+    """
+
     if hasattr(env.unwrapped, '_reward_shaping_wrapper'):
         env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme = reward_shaping
-    elif isinstance(env.unwrapped, MultiAgentEnv):
-        env.unwrapped.set_env_attr(agent_idx, 'unwrapped._reward_shaping_wrapper.reward_shaping_scheme', reward_shaping)
+    else:
+        try:
+            from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
+            if isinstance(env.unwrapped, MultiAgentEnv):
+                env.unwrapped.set_env_attr(
+                    agent_idx, 'unwrapped._reward_shaping_wrapper.reward_shaping_scheme', reward_shaping,
+                )
+        except ImportError:
+            pass
 
 
 class ActorState:
@@ -78,6 +88,7 @@ class ActorState:
         self.last_episode_reward = 0
         self.last_episode_duration = 0
         self.last_episode_true_reward = 0
+        self.last_episode_extra_stats = dict()
 
         # whether the new episode was started during the current rollout
         self.new_episode = False
@@ -124,6 +135,7 @@ class ActorState:
         if done:
             self.new_episode = True
             self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
+            self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
 
     def finalize_trajectory(self, rollout_step):
         t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
@@ -152,9 +164,11 @@ class ActorState:
         stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
 
         stats['true_reward'] = self.last_episode_true_reward
+        stats['episode_extra_stats'] = self.last_episode_extra_stats
 
         report = dict(episodic=stats, policy_id=self.curr_policy_id)
         self.last_episode_reward = self.last_episode_duration = self.last_episode_true_reward = 0
+        self.last_episode_extra_stats = dict()
         return report
 
 
@@ -185,7 +199,14 @@ class VectorEnvRunner:
     def init(self):
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
-            env_config = AttrDict({'worker_index': self.worker_idx, 'vector_index': vector_idx})
+
+            # global env id within the entire system
+            env_id = self.worker_idx * self.cfg.num_envs_per_worker + vector_idx
+
+            env_config = AttrDict(
+                worker_index=self.worker_idx, vector_index=vector_idx, env_id=env_id,
+            )
+
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func(self.cfg, env_config=env_config)
 
