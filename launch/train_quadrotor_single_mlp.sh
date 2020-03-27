@@ -14,6 +14,6 @@ python -m algorithms.appo.train_appo --env=quadrotor_single \
 --batch_size=1024 \
 --benchmark=False \
 --with_pbt=False \
---experiment=quad_test_no_pbt \
+--experiment=quad_test_no_pbt_mlp \
 --ppo_clip_ratio=0.05 \
 --value_loss_coeff=2
