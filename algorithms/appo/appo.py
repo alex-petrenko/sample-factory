@@ -49,8 +49,7 @@ class Algorithm:
 
         p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
 
-        p.add_argument('--train_for_env_steps', default=int(1e10), type=int,
-                       help='Stop after all policies are trained for this many env steps')
+        p.add_argument('--train_for_env_steps', default=int(1e10), type=int, help='Stop after all policies are trained for this many env steps')
         p.add_argument('--train_for_seconds', default=int(1e10), type=int, help='Stop training after this many seconds')
 
         # observation preprocessing

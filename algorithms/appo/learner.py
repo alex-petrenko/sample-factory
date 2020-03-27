@@ -435,15 +435,17 @@ class LearnerWorker:
                             core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
                             core_outputs.append(core_output)
 
-                        # zero-out RNN states on the episode boundary
-                        with timing.add_time('bptt_rnn_states'):
-                            is_same_episode_step = is_same_episode[i::recurrence]
-                            rnn_states.mul_(is_same_episode_step)
+                        if self.cfg.use_rnn:
+                            # zero-out RNN states on the episode boundary
+                            with timing.add_time('bptt_rnn_states'):
+                                is_same_episode_step = is_same_episode[i::recurrence]
+                                rnn_states.mul_(is_same_episode_step)
 
                 with timing.add_time('tail'):
                     # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
                     # which is the same shape as the minibatch
                     core_outputs = torch.stack(core_outputs)
+
                     num_timesteps, num_trajectories = core_outputs.shape[:2]
                     assert num_timesteps == recurrence
                     assert num_timesteps * num_trajectories == self.cfg.batch_size

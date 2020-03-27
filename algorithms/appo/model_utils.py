@@ -12,6 +12,9 @@ ENCODER_REGISTRY = dict()
 
 
 def get_hidden_size(cfg):
+    if not cfg.use_rnn:
+        return 1
+
     if cfg.rnn_type == 'lstm':
         return cfg.hidden_size * 2
     else:
@@ -171,14 +174,16 @@ class PolicyCoreFC(nn.Module):
     def __init__(self, cfg, input_size):
         super().__init__()
 
+        self.cfg = cfg
+
         self.core = nn.Sequential(
-            nn.Linear(input_size, self.hidden_size),
+            nn.Linear(input_size, cfg.hidden_size),
             nonlinearity(cfg),
         )
 
     def forward(self, head_output, unused_rnn_states):
         x = self.core(head_output)
-        fake_new_rnn_states = torch.zeros(x.shape[0])  # optimize this away if you use the FC core
+        fake_new_rnn_states = torch.zeros([x.shape[0], get_hidden_size(self.cfg)], device=x.device)
         return x, fake_new_rnn_states
 
 
