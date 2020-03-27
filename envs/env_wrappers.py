@@ -369,7 +369,7 @@ class RemainingTimeWrapper(ObservationWrapper):
 
 
 class PixelFormatChwWrapper(ObservationWrapper):
-    # TODO? This can be optimized, we can query CHW directly from VizDoom
+    """TODO? This can be optimized for VizDoom, can we query CHW directly from VizDoom?"""
 
     def __init__(self, env):
         super().__init__(env)

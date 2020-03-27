@@ -28,6 +28,11 @@ ACTION_SET = (
 )
 
 
+DMLAB_INSTRUCTIONS = 'INSTR'
+DMLAB_VOCABULARY_SIZE = 1000
+DMLAB_MAX_INSTRUCTION_LEN = 16
+
+
 class LevelCache:
     def __init__(self, cache_dir):
         ensure_dir_exists(cache_dir)
@@ -54,39 +59,75 @@ class LevelCache:
 level_cache = LevelCache(join(project_root(), '.dmlab_cache'))
 
 
+def get_dataset_path(cfg):
+    cfg_dataset_path = os.path.expanduser(cfg.dmlab30_dataset)
+    return cfg_dataset_path
+
+
+def string_to_hash_bucket(s, vocabulary_size):
+    return hash(s) % vocabulary_size
+
+
 class DmlabGymEnv(gym.Env):
-    def __init__(self, level, action_repeat, res_w, res_h, benchmark_mode, renderer, gpu_index, extra_cfg=None):
-        self._width = res_w
-        self._height = res_h
-        self._main_observation = 'DEBUG.CAMERA_INTERLEAVED.PLAYER_VIEW_NO_RETICLE'
-        self._action_repeat = action_repeat
+    def __init__(
+            self, task_id, level, action_repeat, res_w, res_h, benchmark_mode, renderer, dataset_path,
+            with_instructions, gpu_index, extra_cfg=None,
+    ):
+        self.width = res_w
+        self.height = res_h
 
-        self._random_state = None
+        # self._main_observation = 'DEBUG.CAMERA_INTERLEAVED.PLAYER_VIEW_NO_RETICLE'
+        self.main_observation = 'RGB_INTERLEAVED'
+        self.instructions_observation = DMLAB_INSTRUCTIONS
+        self.with_instructions = with_instructions and not benchmark_mode
 
+        self.action_repeat = action_repeat
+
+        self.random_state = None
+
+        self.task_id = task_id
         self.level = level
         self.level_name = level.split('/')[-1]
 
-        observation_format = [self._main_observation, 'DEBUG.POS.TRANS']
-        config = {'width': self._width, 'height': self._height, 'gpuDeviceIndex': str(gpu_index)}
+        self.instructions = np.zeros([DMLAB_MAX_INSTRUCTION_LEN], dtype=np.int32)
+
+        observation_format = [self.main_observation]
+        if self.with_instructions:
+            observation_format += [self.instructions_observation]
+
+        config = {
+            'width': self.width,
+            'height': self.height,
+            'gpuDeviceIndex': str(gpu_index),
+            'datasetPath': dataset_path,
+        }
+
         if extra_cfg is not None:
             config.update(extra_cfg)
         config = {k: str(v) for k, v in config.items()}
 
-        self._dmlab = deepmind_lab.Lab(
+        self.dmlab = deepmind_lab.Lab(
             level, observation_format, config=config, renderer=renderer, level_cache=level_cache,
         )
 
-        self._action_set = ACTION_SET
-        self._action_list = np.array(self._action_set, dtype=np.intc)  # DMLAB requires intc type for actions
+        self.action_set = ACTION_SET
+        self.action_list = np.array(self.action_set, dtype=np.intc)  # DMLAB requires intc type for actions
 
-        self._last_observation = None
+        self.last_observation = None
 
-        self._render_scale = 5
-        self._render_fps = 30
-        self._last_frame = time.time()
+        self.render_scale = 5
+        self.render_fps = 30
+        self.last_frame = time.time()
 
-        self.action_space = gym.spaces.Discrete(len(self._action_set))
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(self._height, self._width, 3), dtype=np.uint8)
+        self.action_space = gym.spaces.Discrete(len(self.action_set))
+
+        self.observation_space = gym.spaces.Dict(
+            obs=gym.spaces.Box(low=0, high=255, shape=(self.height, self.width, 3), dtype=np.uint8)
+        )
+        if self.with_instructions:
+            self.observation_space.spaces[self.instructions_observation] = gym.spaces.Box(
+                low=0, high=DMLAB_VOCABULARY_SIZE, shape=[DMLAB_MAX_INSTRUCTION_LEN], dtype=np.int32,
+            )
 
         self.benchmark_mode = benchmark_mode
         if self.benchmark_mode:
@@ -99,34 +140,51 @@ class DmlabGymEnv(gym.Env):
             initial_seed = 42
         else:
             initial_seed = seeding.hash_seed(seed) % 2 ** 32
-        self._random_state = np.random.RandomState(seed=initial_seed)
+        self.random_state = np.random.RandomState(seed=initial_seed)
         return [initial_seed]
 
+    def format_obs_dict(self, env_obs_dict):
+        """SampleFactory traditionally uses 'obs' key for the 'main' observation."""
+        env_obs_dict['obs'] = env_obs_dict.pop(self.main_observation)
+
+        instr = env_obs_dict.get(self.instructions_observation)
+        self.instructions[:] = 0
+        if instr is not None:
+            instr_words = instr.split()
+            for i, word in enumerate(instr_words):
+                self.instructions[i] = string_to_hash_bucket(word, DMLAB_VOCABULARY_SIZE)
+
+            env_obs_dict[self.instructions_observation] = self.instructions
+
+        return env_obs_dict
+
     def reset(self):
-        self._dmlab.reset(seed=self._random_state.randint(0, 2 ** 31 - 1))
-        self._last_observation = self._dmlab.observations()[self._main_observation]
-        return self._last_observation
+        self.dmlab.reset(seed=self.random_state.randint(0, 2 ** 31 - 1))
+        self.last_observation = self.format_obs_dict(self.dmlab.observations())
+        return self.last_observation
 
     def step(self, action):
         if self.benchmark_mode:
             # the performance of many DMLab environments heavily depends on what agent is actually doing
             # therefore for purposes of measuring throughput we ignore the actions, this way the agent executes
             # random policy and we can measure raw throughput more precisely
-            action = self._random_state.randint(0, self.action_space.n)
+            action = self.random_state.randint(0, self.action_space.n)
 
-        reward = self._dmlab.step(self._action_list[action], num_steps=self._action_repeat)
-        done = not self._dmlab.is_running()
+        reward = self.dmlab.step(self.action_list[action], num_steps=self.action_repeat)
+        done = not self.dmlab.is_running()
+
         if not done:
-            self._last_observation = self._dmlab.observations()[self._main_observation]
+            obs_dict = self.format_obs_dict(self.dmlab.observations())
+            self.last_observation = obs_dict
 
-        info = {'num_frames': self._action_repeat}
-        return self._last_observation, reward, done, info
+        info = {'num_frames': self.action_repeat}
+        return self.last_observation, reward, done, info
 
     def render(self, mode='human'):
-        if self._last_observation is None and self._dmlab.is_running():
-            self._last_observation = self._dmlab.observations()[self._main_observation]
+        if self.last_observation is None and self.dmlab.is_running():
+            self.last_observation = self.dmlab.observations()
 
-        img = self._last_observation
+        img = self.last_observation[self.main_observation]
         if mode == 'rgb_array':
             return img
         elif mode != 'human':
@@ -134,18 +192,18 @@ class DmlabGymEnv(gym.Env):
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        scale = self._render_scale
-        img_big = cv2.resize(img, (self._width * scale, self._height * scale), interpolation=cv2.INTER_NEAREST)
+        scale = self.render_scale
+        img_big = cv2.resize(img, (self.width * scale, self.height * scale), interpolation=cv2.INTER_NEAREST)
         cv2.imshow('dmlab', img_big)
 
-        since_last_frame = time.time() - self._last_frame
-        wait_time_sec = max(1.0 / self._render_fps - since_last_frame, 0.001)
+        since_last_frame = time.time() - self.last_frame
+        wait_time_sec = max(1.0 / self.render_fps - since_last_frame, 0.001)
         wait_time_ms = max(int(1000 * wait_time_sec), 1)
         cv2.waitKey(wait_time_ms)
-        self._last_frame = time.time()
+        self.last_frame = time.time()
 
     def close(self):
-        self._dmlab.close()
+        self.dmlab.close()
 
 
 class DmLabSpec:
@@ -210,11 +268,12 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
         task_id = get_task_id(env_config)
         level = task_id_to_level(task_id)
     else:
+        task_id = 0
         level = spec.level
 
     env = DmlabGymEnv(
-        level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
-        gpu_idx, spec.extra_cfg,
+        task_id, level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
+        get_dataset_path(cfg), cfg.dmlab_with_instructions, gpu_idx, spec.extra_cfg,
     )
 
     if 'record_to' in cfg and cfg.record_to is not None:

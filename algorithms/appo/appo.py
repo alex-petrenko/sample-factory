@@ -38,14 +38,11 @@ class Algorithm:
 
         p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
 
-        p.add_argument('--initial_save_rate', default=1000, type=int,
-                       help='Save model every N train steps in the beginning of training')
+        p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N train steps in the beginning of training')
         p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
-        p.add_argument('--save_milestones_sec', default=-1, type=int,
-                       help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
+        p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
 
-        p.add_argument('--stats_episodes', default=100, type=int,
-                       help='How many episodes to average to measure performance (avg. reward etc)')
+        p.add_argument('--stats_avg', default=200, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 
         p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
 
@@ -64,8 +61,7 @@ class Algorithm:
                   'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
                   'Loss values become too high which requires a smaller learning rate, etc.'),
         )
-        p.add_argument('--reward_clip', default=10.0, type=float,
-                       help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
+        p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
 
         # policy size and configuration
         p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder')
@@ -129,8 +125,8 @@ class APPO(Algorithm):
         p.add_argument(
             '--decorrelate_experience_max_seconds', default=10, type=int,
             help='Decorrelating experience serves two benefits. First: this is better for learning because samples from workers come from random moments in the episode, becoming more "i.i.d".'
-                 'Second, and more important one: this is good for environments that highly non-uniform one-step times, including long and expensive episode resets. If experience is not decorrelated'
-                 'then training batches will come in bursts e.g. after a bunch of environments finished resets and many iterations on the learner might be required before,'
+                 'Second, and more important one: this is good for environments with highly non-uniform one-step times, including long and expensive episode resets. If experience is not decorrelated'
+                 'then training batches will come in bursts e.g. after a bunch of environments finished resets and many iterations on the learner might be required,'
                  'which will increase the policy-lag of the new experience collected. The performance of the Sample Factory is best when experience is generated as more-or-less'
                  'uniform stream. Try increasing this to 100-200 seconds to smoothen the experience distribution in time right from the beginning (it will eventually spread out and settle anyway)',
         )
@@ -401,7 +397,7 @@ class APPO(Algorithm):
                 for _, key, value in iterate_recursively(s):
                     # log.debug('Policy stats: %s %r', key, value)
                     if key not in self.policy_avg_stats:
-                        self.policy_avg_stats[key] = [deque(maxlen=100) for _ in range(self.cfg.num_policies)]
+                        self.policy_avg_stats[key] = [deque(maxlen=self.cfg.stats_avg) for _ in range(self.cfg.num_policies)]
 
                     self.policy_avg_stats[key][policy_id].append(value)
 

@@ -76,6 +76,8 @@ class _ActorCritic(nn.Module):
 
     @staticmethod
     def initialize_weights(layer):
+        """TODO: test xavier initialization"""
+
         if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
             nn.init.orthogonal_(layer.weight.data, gain=1)
             layer.bias.data.fill_(0)

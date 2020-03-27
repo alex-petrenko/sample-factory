@@ -3,7 +3,7 @@ from math import tanh
 import gym
 
 from algorithms.utils.algo_utils import EPS
-from envs.dmlab.dmlab30 import HUMAN_SCORES, RANDOM_SCORES
+from envs.dmlab.dmlab30 import HUMAN_SCORES, RANDOM_SCORES, LEVEL_MAPPING
 
 
 class DmlabRewardShapingWrapper(gym.Wrapper):
@@ -29,8 +29,10 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
             score = self.raw_episode_return
 
             level_name = self.unwrapped.level_name
-            human = HUMAN_SCORES[level_name]
-            random = RANDOM_SCORES[level_name]
+            test_level_name = LEVEL_MAPPING[level_name]
+
+            human = HUMAN_SCORES[test_level_name]
+            random = RANDOM_SCORES[test_level_name]
             human_normalized_score = (score - random) / (human - random + EPS) * 100
             capped_human_normalized_score = max(100.0, human_normalized_score)
 
@@ -40,5 +42,8 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
                 uncapped_human_normalized_score=human_normalized_score,
                 unmodified_score=score,
             )
+
+            level_name_key = f'zz_{self.unwrapped.task_id:02d}_{level_name}_score'
+            info['episode_extra_stats'][level_name_key] = score
 
         return obs, rew, done, info

@@ -431,7 +431,7 @@ class LearnerWorker:
                         # indices of head outputs corresponding to the current timestep
                         step_head_outputs = head_outputs[i::recurrence]
 
-                        with timing.add_time('forward_core'):
+                        with timing.add_time('bptt_forward_core'):
                             core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
                             core_outputs.append(core_output)
 
