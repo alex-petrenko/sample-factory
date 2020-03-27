@@ -4,8 +4,8 @@ from unittest import TestCase
 
 from algorithms.utils.agent import TrainStatus
 from algorithms.utils.arguments import parse_args
-from enjoy_pytorch import enjoy
-from train_pytorch import train
+from algorithms.ppo.enjoy_pytorch import enjoy
+from algorithms.ppo.train_pytorch import train
 from utils.utils import experiment_dir
 
 
