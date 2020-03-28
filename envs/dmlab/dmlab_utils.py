@@ -293,7 +293,7 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
 
     env = DmlabGymEnv(
         task_id, level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
-        get_dataset_path(cfg), cfg.dmlab_with_instructions, cfg.extended_action_set, gpu_idx, spec.extra_cfg,
+        get_dataset_path(cfg), cfg.dmlab_with_instructions, cfg.dmlab_extended_action_set, gpu_idx, spec.extra_cfg,
     )
 
     if 'record_to' in cfg and cfg.record_to is not None:
