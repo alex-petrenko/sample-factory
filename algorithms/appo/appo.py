@@ -141,7 +141,7 @@ class APPO(Algorithm):
                 'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
                 'that can use parallel CPU cores for level generation.'),
         )
-        p.add_argument('--reset_timeout_seconds', default=90, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
+        p.add_argument('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
         p.add_argument('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
 

@@ -95,6 +95,68 @@ class ConvEncoder(nn.Module):
         return x
 
 
+class ResBlock(nn.Module):
+    def __init__(self, cfg, input_ch, output_ch):
+        super().__init__()
+
+        layers = [
+            nonlinearity(cfg),
+            nn.Conv2d(input_ch, output_ch, kernel_size=3, stride=1, padding=1),  # padding SAME
+            nonlinearity(cfg),
+            nn.Conv2d(output_ch, output_ch, kernel_size=3, stride=1, padding=1),  # padding SAME
+        ]
+
+        self.res_block_core = nn.Sequential(*layers)
+
+    def forward(self, x):
+        identity = x
+        out = self.res_block_core(x)
+        out += identity
+        return out
+
+
+class ResnetEncoder(nn.Module):
+    def __init__(self, cfg, obs_space):
+        super().__init__()
+
+        self.cfg = cfg
+
+        obs_shape = get_obs_shape(obs_space)
+        input_ch = obs_shape.obs[0]
+        log.debug('Num input channels: %d', input_ch)
+
+        if cfg.encoder_subtype == 'resnet_impala':
+            # configuration from the IMPALA paper
+            resnet_conf = [[16, 2], [32, 2], [32, 2]]
+        else:
+            raise NotImplementedError(f'Unknown resnet subtype {cfg.encoder_subtype}')
+
+        curr_input_channels = input_ch
+        layers = []
+        for i, (out_channels, res_blocks) in enumerate(resnet_conf):
+            layers.extend([
+                nn.Conv2d(curr_input_channels, out_channels, kernel_size=3, stride=1, padding=1),  # padding SAME
+                nn.MaxPool2d(kernel_size=3, stride=2, padding=1),  # padding SAME
+            ])
+
+            for j in range(res_blocks):
+                layers.append(ResBlock(cfg, out_channels, out_channels))
+
+            curr_input_channels = out_channels
+
+        layers.append(nonlinearity(cfg))
+
+        self.conv_head = nn.Sequential(*layers)
+        self.encoder_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        log.debug('Convolutional layer output size: %r', self.encoder_out_size)
+
+    def forward(self, obs_dict):
+        normalize_obs(obs_dict, self.cfg)
+        x = self.conv_head(obs_dict['obs'])
+        x = x.view(-1, self.encoder_out_size)
+        return x
+
+
 class MlpEncoder(nn.Module):
     def __init__(self, cfg, obs_space):
         super().__init__()
@@ -111,7 +173,7 @@ class MlpEncoder(nn.Module):
                 nonlinearity(cfg),
             ]
         else:
-            raise NotImplementedError(f'Unknown encoder {cfg.encoder_subtype}')
+            raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
 
         self.mlp_head = nn.Sequential(*encoder_layers)
         self.encoder_out_size = fc_encoder_output_size
@@ -135,6 +197,8 @@ def create_encoder(cfg, obs_space):
 def create_standard_encoder(cfg, obs_space):
     if cfg.encoder_type == 'conv':
         encoder = ConvEncoder(cfg, obs_space)
+    elif cfg.encoder_type == 'resnet':
+        encoder = ResnetEncoder(cfg, obs_space)
     elif cfg.encoder_type == 'mlp':
         encoder = MlpEncoder(cfg, obs_space)
     else:

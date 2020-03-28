@@ -1,6 +1,11 @@
 import collections
 
 
+DMLAB_INSTRUCTIONS = 'INSTR'
+DMLAB_VOCABULARY_SIZE = 1000
+DMLAB_MAX_INSTRUCTION_LEN = 16
+
+
 LEVEL_MAPPING = collections.OrderedDict([
     ('rooms_collect_good_objects_train', 'rooms_collect_good_objects_test'),
     ('rooms_exploit_deferred_effects_train', 'rooms_exploit_deferred_effects_test'),

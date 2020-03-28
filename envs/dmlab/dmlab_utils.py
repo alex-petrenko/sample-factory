@@ -10,10 +10,16 @@ import gym
 import numpy as np
 from gym.utils import seeding
 
-from envs.dmlab.dmlab30 import LEVEL_MAPPING, dmlab30_num_envs
+from envs.dmlab.dmlab30 import LEVEL_MAPPING, dmlab30_num_envs, DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, \
+    DMLAB_VOCABULARY_SIZE
+from envs.dmlab.dmlab_model import register_models
 from envs.dmlab.wrappers.reward_shaping import DmlabRewardShapingWrapper
 from envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
 from utils.utils import project_root, ensure_dir_exists, log
+
+
+DMLAB_INITIALIZED = False
+
 
 ACTION_SET = (
     (0, 0, 0, 1, 0, 0, 0),    # Forward
@@ -28,9 +34,23 @@ ACTION_SET = (
 )
 
 
-DMLAB_INSTRUCTIONS = 'INSTR'
-DMLAB_VOCABULARY_SIZE = 1000
-DMLAB_MAX_INSTRUCTION_LEN = 16
+EXTENDED_ACTION_SET = (
+    (0, 0, 0, 1, 0, 0, 0),    # Forward
+    (0, 0, 0, -1, 0, 0, 0),   # Backward
+    (0, 0, -1, 0, 0, 0, 0),   # Strafe Left
+    (0, 0, 1, 0, 0, 0, 0),    # Strafe Right
+    (-10, 0, 0, 0, 0, 0, 0),  # Small Look Left
+    (10, 0, 0, 0, 0, 0, 0),   # Small Look Right
+    (-60, 0, 0, 0, 0, 0, 0),  # Large Look Left
+    (60, 0, 0, 0, 0, 0, 0),   # Large Look Right
+    (0, 10, 0, 0, 0, 0, 0),   # Look Down
+    (0, -10, 0, 0, 0, 0, 0),  # Look Up
+    (-10, 0, 0, 1, 0, 0, 0),  # Forward + Small Look Left
+    (10, 0, 0, 1, 0, 0, 0),   # Forward + Small Look Right
+    (-60, 0, 0, 1, 0, 0, 0),  # Forward + Large Look Left
+    (60, 0, 0, 1, 0, 0, 0),   # Forward + Large Look Right
+    (0, 0, 0, 0, 1, 0, 0),    # Fire.
+)
 
 
 class LevelCache:
@@ -65,13 +85,13 @@ def get_dataset_path(cfg):
 
 
 def string_to_hash_bucket(s, vocabulary_size):
-    return hash(s) % vocabulary_size
+    return (hash(s) % (vocabulary_size - 1)) + 1  # 0 means absence of an instruction
 
 
 class DmlabGymEnv(gym.Env):
     def __init__(
             self, task_id, level, action_repeat, res_w, res_h, benchmark_mode, renderer, dataset_path,
-            with_instructions, gpu_index, extra_cfg=None,
+            with_instructions, extended_action_set, gpu_index, extra_cfg=None,
     ):
         self.width = res_w
         self.height = res_h
@@ -110,7 +130,7 @@ class DmlabGymEnv(gym.Env):
             level, observation_format, config=config, renderer=renderer, level_cache=level_cache,
         )
 
-        self.action_set = ACTION_SET
+        self.action_set = EXTENDED_ACTION_SET if extended_action_set else ACTION_SET
         self.action_list = np.array(self.action_set, dtype=np.intc)  # DMLAB requires intc type for actions
 
         self.last_observation = None
@@ -273,7 +293,7 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
 
     env = DmlabGymEnv(
         task_id, level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
-        get_dataset_path(cfg), cfg.dmlab_with_instructions, gpu_idx, spec.extra_cfg,
+        get_dataset_path(cfg), cfg.dmlab_with_instructions, cfg.extended_action_set, gpu_idx, spec.extra_cfg,
     )
 
     if 'record_to' in cfg and cfg.record_to is not None:
@@ -287,6 +307,17 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
 
 
 def make_dmlab_env(env_name, cfg=None, **kwargs):
+    ensure_initialized()
+
     spec = dmlab_env_by_name(env_name)
     return make_dmlab_env_impl(spec, cfg=cfg, **kwargs)
 
+
+def ensure_initialized():
+    global DMLAB_INITIALIZED
+    if DMLAB_INITIALIZED:
+        return
+
+    register_models()
+
+    DMLAB_INITIALIZED = True
