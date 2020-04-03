@@ -7,7 +7,7 @@ import shutil
 from os.path import join
 from pathlib import Path
 
-from utils.utils import ensure_dir_exists, log, project_root
+from utils.utils import ensure_dir_exists, log, project_root, safe_ensure_dir_exists
 
 LEVEL_CACHE_DIR = join(project_root(), '.dmlab_cache')
 LEVEL_SEEDS_FILE_EXT = 'dm_lvl_seeds'
@@ -87,7 +87,6 @@ class DmlabLevelCacheGlobal:
 
         log.debug('Reading the DMLab level cache...')
         cache_dir = ensure_dir_exists(cache_dir)
-        ensure_dir_exists(join(self.experiment_dir, 'dmlab_used_lvl_seeds'))
 
         lvl_seed_files = Path(cache_dir).rglob(f'*.{LEVEL_SEEDS_FILE_EXT}')
         all_seeds = dict()
@@ -128,7 +127,7 @@ class DmlabLevelCacheGlobal:
 
         used_lvl_seeds_dir = ensure_dir_exists(join(self.experiment_dir, 'dmlab_used_lvl_seeds'))
         used_seeds_filename = join(used_lvl_seeds_dir, level_to_filename(level))
-        ensure_dir_exists(os.path.dirname(used_seeds_filename))
+        safe_ensure_dir_exists(os.path.dirname(used_seeds_filename))
 
         with open(used_seeds_filename, 'a') as fobj:
             fobj.write(f'{seed}\n')
@@ -187,7 +186,7 @@ class DmlabLevelCacheGlobal:
             # add new map to the list of available seeds for this level
             # so it can be used next time we run the experiment
             lvl_seeds_filename = join(self.cache_dir, level_to_filename(level))
-            ensure_dir_exists(os.path.dirname(lvl_seeds_filename))
+            safe_ensure_dir_exists(os.path.dirname(lvl_seeds_filename))
             with open(lvl_seeds_filename, 'a') as fobj:
                 fobj.write(f'{seed} {key}\n')
 

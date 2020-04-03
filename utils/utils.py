@@ -235,6 +235,14 @@ def ensure_dir_exists(path):
     return path
 
 
+def safe_ensure_dir_exists(path):
+    """Should be safer in multi-treaded environment."""
+    try:
+        return ensure_dir_exists(path)
+    except FileExistsError:
+        return path
+
+
 def remove_if_exists(file):
     if os.path.isfile(file):
         os.remove(file)
