@@ -10,7 +10,7 @@ from envs.dmlab.dmlab30 import RANDOM_POLICY_EPISODE_LEN
 from utils.timing import Timing
 from utils.utils import log, AttrDict, get_free_disk_space_mb
 
-DESIRED_TRAINING_LENGTH = int(2e10)
+DESIRED_TRAINING_LENGTH = int(1e10)
 
 
 class DmlabLevelGenerator(DummySampler):
