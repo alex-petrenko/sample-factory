@@ -3,6 +3,7 @@ from gym.spaces import Discrete
 from envs.doom.action_space import doom_action_space, \
     doom_action_space_full_discretized, doom_action_space_basic, doom_action_space_discretized_no_weap
 from envs.doom.doom_gym import VizdoomEnv
+
 from envs.doom.doom_model import register_models
 from envs.doom.wrappers.additional_input import DoomAdditionalInput
 from envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper

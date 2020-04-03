@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from algorithms.ppo.agent_ppo import calc_num_elements
 from algorithms.utils.algo_utils import EPS
+from algorithms.utils.pytorch_utils import calc_num_elements
 from utils.utils import AttrDict
 from utils.utils import log
 

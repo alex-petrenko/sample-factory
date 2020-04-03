@@ -1,4 +1,3 @@
-import copy
 import os
 import threading
 from collections import OrderedDict, deque
@@ -10,6 +9,7 @@ from gym import spaces, Wrapper
 
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
+from utils.get_available_gpus import get_available_gpus_without_triggering_pytorch_cuda_initialization
 from utils.utils import log, memory_consumption_mb
 
 CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
@@ -107,6 +107,14 @@ def extend_array_by(x, extra_len):
     return np.append(x, tail, axis=0)
 
 
+def set_global_cuda_envvars():
+    available_gpus = get_available_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
+    if CUDA_ENVVAR not in os.environ:
+        os.environ[CUDA_ENVVAR] = available_gpus
+    os.environ[f'{CUDA_ENVVAR}_backup_'] = os.environ[CUDA_ENVVAR]
+    os.environ[CUDA_ENVVAR] = ''
+
+
 def cuda_envvars(policy_id):
     orig_visible_devices = os.environ[f'{CUDA_ENVVAR}_backup_']
     available_gpus = [int(g) for g in orig_visible_devices.split(',')]
@@ -136,29 +144,6 @@ def memory_stats(process, device):
         f'gpu_cache_{process}': gpu_cache_mb,
     }
     return stats
-
-
-def cores_for_worker_process(worker_idx, num_workers, cpu_count):
-    worker_idx_modulo = worker_idx % cpu_count
-
-    # trying to optimally assign workers to CPU cores to minimize context switching
-    # logic here is best illustrated with an example
-    # 20 cores, 44 workers (why? I don't know, someone wanted 44 workers)
-    # first 40 are assigned to a single core each, remaining 4 get 5 cores each
-
-    cores = None
-    whole_workers_per_core = num_workers // cpu_count
-    if worker_idx < whole_workers_per_core * cpu_count:
-        # these workers get an private core each
-        cores = [worker_idx_modulo]
-    else:
-        # we're dealing with some number of workers that is less than # of cpu cores
-        remaining_workers = num_workers % cpu_count
-        if cpu_count % remaining_workers == 0:
-            cores_to_use = cpu_count // remaining_workers
-            cores = list(range(worker_idx_modulo * cores_to_use, (worker_idx_modulo + 1) * cores_to_use, 1))
-
-    return cores
 
 
 class TensorBatcher:

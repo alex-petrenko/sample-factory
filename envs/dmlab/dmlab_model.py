@@ -69,6 +69,6 @@ class DmlabEncoder(nn.Module):
         return x
 
 
-def register_models():
+def dmlab_register_models():
     log.info('Adding model class %r to registry', DmlabEncoder)
     ENCODER_REGISTRY['dmlab_instructions'] = DmlabEncoder

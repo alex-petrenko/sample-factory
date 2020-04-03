@@ -106,7 +106,44 @@ RANDOM_SCORES = {
     'explore_object_rewards_many': 2.438,
 }
 
+RANDOM_POLICY_EPISODE_LEN = {
+    'rooms_collect_good_objects_train': 3600,
+    'rooms_exploit_deferred_effects_train': 3600,
+    'rooms_select_nonmatching_object': 720,
+    'rooms_watermaze': 7200,
+    'rooms_keys_doors_puzzle': 3468,
+    'language_select_described_object': 3600,
+    'language_select_located_object': 7200,
+    'language_execute_random_task': 7200,
+    'language_answer_quantitative_question': 3600,
+    'lasertag_one_opponent_small': 14400,
+    'lasertag_three_opponents_small': 14400,
+    'lasertag_one_opponent_large': 14400,
+    'lasertag_three_opponents_large': 14400,
+    'natlab_fixed_large_map': 7200,
+    'natlab_varying_map_regrowth': 7200,
+    'natlab_varying_map_randomized': 7200,
+    'skymaze_irreversible_path_hard': 3600,
+    'skymaze_irreversible_path_varied': 3372,
+    'psychlab_arbitrary_visuomotor_mapping': 18000,
+    'psychlab_continuous_recognition': 18000,
+    'psychlab_sequential_comparison': 18000,
+    'psychlab_visual_search': 9000,
+    'explore_object_locations_small': 5400,
+    'explore_object_locations_large': 7200,
+    'explore_obstructed_goals_small': 5400,
+    'explore_obstructed_goals_large': 7200,
+    'explore_goal_locations_small': 5400,
+    'explore_goal_locations_large': 7200,
+    'explore_object_rewards_few': 5400,
+    'explore_object_rewards_many': 7200,
+}
+
 
 def dmlab30_num_envs():
     num_envs = len(tuple(LEVEL_MAPPING.keys()))
     return num_envs
+
+
+def level_name_to_level(level_name):
+    return f'contributed/dmlab30/{level_name}'

@@ -1,7 +1,9 @@
 import gym
 from gym.spaces import Discrete, Box
 
-from algorithms.spaces.discretized import Discretized
+import numpy as np
+
+from algorithms.utils.spaces.discretized import Discretized
 
 
 def key_to_action_basic(key):
@@ -50,7 +52,7 @@ def doom_action_space():
         Discrete(3),  # noop, prev_weapon, next_weapon
         Discrete(2),  # noop, attack
         Discrete(2),  # noop, sprint
-        Box(float(-1.0), float(1.0), (1,)),
+        Box(np.float32(-1.0), np.float32(1.0), (1,)),
     ))
 
 

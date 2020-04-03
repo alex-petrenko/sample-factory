@@ -4,21 +4,20 @@ import json
 import os
 import sys
 
-from algorithms.utils.agent import Agent
 from algorithms.utils.evaluation_config import add_eval_args
 from envs.env_config import add_env_args, env_override_defaults
 from utils.utils import log, AttrDict, cfg_file
 
 
 def get_algo_class(algo):
-    algo_class = Agent
+    algo_class = None
 
-    if algo == 'PPO':
-        from algorithms.ppo.agent_ppo import AgentPPO
-        algo_class = AgentPPO
-    elif algo == 'APPO':
+    if algo == 'APPO':
         from algorithms.appo.appo import APPO
         algo_class = APPO
+    elif algo == 'DUMMY_SAMPLER':
+        from algorithms.dummy_sampler.sampler import DummySampler
+        algo_class = DummySampler
     else:
         log.warning('Algorithm %s is not supported', algo)
 
@@ -41,7 +40,7 @@ def parse_args(argv=None, evaluation=False):
     algo = basic_args.algo
     env = basic_args.env
 
-    # algorithm-specific parameters (e.g. for PPO)
+    # algorithm-specific parameters (e.g. for APPO)
     algo_class = get_algo_class(algo)
     algo_class.add_cli_args(parser)
 
@@ -77,7 +76,7 @@ def parse_args(argv=None, evaluation=False):
     return args
 
 
-def default_cfg(algo='PPO', env='env', experiment='test'):
+def default_cfg(algo='APPO', env='env', experiment='test'):
     """Useful for tests."""
     return parse_args(argv=[f'--algo={algo}', f'--env={env}', f'--experiment={experiment}'])
 

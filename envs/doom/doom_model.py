@@ -3,7 +3,7 @@ from torch import nn
 
 from algorithms.appo.model_utils import ENCODER_REGISTRY, get_obs_shape, nonlinearity, \
     create_standard_encoder
-from algorithms.ppo.agent_ppo import calc_num_elements
+from algorithms.utils.pytorch_utils import calc_num_elements
 from utils.utils import log
 
 

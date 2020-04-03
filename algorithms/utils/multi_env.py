@@ -1,3 +1,11 @@
+"""
+MultiEnv class is a useful primitive that allows running multiple environments in parallel
+synchronously. This is not used in SampleFactory APPO, but can be used for synchronous RL on-policy algorithms
+such as A2C or PPO.
+
+"""
+
+
 import threading
 import time
 from multiprocessing import Process, JoinableQueue

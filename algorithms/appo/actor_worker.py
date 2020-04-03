@@ -9,11 +9,10 @@ import psutil
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, cores_for_worker_process, make_env_func
+from algorithms.appo.appo_utils import TaskType, make_env_func
 from algorithms.appo.population_based_training import PbtTask
-from algorithms.utils.algo_utils import num_env_steps
 from utils.timing import Timing
-from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill
+from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity
 
 
 def transform_dict_observations(observations):
@@ -128,7 +127,7 @@ class ActorState:
         self.traj_tensors['rewards'][traj_buffer_idx, rollout_step][0] = float(reward)
         self.traj_tensors['dones'][traj_buffer_idx, rollout_step][0] = done
 
-        env_steps = num_env_steps([info])
+        env_steps = info.get('num_frames', 1)
         self.rollout_env_steps += env_steps
         self.last_episode_duration += env_steps
 
@@ -210,7 +209,7 @@ class VectorEnvRunner:
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func(self.cfg, env_config=env_config)
 
-            env.seed(self.worker_idx * 1000 + env_i)
+            env.seed(env_id)
             self.envs.append(env)
 
             actor_states_env, episode_rewards_env = [], []
@@ -469,15 +468,9 @@ class ActorWorker:
     def _init(self):
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
-        curr_process = psutil.Process()
         if self.cfg.set_workers_cpu_affinity:
-            cpu_count = psutil.cpu_count()
-            cores = cores_for_worker_process(self.worker_idx, self.cfg.num_workers, cpu_count)
-            if cores is not None:
-                curr_process.cpu_affinity(cores)
-
-        log.debug('Worker %d uses CPU cores %r', self.worker_idx, curr_process.cpu_affinity())
-        curr_process.nice(min(self.cfg.default_niceness + 10, 20))
+            set_process_cpu_affinity(self.worker_idx, self.cfg.num_workers)
+        psutil.Process().nice(min(self.cfg.default_niceness + 10, 20))
 
         self.env_runners = []
         for split_idx in range(self.num_splits):

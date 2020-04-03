@@ -24,7 +24,7 @@ class DoomAdditionalInput(gym.Wrapper):
         self.observation_space = gym.spaces.Dict({
             'obs': current_obs_space,
             'measurements': gym.spaces.Box(
-                low=np.array(low), high=np.array(high),
+                low=np.array(low, dtype=np.float32), high=np.array(high, dtype=np.float32),
             ),
         })
 

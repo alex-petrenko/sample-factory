@@ -8,16 +8,17 @@ from envs.dmlab.dmlab30 import HUMAN_SCORES, RANDOM_SCORES, LEVEL_MAPPING
 class DmlabRewardShapingWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
-        self.raw_episode_return = 0
+        self.raw_episode_return = self.episode_length = 0
 
     def reset(self):
         obs = self.env.reset()
-        self.raw_episode_return = 0
+        self.raw_episode_return = self.episode_length = 0
         return obs
 
     def step(self, action):
         obs, rew, done, info = self.env.step(action)
         self.raw_episode_return += rew
+        self.episode_length += info.get('num_frames', 1)
 
         # optimistic asymmetric clipping from IMPALA paper
         squeezed = tanh(rew / 5.0)
@@ -44,5 +45,6 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
 
             level_name_key = f'zz_{self.unwrapped.task_id:02d}_{level_name}'
             info['episode_extra_stats'][level_name_key] = score
+            info['episode_extra_stats'][f'{level_name_key}_len'] = self.episode_length
 
         return obs, rew, done, info

@@ -12,6 +12,7 @@ import torch
 from tensorboardX import SummaryWriter
 from torch.multiprocessing import Queue as TorchQueue, JoinableQueue as TorchJoinableQueue
 
+from algorithms.algorithm import ReinforcementLearningAlgorithm
 from algorithms.appo.actor_worker import ActorWorker
 from algorithms.appo.appo_utils import make_env_func, iterate_recursively
 from algorithms.appo.learner import LearnerWorker
@@ -31,51 +32,7 @@ def done_filename(cfg):
     return join(experiment_dir(cfg=cfg), 'done')
 
 
-class Algorithm:
-    @classmethod
-    def add_cli_args(cls, parser):
-        p = parser
-
-        p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
-
-        p.add_argument('--initial_save_rate', default=1000, type=int, help='Save model every N train steps in the beginning of training')
-        p.add_argument('--keep_checkpoints', default=2, type=int, help='Number of model checkpoints to keep')
-        p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
-
-        p.add_argument('--stats_avg', default=200, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
-
-        p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
-
-        p.add_argument('--train_for_env_steps', default=int(1e10), type=int, help='Stop after all policies are trained for this many env steps')
-        p.add_argument('--train_for_seconds', default=int(1e10), type=int, help='Stop training after this many seconds')
-
-        # observation preprocessing
-        p.add_argument('--obs_subtract_mean', default=0.0, type=float, help='Observation preprocessing, mean value to subtract from observation (e.g. 128.0 for 8-bit RGB)')
-        p.add_argument('--obs_scale', default=1.0, type=float, help='Observation preprocessing, divide observation tensors by this scalar (e.g. 128.0 for 8-bit RGB)')
-
-        # RL
-        p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')
-        p.add_argument(
-            '--reward_scale', default=1.0, type=float,
-            help=('Multiply all rewards but this factor before feeding into RL algorithm.'
-                  'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
-                  'Loss values become too high which requires a smaller learning rate, etc.'),
-        )
-        p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
-
-        # policy size and configuration
-        p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder')
-        p.add_argument('--encoder_subtype', default='convnet_simple', type=str, help='Specific encoder design (see model.py)')
-        p.add_argument('--encoder_custom', default=None, type=str, help='Use custom encoder class from the registry (see model_utils.py)')
-        p.add_argument('--fc_after_encoder', default=True, type=str2bool, help='Whether to add a fully-connected layer immediately after encoder')
-        p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
-        p.add_argument('--nonlinearity', default='elu', type=str, help='Type of nonlinearity to use')
-
-    def __init__(self, cfg):
-        self.cfg = cfg
-
-
-class APPO(Algorithm):
+class APPO(ReinforcementLearningAlgorithm):
     """Async PPO."""
 
     @classmethod
@@ -119,8 +76,7 @@ class APPO(Algorithm):
             '--min_traj_buffers_per_worker', default=2, type=int,
             help='How many shared rollout tensors to allocate per actor worker to exchange information between actors and learners'
                  'Default value of 2 is fine for most workloads, except when differences in 1-step simulation time are extreme, like with some DMLab environments.'
-                 'If you see a lot of warnings about actor workers having to wait for trajectory buffers, try increasing this to 4-6, this should eliminate the problem at a cost of more RAM.'
-                 'TODO: allocate these buffers on demand?',
+                 'If you see a lot of warnings about actor workers having to wait for trajectory buffers, try increasing this to 4-6, this should eliminate the problem at a cost of more RAM.',
         )
         p.add_argument(
             '--decorrelate_experience_max_seconds', default=10, type=int,
@@ -138,7 +94,7 @@ class APPO(Algorithm):
             '--set_workers_cpu_affinity', default=True, type=str2bool,
             help=(
                 'Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
-                'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This is the case for some DMLab environments with very expensive episode reset'
+                'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
                 'that can use parallel CPU cores for level generation.'),
         )
         p.add_argument('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
@@ -426,7 +382,7 @@ class APPO(Algorithm):
 
         fps = []
         for avg_interval in self.avg_stats_intervals:
-            past_moment, past_frames = self.fps_stats[max(0, len(self.fps_stats) - avg_interval)]
+            past_moment, past_frames = self.fps_stats[max(0, len(self.fps_stats) - 1 - avg_interval)]
             fps.append((total_env_steps - past_frames) / (now - past_moment))
 
         sample_throughput = dict()
@@ -507,7 +463,7 @@ class APPO(Algorithm):
 
         return end
 
-    def learn(self):
+    def run(self):
         if os.path.isfile(done_filename(self.cfg)):
             log.warning('Training already finished! Remove "done" file to continue training')
             return

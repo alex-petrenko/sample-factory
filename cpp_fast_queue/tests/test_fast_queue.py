@@ -30,18 +30,23 @@ def produce(q, p_idx, num_messages):
     log.info('Done! %d', p_idx)
 
 
-def consume(q, p_idx, consume_many):
+def consume(q, p_idx, consume_many, total_num_messages=int(1e9)):
+    messages_received = 0
+
     while True:
         try:
-            msgs = q.get_many(consume_many, timeout=0.01)
+            msgs = q.get_many(timeout=0.01, max_messages_to_get=consume_many)
 
             for msg in msgs:
+                messages_received += 1
                 if msg[0] % 1000 == 0:
                     log.info('Consume: %r %d num_msgs: %d', msg, p_idx, len(msgs))
+
+            if messages_received >= total_num_messages:
+                break
         except Empty:
             if q.is_closed():
                 break
-            # time.sleep(0.001)
         except Exception as exc:
             log.exception(exc)
 
@@ -52,12 +57,13 @@ class TestFastQueue(TestCase):
     def test_singleproc(self):
         q = Queue()
         produce(q, 0, num_messages=20)
-        consume(q, 0, consume_many=2)
+        consume(q, 0, consume_many=2, total_num_messages=20)
+        q.close()
 
     def test_multiproc(self):
         q = Queue()
 
-        consume_many = 2000
+        consume_many = 1000
 
         producers = []
         consumers = []

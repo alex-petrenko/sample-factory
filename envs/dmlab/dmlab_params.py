@@ -25,3 +25,4 @@ def add_dmlab_env_args(env, parser):
     p.add_argument('--dmlab30_dataset', default='~/datasets/brady_konkle_oliva2008', type=str, help='Path to dataset needed for some of the environments in DMLab-30')
     p.add_argument('--dmlab_with_instructions', default=True, type=str2bool, help='Whether to use text instructions or not')
     p.add_argument('--dmlab_extended_action_set', default=False, type=str2bool, help='Use larger action set from newer papers')
+    p.add_argument('--dmlab_use_level_cache', default=True, type=str2bool, help='Whether to use the local level cache (highly recommended)')
