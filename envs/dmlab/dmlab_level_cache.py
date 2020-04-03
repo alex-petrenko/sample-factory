@@ -87,6 +87,7 @@ class DmlabLevelCacheGlobal:
 
         log.debug('Reading the DMLab level cache...')
         cache_dir = ensure_dir_exists(cache_dir)
+        ensure_dir_exists(join(self.experiment_dir, 'dmlab_used_lvl_seeds'))
 
         lvl_seed_files = Path(cache_dir).rglob(f'*.{LEVEL_SEEDS_FILE_EXT}')
         all_seeds = dict()

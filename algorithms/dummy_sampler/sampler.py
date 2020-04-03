@@ -225,4 +225,5 @@ class DummySampler(AlgorithmBase):
         log.debug('Done joining!')
 
 
-# --algo=DUMMY_SAMPLER --env=dmlab_30 --env_frameskip=4 --num_workers=30 --num_envs_per_worker=1 --sample_env_frames=40000000000 --sample_env_frames_per_worker=40000000000 --set_workers_cpu_affinity=False --dmlab_use_level_cache=True --dmlab_renderer=software --experiment=dmlab_populate_cache
+# --algo=DUMMY_SAMPLER --env=doom_benchmark --env_frameskip=4 --res_w=128 --res_h=72 --wide_aspect_ratio=False --num_workers=20 --num_envs_per_worker=10 --sample_env_frames=2000000 --experiment=test
+# --algo=DUMMY_SAMPLER --env=dmlab_benchmark --env_frameskip=4 --num_workers=20 --num_envs_per_worker=10 --sample_env_frames=2000000 --experiment=test
