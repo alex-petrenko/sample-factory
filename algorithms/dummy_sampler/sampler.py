@@ -7,6 +7,8 @@ Designed to establish the upper bound on the RL algorithm throughput.
 
 import ctypes
 import multiprocessing
+import signal
+
 import psutil
 import time
 from _queue import Empty
@@ -69,6 +71,9 @@ class DummySampler(AlgorithmBase):
             self.processes.append(p)
 
     def sample(self, proc_idx):
+        # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         timing = Timing()
 
         if self.cfg.set_workers_cpu_affinity:

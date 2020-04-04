@@ -1,3 +1,4 @@
+import signal
 import time
 
 import psutil
@@ -18,6 +19,9 @@ class DmlabLevelGenerator(DummySampler):
         super().__init__(cfg)
 
     def sample(self, proc_idx):
+        # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         timing = Timing()
 
         psutil.Process().nice(10)
