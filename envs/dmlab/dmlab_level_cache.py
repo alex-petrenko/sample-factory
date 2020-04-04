@@ -34,13 +34,17 @@ def read_seeds_file(filename, has_keys):
     with open(filename, 'r') as seed_file:
         lines = seed_file.readlines()
         for line in lines:
-            if has_keys:
-                seed, cache_key = line.split(' ')
-            else:
-                seed = line
+            try:
+                if has_keys:
+                    seed, cache_key = line.split(' ')
+                else:
+                    seed = line
 
-            seed = int(seed)
-            seeds.append(seed)
+                seed = int(seed)
+                seeds.append(seed)
+            except Exception:
+                log.error('Could not read seed value from the file! File potentially corrupted')
+                log.exception('Exception when reading seeds file')
 
     return seeds
 
