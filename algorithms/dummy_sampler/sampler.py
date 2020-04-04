@@ -184,10 +184,12 @@ class DummySampler(AlgorithmBase):
                 msg = self.report_queue.get(timeout=0.1)
                 if 'finished_reset' in msg:
                     finished_reset[msg['proc_idx']] = True
+                    log.debug('Process %d finished reset! Status %r', msg['proc_idx'], finished_reset)
             except Empty:
                 pass
-        log.debug('All workers finished reset!')
 
+        log.debug('All workers finished reset!')
+        time.sleep(3)
         self.start_event.set()
 
         start = time.time()
