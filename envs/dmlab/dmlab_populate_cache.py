@@ -37,7 +37,7 @@ class DmlabLevelGenerator(DummySampler):
             # this is to track the performance for individual DMLab levels
             if hasattr(env.unwrapped, 'level_name'):
                 env_key = env.unwrapped.level_name
-                env_desired_resets = DESIRED_TRAINING_LENGTH / (RANDOM_POLICY_EPISODE_LEN[env_key] * 30)
+                env_desired_resets = DESIRED_TRAINING_LENGTH / (RANDOM_POLICY_EPISODE_LEN[env_key] * self.cfg.num_workers)
 
             env.reset()
             env_uses_level_cache = env.unwrapped.env_uses_level_cache
