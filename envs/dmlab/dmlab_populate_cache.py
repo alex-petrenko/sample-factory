@@ -69,7 +69,7 @@ class DmlabLevelGenerator(DummySampler):
                     # let other workers proceed
                     if not env_uses_level_cache:
                         log.debug('Env %s does not require cache, sleeping...', env_key)
-                        time.sleep(300)
+                        time.sleep(200)
 
                     with timing.add_time('report'):
                         now = time.time()
@@ -81,7 +81,7 @@ class DmlabLevelGenerator(DummySampler):
 
                             if get_free_disk_space_mb() < 3 * 1024:
                                 log.error('Not enough disk space! %d', get_free_disk_space_mb())
-                                time.sleep(300)
+                                time.sleep(200)
         except:
             log.exception('Unknown exception')
             log.error('Unknown exception in worker %d, terminating...', proc_idx)

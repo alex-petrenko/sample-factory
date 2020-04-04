@@ -194,11 +194,14 @@ class DummySampler(AlgorithmBase):
 
         start = time.time()
         env_frames = 0
+        last_process_report = [time.time() for _ in self.processes]
 
         while not self.terminate.value:
             try:
                 msgs = self.report_queue.get_many(timeout=0.1)
                 for msg in msgs:
+                    last_process_report[msg['proc_idx']] = time.time()
+
                     if 'crash' in msg:
                         self.terminate.value = True
                         log.error('Terminating due to process %d crashing...', msg['proc_idx'])
@@ -215,6 +218,13 @@ class DummySampler(AlgorithmBase):
 
             if time.time() - self.last_report > self.report_every_sec:
                 self.report(env_frames)
+
+            for proc_idx, p in enumerate(self.processes):
+                delay = time.time() - last_process_report[proc_idx]
+                if delay > 600:
+                    # killing the whole script is the best way to know that some of the processes froze
+                    log.error('Process %d had not responded in %.1f s!!! Terminating...', proc_idx, delay)
+                    self.terminate.value = True
 
             all_dead = True
             for p in self.processes:
