@@ -21,6 +21,10 @@ def get_hidden_size(cfg):
         return cfg.hidden_size
 
 
+def fc_after_encoder_size(cfg):
+    return cfg.hidden_size  # make configurable?
+
+
 def nonlinearity(cfg):
     if cfg.nonlinearity == 'elu':
         return nn.ELU(inplace=True)
@@ -59,16 +63,43 @@ class EncoderBase(nn.Module):
         self.cfg = cfg
         self.timing = timing
 
+        self.fc_after_enc = None
+        self.encoder_out_size = -1  # to be initialized in the constuctor of derived class
+
+    def init_fc_blocks(self, input_size):
+        layers = []
+        fc_layer_size = fc_after_encoder_size(self.cfg)
+
+        for i in range(self.cfg.encoder_extra_fc_layers):
+            size = input_size if i == 0 else fc_layer_size
+
+            layers.extend([
+                nn.Linear(size, fc_layer_size),
+                nonlinearity(self.cfg),
+            ])
+
+        if len(layers) > 0:
+            self.fc_after_enc = nn.Sequential(*layers)
+            self.encoder_out_size = fc_layer_size
+        else:
+            self.encoder_out_size = input_size
+
     def model_to_device(self, device):
         """Default implementation, can be overridden in derived classes."""
         self.to(device)
 
     def device_and_type_for_input_tensor(self, _):
         """Default implementation, can be overridden in derived classes."""
-        return self.device, torch.float32
+        return self.model_device(), torch.float32
 
     def model_device(self):
         return next(self.parameters()).device
+
+    def forward_fc_blocks(self, x):
+        if self.fc_after_enc is not None:
+            x = self.fc_after_enc(x)
+
+        return x
 
 
 class ConvEncoder(EncoderBase):
@@ -100,15 +131,18 @@ class ConvEncoder(EncoderBase):
                 raise NotImplementedError(f'Layer {layer} not supported!')
 
         self.conv_head = nn.Sequential(*conv_layers)
-        self.encoder_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
-        log.debug('Convolutional layer output size: %r', self.encoder_out_size)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        log.debug('Convolutional layer output size: %r', self.conv_head_out_size)
+
+        self.init_fc_blocks(self.conv_head_out_size)
 
     def forward(self, obs_dict):
         normalize_obs(obs_dict, self.cfg)
 
         x = self.conv_head(obs_dict['obs'])
-        x = x.view(-1, self.encoder_out_size)
+        x = x.view(-1, self.conv_head_out_size)
 
+        x = self.forward_fc_blocks(x)
         return x
 
 
@@ -166,13 +200,17 @@ class ResnetEncoder(EncoderBase):
         layers.append(nonlinearity(cfg))
 
         self.conv_head = nn.Sequential(*layers)
-        self.encoder_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
-        log.debug('Convolutional layer output size: %r', self.encoder_out_size)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        log.debug('Convolutional layer output size: %r', self.conv_head_out_size)
+
+        self.init_fc_blocks(self.conv_head_out_size)
 
     def forward(self, obs_dict):
         normalize_obs(obs_dict, self.cfg)
         x = self.conv_head(obs_dict['obs'])
-        x = x.view(-1, self.encoder_out_size)
+        x = x.view(-1, self.conv_head_out_size)
+
+        x = self.forward_fc_blocks(x)
         return x
 
 
@@ -193,11 +231,13 @@ class MlpEncoder(EncoderBase):
             raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
 
         self.mlp_head = nn.Sequential(*encoder_layers)
-        self.encoder_out_size = fc_encoder_output_size
+        self.init_fc_blocks(fc_encoder_output_size)
 
     def forward(self, obs_dict):
         normalize_obs(obs_dict, self.cfg)
         x = self.mlp_head(obs_dict['obs'])
+
+        x = self.forward_fc_blocks(x)
         return x
 
 

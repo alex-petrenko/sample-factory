@@ -1,13 +1,9 @@
 from torch import nn
 
-from algorithms.appo.model_utils import nonlinearity, create_encoder, create_core
+from algorithms.appo.model_utils import create_encoder, create_core
 from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
 from utils.timing import Timing
 from utils.utils import AttrDict
-
-
-def fc_after_encoder_size(cfg):
-    return cfg.hidden_size  # make configurable?
 
 
 class _ActorCritic(nn.Module):
@@ -20,13 +16,6 @@ class _ActorCritic(nn.Module):
         self.timing = timing
 
         self.encoder = encoder
-
-        self.linear_after_enc = None
-        if cfg.fc_after_encoder:
-            self.linear_after_enc = nn.Sequential(
-                nn.Linear(self.encoder.encoder_out_size, fc_after_encoder_size(cfg)),
-                nonlinearity(cfg),
-            )
 
         self.core = core
 
@@ -42,8 +31,6 @@ class _ActorCritic(nn.Module):
     def forward_head(self, obs_dict):
         with self.timing.add_time('forward_encoder'):
             x = self.encoder(obs_dict)
-        if self.linear_after_enc is not None:
-            x = self.linear_after_enc(x)
         return x
 
     def forward_core(self, head_output, rnn_states):
@@ -106,12 +93,6 @@ def create_actor_critic(cfg, obs_space, action_space, timing=None):
         timing = Timing()
 
     encoder = create_encoder(cfg, obs_space, timing)
-
-    if cfg.fc_after_encoder:
-        core_input_size = fc_after_encoder_size(cfg)
-    else:
-        core_input_size = encoder.encoder_out_size
-
-    core = create_core(cfg, core_input_size)
+    core = create_core(cfg, encoder.encoder_out_size)
 
     return _ActorCritic(encoder, core, action_space, cfg, timing)
