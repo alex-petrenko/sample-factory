@@ -7,8 +7,8 @@ python -m algorithms.appo.train_appo \
 --benchmark=True \
 --dmlab_renderer=software \
 --reset_timeout_seconds=300 \
---encoder_custom=dmlab_instructions --encoder_type=resnet --encoder_subtype=resnet_impala --fc_after_encoder=True \
---hidden_size=256 --nonlinearity=relu --max_grad_norm=0.0 --rnn_type=lstm \
+--encoder_custom=dmlab_instructions --encoder_type=resnet --encoder_subtype=resnet_impala --encoder_extra_fc_layers=1 --hidden_size=256 --nonlinearity=relu --rnn_type=lstm \
+--max_grad_norm=0.0 \
 --dmlab_extended_action_set=True \
 --experiment=dmlab_30_test \
 --train_for_env_steps=1000000 \
