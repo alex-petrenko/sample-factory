@@ -46,41 +46,46 @@ class DmlabLevelGenerator(DummySampler):
 
         self.start_event.wait()
 
-        with timing.timeit('work'):
-            last_report = last_report_frames = total_env_frames = 0
-            while not self.terminate.value and total_env_frames < self.cfg.sample_env_frames_per_worker:
-                action = env.action_space.sample()
-                with timing.add_time(f'{env_key}.step'):
-                    env.step(action)
+        try:
+            with timing.timeit('work'):
+                last_report = last_report_frames = total_env_frames = 0
+                while not self.terminate.value and total_env_frames < self.cfg.sample_env_frames_per_worker:
+                    action = env.action_space.sample()
+                    with timing.add_time(f'{env_key}.step'):
+                        env.step(action)
 
-                total_env_frames += 1
+                    total_env_frames += 1
 
-                with timing.add_time(f'{env_key}.reset'):
-                    env.reset()
-                    env_num_resets += 1
-                    log.debug('Env %s done %d/%d resets', env_key, env_num_resets, env_desired_resets)
+                    with timing.add_time(f'{env_key}.reset'):
+                        env.reset()
+                        env_num_resets += 1
+                        log.debug('Env %s done %d/%d resets', env_key, env_num_resets, env_desired_resets)
 
-                if env_num_resets >= env_desired_resets:
-                    log.debug('%s finished %d/%d resets, sleeping...', env_key, env_num_resets, env_desired_resets)
-                    time.sleep(30)  # free up CPU time for other envs
+                    if env_num_resets >= env_desired_resets:
+                        log.debug('%s finished %d/%d resets, sleeping...', env_key, env_num_resets, env_desired_resets)
+                        time.sleep(30)  # free up CPU time for other envs
 
-                # if env does not use level cache, there is no need to run it
-                # let other workers proceed
-                if not env_uses_level_cache:
-                    log.debug('Env %s does not require cache, sleeping...', env_key)
-                    time.sleep(300)
+                    # if env does not use level cache, there is no need to run it
+                    # let other workers proceed
+                    if not env_uses_level_cache:
+                        log.debug('Env %s does not require cache, sleeping...', env_key)
+                        time.sleep(300)
 
-                with timing.add_time('report'):
-                    now = time.time()
-                    if now - last_report > self.report_every_sec:
-                        last_report = now
-                        frames_since_last_report = total_env_frames - last_report_frames
-                        last_report_frames = total_env_frames
-                        self.report_queue.put(dict(proc_idx=proc_idx, env_frames=frames_since_last_report))
+                    with timing.add_time('report'):
+                        now = time.time()
+                        if now - last_report > self.report_every_sec:
+                            last_report = now
+                            frames_since_last_report = total_env_frames - last_report_frames
+                            last_report_frames = total_env_frames
+                            self.report_queue.put(dict(proc_idx=proc_idx, env_frames=frames_since_last_report))
 
-                        if get_free_disk_space_mb() < 3 * 1024:
-                            log.error('Not enough disk space! %d', get_free_disk_space_mb())
-                            time.sleep(300)
+                            if get_free_disk_space_mb() < 3 * 1024:
+                                log.error('Not enough disk space! %d', get_free_disk_space_mb())
+                                time.sleep(300)
+        except:
+            log.exception('Unknown exception')
+            log.error('Unknown exception in worker %d, terminating...', proc_idx)
+            self.report_queue.put(dict(proc_idx=proc_idx, crash=True))
 
         time.sleep(proc_idx * 0.1 + 0.1)
         log.info('Process %d finished sampling. Timing: %s', proc_idx, timing)
