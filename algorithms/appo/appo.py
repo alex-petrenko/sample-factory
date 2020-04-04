@@ -92,14 +92,19 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
-            help=(
-                'Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
-                'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
-                'that can use parallel CPU cores for level generation.'),
+            help='Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
+                 'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
+                 'that can use parallel CPU cores for level generation.',
         )
         p.add_argument('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
         p.add_argument('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
+
+        p.add_argument(
+            '--train_in_background_thread', default=True, type=str2bool,
+            help='Using background thread for training is faster and allows preparing the next batch while training is in progress.'
+                 'Unfortunately debugging can become very tricky in this case. So there is an option to use only a single thread on the learner to simplify the debugging.',
+        )
 
         # PBT stuff
         p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')

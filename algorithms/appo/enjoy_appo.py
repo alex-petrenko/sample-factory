@@ -53,7 +53,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
     actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
     device = torch.device('cuda')
-    actor_critic.to(device)
+    actor_critic.model_to_device(device)
 
     policy_id = cfg.policy_index
     checkpoints = LearnerWorker.get_checkpoints(LearnerWorker.checkpoint_dir(cfg, policy_id))

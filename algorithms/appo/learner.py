@@ -78,7 +78,7 @@ class LearnerWorker:
         self.tensor_batcher = TensorBatcher(self.tensor_batch_pool)
 
         self.with_training = True  # set to False for debugging no-training regime
-        self.train_in_background = True  # set to False for debugging the learner
+        self.train_in_background = self.cfg.train_in_background_thread  # set to False for debugging
 
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
@@ -376,11 +376,22 @@ class LearnerWorker:
 
         return value_loss
 
+    def _prepare_observations(self, obs_tensors, gpu_buffer_obs):
+        for d, gpu_d, k, v, _ in iter_dicts_recursively(obs_tensors, gpu_buffer_obs):
+            device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
+            tensor = v.detach().to(device, copy=True).type(dtype)
+            gpu_d[k] = tensor
+
     def _copy_train_data_to_gpu(self, buffer):
         gpu_buffer = copy_dict_structure(buffer)
-        for d, gpu_d, k, v, _ in iter_dicts_recursively(buffer, gpu_buffer):
-            gpu_tensor = v.detach().to(self.device, copy=True)
-            gpu_d[k] = gpu_tensor.float()
+
+        for key, item in buffer.items():
+            if key == 'obs':
+                self._prepare_observations(item, gpu_buffer['obs'])
+            else:
+                gpu_tensor = item.detach().to(self.device, copy=True)
+                gpu_buffer[key] = gpu_tensor.float()
+
         return gpu_buffer
 
     def _train(self, gpu_buffer, experience_size, timing):
@@ -650,9 +661,9 @@ class LearnerWorker:
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
 
-    def init_model(self):
-        self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space)
-        self.actor_critic.to(self.device)
+    def init_model(self, timing):
+        self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space, timing)
+        self.actor_critic.model_to_device(self.device)
         self.actor_critic.share_memory()
 
     def load_from_checkpoint(self, policy_id):
@@ -685,7 +696,7 @@ class LearnerWorker:
             # we should already see only one CUDA device, because of env vars
             assert torch.cuda.device_count() == 1
             self.device = torch.device('cuda', index=0)
-            self.init_model()
+            self.init_model(timing)
 
             self.optimizer = torch.optim.Adam(
                 self.actor_critic.parameters(),

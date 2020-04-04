@@ -2,6 +2,7 @@ from torch import nn
 
 from algorithms.appo.model_utils import nonlinearity, create_encoder, create_core
 from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
+from utils.timing import Timing
 from utils.utils import AttrDict
 
 
@@ -10,11 +11,13 @@ def fc_after_encoder_size(cfg):
 
 
 class _ActorCritic(nn.Module):
-    def __init__(self, encoder, core, action_space, cfg):
+    def __init__(self, encoder, core, action_space, cfg, timing):
         super().__init__()
 
         self.cfg = cfg
         self.action_space = action_space
+
+        self.timing = timing
 
         self.encoder = encoder
 
@@ -37,7 +40,8 @@ class _ActorCritic(nn.Module):
         self.train()
 
     def forward_head(self, obs_dict):
-        x = self.encoder(obs_dict)
+        with self.timing.add_time('forward_encoder'):
+            x = self.encoder(obs_dict)
         if self.linear_after_enc is not None:
             x = self.linear_after_enc(x)
         return x
@@ -74,6 +78,13 @@ class _ActorCritic(nn.Module):
         result.rnn_states = new_rnn_states
         return result
 
+    def model_to_device(self, device):
+        self.to(device)
+        self.encoder.model_to_device(device)
+
+    def device_and_type_for_input_tensor(self, input_tensor_name):
+        return self.encoder.device_and_type_for_input_tensor(input_tensor_name)
+
     @staticmethod
     def initialize_weights(layer):
         """TODO: test xavier initialization"""
@@ -90,8 +101,11 @@ class _ActorCritic(nn.Module):
             pass
 
 
-def create_actor_critic(cfg, obs_space, action_space):
-    encoder = create_encoder(cfg, obs_space)
+def create_actor_critic(cfg, obs_space, action_space, timing=None):
+    if timing is None:
+        timing = Timing()
+
+    encoder = create_encoder(cfg, obs_space, timing)
 
     if cfg.fc_after_encoder:
         core_input_size = fc_after_encoder_size(cfg)
@@ -100,4 +114,4 @@ def create_actor_critic(cfg, obs_space, action_space):
 
     core = create_core(cfg, core_input_size)
 
-    return _ActorCritic(encoder, core, action_space, cfg)
+    return _ActorCritic(encoder, core, action_space, cfg, timing)

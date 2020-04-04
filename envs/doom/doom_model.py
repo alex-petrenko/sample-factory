@@ -2,16 +2,16 @@ import torch
 from torch import nn
 
 from algorithms.appo.model_utils import ENCODER_REGISTRY, get_obs_shape, nonlinearity, \
-    create_standard_encoder
+    create_standard_encoder, EncoderBase
 from algorithms.utils.pytorch_utils import calc_num_elements
 from utils.utils import log
 
 
-class VizdoomEncoder(nn.Module):
-    def __init__(self, cfg, obs_space):
-        super().__init__()
+class VizdoomEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing):
+        super().__init__(cfg, timing)
 
-        self.basic_encoder = create_standard_encoder(cfg, obs_space)
+        self.basic_encoder = create_standard_encoder(cfg, obs_space, timing)
         self.encoder_out_size = self.basic_encoder.encoder_out_size
         obs_shape = get_obs_shape(obs_space)
 

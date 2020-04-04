@@ -52,11 +52,28 @@ def normalize_obs(obs_dict, cfg):
         obs_dict['obs'].sub_(mean).mul_(1.0 / scale)  # convert rgb observations to [-1, 1] in-place
 
 
-class ConvEncoder(nn.Module):
-    def __init__(self, cfg, obs_space):
+class EncoderBase(nn.Module):
+    def __init__(self, cfg, timing):
         super().__init__()
 
         self.cfg = cfg
+        self.timing = timing
+
+    def model_to_device(self, device):
+        """Default implementation, can be overridden in derived classes."""
+        self.to(device)
+
+    def device_and_type_for_input_tensor(self, _):
+        """Default implementation, can be overridden in derived classes."""
+        return self.device, torch.float32
+
+    def model_device(self):
+        return next(self.parameters()).device
+
+
+class ConvEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing):
+        super().__init__(cfg, timing)
 
         obs_shape = get_obs_shape(obs_space)
         input_ch = obs_shape.obs[0]
@@ -96,8 +113,10 @@ class ConvEncoder(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, cfg, input_ch, output_ch):
+    def __init__(self, cfg, input_ch, output_ch, timing):
         super().__init__()
+
+        self.timing = timing
 
         layers = [
             nonlinearity(cfg),
@@ -109,17 +128,17 @@ class ResBlock(nn.Module):
         self.res_block_core = nn.Sequential(*layers)
 
     def forward(self, x):
-        identity = x
-        out = self.res_block_core(x)
-        out += identity
-        return out
+        with self.timing.add_time('res_block'):
+            identity = x
+            out = self.res_block_core(x)
+            with self.timing.add_time('res_block_plus'):
+                out.add_(identity)
+            return out
 
 
-class ResnetEncoder(nn.Module):
-    def __init__(self, cfg, obs_space):
-        super().__init__()
-
-        self.cfg = cfg
+class ResnetEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing):
+        super().__init__(cfg, timing)
 
         obs_shape = get_obs_shape(obs_space)
         input_ch = obs_shape.obs[0]
@@ -140,7 +159,7 @@ class ResnetEncoder(nn.Module):
             ])
 
             for j in range(res_blocks):
-                layers.append(ResBlock(cfg, out_channels, out_channels))
+                layers.append(ResBlock(cfg, out_channels, out_channels, self.timing))
 
             curr_input_channels = out_channels
 
@@ -157,11 +176,9 @@ class ResnetEncoder(nn.Module):
         return x
 
 
-class MlpEncoder(nn.Module):
-    def __init__(self, cfg, obs_space):
-        super().__init__()
-
-        self.cfg = cfg
+class MlpEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing):
+        super().__init__(cfg, timing)
 
         obs_shape = get_obs_shape(obs_space)
         assert len(obs_shape.obs) == 1
@@ -184,23 +201,23 @@ class MlpEncoder(nn.Module):
         return x
 
 
-def create_encoder(cfg, obs_space):
+def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:
         encoder_cls = ENCODER_REGISTRY[cfg.encoder_custom]
-        encoder = encoder_cls(cfg, obs_space)
+        encoder = encoder_cls(cfg, obs_space, timing)
     else:
-        encoder = create_standard_encoder(cfg, obs_space)
+        encoder = create_standard_encoder(cfg, obs_space, timing)
 
     return encoder
 
 
-def create_standard_encoder(cfg, obs_space):
+def create_standard_encoder(cfg, obs_space, timing):
     if cfg.encoder_type == 'conv':
-        encoder = ConvEncoder(cfg, obs_space)
+        encoder = ConvEncoder(cfg, obs_space, timing)
     elif cfg.encoder_type == 'resnet':
-        encoder = ResnetEncoder(cfg, obs_space)
+        encoder = ResnetEncoder(cfg, obs_space, timing)
     elif cfg.encoder_type == 'mlp':
-        encoder = MlpEncoder(cfg, obs_space)
+        encoder = MlpEncoder(cfg, obs_space, timing)
     else:
         raise Exception('Encoder type not supported')
 

@@ -74,7 +74,7 @@ def multi_agent_match(policy_indices, max_num_episodes=int(1e9), max_num_frames=
     device = torch.device('cuda')
     for rival in RIVALS:
         rival.actor_critic = create_actor_critic(rival.cfg, env.observation_space, env.action_space)
-        rival.actor_critic.to(device)
+        rival.actor_critic.model_to_device(device)
 
         policy_id = rival.policy_index
         checkpoints = LearnerWorker.get_checkpoints(LearnerWorker.checkpoint_dir(rival.cfg, policy_id))

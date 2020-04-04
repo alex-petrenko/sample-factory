@@ -1,8 +1,9 @@
+import psutil
 import time
 from collections import deque
 
 from algorithms.utils.algo_utils import EPS
-from utils.utils import AttrDict
+from utils.utils import AttrDict, log
 
 
 class AvgTime:
@@ -62,3 +63,9 @@ class Timing(AttrDict):
                 s += ', '
             i += 1
         return s
+
+
+def init_global_profiler(t):
+    global TIMING
+    log.info('Setting global profiler in process %r', psutil.Process())
+    TIMING = t
