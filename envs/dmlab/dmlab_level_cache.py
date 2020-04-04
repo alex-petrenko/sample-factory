@@ -159,7 +159,8 @@ class DmlabLevelCacheGlobal:
                         break
 
                     if new_seed in self.used_seeds[level]:
-                        log.debug('Random seed %d already used in the past!', new_seed)
+                        # log.debug('Random seed %d already used in the past!', new_seed)
+                        pass
                     else:
                         break
             else:
