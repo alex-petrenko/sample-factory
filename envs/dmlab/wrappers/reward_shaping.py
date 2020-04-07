@@ -43,8 +43,8 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
                 unmodified_score=score,
             )
 
-            level_name_key = f'zz_{self.unwrapped.task_id:02d}_{level_name}'
-            info['episode_extra_stats'][level_name_key] = score
+            level_name_key = f'{self.unwrapped.task_id:02d}_{level_name}'
+            info['episode_extra_stats'][f'{level_name_key}_hum_norm_score'] = human_normalized_score
             info['episode_extra_stats'][f'{level_name_key}_len'] = self.episode_length
 
         return obs, rew, done, info

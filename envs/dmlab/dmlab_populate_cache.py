@@ -1,17 +1,18 @@
 import signal
+import sys
 import time
 
 import psutil
-import sys
 
 from algorithms.dummy_sampler.sampler import DummySampler
 from algorithms.utils.arguments import maybe_load_from_checkpoint, parse_args
 from envs.create_env import create_env
-from envs.dmlab.dmlab30 import RANDOM_POLICY_EPISODE_LEN
+from envs.dmlab.dmlab30 import DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES, DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE
 from utils.timing import Timing
 from utils.utils import log, AttrDict, get_free_disk_space_mb
 
-DESIRED_TRAINING_LENGTH = int(1e10)
+
+DESIRED_TRAINING_LENGTH = int(15e9)
 
 
 class DmlabLevelGenerator(DummySampler):
@@ -26,6 +27,8 @@ class DmlabLevelGenerator(DummySampler):
 
         psutil.Process().nice(10)
 
+        num_envs = len(DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE)
+        assert self.cfg.num_workers % num_envs == 0, f'should have an integer number of workers per env, e.g. {1 * num_envs}, {2 * num_envs}, etc...'
         assert self.cfg.num_envs_per_worker == 1, 'use populate_cache with 1 env per worker'
 
         with timing.timeit('env_init'):
@@ -41,7 +44,12 @@ class DmlabLevelGenerator(DummySampler):
             # this is to track the performance for individual DMLab levels
             if hasattr(env.unwrapped, 'level_name'):
                 env_key = env.unwrapped.level_name
-                env_desired_resets = DESIRED_TRAINING_LENGTH / (RANDOM_POLICY_EPISODE_LEN[env_key] * self.cfg.num_workers)
+                approx_num_episodes_per_1b_frames = DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES[env_key]
+                num_billions = DESIRED_TRAINING_LENGTH / int(1e9)
+                num_workers_for_env = self.cfg.num_workers // num_envs
+                env_desired_resets = int((approx_num_episodes_per_1b_frames * num_billions) / num_workers_for_env)
+                log.warning('Env %s requires %d resets on worker %d!', env_key, env_desired_resets, proc_idx)
+                time.sleep(4)
 
             env.reset()
             env_uses_level_cache = env.unwrapped.env_uses_level_cache
@@ -119,4 +127,4 @@ if __name__ == '__main__':
     sys.exit(main())
 
 
-# --algo=DUMMY_SAMPLER --env=dmlab_30 --env_frameskip=4 --num_workers=30 --num_envs_per_worker=1 --sample_env_frames=40000000000 --sample_env_frames_per_worker=40000000000 --set_workers_cpu_affinity=False --dmlab_use_level_cache=True --dmlab_renderer=software --experiment=dmlab_populate_cache
+# --algo=DUMMY_SAMPLER --env=dmlab_level_cache --env_frameskip=4 --num_workers=30 --num_envs_per_worker=1 --sample_env_frames=40000000000 --sample_env_frames_per_worker=40000000000 --set_workers_cpu_affinity=False --dmlab_use_level_cache=True --dmlab_renderer=software --experiment=dmlab_populate_cache

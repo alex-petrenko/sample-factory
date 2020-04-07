@@ -1,6 +1,7 @@
 import os
 
-from envs.dmlab.dmlab30 import LEVEL_MAPPING, dmlab30_num_envs, level_name_to_level
+from envs.dmlab.dmlab30 import LEVEL_MAPPING, dmlab30_level_name_to_level, \
+    DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE, DMLAB30_LEVELS
 from envs.dmlab.dmlab_gym import DmlabGymEnv
 from envs.dmlab.dmlab_level_cache import dmlab_ensure_global_cache_initialized
 from envs.dmlab.dmlab_model import dmlab_register_models
@@ -27,7 +28,8 @@ DMLAB_ENVS = [
     DmLabSpec('dmlab_benchmark', 'contributed/dmlab30/rooms_collect_good_objects_train'),
 
     # train a single agent for all 30 DMLab tasks
-    DmLabSpec('dmlab_30', None),
+    DmLabSpec('dmlab_30', [dmlab30_level_name_to_level(l) for l in DMLAB30_LEVELS]),
+    DmLabSpec('dmlab_level_cache', [dmlab30_level_name_to_level(l) for l in DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE]),
 
     # this is very hard to work with as a benchmark, because FPS fluctuates a lot due to slow resets.
     # also depends a lot on whether levels are in level cache or not
@@ -38,9 +40,6 @@ DMLAB_ENVS = [
     DmLabSpec('dmlab_sparse_doors', 'contributed/dmlab30/explore_obstructed_goals_large'),
     DmLabSpec('dmlab_nonmatch', 'contributed/dmlab30/rooms_select_nonmatching_object'),
     DmLabSpec('dmlab_watermaze', 'contributed/dmlab30/rooms_watermaze'),
-
-    DmLabSpec('dmlab_skymaze_irreversible_path_hard', 'contributed/dmlab30/skymaze_irreversible_path_hard'),
-    DmLabSpec('dmlab_language_select_located_object', 'contributed/dmlab30/language_select_located_object'),
 ]
 
 
@@ -48,24 +47,48 @@ def dmlab_env_by_name(name):
     for spec in DMLAB_ENVS:
         if spec.name == name:
             return spec
-    raise Exception('Unknown DMLab env')
+
+    # not a known "named" environment with a predefined spec
+    log.warning('Level %s not found. Interpreting the level name as an unmodified DMLab-30 env name!', name)
+    level = name.split('dmlab_')[1]
+    spec = DmLabSpec(name, level)
+    return spec
 
 
-def get_task_id(env_config):
+def get_task_id(env_config, spec):
+    #TODO implement training regime with equal compute per env (task id defined by worker id)
+
     if env_config is None:
         return 0
-    else:
-        num_envs = dmlab30_num_envs()
+    elif isinstance(spec.level, str):
+        return spec.level
+    elif isinstance(spec.level, (list, tuple)):
+        num_envs = len(spec.level)
         return env_config['env_id'] % num_envs
-
-
-def task_id_to_level(task_id, spec_name):
-    if spec_name == 'dmlab_30':
-        assert 0 <= task_id < dmlab30_num_envs()
-        level_name = tuple(LEVEL_MAPPING.keys())[task_id]
-        return level_name_to_level(level_name)
     else:
-        raise NotImplementedError(f'Unknown env spec {spec_name}')
+        raise Exception('spec level is either string or a list/tuple')
+
+
+def task_id_to_level(task_id, spec):
+    if isinstance(spec.level, str):
+        return spec.level
+    elif isinstance(spec.level, (list, tuple)):
+        levels = spec.level
+        level = levels[task_id]
+        return level
+    else:
+        raise Exception('spec level is either string or a list/tuple')
+
+
+def list_all_levels_for_experiment(env_name):
+    spec = dmlab_env_by_name(env_name)
+    if isinstance(spec.level, str):
+        return [spec.level]
+    elif isinstance(spec.level, (list, tuple)):
+        levels = spec.level
+        return levels
+    else:
+        raise Exception('spec level is either string or a list/tuple')
 
 
 # noinspection PyUnusedLocal
@@ -79,12 +102,8 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
             gpu_idx = cfg.dmlab_gpus[vector_index % len(cfg.dmlab_gpus)]
             log.debug('Using GPU %d for DMLab rendering!', gpu_idx)
 
-    if spec.level is None:
-        task_id = get_task_id(env_config)
-        level = task_id_to_level(task_id, spec.name)
-    else:
-        task_id = 0
-        level = spec.level
+    task_id = get_task_id(env_config, spec)
+    level = task_id_to_level(task_id, spec)
 
     env = DmlabGymEnv(
         task_id, level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
@@ -103,20 +122,6 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
 
     env = DmlabRewardShapingWrapper(env)
     return env
-
-
-def list_all_levels_for_experiment(env_name):
-    spec = dmlab_env_by_name(env_name)
-    if spec.level is not None:
-        level = spec.level
-        return [level]
-    else:
-        if spec.name == 'dmlab_30':
-            all_train_levels = list(LEVEL_MAPPING.keys())
-            all_train_levels = [level_name_to_level(l) for l in all_train_levels]
-            return all_train_levels
-        else:
-            raise NotImplementedError(f'Unknown env spec {spec.name}')
 
 
 def make_dmlab_env(env_name, cfg=None, **kwargs):

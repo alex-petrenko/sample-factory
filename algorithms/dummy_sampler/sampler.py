@@ -203,23 +203,26 @@ class DummySampler(AlgorithmBase):
 
         while not self.terminate.value:
             try:
-                msgs = self.report_queue.get_many(timeout=0.1)
-                for msg in msgs:
-                    last_process_report[msg['proc_idx']] = time.time()
+                try:
+                    msgs = self.report_queue.get_many(timeout=0.1)
+                    for msg in msgs:
+                        last_process_report[msg['proc_idx']] = time.time()
 
-                    if 'crash' in msg:
+                        if 'crash' in msg:
+                            self.terminate.value = True
+                            log.error('Terminating due to process %d crashing...', msg['proc_idx'])
+                            break
+
+                        env_frames += msg['env_frames']
+
+                    if env_frames >= self.cfg.sample_env_frames:
                         self.terminate.value = True
-                        log.error('Terminating due to process %d crashing...', msg['proc_idx'])
-                        break
-
-                    env_frames += msg['env_frames']
-
-                if env_frames >= self.cfg.sample_env_frames:
-                    self.terminate.value = True
-            except Empty:
-                pass
+                except Empty:
+                    pass
             except KeyboardInterrupt:
                 self.terminate.value = True
+                log.error('KeyboardInterrupt in main loop! Terminating...')
+                break
 
             if time.time() - self.last_report > self.report_every_sec:
                 self.report(env_frames)
@@ -231,13 +234,10 @@ class DummySampler(AlgorithmBase):
                     log.error('Process %d had not responded in %.1f s!!! Terminating...', proc_idx, delay)
                     self.terminate.value = True
 
-            all_dead = True
             for p in self.processes:
-                if p.is_alive():
-                    all_dead = False
-
-            if all_dead:
-                self.terminate.value = True
+                if not p.is_alive():
+                    self.terminate.value = True
+                    log.error('Process %r died! terminating...', p)
 
         total_time = time.time() - start
         log.info('Collected %d frames in %.1f s, avg FPS: %.1f', env_frames, total_time, env_frames / total_time)

@@ -441,8 +441,8 @@ class APPO(ReinforcementLearningAlgorithm):
         default_policy = 0
         for policy_id, env_steps in self.env_steps.items():
             if policy_id == default_policy:
-                self.writers[policy_id].add_scalar('0_aux/fps', fps, env_steps)
-                self.writers[policy_id].add_scalar('0_aux/master_process_memory_mb', float(memory_mb), env_steps)
+                self.writers[policy_id].add_scalar('0_aux/_fps', fps, env_steps)
+                self.writers[policy_id].add_scalar('0_aux/_master_process_memory_mb', float(memory_mb), env_steps)
                 for key, value in self.avg_stats.items():
                     if len(value) >= value.maxlen:
                         self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
@@ -451,7 +451,7 @@ class APPO(ReinforcementLearningAlgorithm):
                     self.writers[policy_id].add_scalar(f'stats/{key}', value, env_steps)
 
             if not math.isnan(sample_throughput[policy_id]):
-                self.writers[policy_id].add_scalar('0_aux/sample_throughput', sample_throughput[policy_id], env_steps)
+                self.writers[policy_id].add_scalar('0_aux/_sample_throughput', sample_throughput[policy_id], env_steps)
 
             for key, stat in self.policy_avg_stats.items():
                 if len(stat[policy_id]) > 0:
