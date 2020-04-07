@@ -79,12 +79,14 @@ class DmlabLevelCacheGlobal:
         self.cache_dir = cache_dir
         self.experiment_dir = experiment_dir
 
+        self.all_seeds = dict()
         self.available_seeds = dict()
         self.used_seeds = dict()
         self.num_seeds_used_in_current_run = dict()
         self.locks = dict()
 
         for lvl in all_levels_for_experiment:
+            self.all_seeds[lvl] = []
             self.available_seeds[lvl] = []
             self.num_seeds_used_in_current_run[lvl] = multiprocessing.RawValue(ctypes.c_int32, 0)
             self.locks[lvl] = multiprocessing.Lock()
@@ -93,13 +95,12 @@ class DmlabLevelCacheGlobal:
         cache_dir = ensure_dir_exists(cache_dir)
 
         lvl_seed_files = Path(cache_dir).rglob(f'*.{LEVEL_SEEDS_FILE_EXT}')
-        all_seeds = dict()
         for lvl_seed_file in lvl_seed_files:
             lvl_seed_file = str(lvl_seed_file)
             level = filename_to_level(os.path.relpath(lvl_seed_file, cache_dir))
-            all_seeds[level] = read_seeds_file(lvl_seed_file, has_keys=True)
-            all_seeds[level] = list(set(all_seeds[level]))  # leave only unique seeds
-            log.debug('Level %s has %d total seeds available', level, len(all_seeds[level]))
+            self.all_seeds[level] = read_seeds_file(lvl_seed_file, has_keys=True)
+            self.all_seeds[level] = list(set(self.all_seeds[level]))  # leave only unique seeds
+            log.debug('Level %s has %d total seeds available', level, len(self.all_seeds[level]))
 
         log.debug('Updating level cache for the current experiment...')
         used_lvl_seeds_dir = ensure_dir_exists(join(experiment_dir, 'dmlab_used_lvl_seeds'))
@@ -114,7 +115,7 @@ class DmlabLevelCacheGlobal:
             self.used_seeds[level] = set(self.used_seeds[level])
 
         for lvl in all_levels_for_experiment:
-            lvl_seeds = all_seeds.get(lvl, [])
+            lvl_seeds = self.all_seeds.get(lvl, [])
             lvl_used_seeds = self.used_seeds.get(lvl, [])
 
             lvl_remaining_seeds = set(lvl_seeds) - set(lvl_used_seeds)
@@ -195,7 +196,7 @@ class DmlabLevelCacheGlobal:
             with open(lvl_seeds_filename, 'a') as fobj:
                 fobj.write(f'{seed} {key}\n')
 
-            # we're not updating self.available_seeds here because it is not shared across processes
+            # we're not updating self.all_seeds and self.available_seeds here because they are not shared across processes
             # basically the fact that we're adding a new level means that we ran out of cache and we won't need it
             # anymore in this experiment
 
