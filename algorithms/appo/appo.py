@@ -512,7 +512,7 @@ class APPO(ReinforcementLearningAlgorithm):
             # timeout is needed here because some environments may crash on KeyboardInterrupt (e.g. VizDoom)
             # Therefore the learner train loop will never do another iteration and will never save the model.
             # This is not an issue with normal exit, e.g. due to desired number of frames reached.
-            learner.save_model(timeout=2.0)
+            learner.save_model(timeout=5.0)
 
         all_workers = self.actor_workers
         for workers in self.policy_workers.values():

@@ -149,21 +149,21 @@ RANDOM_POLICY_EPISODE_LEN = {
 # the actual value will of course be different since episode lengths change as policy improves
 # this is also under assumption that the agent is trained for the same number of envs on every level
 DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES = {
-    "rooms_keys_doors_puzzle": 11200,
-    "lasertag_one_opponent_small": 2400,
-    "lasertag_three_opponents_small": 2400,
-    "lasertag_one_opponent_large": 2400,
-    "lasertag_three_opponents_large": 2400,
-    "skymaze_irreversible_path_hard": 11200,
-    "skymaze_irreversible_path_varied": 13500,
-    "explore_object_locations_small": 6200,
-    "explore_object_locations_large": 4700,
-    "explore_obstructed_goals_small": 6200,
-    "explore_obstructed_goals_large": 4700,
-    "explore_goal_locations_small": 6200,
-    "explore_goal_locations_large": 4700,
-    "explore_object_rewards_few": 6200,
-    "explore_object_rewards_many": 4700
+    'rooms_keys_doors_puzzle': 11200,
+    'lasertag_one_opponent_small': 2400,
+    'lasertag_three_opponents_small': 2400,
+    'lasertag_one_opponent_large': 2400,
+    'lasertag_three_opponents_large': 2400,
+    'skymaze_irreversible_path_hard': 11200,
+    'skymaze_irreversible_path_varied': 13500,
+    'explore_object_locations_small': 6200,
+    'explore_object_locations_large': 4700,
+    'explore_obstructed_goals_small': 6200,
+    'explore_obstructed_goals_large': 4700,
+    'explore_goal_locations_small': 6200,
+    'explore_goal_locations_large': 4700,
+    'explore_object_rewards_few': 6200,
+    'explore_object_rewards_many': 4700
 }
 
 DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE = tuple(DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES.keys())

@@ -61,7 +61,7 @@ def get_task_id(env_config, spec):
     if env_config is None:
         return 0
     elif isinstance(spec.level, str):
-        return spec.level
+        return 0
     elif isinstance(spec.level, (list, tuple)):
         num_envs = len(spec.level)
         return env_config['env_id'] % num_envs
