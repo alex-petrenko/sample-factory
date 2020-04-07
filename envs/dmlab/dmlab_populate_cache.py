@@ -7,6 +7,7 @@ import psutil
 from algorithms.dummy_sampler.sampler import DummySampler
 from algorithms.utils.arguments import maybe_load_from_checkpoint, parse_args
 from envs.create_env import create_env
+from envs.dmlab import dmlab_level_cache
 from envs.dmlab.dmlab30 import DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES, DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE
 from utils.timing import Timing
 from utils.utils import log, AttrDict, get_free_disk_space_mb
@@ -33,8 +34,7 @@ class DmlabLevelGenerator(DummySampler):
 
         with timing.timeit('env_init'):
             env_key = 'env'
-            env_desired_resets = 0
-            env_num_resets = 0
+            env_desired_num_levels = 0
 
             global_env_id = proc_idx * self.cfg.num_envs_per_worker
             env_config = AttrDict(worker_index=proc_idx, vector_index=0, env_id=global_env_id)
@@ -47,8 +47,11 @@ class DmlabLevelGenerator(DummySampler):
                 approx_num_episodes_per_1b_frames = DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES[env_key]
                 num_billions = DESIRED_TRAINING_LENGTH / int(1e9)
                 num_workers_for_env = self.cfg.num_workers // num_envs
-                env_desired_resets = int((approx_num_episodes_per_1b_frames * num_billions) / num_workers_for_env)
-                log.warning('Env %s requires %d resets on worker %d!', env_key, env_desired_resets, proc_idx)
+                env_desired_num_levels = int((approx_num_episodes_per_1b_frames * num_billions) / num_workers_for_env)
+
+                env_num_levels_generated = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE.available_seeds[env_key] // num_workers_for_env
+
+                log.warning('Worker %d (env %s) generated %d/%d levels!', proc_idx, env_key, env_num_levels_generated, env_desired_num_levels)
                 time.sleep(4)
 
             env.reset()
@@ -70,11 +73,11 @@ class DmlabLevelGenerator(DummySampler):
 
                     with timing.add_time(f'{env_key}.reset'):
                         env.reset()
-                        env_num_resets += 1
-                        log.debug('Env %s done %d/%d resets', env_key, env_num_resets, env_desired_resets)
+                        env_num_levels_generated += 1
+                        log.debug('Env %s done %d/%d resets', env_key, env_num_levels_generated, env_desired_num_levels)
 
-                    if env_num_resets >= env_desired_resets:
-                        log.debug('%s finished %d/%d resets, sleeping...', env_key, env_num_resets, env_desired_resets)
+                    if env_num_levels_generated >= env_desired_num_levels:
+                        log.debug('%s finished %d/%d resets, sleeping...', env_key, env_num_levels_generated, env_desired_num_levels)
                         time.sleep(30)  # free up CPU time for other envs
 
                     # if env does not use level cache, there is no need to run it
