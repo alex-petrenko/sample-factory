@@ -343,7 +343,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 w.init()
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
 
-    def process_report(self, report):
+    def process_report(self, report, timing):
         if 'policy_id' in report:
             policy_id = report['policy_id']
 
@@ -363,7 +363,8 @@ class APPO(ReinforcementLearningAlgorithm):
                     self.policy_avg_stats[key][policy_id].append(value)
 
             if 'train' in report:
-                self.report_train_summaries(report['train'], policy_id)
+                with timing.timeit('train_summaries'):
+                    self.report_train_summaries(report['train'], policy_id)
 
             if 'samples' in report:
                 self.samples_collected[policy_id] += report['samples']
@@ -483,19 +484,21 @@ class APPO(ReinforcementLearningAlgorithm):
         with timing.timeit('experience'):
             try:
                 while not self._should_end_training():
-                    while True:
-                        try:
-                            report = self.report_queue.get(timeout=0.001)
-                            self.process_report(report)
-                        except Empty:
-                            break
+                    with timing.timeit('loop_iteration'):
+                        while True:
+                            try:
+                                report = self.report_queue.get(timeout=0.001)
+                                self.process_report(report, timing)
+                            except Empty:
+                                break
 
-                    if time.time() - self.last_report > self.report_interval:
-                        self.report()
+                        if time.time() - self.last_report > self.report_interval:
+                            self.report()
+                            log.error('Main loop timing: %s', timing)
 
-                        now = time.time()
-                        self.total_train_seconds += now - self.last_report
-                        self.last_report = now
+                            now = time.time()
+                            self.total_train_seconds += now - self.last_report
+                            self.last_report = now
 
                     self.pbt.update(self.env_steps, self.policy_avg_stats)
                     time.sleep(0.1)
