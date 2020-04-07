@@ -87,10 +87,13 @@ class LearnerWorker:
 
         self.train_step = self.env_steps = 0
 
-        self.summary_rate_decay = LinearDecay([(0, 50), (1000000, 1000), (10000000, 5000)])
-        self.last_summary_written = -1e9
-        self.save_rate_decay = LinearDecay([(0, self.cfg.initial_save_rate), (1000000, 5000)], staircase=100)
-        self.last_saved = self.last_milestone = 0
+        # decay rate at which summaries are collected
+        # save summaries every 20 seconds in the beginning, but decay to every 2 minutes in the limit, because we
+        # do not need frequent summaries for longer experiments
+        self.summary_rate_decay_seconds = LinearDecay([(0, 20), (100000, 60), (1000000, 120)])
+        self.last_summary_time = time.time()
+
+        self.last_saved_time = self.last_milestone_time = 0
 
         self.discarded_experience_over_time = deque([], maxlen=30)
         self.discarded_experience_timer = time.time()
@@ -288,12 +291,8 @@ class LearnerWorker:
         return mb
 
     def _should_save_summaries(self):
-        summaries_every = self.summary_rate_decay.at(self.train_step)
-        if self.train_step - self.last_summary_written < summaries_every:
-            return False
-
-        if random.random() < 0.1:
-            # this is to make sure summaries are saved at random moments in time, to guarantee we have no bias
+        summaries_every_seconds = self.summary_rate_decay_seconds.at(self.train_step)
+        if time.time() - self.last_summary_time < summaries_every_seconds:
             return False
 
         return True
@@ -304,12 +303,11 @@ class LearnerWorker:
         self._maybe_save()
 
     def _maybe_save(self):
-        save_every = self.save_rate_decay.at(self.train_step)
-        if self.train_step - self.last_saved >= save_every or self.should_save_model:
+        if time.time() - self.last_saved_time >= self.cfg.save_every_sec or self.should_save_model:
             self._save()
             self.model_saved_event.set()
             self.should_save_model = False
-            self.last_saved = self.train_step
+            self.last_saved_time = time.time()
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -349,12 +347,14 @@ class LearnerWorker:
                 log.debug('Removing %s', oldest_checkpoint)
                 os.remove(oldest_checkpoint)
 
-        if self.cfg.save_milestones_sec > 0 and time.time() - self.last_milestone:
-            milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
-            milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
-            log.debug('Saving a milestone %s', milestone_path)
-            shutil.copy(filepath, milestone_path)
-            self.last_milestone = time.time()
+        if self.cfg.save_milestones_sec > 0:
+            # milestones enabled
+            if time.time() - self.last_milestone_time >= self.cfg.save_milestones_sec:
+                milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
+                milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
+                log.debug('Saving a milestone %s', milestone_path)
+                shutil.copy(filepath, milestone_path)
+                self.last_milestone_time = time.time()
 
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high):
@@ -556,7 +556,7 @@ class LearnerWorker:
                     # collect and report summaries
                     with_summaries = self._should_save_summaries()
                     if with_summaries or force_summaries:
-                        self.last_summary_written = self.train_step
+                        self.last_summary_time = time.time()
                         stats = AttrDict()
 
                         grad_norm = sum(
