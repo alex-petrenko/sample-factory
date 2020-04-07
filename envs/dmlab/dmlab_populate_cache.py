@@ -44,12 +44,14 @@ class DmlabLevelGenerator(DummySampler):
             # this is to track the performance for individual DMLab levels
             if hasattr(env.unwrapped, 'level_name'):
                 env_key = env.unwrapped.level_name
+                env_level = env.unwrapped.level
+
                 approx_num_episodes_per_1b_frames = DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES[env_key]
                 num_billions = DESIRED_TRAINING_LENGTH / int(1e9)
                 num_workers_for_env = self.cfg.num_workers // num_envs
                 env_desired_num_levels = int((approx_num_episodes_per_1b_frames * num_billions) / num_workers_for_env)
 
-                env_num_levels_generated = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE.available_seeds[env_key] // num_workers_for_env
+                env_num_levels_generated = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE.available_seeds[env_level] // num_workers_for_env
 
                 log.warning('Worker %d (env %s) generated %d/%d levels!', proc_idx, env_key, env_num_levels_generated, env_desired_num_levels)
                 time.sleep(4)
