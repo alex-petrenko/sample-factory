@@ -172,7 +172,10 @@ class APPO(ReinforcementLearningAlgorithm):
         self.total_train_seconds = 0  # TODO: save and load from checkpoint??
 
         self.last_report = time.time()
+        self.last_basic_summaries = 0
+
         self.report_interval = 5.0  # sec
+        self.basic_summaries_interval = 30.0  # sec
 
         self.avg_stats_intervals = (2, 12, 60)  # 10 seconds, 1 minute, 5 minutes
 
@@ -344,14 +347,17 @@ class APPO(ReinforcementLearningAlgorithm):
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
 
     def process_report(self, report, timing):
+        """Process stats from various types of workers."""
+
         if 'policy_id' in report:
             policy_id = report['policy_id']
 
-            if 'env_steps' in report:
+            if 'learner_env_steps' in report:
                 if policy_id in self.env_steps:
-                    delta = report['env_steps'] - self.env_steps[policy_id]
+                    delta = report['learner_env_steps'] - self.env_steps[policy_id]
                     self.total_env_steps_since_resume += delta
-                self.env_steps[policy_id] = report['env_steps']
+                log.error('New env_steps value for policy %d: %d (prev %d)', policy_id, report['learner_env_steps'], self.env_steps[policy_id])  # TODO: remove!
+                self.env_steps[policy_id] = report['learner_env_steps']
 
             if 'episodic' in report:
                 s = report['episodic']
@@ -401,7 +407,10 @@ class APPO(ReinforcementLearningAlgorithm):
                 sample_throughput[policy_id] = math.nan
 
         self.print_stats(fps, sample_throughput, total_env_steps)
-        self.report_basic_summaries(fps[0], sample_throughput)
+
+        if time.time() - self.last_basic_summaries > self.basic_summaries_interval:
+            self.report_basic_summaries(fps[0], sample_throughput)
+            self.last_basic_summaries = time.time()
 
     def print_stats(self, fps, sample_throughput, total_env_steps):
         fps_str = []
@@ -494,7 +503,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
                         if time.time() - self.last_report > self.report_interval:
                             self.report()
-                            log.error('Main loop timing: %s', timing)
+                            log.error('Main loop timing: %s', timing)  #TODO remove
 
                             now = time.time()
                             self.total_train_seconds += now - self.last_report

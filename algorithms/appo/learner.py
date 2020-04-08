@@ -88,9 +88,9 @@ class LearnerWorker:
         self.train_step = self.env_steps = 0
 
         # decay rate at which summaries are collected
-        # save summaries every 20 seconds in the beginning, but decay to every 2 minutes in the limit, because we
+        # save summaries every 30 seconds in the beginning, but decay to every 5 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
-        self.summary_rate_decay_seconds = LinearDecay([(0, 20), (100000, 60), (1000000, 120)])
+        self.summary_rate_decay_seconds = LinearDecay([(0, 30), (100000, 120), (1000000, 300)])
         self.last_summary_time = time.time()
 
         self.last_saved_time = self.last_milestone_time = 0
@@ -122,8 +122,9 @@ class LearnerWorker:
 
     def _calculate_gae(self, buffer):
         """
-        This is leftover from previous version of the algorithm. Should be reimplemented in PyTorch tensors,
-        similar to V-trace.
+        Calculate advantages using Generalized Advantage Estimation.
+        This is leftover the from previous version of the algorithm.
+        Perhaps should be re-implemented in PyTorch tensors, similar to V-trace for uniformity.
         """
 
         rewards = torch.stack(buffer.rewards).numpy().squeeze()  # [E, T]
@@ -716,7 +717,8 @@ class LearnerWorker:
         self.env_steps += env_steps
         experience_size = buffer.rewards.shape[0]
 
-        stats = dict(env_steps=self.env_steps, policy_id=self.policy_id)
+        log.error('Learner env steps per batch: %d (Total: %d)', env_steps, self.env_steps)  # TODO: remove!
+        stats = dict(learner_env_steps=self.env_steps, policy_id=self.policy_id)
 
         with timing.add_time('train'):
             discarding_rate = self._discarding_rate()
@@ -741,6 +743,7 @@ class LearnerWorker:
 
                 stats['stats'] = memory_stats('learner', self.device)
 
+        log.error('Learner reporting stats %r', stats)  # TODO: remove!
         self.report_queue.put(stats)
 
     def _train_loop(self):
