@@ -94,7 +94,6 @@ class APPO(ReinforcementLearningAlgorithm):
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 
-        p.add_argument('--init_workers_parallel', default=multiprocessing.cpu_count(), type=int, help='Limit the maximum amount of workers we initialize in parallel. Helps to avoid crashes with some envs')
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
             help='Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
@@ -335,7 +334,7 @@ class APPO(ReinforcementLearningAlgorithm):
         log.info('Initializing actors...')
 
         self.actor_workers = []
-        max_parallel_init = self.cfg.init_workers_parallel
+        max_parallel_init = int(1e9)  # might be useful to limit this for some envs
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
             workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
@@ -391,19 +390,18 @@ class APPO(ReinforcementLearningAlgorithm):
             self.stats.update(report['stats'])
 
     def report(self):
-        if len(self.env_steps) <= 0:
+        if len(self.env_steps) < self.cfg.num_policies:
             return
 
-        total_env_steps = sum(self.env_steps.values())
         now = time.time()
-        self.fps_stats.append((now, total_env_steps))
+        self.fps_stats.append((now, self.total_env_steps_since_resume))
         if len(self.fps_stats) <= 1:
             return
 
         fps = []
         for avg_interval in self.avg_stats_intervals:
             past_moment, past_frames = self.fps_stats[max(0, len(self.fps_stats) - 1 - avg_interval)]
-            fps.append((total_env_steps - past_frames) / (now - past_moment))
+            fps.append((self.total_env_steps_since_resume - past_frames) / (now - past_moment))
 
         sample_throughput = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -414,6 +412,7 @@ class APPO(ReinforcementLearningAlgorithm):
             else:
                 sample_throughput[policy_id] = math.nan
 
+        total_env_steps = sum(self.env_steps.values())
         self.print_stats(fps, sample_throughput, total_env_steps)
 
         if time.time() - self.last_basic_summaries > self.basic_summaries_interval:
@@ -472,7 +471,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 self.writers[policy_id].add_scalar('0_aux/_sample_throughput', sample_throughput[policy_id], env_steps)
 
             for key, stat in self.policy_avg_stats.items():
-                if len(stat[policy_id]) > 0:
+                if len(stat[policy_id]) >= stat[policy_id].maxlen:
                     stat_value = np.mean(stat[policy_id])
                     self.writers[policy_id].add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
 
@@ -547,7 +546,7 @@ class APPO(ReinforcementLearningAlgorithm):
         # VizDoom processes often refuse to die for an unidentified reason, so we're force killing them with a hack
         kill_processes(child_processes)
 
-        fps = sum(self.env_steps.values()) / timing.experience
+        fps = self.total_env_steps_since_resume / timing.experience
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
         log.info('Timing: %s', timing)
 

@@ -218,7 +218,7 @@ class DmlabGymEnv(gym.Env):
         """Environment object itself acts as a proxy to the global level cache."""
         if not self.env_uses_level_cache:
             self.env_uses_level_cache = True
-            log.debug('Env %s uses level cache!', self.level_name)
+            # log.debug('Env %s uses level cache!', self.level_name)
 
         path = join(LEVEL_CACHE_DIR, key)
 
