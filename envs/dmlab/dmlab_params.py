@@ -26,3 +26,12 @@ def add_dmlab_env_args(env, parser):
     p.add_argument('--dmlab_with_instructions', default=True, type=str2bool, help='Whether to use text instructions or not')
     p.add_argument('--dmlab_extended_action_set', default=False, type=str2bool, help='Use larger action set from newer papers')
     p.add_argument('--dmlab_use_level_cache', default=True, type=str2bool, help='Whether to use the local level cache (highly recommended)')
+    p.add_argument(
+        '--dmlab_one_task_per_worker', default=False, type=str2bool,
+        help='By default SampleFactory will run several tasks per worker. E.g. if num_envs_per_worker=30 then each and every worker'
+             'will run all 30 tasks of DMLab-30. In such regime an equal amount of samples will be collected for all tasks'
+             'throughout training. This can potentially limit the throughput, because in this case the system is forced to'
+             'collect the same number of samples from slow and from fast environments (and the simulation speeds vary greatly, especially on CPU)'
+             'This flag enables a different regime, where each worker is focused on a single task. In this case the total number of workers should'
+             'be a multiple of 30 (for DMLab-30), and e.g. 17th task will be executed on 17th, 47th, 77th... worker',
+    )

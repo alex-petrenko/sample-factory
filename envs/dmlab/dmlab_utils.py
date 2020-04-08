@@ -55,16 +55,18 @@ def dmlab_env_by_name(name):
     return spec
 
 
-def get_task_id(env_config, spec):
-    #TODO implement training regime with equal compute per env (task id defined by worker id)
-
+def get_task_id(env_config, spec, cfg):
     if env_config is None:
         return 0
     elif isinstance(spec.level, str):
         return 0
     elif isinstance(spec.level, (list, tuple)):
         num_envs = len(spec.level)
-        return env_config['env_id'] % num_envs
+
+        if cfg.dmlab_one_task_per_worker:
+            return env_config['worker_index'] % num_envs
+        else:
+            return env_config['env_id'] % num_envs
     else:
         raise Exception('spec level is either string or a list/tuple')
 
@@ -102,8 +104,9 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
             gpu_idx = cfg.dmlab_gpus[vector_index % len(cfg.dmlab_gpus)]
             log.debug('Using GPU %d for DMLab rendering!', gpu_idx)
 
-    task_id = get_task_id(env_config, spec)
+    task_id = get_task_id(env_config, spec, cfg)
     level = task_id_to_level(task_id, spec)
+    log.debug('%r level %s task id %d', env_config, level, task_id)
 
     env = DmlabGymEnv(
         task_id, level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
