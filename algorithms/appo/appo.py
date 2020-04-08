@@ -10,7 +10,7 @@ from queue import Empty
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import Queue as TorchQueue, JoinableQueue as TorchJoinableQueue
+from torch.multiprocessing import JoinableQueue as TorchJoinableQueue
 
 from algorithms.algorithm import ReinforcementLearningAlgorithm
 from algorithms.appo.actor_worker import ActorWorker
@@ -147,7 +147,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         self.actor_workers = None
 
-        self.report_queue = TorchQueue()
+        self.report_queue = fast_queue.Queue()
         self.policy_workers = dict()
         self.policy_queues = dict()
 
@@ -169,7 +169,9 @@ class APPO(ReinforcementLearningAlgorithm):
         self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
         self.total_env_steps_since_resume = 0
 
-        self.total_train_seconds = 0  # TODO: save and load from checkpoint??
+        # currently this applies only to the current run, not experiment as a whole
+        # to change this behavior we'd need to save the state of the main loop to a filesystem
+        self.total_train_seconds = 0
 
         self.last_report = time.time()
         self.last_basic_summaries = 0
@@ -346,7 +348,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 w.init()
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
 
-    def process_report(self, report, timing):
+    def process_report(self, report):
         """Process stats from various types of workers."""
 
         if 'policy_id' in report:
@@ -356,7 +358,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 if policy_id in self.env_steps:
                     delta = report['learner_env_steps'] - self.env_steps[policy_id]
                     self.total_env_steps_since_resume += delta
-                log.error('New env_steps value for policy %d: %d (prev %d)', policy_id, report['learner_env_steps'], self.env_steps.get(policy_id, -1))  # TODO: remove!
+                # log.error('New env_steps value for policy %d: %d (prev %d)', policy_id, report['learner_env_steps'], self.env_steps.get(policy_id, -1))  # TODO: remove!
                 self.env_steps[policy_id] = report['learner_env_steps']
 
             if 'episodic' in report:
@@ -369,8 +371,7 @@ class APPO(ReinforcementLearningAlgorithm):
                     self.policy_avg_stats[key][policy_id].append(value)
 
             if 'train' in report:
-                with timing.timeit('train_summaries'):
-                    self.report_train_summaries(report['train'], policy_id)
+                self.report_train_summaries(report['train'], policy_id)
 
             if 'samples' in report:
                 self.samples_collected[policy_id] += report['samples']
@@ -385,9 +386,11 @@ class APPO(ReinforcementLearningAlgorithm):
             self.stats.update(report['stats'])
 
     def report(self):
-        now = time.time()
+        if len(self.env_steps) <= 0:
+            return
 
         total_env_steps = sum(self.env_steps.values())
+        now = time.time()
         self.fps_stats.append((now, total_env_steps))
         if len(self.fps_stats) <= 1:
             return
@@ -443,7 +446,7 @@ class APPO(ReinforcementLearningAlgorithm):
         for key, scalar in stats.items():
             self.writers[policy_id].add_scalar(f'train/{key}', scalar, self.env_steps[policy_id])
             if 'version_diff' in key:
-                self.policy_lag[policy_id][key] = scalar.item()
+                self.policy_lag[policy_id][key] = scalar
 
     def report_basic_summaries(self, fps, sample_throughput):
         memory_mb = memory_consumption_mb()
@@ -493,27 +496,21 @@ class APPO(ReinforcementLearningAlgorithm):
         with timing.timeit('experience'):
             try:
                 while not self._should_end_training():
-                    with timing.timeit('loop_iteration'), timing.add_time('main_loop'):
-                        while True:
-                            try:
-                                report = self.report_queue.get(timeout=0.001)
-                                self.process_report(report, timing)
-                            except Empty:
-                                break
+                    try:
+                        reports = self.report_queue.get_many(timeout=0.1)
+                        for report in reports:
+                            self.process_report(report)
+                    except Empty:
+                        pass
 
-                        if time.time() - self.last_report > self.report_interval:
-                            self.report()
-                            log.error('Main loop timing: %s', timing)  #TODO remove
+                    if time.time() - self.last_report > self.report_interval:
+                        self.report()
 
-                            now = time.time()
-                            self.total_train_seconds += now - self.last_report
-                            self.last_report = now
+                        now = time.time()
+                        self.total_train_seconds += now - self.last_report
+                        self.last_report = now
 
-                    with timing.add_time('pbt_update'):
-                        self.pbt.update(self.env_steps, self.policy_avg_stats)
-
-                    with timing.add_time('main_loop_sleep'):
-                        time.sleep(0.1)
+                    self.pbt.update(self.env_steps, self.policy_avg_stats)
 
             except Exception:
                 log.exception('Exception in driver loop')

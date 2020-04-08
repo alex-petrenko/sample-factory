@@ -29,8 +29,7 @@ class _ActorCritic(nn.Module):
         self.train()
 
     def forward_head(self, obs_dict):
-        with self.timing.add_time('forward_encoder'):
-            x = self.encoder(obs_dict)
+        x = self.encoder(obs_dict)
         return x
 
     def forward_core(self, head_output, rnn_states):

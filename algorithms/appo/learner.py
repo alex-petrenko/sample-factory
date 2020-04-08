@@ -617,7 +617,7 @@ class LearnerWorker:
                         # we want this statistic for the last batch of the last epoch
                         for key, value in stats.items():
                             if isinstance(value, torch.Tensor):
-                                stats[key] = value.detach().cpu()
+                                stats[key] = value.item()
 
         return stats
 
@@ -717,7 +717,6 @@ class LearnerWorker:
         self.env_steps += env_steps
         experience_size = buffer.rewards.shape[0]
 
-        log.error('Learner env steps per batch: %d (Total: %d)', env_steps, self.env_steps)  # TODO: remove!
         stats = dict(learner_env_steps=self.env_steps, policy_id=self.policy_id)
 
         with timing.add_time('train'):
@@ -743,7 +742,6 @@ class LearnerWorker:
 
                 stats['stats'] = memory_stats('learner', self.device)
 
-        log.error('Learner reporting stats %r', stats)  # TODO: remove!
         self.report_queue.put(stats)
 
     def _train_loop(self):
@@ -929,6 +927,10 @@ class LearnerWorker:
         join_or_kill(self.process)
 
 
+# PROFILING HISTORY (no reason to keep it here, it's just what happened historically)
+# This is pretty much the same setup (20 workers with 20 envs each) training on VizDoom Battle environment
+# with widescreen rendering (this is important!), so not the fastest possible setup. But what matters is consistency.
+
 # WITHOUT TRAINING:
 # [2019-11-27 22:06:02,056] Gpu learner timing: init: 3.1058, work: 0.0001
 # [2019-11-27 22:06:02,059] Gpu worker timing: init: 2.7746, deserialize: 4.6964, to_device: 3.8011, forward: 14.2683, serialize: 8.4691, postprocess: 9.8058, policy_step: 32.8482, weight_update: 0.0005, gpu_waiting: 2.0623
@@ -1095,3 +1097,15 @@ class LearnerWorker:
 # [2020-04-04 02:03:59,691][02449] Train loop timing: init: 1.3370, train_wait: 0.2528, forward_encoder: 11.0017, forward_head: 11.0051, bptt_initial: 1.0097, bptt_forward_core: 6.6520, bptt_rnn_states: 4.2696, bptt: 11.0963, tail: 0.6196, vtrace: 1.0200, losses: 0.4056, clip: 8.2484, update: 14.1095, train: 42.0111
 # [2020-04-04 02:03:59,829][02416] Collected {0: 2015232}, FPS: 46444.4
 # [2020-04-04 02:03:59,829][02416] Timing: experience: 43.3902
+
+# Version V84 (replaced report queue with C++ fast queue)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --experiment=doom_battle_appo_v84_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-04-07 19:08:20,955][03903] Env runner 0, rollouts 800: timing wait_actor: 0.0000, waiting: 0.4329, reset: 12.9667, save_policy_outputs: 0.9610, env_step: 36.3117, overhead: 3.7032, complete_rollouts: 0.0155, enqueue_policy_requests: 0.1662, one_step: 0.0152, work: 43.1195
+# [2020-04-07 19:08:20,980][03904] Env runner 1, rollouts 800: timing wait_actor: 0.0000, waiting: 0.4846, reset: 10.7025, save_policy_outputs: 0.9715, env_step: 36.2209, overhead: 3.6897, complete_rollouts: 0.0149, enqueue_policy_requests: 0.1649, one_step: 0.0158, work: 43.0722
+# [2020-04-07 19:08:21,195][03902] Policy worker avg. requests 3.14, timing: init: 1.8839, wait_policy_total: 14.6510, wait_policy: 0.0051, handle_policy_step: 41.6352, one_step: 0.0000, deserialize: 1.3962, obs_to_device: 5.0880, stack: 13.6252, forward: 15.4521, postprocess: 5.0110, weight_update: 0.0004
+# [2020-04-07 19:08:21,300][03885] GPU learner timing: extract: 0.1786, buffers: 0.0659, batching: 5.1178, buff_ready: 0.2293, tensors_gpu_float: 7.9821, squeeze: 0.0124, prepare: 13.4654, batcher_mem: 5.0712
+# [2020-04-07 19:08:21,607][03885] Train loop timing: init: 1.3035, train_wait: 0.2528, forward_head: 9.9191, bptt_initial: 1.0980, bptt_forward_core: 7.1492, bptt_rnn_states: 4.6381, bptt: 11.9665, tail: 0.5081, vtrace: 1.2516, losses: 0.4508, clip: 7.8777, update: 14.1513, train: 42.0710
+# [2020-04-07 19:08:21,748][03845] Collected {0: 2015232}, FPS: 46475.5
+# [2020-04-07 19:08:21,748][03845] Timing: experience: 43.3612
+
+
