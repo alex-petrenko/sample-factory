@@ -356,7 +356,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 if policy_id in self.env_steps:
                     delta = report['learner_env_steps'] - self.env_steps[policy_id]
                     self.total_env_steps_since_resume += delta
-                log.error('New env_steps value for policy %d: %d (prev %d)', policy_id, report['learner_env_steps'], self.env_steps[policy_id])  # TODO: remove!
+                log.error('New env_steps value for policy %d: %d (prev %d)', policy_id, report['learner_env_steps'], self.env_steps.get(policy_id, -1))  # TODO: remove!
                 self.env_steps[policy_id] = report['learner_env_steps']
 
             if 'episodic' in report:
