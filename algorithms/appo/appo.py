@@ -493,7 +493,7 @@ class APPO(ReinforcementLearningAlgorithm):
         with timing.timeit('experience'):
             try:
                 while not self._should_end_training():
-                    with timing.timeit('loop_iteration'):
+                    with timing.timeit('loop_iteration'), timing.add_time('main_loop'):
                         while True:
                             try:
                                 report = self.report_queue.get(timeout=0.001)
@@ -509,8 +509,11 @@ class APPO(ReinforcementLearningAlgorithm):
                             self.total_train_seconds += now - self.last_report
                             self.last_report = now
 
-                    self.pbt.update(self.env_steps, self.policy_avg_stats)
-                    time.sleep(0.1)
+                    with timing.add_time('pbt_update'):
+                        self.pbt.update(self.env_steps, self.policy_avg_stats)
+
+                    with timing.add_time('main_loop_sleep'):
+                        time.sleep(0.1)
 
             except Exception:
                 log.exception('Exception in driver loop')
