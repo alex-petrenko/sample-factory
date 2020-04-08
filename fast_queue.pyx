@@ -154,6 +154,6 @@ class Queue:
         return messages
 
     def reallocate_msg_buffer(self, new_size):
-        log.info('Reallocating msg buffer size: %d', new_size)
+        # log.info('Reallocating msg buffer size: %d', new_size)
         self.message_buffer = (ctypes.c_ubyte * new_size)()
         self.message_buffer_memview = memoryview(self.message_buffer)

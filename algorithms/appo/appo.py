@@ -86,6 +86,11 @@ class APPO(ReinforcementLearningAlgorithm):
                  'which will increase the policy-lag of the new experience collected. The performance of the Sample Factory is best when experience is generated as more-or-less'
                  'uniform stream. Try increasing this to 100-200 seconds to smoothen the experience distribution in time right from the beginning (it will eventually spread out and settle anyway)',
         )
+        p.add_argument(
+            '--decorrelate_envs_on_one_worker', default=True, type=str2bool,
+            help='In addition to temporal decorrelation of worker processes, also decorrelate envs within one worker process'
+                 'For environments with a fixed episode length it can prevent the reset from happening in the same rollout for all envs simultaneously, which makes experience collection more uniform.',
+        )
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
 

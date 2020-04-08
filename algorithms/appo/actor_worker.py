@@ -357,6 +357,14 @@ class VectorEnvRunner:
     def reset(self, report_queue):
         for env_i, e in enumerate(self.envs):
             observations = e.reset()
+
+            if self.cfg.decorrelate_envs_on_one_worker:
+                decorrelate_steps = self.cfg.rollout * env_i + 1
+                log.info('Decorrelating experience for %d frames...', decorrelate_steps)
+                for decorrelate_step in range(decorrelate_steps):
+                    actions = [e.action_space.sample() for _ in range(self.num_agents)]
+                    observations, rew, dones, info = e.step(actions)
+
             for agent_i, obs in enumerate(observations):
                 actor_state = self.actor_states[env_i][agent_i]
                 actor_state.set_trajectory_data(dict(obs=obs), self.traj_buffer_idx, self.rollout_step)
