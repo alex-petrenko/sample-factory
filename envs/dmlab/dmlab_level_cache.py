@@ -75,9 +75,10 @@ class DmlabLevelCacheGlobal:
 
     """
 
-    def __init__(self,  cache_dir, experiment_dir, all_levels_for_experiment):
+    def __init__(self,  cache_dir, experiment_dir, all_levels_for_experiment, policy_idx):
         self.cache_dir = cache_dir
         self.experiment_dir = experiment_dir
+        self.policy_idx = policy_idx
 
         self.all_seeds = dict()
         self.available_seeds = dict()
@@ -103,7 +104,7 @@ class DmlabLevelCacheGlobal:
             log.debug('Level %s has %d total seeds available', level, len(self.all_seeds[level]))
 
         log.debug('Updating level cache for the current experiment...')
-        used_lvl_seeds_dir = ensure_dir_exists(join(experiment_dir, 'dmlab_used_lvl_seeds'))
+        used_lvl_seeds_dir = self.get_used_seeds_dir()
         used_seeds_files = Path(used_lvl_seeds_dir).rglob(f'*.{LEVEL_SEEDS_FILE_EXT}')
         self.used_seeds = dict()
         for used_seeds_file in used_seeds_files:
@@ -120,17 +121,26 @@ class DmlabLevelCacheGlobal:
 
             lvl_remaining_seeds = set(lvl_seeds) - set(lvl_used_seeds)
             self.available_seeds[lvl] = list(lvl_remaining_seeds)
-            random.shuffle(self.available_seeds[lvl])
+
+            same_levels_for_population = False
+            if same_levels_for_population:
+                # shuffle with fixed seed so agents in population get the same levels
+                random.Random(42).shuffle(self.available_seeds[lvl])
+            else:
+                random.shuffle(self.available_seeds[lvl])
 
             log.debug('Env %s has %d remaining unused seeds', lvl, len(self.available_seeds[lvl]))
 
         log.debug('Done initializing global DMLab level cache!')
 
+    def get_used_seeds_dir(self):
+        return ensure_dir_exists(join(self.experiment_dir, f'dmlab_used_lvl_seeds_p{self.policy_idx:02d}'))
+
     def record_used_seed(self, level, seed):
         self.num_seeds_used_in_current_run[level].value += 1
         log.debug('Updated number of used seeds for level %s (%d)', level, self.num_seeds_used_in_current_run[level].value)
 
-        used_lvl_seeds_dir = ensure_dir_exists(join(self.experiment_dir, 'dmlab_used_lvl_seeds'))
+        used_lvl_seeds_dir = self.get_used_seeds_dir()
         used_seeds_filename = join(used_lvl_seeds_dir, level_to_filename(level))
         safe_ensure_dir_exists(os.path.dirname(used_seeds_filename))
 
@@ -201,11 +211,17 @@ class DmlabLevelCacheGlobal:
             # anymore in this experiment
 
 
-def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experiment):
+def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experiment, num_policies):
     global DMLAB_GLOBAL_LEVEL_CACHE
 
     assert multiprocessing.current_process().name == 'MainProcess', \
         'make sure you initialize DMLab cache before child processes are forked'
 
-    print('Setting global level cache...')
-    DMLAB_GLOBAL_LEVEL_CACHE = DmlabLevelCacheGlobal(LEVEL_CACHE_DIR, experiment_dir, all_levels_for_experiment)
+    DMLAB_GLOBAL_LEVEL_CACHE = []
+    for policy_id in range(num_policies):
+        # level cache is of course shared between independently training policies
+        # it's easiest to achieve
+
+        log.info('Initializing level cache for policy %d...', policy_id)
+        cache = DmlabLevelCacheGlobal(LEVEL_CACHE_DIR, experiment_dir, all_levels_for_experiment, policy_id)
+        DMLAB_GLOBAL_LEVEL_CACHE.append(cache)

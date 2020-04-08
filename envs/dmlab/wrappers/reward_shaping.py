@@ -43,7 +43,8 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
                 unmodified_score=score,
             )
 
-            level_name_key = f'{self.unwrapped.task_id:02d}_{level_name}'
+            # add extra 'z' to the summary key to put them towards the end on tensorboard
+            level_name_key = f'z{self.unwrapped.task_id:02d}_{level_name}'
             info['episode_extra_stats'][f'{level_name_key}_hum_norm_score'] = human_normalized_score
             info['episode_extra_stats'][f'{level_name_key}_len'] = self.episode_length
 

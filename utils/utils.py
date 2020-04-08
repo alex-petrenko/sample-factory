@@ -48,6 +48,11 @@ class AttrDict(dict):
             return super().__getattribute__(item)
 
 
+def set_attr_if_exists(obj, attr_name, attr_value):
+    if hasattr(obj, attr_name):
+        setattr(obj, attr_name, attr_value)
+
+
 def scale_to_range(np_array, min_, max_):
     min_arr = np.min(np_array)
     max_arr = np.max(np_array)

@@ -51,7 +51,7 @@ class DmlabLevelGenerator(DummySampler):
                 num_workers_for_env = self.cfg.num_workers // num_envs
                 env_desired_num_levels = int((approx_num_episodes_per_1b_frames * num_billions) / num_workers_for_env)
 
-                env_num_levels_generated = len(dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE.all_seeds[env_level]) // num_workers_for_env
+                env_num_levels_generated = len(dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE[0].all_seeds[env_level]) // num_workers_for_env
 
                 log.warning('Worker %d (env %s) generated %d/%d levels!', proc_idx, env_key, env_num_levels_generated, env_desired_num_levels)
                 time.sleep(4)

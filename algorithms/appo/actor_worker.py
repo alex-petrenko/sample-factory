@@ -12,7 +12,7 @@ from torch.multiprocessing import Process as TorchProcess
 from algorithms.appo.appo_utils import TaskType, make_env_func
 from algorithms.appo.population_based_training import PbtTask
 from utils.timing import Timing
-from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity
+from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
 
 
 def transform_dict_observations(observations):
@@ -68,6 +68,7 @@ class ActorState:
         self.agent_idx = agent_idx
 
         self.curr_policy_id = self._sample_random_policy()
+        self._env_set_curr_policy()
 
         self.traj_tensors = traj_tensors
         self.num_traj_buffers = num_traj_buffers
@@ -96,6 +97,13 @@ class ActorState:
 
     def _sample_random_policy(self):
         return random.randint(0, self.cfg.num_policies - 1)
+
+    def _env_set_curr_policy(self):
+        """
+        Most environments do not need to know index of the policy that currently collects experience.
+        But in rare cases it is necessary. Originally was implemented for DMLab to properly manage the level cache.
+        """
+        set_attr_if_exists(self.env.unwrapped, 'curr_policy_idx', self.curr_policy_id)
 
     def _on_new_policy(self, new_policy_id):
         """Called when the new policy is sampled for this actor."""
@@ -149,6 +157,7 @@ class ActorState:
             new_policy_id = self._sample_random_policy()
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
+                self._env_set_curr_policy()
 
             self.new_episode = False
 

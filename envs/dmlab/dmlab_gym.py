@@ -71,6 +71,10 @@ class DmlabGymEnv(gym.Env):
         self.level = level
         self.level_name = level.split('/')[-1]
 
+        # the policy index which currently acts in the environment
+        self.curr_policy_idx = 0
+        self.curr_cache = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE[self.curr_policy_idx]
+
         self.instructions = np.zeros([DMLAB_MAX_INSTRUCTION_LEN], dtype=np.int32)
 
         observation_format = [self.main_observation]
@@ -94,7 +98,7 @@ class DmlabGymEnv(gym.Env):
         self.last_reset_seed = None
 
         if env_level_cache is not None:
-            if not isinstance(dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE, dmlab_level_cache.DmlabLevelCacheGlobal):
+            if not isinstance(self.curr_cache, dmlab_level_cache.DmlabLevelCacheGlobal):
                 raise Exception(
                     'DMLab global level cache object is not initialized! Make sure to call'
                     'dmlab_ensure_global_cache_initialized() in the main thread before you fork any child processes'
@@ -159,9 +163,8 @@ class DmlabGymEnv(gym.Env):
 
     def reset(self):
         if self.use_level_cache:
-            self.last_reset_seed = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE.get_unused_seed(
-                self.level, self.random_state,
-            )
+            self.curr_cache = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE[self.curr_policy_idx]
+            self.last_reset_seed = self.curr_cache.get_unused_seed(self.level, self.random_state)
         else:
             self.last_reset_seed = self.random_state.randint(0, 2 ** 31 - 1)
 
@@ -230,4 +233,4 @@ class DmlabGymEnv(gym.Env):
     def write(self, key, pk3_path):
         """Environment object itself acts as a proxy to the global level cache."""
         log.debug('Add new level to cache! Level %s seed %r key %s', self.level_name, self.last_reset_seed, key)
-        dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE.add_new_level(self.level, self.last_reset_seed, key, pk3_path)
+        self.curr_cache.add_new_level(self.level, self.last_reset_seed, key, pk3_path)
