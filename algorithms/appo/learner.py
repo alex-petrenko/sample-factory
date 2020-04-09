@@ -43,6 +43,7 @@ class LearnerWorker:
         # PBT-related stuff
         self.should_save_model = True  # set to true if we need to save the model to disk on the next training iteration
         self.load_policy_id = None  # non-None when we need to replace our parameters with another policy's parameters
+        self.pbt_mutex = threading.Lock()
         self.new_cfg = None  # non-None when we need to update the learning hyperparameters
 
         self.terminate = False
@@ -631,25 +632,26 @@ class LearnerWorker:
 
     def _update_pbt(self):
         """To be called from the training loop, same thread that updates the model!"""
-        if self.load_policy_id is not None:
-            assert self.cfg.with_pbt
+        with self.pbt_mutex:
+            if self.load_policy_id is not None:
+                assert self.cfg.with_pbt
 
-            log.debug('Learner %d loads policy from %d', self.policy_id, self.load_policy_id)
-            self.load_from_checkpoint(self.load_policy_id)
-            self.load_policy_id = None
+                log.debug('Learner %d loads policy from %d', self.policy_id, self.load_policy_id)
+                self.load_from_checkpoint(self.load_policy_id)
+                self.load_policy_id = None
 
-        if self.new_cfg is not None:
-            for key, value in self.new_cfg.items():
-                if self.cfg[key] != value:
-                    log.debug('Learner %d replacing cfg parameter %r with new value %r', self.policy_id, key, value)
-                    self.cfg[key] = value
+            if self.new_cfg is not None:
+                for key, value in self.new_cfg.items():
+                    if self.cfg[key] != value:
+                        log.debug('Learner %d replacing cfg parameter %r with new value %r', self.policy_id, key, value)
+                        self.cfg[key] = value
 
-            for param_group in self.optimizer.param_groups:
-                param_group['lr'] = self.cfg.learning_rate
-                param_group['betas'] = (self.cfg.adam_beta1, self.cfg.adam_beta2)
-                log.debug('Updated optimizer lr to value %.7f, betas: %r', param_group['lr'], param_group['betas'])
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = self.cfg.learning_rate
+                    param_group['betas'] = (self.cfg.adam_beta1, self.cfg.adam_beta2)
+                    log.debug('Updated optimizer lr to value %.7f, betas: %r', param_group['lr'], param_group['betas'])
 
-            self.new_cfg = None
+                self.new_cfg = None
 
     @staticmethod
     def load_checkpoint(checkpoints, device):
@@ -834,19 +836,20 @@ class LearnerWorker:
     def _process_pbt_task(self, pbt_task):
         task_type, data = pbt_task
 
-        if task_type == PbtTask.SAVE_MODEL:
-            policy_id = data
-            assert policy_id == self.policy_id
-            self.should_save_model = True
-        elif task_type == PbtTask.LOAD_MODEL:
-            policy_id, new_policy_id = data
-            assert policy_id == self.policy_id
-            assert new_policy_id is not None
-            self.load_policy_id = new_policy_id
-        elif task_type == PbtTask.UPDATE_CFG:
-            policy_id, new_cfg = data
-            assert policy_id == self.policy_id
-            self.new_cfg = new_cfg
+        with self.pbt_mutex:
+            if task_type == PbtTask.SAVE_MODEL:
+                policy_id = data
+                assert policy_id == self.policy_id
+                self.should_save_model = True
+            elif task_type == PbtTask.LOAD_MODEL:
+                policy_id, new_policy_id = data
+                assert policy_id == self.policy_id
+                assert new_policy_id is not None
+                self.load_policy_id = new_policy_id
+            elif task_type == PbtTask.UPDATE_CFG:
+                policy_id, new_cfg = data
+                assert policy_id == self.policy_id
+                self.new_cfg = new_cfg
 
     def _run(self):
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
@@ -1118,4 +1121,12 @@ class LearnerWorker:
 # [2020-04-07 19:08:21,748][03845] Collected {0: 2015232}, FPS: 46475.5
 # [2020-04-07 19:08:21,748][03845] Timing: experience: 43.3612
 
-
+# Version V85 (remove macro_batch parameter)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v85_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-04-09 00:17:45,919][08128] Env runner 0, rollouts 820: timing wait_actor: 0.0000, waiting: 0.4283, reset: 12.1576, save_policy_outputs: 0.9939, env_step: 36.2774, overhead: 3.7866, complete_rollouts: 0.0152, enqueue_policy_requests: 0.1750, one_step: 0.0148, work: 43.2697
+# [2020-04-09 00:17:45,929][08129] Env runner 1, rollouts 780: timing wait_actor: 0.0000, waiting: 0.4069, reset: 14.8796, save_policy_outputs: 0.9644, env_step: 36.5389, overhead: 3.6801, complete_rollouts: 0.0143, enqueue_policy_requests: 0.1543, one_step: 0.0150, work: 43.3091
+# [2020-04-09 00:17:46,168][08127] Policy worker avg. requests 2.98, timing: init: 1.8611, wait_policy_total: 17.1872, wait_policy: 0.0051, handle_policy_step: 41.7487, one_step: 0.0000, deserialize: 1.4023, obs_to_device: 5.1597, stack: 13.6694, forward: 15.5434, postprocess: 4.9102, weight_update: 0.0005
+# [2020-04-09 00:17:46,276][08108] GPU learner timing: extract: 0.1817, buffers: 0.0662, batching: 5.1368, buff_ready: 0.2489, tensors_gpu_float: 7.7053, squeeze: 0.0106, prepare: 13.2235, batcher_mem: 5.0908
+# [2020-04-09 00:17:46,582][08108] Train loop timing: init: 1.3731, train_wait: 0.4299, forward_head: 9.1451, bptt_initial: 1.1248, bptt_forward_core: 7.7663, bptt_rnn_states: 4.9050, bptt: 12.8538, tail: 0.8713, vtrace: 1.1398, losses: 0.3700, clip: 8.0898, update: 14.1737, train: 42.0695
+# [2020-04-09 00:17:46,725][08069] Collected {0: 2015232}, FPS: 46042.6
+# [2020-04-09 00:17:46,725][08069] Timing: experience: 43.5909
