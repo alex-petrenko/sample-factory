@@ -28,7 +28,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--keep_checkpoints', default=3, type=int, help='Number of model checkpoints to keep')
         p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
 
-        p.add_argument('--stats_avg', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
+        p.add_argument('--stats_avg', default=200, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 
         p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
 

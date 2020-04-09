@@ -13,14 +13,14 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
         super().__init__(env)
 
         self.reward_shaping_scheme = reward_shaping_scheme
-        self.cumulative_distance_reward = 0.0
+        self.cumulative_rewards = dict()
 
         # save a reference to this wrapper in the actual env class, for other wrappers
         self.env.unwrapped._reward_shaping_wrapper = self
 
     def reset(self):
         obs = self.env.reset()
-        self.cumulative_distance_reward = 0.0
+        self.cumulative_rewards = dict()
         return obs
 
     def step(self, action):
@@ -32,11 +32,17 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
         obs, rew, done, info = self.env.step(action)
 
         rew_dict = info['rewards']
-        self.cumulative_distance_reward += rew_dict['rewraw_main']
+
+        for key, value in rew_dict.items():
+            if key.startswith('rewraw'):
+                if key not in self.cumulative_rewards:
+                    self.cumulative_rewards[key] = 0
+                self.cumulative_rewards[key] += value
 
         if done:
-            true_reward = self.cumulative_distance_reward
+            true_reward = self.cumulative_rewards['rewraw_main']
             info['true_reward'] = true_reward
+            info['episode_extra_stats'] = self.cumulative_rewards
 
         return obs, rew, done, info
 
