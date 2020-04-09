@@ -146,12 +146,27 @@ def memory_stats(process, device):
     return stats
 
 
+def tensor_batch_size(tensor_batch):
+    for _, _, v in iterate_recursively(tensor_batch):
+        return v.shape[0]
+
+
 class TensorBatcher:
     def __init__(self, batch_pool):
         self.batch_pool = batch_pool
 
-    def cat(self, dict_of_tensor_arrays, timing):
+    def cat(self, dict_of_tensor_arrays, batch_size, timing):
         tensor_batch = self.batch_pool.get()
+
+        if tensor_batch is not None:
+            old_batch_size = tensor_batch_size(tensor_batch)
+            if old_batch_size != batch_size:
+                # this can happen due to PBT changing batch size during the experiment
+                log.warning('Tensor batch size changed from %d to %d!', old_batch_size, batch_size)
+                log.warning('Discarding the cached tensor batch!')
+                del tensor_batch
+                tensor_batch = None
+
         if tensor_batch is None:
             tensor_batch = copy_dict_structure(dict_of_tensor_arrays)
             log.info('Allocating new CPU tensor batch (could not get from the pool)')
@@ -172,8 +187,9 @@ class TensorBatcher:
 
 
 class ObjectPool:
-    def __init__(self):
-        self.pool = deque([], maxlen=10)
+    def __init__(self, pool_size=10):
+        self.pool_size = pool_size
+        self.pool = deque([], maxlen=self.pool_size)
         self.lock = threading.Lock()
 
     def get(self):
@@ -187,3 +203,7 @@ class ObjectPool:
     def put(self, obj):
         with self.lock:
             self.pool.append(obj)
+
+    def clear(self):
+        with self.lock:
+            self.pool = deque([], maxlen=self.pool_size)

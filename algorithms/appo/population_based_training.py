@@ -21,7 +21,7 @@ def perturb_float(x, perturb_amount=1.2):
     return new_value
 
 
-def perturb_vtrace(x):
+def perturb_vtrace(x, cfg):
     return perturb_float(x, perturb_amount=1.005)
 
 
@@ -34,12 +34,16 @@ def perturb_exponential_decay(x, cfg):
 
 def perturb_batch_size(x, cfg):
     new_value = perturb_float(x, perturb_amount=1.2)
-    max_batch_size = cfg.batch_size * 1.5
+    initial_batch_size = cfg.batch_size
+    max_batch_size = initial_batch_size * 1.5
+    min_batch_size = cfg.rollout
 
     new_value = min(new_value, max_batch_size)
 
-    # round to nearest whole number of rollouts
+    # round down to whole number of rollouts
     new_value = (int(new_value) // cfg.rollout) * cfg.rollout
+
+    new_value = max(new_value, min_batch_size)
     return new_value
 
 

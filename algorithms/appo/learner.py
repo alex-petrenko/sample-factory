@@ -162,7 +162,7 @@ class LearnerWorker:
         r = rollout
         self.traj_tensors_available[r.worker_idx, r.split_idx][r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
 
-    def _prepare_train_buffer(self, rollouts, timing):
+    def _prepare_train_buffer(self, rollouts, batch_size, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
 
         with timing.add_time('buffers'):
@@ -185,7 +185,10 @@ class LearnerWorker:
                 buffer = self._calculate_gae(buffer)
 
         with timing.add_time('batching'):
-            buffer = self.tensor_batcher.cat(buffer, timing)
+            # concatenate rollouts from different workers into a single batch efficiently
+            # that is, if we already have memory for the buffers allocated, we can just copy the data into
+            # existing cached tensors instead of creating new ones. This is a performance optimization.
+            buffer = self.tensor_batcher.cat(buffer, batch_size, timing)
 
         with timing.add_time('buff_ready'):
             for r in rollouts:
@@ -200,6 +203,7 @@ class LearnerWorker:
             for tensor_name in tensors_to_squeeze:
                 gpu_buffer[tensor_name].squeeze_()
 
+        # we no longer need the cached buffer, and can put it back into the pool
         self.tensor_batch_pool.put(buffer)
         return gpu_buffer
 
@@ -219,7 +223,7 @@ class LearnerWorker:
             env_steps += rollout['env_steps']
 
         with timing.add_time('prepare'):
-            buffer = self._prepare_train_buffer(rollouts, timing)
+            buffer = self._prepare_train_buffer(rollouts, batch_size, timing)
             self.experience_buffer_queue.put((buffer, batch_size, samples, env_steps))
 
     def _process_rollouts(self, rollouts, timing):
@@ -263,7 +267,7 @@ class LearnerWorker:
     def _get_minibatches(self, batch_size, experience_size):
         """Generating minibatches for training."""
         assert self.cfg.rollout % self.cfg.recurrence == 0
-        assert experience_size % batch_size == 0
+        assert experience_size % batch_size == 0, f'experience size: {experience_size}, batch size: {batch_size}'
 
         if self.cfg.num_batches_per_iteration == 1:
             return [None]  # single minibatch is actually the entire buffer, we don't need indices
@@ -343,7 +347,7 @@ class LearnerWorker:
         assert checkpoint is not None
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
-        tmp_filepath = join(checkpoint_dir, 'checkpoint_tmp')
+        tmp_filepath = join(checkpoint_dir, '.temp_checkpoint')
         checkpoint_name = f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth'
         filepath = join(checkpoint_dir, checkpoint_name)
         log.info('Saving %s...', tmp_filepath)
@@ -660,9 +664,16 @@ class LearnerWorker:
             return None
         else:
             latest_checkpoint = checkpoints[-1]
-            log.warning('Loading state from checkpoint %s...', latest_checkpoint)
-            checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
-            return checkpoint_dict
+
+            # extra safety mechanism to recover from spurious filesystem errors
+            num_attempts = 3
+            for attempt in range(num_attempts):
+                try:
+                    log.warning('Loading state from checkpoint %s...', latest_checkpoint)
+                    checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
+                    return checkpoint_dict
+                except Exception:
+                    log.exception(f'Could not load from checkpoint, attempt {attempt}')
 
     def _load_state(self, checkpoint_dict, load_progress=True):
         if load_progress:
