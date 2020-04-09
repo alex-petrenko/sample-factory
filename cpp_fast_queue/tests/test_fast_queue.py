@@ -93,6 +93,7 @@ class TestFastQueue(TestCase):
         q = Queue(max_size_bytes=1000)
         py_obj = dict(a=42, b=33, c=(1, 2, 3), d=[1, 2, 3], e='123', f=b'kkk')
         q.put_nowait(py_obj)
-
         res = q.get_nowait()
         log.debug('Got object %r', res)
+        self.assertEqual(py_obj, res)
+

@@ -134,7 +134,7 @@ class TrajectoryBuffers:
         # once macro batch is collected, all buffers will be released
         # we could have just copied the tensors on the learner to avoid this complicated logic, but it's better for
         # performance to keep data in shared buffers until they're needed
-        samples_per_iteration = self.cfg.macro_batch * self.cfg.num_policies
+        samples_per_iteration = self.cfg.num_batches_per_iteration * self.cfg.batch_size * self.cfg.num_policies
         num_traj_buffers = samples_per_iteration / (self.cfg.num_workers * self.cfg.num_envs_per_worker * self.num_agents * self.cfg.rollout)
 
         # make sure we definitely have enough buffers to actually never wait

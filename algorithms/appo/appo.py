@@ -56,7 +56,13 @@ class APPO(ReinforcementLearningAlgorithm):
 
         p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
-        p.add_argument('--batch_size', default=1024, type=int, help='PPO minibatch size')
+        p.add_argument('--batch_size', default=1024, type=int, help='Minibatch size for SGD')
+        p.add_argument(
+            '--num_batches_per_iteration', default=1, type=int,
+            help='How many minibatches we collect before training on the collected experience. It is generally recommended to set this to 1 for most experiments, because any higher value will increase the policy lag.'
+                 'But in some specific circumstances it can be beneficial to have a larger macro-batch in order to shuffle and decorrelate the minibatches.'
+                 'Here and throughout the codebase: macro batch is the portion of experience that learner processes per iteration (consisting of 1 or several minibatches)',
+        )
         p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
 
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
@@ -70,7 +76,6 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
-        p.add_argument('--macro_batch', default=2048, type=int, help='Amount of experience to collect per policy before passing experience to the learner')
         p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
         p.add_argument(
             '--min_traj_buffers_per_worker', default=2, type=int,
@@ -93,6 +98,8 @@ class APPO(ReinforcementLearningAlgorithm):
         )
 
         p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
+        p.add_argument('--vtrace_rho', default=1.0, type=float, help='rho_hat clipping parameter of the V-trace algorithm (importance sampling truncation)')
+        p.add_argument('--vtrace_c', default=1.0, type=float, help='c_hat clipping parameter of the V-trace algorithm. Low values for c_hat can reduce variance of the advantage estimates (similar to GAE lambda < 1)')
 
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
@@ -461,7 +468,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 self.writers[policy_id].add_scalar('0_aux/_fps', fps, env_steps)
                 self.writers[policy_id].add_scalar('0_aux/_master_process_memory_mb', float(memory_mb), env_steps)
                 for key, value in self.avg_stats.items():
-                    if len(value) >= value.maxlen:
+                    if len(value) >= value.maxlen or (len(value) > 10 and self.total_train_seconds > 300):
                         self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
 
                 for key, value in self.stats.items():
@@ -471,7 +478,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 self.writers[policy_id].add_scalar('0_aux/_sample_throughput', sample_throughput[policy_id], env_steps)
 
             for key, stat in self.policy_avg_stats.items():
-                if len(stat[policy_id]) >= stat[policy_id].maxlen:
+                if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and self.total_train_seconds > 300):
                     stat_value = np.mean(stat[policy_id])
                     self.writers[policy_id].add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
 

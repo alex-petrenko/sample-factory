@@ -202,10 +202,15 @@ class LearnerWorker:
         self.tensor_batch_pool.put(buffer)
         return gpu_buffer
 
-    def _process_macro_batch(self, rollouts, timing):
-        assert self.cfg.macro_batch % self.cfg.rollout == 0
+    def _macro_batch_size(self, batch_size):
+        return self.cfg.num_batches_per_iteration * batch_size
+
+    def _process_macro_batch(self, rollouts, batch_size, timing):
+        macro_batch_size = self._macro_batch_size(batch_size)
+
+        assert macro_batch_size % self.cfg.rollout == 0
         assert self.cfg.rollout % self.cfg.recurrence == 0
-        assert self.cfg.macro_batch % self.cfg.recurrence == 0
+        assert macro_batch_size % self.cfg.recurrence == 0
 
         samples = env_steps = 0
         for rollout in rollouts:
@@ -214,11 +219,14 @@ class LearnerWorker:
 
         with timing.add_time('prepare'):
             buffer = self._prepare_train_buffer(rollouts, timing)
-            self.experience_buffer_queue.put((buffer, samples, env_steps))
+            self.experience_buffer_queue.put((buffer, batch_size, samples, env_steps))
 
     def _process_rollouts(self, rollouts, timing):
-        # log.info('Pending rollouts: %d (%d samples)', len(self.rollouts), len(self.rollouts) * self.cfg.rollout)
-        rollouts_in_macro_batch = self.cfg.macro_batch // self.cfg.rollout
+        # batch_size can potentially change through PBT, so we should keep it the same and pass it around
+        # using function arguments, instead of using global self.cfg
+
+        batch_size = self.cfg.batch_size
+        rollouts_in_macro_batch = self._macro_batch_size(batch_size) // self.cfg.rollout
 
         if len(rollouts) < rollouts_in_macro_batch:
             return rollouts
@@ -246,17 +254,17 @@ class LearnerWorker:
             rollouts_to_process = rollouts[:rollouts_in_macro_batch]
             rollouts = rollouts[rollouts_in_macro_batch:]
 
-            self._process_macro_batch(rollouts_to_process, timing)
+            self._process_macro_batch(rollouts_to_process, batch_size, timing)
             # log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
 
         return rollouts
 
-    def _get_minibatches(self, experience_size):
+    def _get_minibatches(self, batch_size, experience_size):
         """Generating minibatches for training."""
         assert self.cfg.rollout % self.cfg.recurrence == 0
-        assert experience_size % self.cfg.batch_size == 0
+        assert experience_size % batch_size == 0
 
-        if self.cfg.macro_batch == self.cfg.batch_size:
+        if self.cfg.num_batches_per_iteration == 1:
             return [None]  # single minibatch is actually the entire buffer, we don't need indices
 
         # indices that will start the mini-trajectories from the same episode (for bptt)
@@ -269,7 +277,7 @@ class LearnerWorker:
 
         assert len(indices) == experience_size
 
-        num_minibatches = experience_size // self.cfg.batch_size
+        num_minibatches = experience_size // batch_size
         minibatches = np.split(indices, num_minibatches)
         return minibatches
 
@@ -395,13 +403,13 @@ class LearnerWorker:
 
         return gpu_buffer
 
-    def _train(self, gpu_buffer, experience_size, timing):
+    def _train(self, gpu_buffer, batch_size, experience_size, timing):
         with torch.no_grad():
-            rho_hat = c_hat = 1.0  # V-trace parameters
+            # V-trace parameters
             # noinspection PyArgumentList
-            rho_hat = torch.Tensor([rho_hat])
+            rho_hat = torch.Tensor([self.cfg.vtrace_rho])
             # noinspection PyArgumentList
-            c_hat = torch.Tensor([c_hat])
+            c_hat = torch.Tensor([self.cfg.vtrace_c])
 
             clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
             # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
@@ -419,7 +427,7 @@ class LearnerWorker:
                 return stats
 
         for epoch in range(self.cfg.ppo_epochs):
-            minibatches = self._get_minibatches(experience_size)
+            minibatches = self._get_minibatches(batch_size, experience_size)
 
             for batch_num in range(len(minibatches)):
                 indices = minibatches[batch_num]
@@ -460,7 +468,7 @@ class LearnerWorker:
 
                     num_timesteps, num_trajectories = core_outputs.shape[:2]
                     assert num_timesteps == recurrence
-                    assert num_timesteps * num_trajectories == self.cfg.batch_size
+                    assert num_timesteps * num_trajectories == batch_size
                     core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
@@ -713,7 +721,9 @@ class LearnerWorker:
         self.train_thread_initialized.set()
 
     def _process_training_data(self, data, timing, wait_stats=None):
-        buffer, samples, env_steps = data
+        buffer, batch_size, samples, env_steps = data
+        assert samples == batch_size * self.cfg.num_batches_per_iteration
+
         self.env_steps += env_steps
         experience_size = buffer.rewards.shape[0]
 
@@ -725,7 +735,7 @@ class LearnerWorker:
             self._update_pbt()
 
             # log.debug('Training policy %d on %d samples', self.policy_id, samples)
-            train_stats = self._train(buffer, experience_size, timing)
+            train_stats = self._train(buffer, batch_size, experience_size, timing)
             self.policy_versions[self.policy_id] = self.train_step
 
             if train_stats is not None:

@@ -1,11 +1,7 @@
-import time
-
 import gym
 
-from algorithms.utils.arguments import default_cfg
-from envs.env_wrappers import ResizeWrapper, StackFramesWrapper, SkipAndStackFramesWrapper, SkipFramesWrapper, \
+from envs.env_wrappers import ResizeWrapper, SkipAndStackFramesWrapper, SkipFramesWrapper, \
     PixelFormatChwWrapper
-from utils.utils import log
 
 ATARI_W = ATARI_H = 84
 

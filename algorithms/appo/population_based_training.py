@@ -15,19 +15,31 @@ from algorithms.utils.algo_utils import EPS
 from utils.utils import log, experiment_dir
 
 
-def perturb_float(x):
-    # mutation amount
-    amount = 1.2
-
+def perturb_float(x, perturb_amount=1.2):
     # mutation direction
-    new_value = x / amount if random.random() < 0.5 else x * amount
+    new_value = x / perturb_amount if random.random() < 0.5 else x * perturb_amount
     return new_value
 
 
-def perturb_exponential_decay(x):
+def perturb_vtrace(x):
+    return perturb_float(x, perturb_amount=1.005)
+
+
+def perturb_exponential_decay(x, cfg):
     perturbed = perturb_float(1.0 - x)
     new_value = 1.0 - perturbed
     new_value = max(EPS, new_value)
+    return new_value
+
+
+def perturb_batch_size(x, cfg):
+    new_value = perturb_float(x, perturb_amount=1.2)
+    max_batch_size = cfg.batch_size * 1.5
+
+    new_value = min(new_value, max_batch_size)
+
+    # round to nearest whole number of rollouts
+    new_value = (int(new_value) // cfg.rollout) * cfg.rollout
     return new_value
 
 
@@ -35,8 +47,19 @@ class PbtTask(Enum):
     SAVE_MODEL, LOAD_MODEL, UPDATE_CFG, UPDATE_REWARD_SCHEME = range(4)
 
 
-HYPERPARAMS_TO_TUNE = {'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value'}
-SPECIAL_PERTURBATION = dict(gamma=perturb_exponential_decay, adam_beta1=perturb_exponential_decay)
+HYPERPARAMS_TO_TUNE = {
+    'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
+    'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
+    'batch_size',
+}
+
+SPECIAL_PERTURBATION = dict(
+    gamma=perturb_exponential_decay,
+    adam_beta1=perturb_exponential_decay,
+    vtrace_rho=perturb_vtrace,
+    vtrace_c=perturb_vtrace,
+    batch_size=perturb_batch_size,
+)
 
 
 def policy_cfg_file(cfg, policy_id):
@@ -136,7 +159,7 @@ class PopulationBasedTraining:
             return default_param
 
         if param_name in SPECIAL_PERTURBATION:
-            new_value = SPECIAL_PERTURBATION[param_name](param)
+            new_value = SPECIAL_PERTURBATION[param_name](param, self.cfg)
         elif type(param) is bool:
             new_value = not param
         elif isinstance(param, numbers.Number):

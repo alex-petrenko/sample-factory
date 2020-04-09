@@ -177,7 +177,7 @@ class DmlabGymEnv(gym.Env):
             # the performance of many DMLab environments heavily depends on what agent is actually doing
             # therefore for purposes of measuring throughput we ignore the actions, this way the agent executes
             # random policy and we can measure raw throughput more precisely
-            action = random.randint(0, self.action_space.n)
+            action = random.randrange(0, self.action_space.n)
 
         reward = self.dmlab.step(self.action_list[action], num_steps=self.action_repeat)
         done = not self.dmlab.is_running()
