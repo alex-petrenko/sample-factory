@@ -30,6 +30,8 @@ def nonlinearity(cfg):
         return nn.ELU(inplace=True)
     elif cfg.nonlinearity == 'relu':
         return nn.ReLU(inplace=True)
+    elif cfg.nonlinearity == 'tanh':
+        return nn.Tanh()
     else:
         raise Exception('Unknown nonlinearity')
 
