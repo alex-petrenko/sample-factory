@@ -129,7 +129,8 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--pbt_optimize_batch_size', default=False, type=str2bool, help='Whether to optimize batch size or not (experimental)')
         p.add_argument(
             '--pbt_target_objective', default='true_reward', type=str,
-            help='Policy stat to optimize with PBT. true_reward (default) is equal to raw env reward if not specified, but can also be any other per-policy stat',
+            help='Policy stat to optimize with PBT. true_reward (default) is equal to raw env reward if not specified, but can also be any other per-policy stat.'
+                 'For DMlab-30 use value "dmlab_target_objective" (which is capped human normalized score)',
         )
 
         # debugging options

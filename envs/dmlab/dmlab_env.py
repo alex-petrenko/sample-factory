@@ -241,8 +241,10 @@ def ensure_initialized(cfg, env_name):
 
     dmlab_register_models()
 
-    EXTRA_EPISODIC_STATS_PROCESSING.append(dmlab_extra_episodic_stats_processing)
-    EXTRA_PER_POLICY_SUMMARIES.append(dmlab_extra_summaries)
+    if env_name == 'dmlab_30':
+        # extra functions to calculate human-normalized score etc.
+        EXTRA_EPISODIC_STATS_PROCESSING.append(dmlab_extra_episodic_stats_processing)
+        EXTRA_PER_POLICY_SUMMARIES.append(dmlab_extra_summaries)
 
     num_policies = cfg.num_policies if hasattr(cfg, 'num_policies') else 1
     all_levels = list_all_levels_for_experiment(env_name)
