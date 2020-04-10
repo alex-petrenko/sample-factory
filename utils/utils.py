@@ -83,6 +83,14 @@ def max_with_idx(x):
     return op_with_idx(x, operator.gt)
 
 
+def static_vars(**kwargs):
+    def decorate(func):
+        for k in kwargs:
+            setattr(func, k, kwargs[k])
+        return func
+    return decorate
+
+
 # CLI args
 
 def str2bool(v):
@@ -259,6 +267,10 @@ def project_root():
     :return: full path to the root dir of this project.
     """
     return os.path.dirname(os.path.dirname(__file__))
+
+
+def project_tmp_dir():
+    return ensure_dir_exists(join(project_root(), '.tmp'))
 
 
 def experiments_dir():

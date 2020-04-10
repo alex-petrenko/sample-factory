@@ -5,6 +5,7 @@ import re
 import time
 from os.path import join
 from threading import Thread
+
 import cv2
 import gym
 import numpy as np
@@ -13,7 +14,7 @@ from gym.utils import seeding
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
 from algorithms.utils.spaces.discretized import Discretized
-from utils.utils import log
+from utils.utils import log, project_tmp_dir
 
 
 def doom_lock_file(max_parallel):
@@ -30,8 +31,7 @@ def doom_lock_file(max_parallel):
     """
     lock_filename = f'doom_{random.randrange(0, max_parallel):03d}.lockfile'
 
-    import tempfile
-    tmp_dir = tempfile.gettempdir()
+    tmp_dir = project_tmp_dir()
     lock_path = join(tmp_dir, lock_filename)
     return lock_path
 

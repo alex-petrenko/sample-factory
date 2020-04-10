@@ -5,6 +5,7 @@ import numbers
 import os
 import random
 import time
+from collections import deque
 from enum import Enum
 from os.path import join
 
@@ -54,7 +55,6 @@ class PbtTask(Enum):
 HYPERPARAMS_TO_TUNE = {
     'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
     'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
-    'batch_size',
 }
 
 SPECIAL_PERTURBATION = dict(
@@ -77,10 +77,17 @@ def policy_reward_shaping_file(cfg, policy_id):
 class PopulationBasedTraining:
     def __init__(self, cfg, default_reward_shaping, summary_writers):
         self.cfg = cfg
+
+        if cfg.pbt_optimize_batch_size and 'batch_size' not in HYPERPARAMS_TO_TUNE:
+            HYPERPARAMS_TO_TUNE.add('batch_size')
+
         self.last_update = [0] * self.cfg.num_policies
 
         self.policy_cfg = [dict() for _ in range(self.cfg.num_policies)]
         self.policy_reward_shaping = [dict() for _ in range(self.cfg.num_policies)]
+
+        # initializing this with [True] prevents PBT from starting to replace params too quickly
+        self.policy_is_the_best = [deque([True], maxlen=5) for _ in range(self.cfg.num_policies)]
 
         self.default_reward_shaping = default_reward_shaping
 
@@ -251,21 +258,21 @@ class PopulationBasedTraining:
             self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, 'rew', env_steps)
 
     def _update_policy(self, policy_id, policy_stats):
-        if 'true_reward' not in policy_stats:
+        if self.cfg.pbt_target_objective not in policy_stats:
             return
 
-        true_rewards = policy_stats['true_reward']
+        target_objectives = policy_stats[self.cfg.pbt_target_objective]
 
         # not enough data to perform PBT yet
-        for rewards in true_rewards:
-            if len(rewards) <= 0:
+        for objectives in target_objectives:
+            if len(objectives) <= 0:
                 return
 
-        true_rewards = [np.mean(r) for r in true_rewards]
+        target_objectives = [np.mean(o) for o in target_objectives]
 
         policies = list(range(self.cfg.num_policies))
-        policies_sorted = sorted(zip(true_rewards, policies), reverse=True)
-        policies_sorted = [p for rew, p in policies_sorted]
+        policies_sorted = sorted(zip(target_objectives, policies), reverse=True)
+        policies_sorted = [p for objective, p in policies_sorted]
 
         replace_fraction = self.cfg.pbt_replace_fraction
         replace_number = math.ceil(replace_fraction * self.cfg.num_policies)
@@ -273,8 +280,20 @@ class PopulationBasedTraining:
         best_policies = policies_sorted[:replace_number]
         worst_policies = policies_sorted[-replace_number:]
 
+        # record this boolean value for the last several PBT intervals
+        is_the_best = policy_id == best_policies[0]
+        self.policy_is_the_best[policy_id].append(is_the_best)
+
+        if True in self.policy_is_the_best[policy_id]:
+            log.debug(
+                'Policy %d was the best at least once in the last %d intervals (%r). Do not touch it, it is doing okay!',
+                policy_id, self.policy_is_the_best[policy_id].maxlen, self.policy_is_the_best[policy_id],
+            )
+            # don't touch the policies that are doing well
+            return
+
         if policy_id in best_policies:
-            # don't touch the policies that are doing very well
+            # don't touch the policies that are doing well
             return
 
         log.debug('PBT best policies: %r, worst policies %r', best_policies, worst_policies)
@@ -287,8 +306,8 @@ class PopulationBasedTraining:
             log.debug('Current policy %d is among the worst policies %r', policy_id, worst_policies)
 
             replacement_policy_candidate = random.choice(best_policies)
-            reward_delta = true_rewards[replacement_policy_candidate] - true_rewards[policy_id]
-            reward_delta_relative = abs(reward_delta / (true_rewards[replacement_policy_candidate] + EPS))
+            reward_delta = target_objectives[replacement_policy_candidate] - target_objectives[policy_id]
+            reward_delta_relative = abs(reward_delta / (target_objectives[replacement_policy_candidate] + EPS))
 
             if abs(reward_delta) > self.cfg.pbt_replace_reward_gap_absolute and reward_delta_relative > self.cfg.pbt_replace_reward_gap:
                 replacement_policy = replacement_policy_candidate

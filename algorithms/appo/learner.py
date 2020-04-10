@@ -1141,3 +1141,13 @@ class LearnerWorker:
 # [2020-04-09 00:17:46,582][08108] Train loop timing: init: 1.3731, train_wait: 0.4299, forward_head: 9.1451, bptt_initial: 1.1248, bptt_forward_core: 7.7663, bptt_rnn_states: 4.9050, bptt: 12.8538, tail: 0.8713, vtrace: 1.1398, losses: 0.3700, clip: 8.0898, update: 14.1737, train: 42.0695
 # [2020-04-09 00:17:46,725][08069] Collected {0: 2015232}, FPS: 46042.6
 # [2020-04-09 00:17:46,725][08069] Timing: experience: 43.5909
+
+# Version V86 (new DMLab reward calculation, PBT changes)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v86_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-04-10 00:37:59,189][10337] Env runner 0, rollouts 800: timing wait_actor: 0.0000, waiting: 0.4441, reset: 17.0015, save_policy_outputs: 0.9655, env_step: 36.0246, overhead: 3.7659, complete_rollouts: 0.0157, enqueue_policy_requests: 0.1704, one_step: 0.0155, work: 42.9231
+# [2020-04-10 00:37:59,219][10339] Env runner 1, rollouts 800: timing wait_actor: 0.0000, waiting: 0.4638, reset: 17.8751, save_policy_outputs: 0.9556, env_step: 36.1600, overhead: 3.6650, complete_rollouts: 0.0151, enqueue_policy_requests: 0.1646, one_step: 0.0130, work: 42.9417
+# [2020-04-10 00:37:59,444][10336] Policy worker avg. requests 2.18, timing: init: 1.9154, wait_policy_total: 17.0760, wait_policy: 0.0026, handle_policy_step: 41.4865, one_step: 0.0019, deserialize: 1.3896, obs_to_device: 5.1518, stack: 13.6961, forward: 15.5052, postprocess: 4.8502, weight_update: 0.0007
+# [2020-04-10 00:37:59,549][10319] GPU learner timing: extract: 0.1794, buffers: 0.0666, batching: 5.0779, buff_ready: 0.2536, tensors_gpu_float: 8.0384, squeeze: 0.0108, prepare: 13.5054, batcher_mem: 5.0249
+# [2020-04-10 00:37:59,855][10319] Train loop timing: init: 1.3496, train_wait: 0.2624, forward_head: 10.3642, bptt_initial: 1.0378, bptt_forward_core: 7.8731, bptt_rnn_states: 5.0327, bptt: 13.0921, tail: 0.5914, vtrace: 0.9438, losses: 0.3258, clip: 7.5854, update: 13.6748, train: 42.2079
+# [2020-04-10 00:38:00,016][10286] Collected {0: 2015232}, FPS: 46529.9
+# [2020-04-10 00:38:00,016][10286] Timing: experience: 43.1344

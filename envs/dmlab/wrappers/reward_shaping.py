@@ -5,6 +5,9 @@ import gym
 from envs.dmlab.dmlab30 import HUMAN_SCORES, RANDOM_SCORES, LEVEL_MAPPING
 
 
+RAW_SCORE_SUMMARY_KEY_SUFFIX = 'dmlab_raw_score'
+
+
 class DmlabRewardShapingWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
@@ -28,24 +31,12 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
         if done:
             score = self.raw_episode_return
 
+            info['episode_extra_stats'] = dict()
             level_name = self.unwrapped.level_name
-            test_level_name = LEVEL_MAPPING[level_name]
 
-            human = HUMAN_SCORES[test_level_name]
-            random = RANDOM_SCORES[test_level_name]
-            human_normalized_score = (score - random) / (human - random) * 100
-            capped_human_normalized_score = min(100.0, human_normalized_score)
-
-            info['true_reward'] = capped_human_normalized_score
-            info['episode_extra_stats'] = dict(
-                capped_human_normalized_score=capped_human_normalized_score,
-                uncapped_human_normalized_score=human_normalized_score,
-                unmodified_score=score,
-            )
-
-            # add extra 'z' to the summary key to put them towards the end on tensorboard
-            level_name_key = f'z{self.unwrapped.task_id:02d}_{level_name}'
-            info['episode_extra_stats'][f'{level_name_key}_hum_norm_score'] = human_normalized_score
+            # add extra 'z_' to the summary key to put them towards the end on tensorboard (just convenience)
+            level_name_key = f'z_{self.unwrapped.task_id:02d}_{level_name}'
+            info['episode_extra_stats'][f'{level_name_key}_{RAW_SCORE_SUMMARY_KEY_SUFFIX}'] = score
             info['episode_extra_stats'][f'{level_name_key}_len'] = self.episode_length
 
         return obs, rew, done, info

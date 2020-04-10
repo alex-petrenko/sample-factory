@@ -46,6 +46,11 @@ EXTENDED_ACTION_SET = (
 )
 
 
+def dmlab_level_to_level_name(level):
+    level_name = level.split('/')[-1]
+    return level_name
+
+
 def string_to_hash_bucket(s, vocabulary_size):
     return (hash(s) % (vocabulary_size - 1)) + 1  # 0 means absence of an instruction
 
@@ -69,7 +74,7 @@ class DmlabGymEnv(gym.Env):
 
         self.task_id = task_id
         self.level = level
-        self.level_name = level.split('/')[-1]
+        self.level_name = dmlab_level_to_level_name(self.level)
 
         # the policy index which currently acts in the environment
         self.curr_policy_idx = 0

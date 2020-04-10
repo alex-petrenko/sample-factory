@@ -19,6 +19,7 @@ from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
 from algorithms.appo.trajectory_buffers import TrajectoryBuffers
+from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISODIC_STATS_PROCESSING
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict
@@ -125,6 +126,11 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
         p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
         p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float, help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
+        p.add_argument('--pbt_optimize_batch_size', default=False, type=str2bool, help='Whether to optimize batch size or not (experimental)')
+        p.add_argument(
+            '--pbt_target_objective', default='true_reward', type=str,
+            help='Policy stat to optimize with PBT. true_reward (default) is equal to raw env reward if not specified, but can also be any other per-policy stat',
+        )
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
@@ -369,17 +375,18 @@ class APPO(ReinforcementLearningAlgorithm):
                 if policy_id in self.env_steps:
                     delta = report['learner_env_steps'] - self.env_steps[policy_id]
                     self.total_env_steps_since_resume += delta
-                # log.error('New env_steps value for policy %d: %d (prev %d)', policy_id, report['learner_env_steps'], self.env_steps.get(policy_id, -1))  # TODO: remove!
                 self.env_steps[policy_id] = report['learner_env_steps']
 
             if 'episodic' in report:
                 s = report['episodic']
                 for _, key, value in iterate_recursively(s):
-                    # log.debug('Policy stats: %s %r', key, value)
                     if key not in self.policy_avg_stats:
                         self.policy_avg_stats[key] = [deque(maxlen=self.cfg.stats_avg) for _ in range(self.cfg.num_policies)]
 
                     self.policy_avg_stats[key][policy_id].append(value)
+
+                    for extra_stat_func in EXTRA_EPISODIC_STATS_PROCESSING:
+                        extra_stat_func(policy_id, key, value, self.cfg)
 
             if 'train' in report:
                 self.report_train_summaries(report['train'], policy_id)
@@ -423,7 +430,7 @@ class APPO(ReinforcementLearningAlgorithm):
         self.print_stats(fps, sample_throughput, total_env_steps)
 
         if time.time() - self.last_basic_summaries > self.basic_summaries_interval:
-            self.report_basic_summaries(fps[0], sample_throughput)
+            self.report_experiment_summaries(fps[0], sample_throughput)
             self.last_basic_summaries = time.time()
 
     def print_stats(self, fps, sample_throughput, total_env_steps):
@@ -459,14 +466,14 @@ class APPO(ReinforcementLearningAlgorithm):
             if 'version_diff' in key:
                 self.policy_lag[policy_id][key] = scalar
 
-    def report_basic_summaries(self, fps, sample_throughput):
+    def report_experiment_summaries(self, fps, sample_throughput):
         memory_mb = memory_consumption_mb()
 
         default_policy = 0
         for policy_id, env_steps in self.env_steps.items():
             if policy_id == default_policy:
                 self.writers[policy_id].add_scalar('0_aux/_fps', fps, env_steps)
-                self.writers[policy_id].add_scalar('0_aux/_master_process_memory_mb', float(memory_mb), env_steps)
+                self.writers[policy_id].add_scalar('0_aux/master_process_memory_mb', float(memory_mb), env_steps)
                 for key, value in self.avg_stats.items():
                     if len(value) >= value.maxlen or (len(value) > 10 and self.total_train_seconds > 300):
                         self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
@@ -481,6 +488,9 @@ class APPO(ReinforcementLearningAlgorithm):
                 if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and self.total_train_seconds > 300):
                     stat_value = np.mean(stat[policy_id])
                     self.writers[policy_id].add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
+
+            for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:
+                extra_summaries_func(policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg)
 
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())

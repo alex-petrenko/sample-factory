@@ -145,7 +145,7 @@ class TestDmlab(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):
-        from envs.dmlab.dmlab_utils import make_dmlab_env
+        from envs.dmlab.dmlab_env import make_dmlab_env
         return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'))
 
     def test_dmlab_performance(self):
