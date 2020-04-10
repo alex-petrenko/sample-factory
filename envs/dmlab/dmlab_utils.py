@@ -142,6 +142,8 @@ def ensure_initialized(cfg, env_name):
     dmlab_register_models()
 
     all_levels = list_all_levels_for_experiment(env_name)
-    dmlab_ensure_global_cache_initialized(experiment_dir(cfg=cfg), all_levels, cfg.num_policies)
+
+    num_policies = cfg.num_policies if hasattr(cfg, 'num_policies') else 1
+    dmlab_ensure_global_cache_initialized(experiment_dir(cfg=cfg), all_levels, num_policies)
 
     DMLAB_INITIALIZED = True

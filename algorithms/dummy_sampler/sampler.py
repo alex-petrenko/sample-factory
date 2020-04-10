@@ -56,7 +56,7 @@ class DummySampler(AlgorithmBase):
         self.report_every_sec = 1.0
         self.last_report = 0
 
-        self.avg_stats_intervals = (1, 10, 60, 180)
+        self.avg_stats_intervals = (1, 10, 60, 300, 600)
         self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
 
     def initialize(self):
