@@ -1,10 +1,13 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('batch_size', [256, 512, 1024]),
-    ('ppo_epochs', [1, 2]),
+    ('batch_size', [256, 512]),
+    ('ppo_epochs', [1]),
     ('nonlinearity', ['tanh', 'relu']),
-    ('learning_rate', [5e-4, 1e-4]),
+    ('learning_rate', [1e-4]),
+    ('entropy_loss_coeff', [0.003, 0.0003]),
+    ('actor_critic_share_weigths', ['True', 'False']),
+    ('policy_initialization', ['orthogonal', 'xavier_uniform']),
     ('max_policy_lag', [50]),
 ])
 
@@ -14,4 +17,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('quads_single_gridsearch_v86', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('quads_single_gridsearch_v87', experiments=[_experiment])
