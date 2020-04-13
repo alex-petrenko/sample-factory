@@ -196,18 +196,40 @@ class TupleActionDistribution:
 
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
-    dist_min_clamp = math.log(1e-6)
-    dist_max_clamp = math.log(1e6)
+    stddev_min = 1e-5
+    stddev_max = 1.0
+    stddev_span = stddev_max - stddev_min
 
     def __init__(self, params):
         num_actions = params.shape[-1] // 2
-        means, log_std = torch.split(params, num_actions, dim=1)
-        log_std = log_std.clamp(self.dist_min_clamp, self.dist_max_clamp)
-        stddev = log_std.exp()
+        torch.autograd.set_detect_anomaly(True)
+        self.means, self.log_std = torch.split(params, num_actions, dim=1)
 
-        normal_dist = Normal(means, stddev)
+        # self.stddevs = self.log_std.exp().sigmoid()
+        # self.stddevs.mul_(self.stddev_span).add_(self.stddev_min)
+        # self.stddevs = self.stddevs * self.stddev_span + self.stddev_min
+
+        self.stddevs = self.log_std.exp()
+        self.stddevs = torch.clamp(self.stddevs, 1e-5, 1.0)
+
+        normal_dist = Normal(self.means, self.stddevs)
         super().__init__(normal_dist, 1)
 
     def kl_divergence(self, other):
         kl = torch.distributions.kl.kl_divergence(self, other)
         return kl
+
+    def summaries(self):
+        return dict(
+            action_mean=self.means.mean(),
+            action_mean_min=self.means.min(),
+            action_mean_max=self.means.max(),
+
+            action_log_std_mean=self.log_std.mean(),
+            action_log_std_min=self.log_std.min(),
+            action_log_std_max=self.log_std.max(),
+
+            action_stddev_mean=self.stddev.mean(),
+            action_stddev_min=self.stddev.min(),
+            action_stddev_max=self.stddev.max(),
+        )

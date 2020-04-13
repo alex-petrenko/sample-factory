@@ -25,5 +25,5 @@ def add_doom_env_args(env, parser):
     p.add_argument('--timelimit', default=None, type=float, help='Allows to override default match timelimit in minutes')
     p.add_argument('--res_w', default=128, type=int, help='Game frame width after resize')
     p.add_argument('--res_h', default=72, type=int, help='Game frame height after resize')
-    p.add_argument('--wide_aspect_ratio', default=True, type=str2bool, help='If true render wide aspect ratio (slower but gives better FOV to the agent)')
+    p.add_argument('--wide_aspect_ratio', default=False, type=str2bool, help='If true render wide aspect ratio (slower but gives better FOV to the agent)')
 

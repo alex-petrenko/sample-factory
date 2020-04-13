@@ -1,5 +1,7 @@
 from abc import ABC
 
+from utils.utils import str2bool
+
 
 class AlgorithmBase:
     def __init__(self, cfg):
@@ -55,7 +57,10 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--encoder_custom', default=None, type=str, help='Use custom encoder class from the registry (see model_utils.py)')
         p.add_argument('--encoder_extra_fc_layers', default=1, type=int, help='Number of fully-connected layers of size "hidden size" to add after the basic encoder (e.g. convolutional)')
         p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
-        p.add_argument('--nonlinearity', default='elu', type=str, help='Type of nonlinearity to use')
+        p.add_argument('--nonlinearity', default='elu', choices=['elu', 'relu', 'tanh'], type=str, help='Type of nonlinearity to use')
+        p.add_argument('--policy_initialization', default='orthogonal', choices=['orthogonal', 'xavier_uniform'], type=str, help='NN weight initialization')
+
+        p.add_argument('--actor_critic_share_weigths', default=True, type=str2bool, help='Whether to share the weights between policy and value function')
 
     def __init__(self, cfg):
         super().__init__(cfg)

@@ -1,3 +1,5 @@
+import numpy as np
+
 import gym
 
 
@@ -14,6 +16,7 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
 
         self.reward_shaping_scheme = reward_shaping_scheme
         self.cumulative_rewards = dict()
+        self.episode_actions = []
 
         # save a reference to this wrapper in the actual env class, for other wrappers
         self.env.unwrapped._reward_shaping_wrapper = self
@@ -21,9 +24,12 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
     def reset(self):
         obs = self.env.reset()
         self.cumulative_rewards = dict()
+        self.episode_actions = []
         return obs
 
     def step(self, action):
+        self.episode_actions.append(action)
+
         # set the (potentially updated) reward shaping scheme
         env_reward_shaping = self.env.unwrapped.rew_coeff
         for key, weight in self.reward_shaping_scheme['quad_rewards'].items():
@@ -43,6 +49,14 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
             true_reward = self.cumulative_rewards['rewraw_main']
             info['true_reward'] = true_reward
             info['episode_extra_stats'] = self.cumulative_rewards
+
+            episode_actions = np.array(self.episode_actions)
+            episode_actions = episode_actions.transpose()
+            for action_idx in range(episode_actions.shape[0]):
+                mean_action = np.mean(episode_actions[action_idx])
+                std_action = np.std(episode_actions[action_idx])
+                info['episode_extra_stats'][f'z_action{action_idx}_mean'] = mean_action
+                info['episode_extra_stats'][f'z_action{action_idx}_std'] = std_action
 
         return obs, rew, done, info
 

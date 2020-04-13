@@ -40,6 +40,7 @@ class APPO(ReinforcementLearningAlgorithm):
     def add_cli_args(cls, parser):
         p = parser
         super().add_cli_args(p)
+        p.add_argument('--experiment_summaries_interval', default=30, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
 
         p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
@@ -53,7 +54,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         p.add_argument('--recurrence', default=32, type=int, help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly')
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
-        p.add_argument('--rnn_type', default='gru', type=str, help='Type of RNN cell to use')
+        p.add_argument('--rnn_type', default='gru', choices=['gru', 'lstm'], type=str, help='Type of RNN cell to use is use_rnn is True')
 
         p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
@@ -192,10 +193,10 @@ class APPO(ReinforcementLearningAlgorithm):
         self.total_train_seconds = 0
 
         self.last_report = time.time()
-        self.last_basic_summaries = 0
+        self.last_experiment_summaries = 0
 
         self.report_interval = 5.0  # sec
-        self.basic_summaries_interval = 30.0  # sec
+        self.experiment_summaries_interval = self.cfg.experiment_summaries_interval  # sec
 
         self.avg_stats_intervals = (2, 12, 60)  # 10 seconds, 1 minute, 5 minutes
 
@@ -430,9 +431,9 @@ class APPO(ReinforcementLearningAlgorithm):
         total_env_steps = sum(self.env_steps.values())
         self.print_stats(fps, sample_throughput, total_env_steps)
 
-        if time.time() - self.last_basic_summaries > self.basic_summaries_interval:
+        if time.time() - self.last_experiment_summaries > self.experiment_summaries_interval:
             self.report_experiment_summaries(fps[0], sample_throughput)
-            self.last_basic_summaries = time.time()
+            self.last_experiment_summaries = time.time()
 
     def print_stats(self, fps, sample_throughput, total_env_steps):
         fps_str = []

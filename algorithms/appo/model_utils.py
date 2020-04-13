@@ -12,13 +12,19 @@ ENCODER_REGISTRY = dict()
 
 
 def get_hidden_size(cfg):
-    if not cfg.use_rnn:
-        return 1
+    if cfg.use_rnn:
+        size = cfg.hidden_size
+    else:
+        size = 1
 
     if cfg.rnn_type == 'lstm':
-        return cfg.hidden_size * 2
-    else:
-        return cfg.hidden_size
+        size *= 2
+
+    if not cfg.actor_critic_share_weigths:
+        # both actor and critic need separate weights
+        size *= 2
+
+    return size
 
 
 def fc_after_encoder_size(cfg):
@@ -67,6 +73,9 @@ class EncoderBase(nn.Module):
 
         self.fc_after_enc = None
         self.encoder_out_size = -1  # to be initialized in the constuctor of derived class
+
+    def get_encoder_out_size(self):
+        return self.encoder_out_size
 
     def init_fc_blocks(self, input_size):
         layers = []
@@ -224,16 +233,18 @@ class MlpEncoder(EncoderBase):
         assert len(obs_shape.obs) == 1
 
         if cfg.encoder_subtype == 'mlp_quads':
-            fc_encoder_output_size = 256
+            fc_encoder_layer = 256
             encoder_layers = [
-                nn.Linear(obs_shape.obs[0], fc_encoder_output_size),
+                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                nonlinearity(cfg),
+                nn.Linear(fc_encoder_layer, fc_encoder_layer),
                 nonlinearity(cfg),
             ]
         else:
             raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
 
         self.mlp_head = nn.Sequential(*encoder_layers)
-        self.init_fc_blocks(fc_encoder_output_size)
+        self.init_fc_blocks(fc_encoder_layer)
 
     def forward(self, obs_dict):
         normalize_obs(obs_dict, self.cfg)
@@ -266,9 +277,20 @@ def create_standard_encoder(cfg, obs_space, timing):
     return encoder
 
 
-class PolicyCoreRNN(nn.Module):
-    def __init__(self, cfg, input_size):
+class PolicyCoreBase(nn.Module):
+    def __init__(self, cfg):
         super().__init__()
+
+        self.cfg = cfg
+        self.core_output_size = -1
+
+    def get_core_out_size(self):
+        return self.core_output_size
+
+
+class PolicyCoreRNN(PolicyCoreBase):
+    def __init__(self, cfg, input_size):
+        super().__init__(cfg)
 
         self.cfg = cfg
         self.is_gru = False
@@ -280,6 +302,8 @@ class PolicyCoreRNN(nn.Module):
             self.core = nn.LSTMCell(input_size, cfg.hidden_size)
         else:
             raise RuntimeError(f'Unknown RNN type {cfg.rnn_type}')
+
+        self.core_output_size = cfg.hidden_size
 
     def forward(self, head_output, rnn_states):
         if self.is_gru:
@@ -293,28 +317,23 @@ class PolicyCoreRNN(nn.Module):
         return x, new_rnn_states
 
 
-class PolicyCoreFC(nn.Module):
+class PolicyCoreFeedForward(PolicyCoreBase):
+    """A noop core (no recurrency)."""
+
     def __init__(self, cfg, input_size):
-        super().__init__()
-
+        super().__init__(cfg)
         self.cfg = cfg
+        self.core_output_size = input_size
 
-        self.core = nn.Sequential(
-            nn.Linear(input_size, cfg.hidden_size),
-            nonlinearity(cfg),
-        )
-
-    def forward(self, head_output, unused_rnn_states):
-        x = self.core(head_output)
-        fake_new_rnn_states = torch.zeros([x.shape[0], get_hidden_size(self.cfg)], device=x.device)
-        return x, fake_new_rnn_states
+    def forward(self, head_output, fake_rnn_states):
+        return head_output, fake_rnn_states
 
 
 def create_core(cfg, core_input_size):
     if cfg.use_rnn:
         core = PolicyCoreRNN(cfg, core_input_size)
     else:
-        core = PolicyCoreFC(cfg, core_input_size)
+        core = PolicyCoreFeedForward(cfg, core_input_size)
 
     return core
 

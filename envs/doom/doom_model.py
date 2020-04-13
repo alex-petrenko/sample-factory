@@ -26,7 +26,7 @@ class VizdoomEncoder(EncoderBase):
             measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
             self.encoder_out_size += measurements_out_size
 
-        log.debug('Policy head output size: %r', self.encoder_out_size)
+        log.debug('Policy head output size: %r', self.get_encoder_out_size())
 
     def forward(self, obs_dict):
         x = self.basic_encoder(obs_dict)
