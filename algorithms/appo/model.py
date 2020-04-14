@@ -1,9 +1,9 @@
 import torch
-
 from torch import nn
 
-from algorithms.appo.model_utils import create_encoder, create_core
-from algorithms.utils.action_distributions import calc_num_logits, sample_actions_log_probs, get_action_distribution
+from algorithms.appo.model_utils import create_encoder, create_core, ActionParameterizationContinuousNonAdaptiveStddev, \
+    ActionParameterizationDefault
+from algorithms.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
 from utils.timing import Timing
 from utils.utils import AttrDict
 
@@ -16,6 +16,16 @@ class _ActorCriticBase(nn.Module):
         self.timing = timing
         self.encoders = []
         self.cores = []
+
+    def get_action_parameterization(self, core_output_size):
+        if not self.cfg.adaptive_stddev and is_continuous_action_space(self.action_space):
+            action_parameterization = ActionParameterizationContinuousNonAdaptiveStddev(
+                self.cfg, core_output_size, self.action_space,
+            )
+        else:
+            action_parameterization = ActionParameterizationDefault(self.cfg, core_output_size, self.action_space)
+
+        return action_parameterization
 
     def model_to_device(self, device):
         self.to(device)
@@ -66,7 +76,8 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
         core_out_size = self.core.get_core_out_size()
         self.critic_linear = nn.Linear(core_out_size, 1)
-        self.distribution_linear = nn.Linear(core_out_size, calc_num_logits(self.action_space))
+
+        self.action_parameterization = self.get_action_parameterization(core_out_size)
 
         self.apply(self.initialize_weights)
         self.train()
@@ -81,22 +92,21 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
     def forward_tail(self, core_output, with_action_distribution=False):
         values = self.critic_linear(core_output)
-        action_logits = self.distribution_linear(core_output)
 
-        dist = get_action_distribution(self.action_space, raw_logits=action_logits)
+        action_distribution_params, action_distribution = self.action_parameterization(core_output)
 
         # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(dist)
+        actions, log_prob_actions = sample_actions_log_probs(action_distribution)
 
         result = AttrDict(dict(
             actions=actions,
-            action_logits=action_logits,
+            action_logits=action_distribution_params,  # perhaps `action_logits` is not the best name here since we now support continuous actions
             log_prob_actions=log_prob_actions,
             values=values,
         ))
 
         if with_action_distribution:
-            result.action_distribution = dist
+            result.action_distribution = action_distribution
 
         return result
 
@@ -121,8 +131,9 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         self.encoders = [self.actor_encoder, self.critic_encoder]
         self.cores = [self.actor_core, self.critic_core]
 
-        self.distribution_linear = nn.Linear(self.actor_core.get_core_out_size(), calc_num_logits(self.action_space))
         self.critic_linear = nn.Linear(self.critic_core.get_core_out_size(), 1)
+
+        self.action_parameterization = self.get_action_parameterization(self.critic_core.get_core_out_size())
 
         self.apply(self.initialize_weights)
 
@@ -154,23 +165,22 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         core_outputs = core_output.chunk(len(self.cores), dim=1)
 
         # first core output corresponds to the actor
-        action_logits = self.distribution_linear(core_outputs[0])
-        dist = get_action_distribution(self.action_space, raw_logits=action_logits)
+        action_distribution_params, action_distribution = self.action_parameterization(core_outputs[0])
         # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(dist)
+        actions, log_prob_actions = sample_actions_log_probs(action_distribution)
 
         # second core output corresponds to the critic
         values = self.critic_linear(core_outputs[1])
 
         result = AttrDict(dict(
             actions=actions,
-            action_logits=action_logits,
+            action_logits=action_distribution_params,
             log_prob_actions=log_prob_actions,
             values=values,
         ))
 
         if with_action_distribution:
-            result.action_distribution = dist
+            result.action_distribution = action_distribution
 
         return result
 

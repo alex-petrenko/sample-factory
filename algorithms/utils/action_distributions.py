@@ -6,6 +6,7 @@ import torch
 from torch.distributions import Categorical, Normal, Independent
 from torch.nn import functional
 
+from algorithms.utils.algo_utils import EPS
 from utils.utils import log
 
 
@@ -34,6 +35,10 @@ def calc_num_logits(action_space):
         return np.prod(action_space.shape) * 2
     else:
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+
+
+def is_continuous_action_space(action_space):
+    return isinstance(action_space, gym.spaces.Box)
 
 
 def get_action_distribution(action_space, raw_logits):
@@ -197,12 +202,11 @@ class TupleActionDistribution:
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
     stddev_min = 1e-5
-    stddev_max = 1.0
+    stddev_max = 2.0 + EPS
     stddev_span = stddev_max - stddev_min
 
     def __init__(self, params):
         num_actions = params.shape[-1] // 2
-        torch.autograd.set_detect_anomaly(True)
         self.means, self.log_std = torch.split(params, num_actions, dim=1)
 
         # self.stddevs = self.log_std.exp().sigmoid()
@@ -210,7 +214,7 @@ class ContinuousActionDistribution(Independent):
         # self.stddevs = self.stddevs * self.stddev_span + self.stddev_min
 
         self.stddevs = self.log_std.exp()
-        self.stddevs = torch.clamp(self.stddevs, 1e-5, 1.0)
+        self.stddevs = torch.clamp(self.stddevs, self.stddev_min, self.stddev_max)
 
         normal_dist = Normal(self.means, self.stddevs)
         super().__init__(normal_dist, 1)

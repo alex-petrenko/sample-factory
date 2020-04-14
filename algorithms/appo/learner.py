@@ -484,6 +484,9 @@ class LearnerWorker:
                     log_prob_actions = action_distribution.log_prob(mb.actions)
                     ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
+                    # super large/small values can cause numerical problems and are probably noise anyway
+                    ratio = torch.clamp(ratio, 0.05, 20.0)
+
                     values = result.values.squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph

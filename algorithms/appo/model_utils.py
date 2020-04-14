@@ -1,6 +1,9 @@
+import math
+
 import torch
 from torch import nn
 
+from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
 from algorithms.utils.algo_utils import EPS
 from algorithms.utils.pytorch_utils import calc_num_elements
 from utils.utils import AttrDict
@@ -337,3 +340,59 @@ def create_core(cfg, core_input_size):
 
     return core
 
+
+class ActionsParameterizationBase(nn.Module):
+    def __init__(self, cfg, action_space):
+        super().__init__()
+        self.cfg = cfg
+        self.action_space = action_space
+
+
+class ActionParameterizationDefault(ActionsParameterizationBase):
+    """
+    A single fully-connected layer to output all parameters of the action distribution. Suitable for
+    categorical action distributions, as well as continuous actions with learned state-dependent stddev.
+
+    """
+
+    def __init__(self, cfg, core_out_size, action_space):
+        super().__init__(cfg, action_space)
+
+        num_action_outputs = calc_num_logits(action_space)
+        self.distribution_linear = nn.Linear(core_out_size, num_action_outputs)
+
+    def forward(self, actor_core_output):
+        """Just forward the FC layer and generate the distribution object."""
+        action_distribution_params = self.distribution_linear(actor_core_output)
+        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        return action_distribution_params, action_distribution
+
+
+class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterizationBase):
+    """Use a single learned parameter for action stddevs."""
+
+    def __init__(self, cfg, core_out_size, action_space):
+        super().__init__(cfg, action_space)
+
+        assert not cfg.adaptive_stddev
+        assert is_continuous_action_space(self.action_space), \
+            'Non-adaptive stddev makes sense only for continuous action spaces'
+
+        num_action_outputs = calc_num_logits(action_space)
+
+        # calculate only action means using the policy neural network
+        self.distribution_linear = nn.Linear(core_out_size, num_action_outputs // 2)
+
+        # stddev is a single learned parameter
+        initial_stddev = torch.empty([num_action_outputs // 2])
+        initial_stddev.fill_(math.log(self.cfg.initial_stddev))
+        self.learned_stddev = nn.Parameter(initial_stddev, requires_grad=True)
+
+    def forward(self, actor_core_output):
+        action_means = self.distribution_linear(actor_core_output)
+
+        batch_size = action_means.shape[0]
+        action_stddevs = self.learned_stddev.repeat(batch_size, 1)
+        action_distribution_params = torch.cat((action_means, action_stddevs), dim=1)
+        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        return action_distribution_params, action_distribution
