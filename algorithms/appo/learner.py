@@ -92,7 +92,7 @@ class LearnerWorker:
         # save summaries every 30 seconds in the beginning, but decay to every 5 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
         self.summary_rate_decay_seconds = LinearDecay([(0, 30), (100000, 120), (1000000, 300)])
-        self.last_summary_time = time.time()
+        self.last_summary_time = 0
 
         self.last_saved_time = self.last_milestone_time = 0
 

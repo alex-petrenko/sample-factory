@@ -1,17 +1,32 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
+# _params = ParamGrid([
+#     ('batch_size', [256]),
+#     ('ppo_epochs', [1]),
+#     ('nonlinearity', ['tanh']),
+#     ('learning_rate', [1e-3, 1e-4]),
+#     ('entropy_loss_coeff', [0.001]),
+#     ('actor_critic_share_weigths', ['True', 'False']),
+#     ('policy_initialization', ['xavier_uniform']),
+#     ('max_policy_lag', [50]),
+#     ('adaptive_stddev', ['False', 'True']),
+#     ('initial_stddev', [0.5, 1.0]),
+# ])
+
 _params = ParamGrid([
+    ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888, 9999, 0000]),
     ('batch_size', [256]),
     ('ppo_epochs', [1]),
     ('nonlinearity', ['tanh']),
-    ('learning_rate', [1e-3, 1e-4]),
+    ('learning_rate', [1e-4]),
     ('entropy_loss_coeff', [0.001]),
-    ('actor_critic_share_weigths', ['True', 'False']),
+    ('actor_critic_share_weigths', ['False']),
     ('policy_initialization', ['xavier_uniform']),
     ('max_policy_lag', [50]),
-    ('adaptive_stddev', ['False', 'True']),
-    ('initial_stddev', [0.5, 1.0]),
+    ('adaptive_stddev', ['False']),
+    ('initial_stddev', [0.5]),
 ])
+
 
 _experiment = Experiment(
     'quads_gridsearch',

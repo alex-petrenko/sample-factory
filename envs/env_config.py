@@ -29,3 +29,6 @@ def add_env_args(env, parser):
     elif env.startswith('dmlab'):
         from envs.dmlab.dmlab_params import add_dmlab_env_args
         add_dmlab_env_args(env, parser)
+    elif env.startswith('quad'):
+        from envs.quadrotors.quadrotor_params import add_quadrotors_env_args
+        add_quadrotors_env_args(env, parser)
