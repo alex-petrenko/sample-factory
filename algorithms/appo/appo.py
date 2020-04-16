@@ -118,6 +118,7 @@ class APPO(ReinforcementLearningAlgorithm):
             help='Using background thread for training is faster and allows preparing the next batch while training is in progress.'
                  'Unfortunately debugging can become very tricky in this case. So there is an option to use only a single thread on the learner to simplify the debugging.',
         )
+        p.add_argument('--learner_main_loop_num_cores', default=1, type=int, help='When batching on the learner is the bottleneck, increasing the number of cores PyTorch uses can improve the performance')
 
         # PBT stuff
         p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')

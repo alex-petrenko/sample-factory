@@ -172,7 +172,7 @@ class TensorBatcher:
             log.info('Allocating new CPU tensor batch (could not get from the pool)')
 
             for d1, cache_d, key, tensor_arr, _ in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
-                cache_d[key] = torch.cat(tensor_arr, dim=0)
+                cache_d[key] = torch.cat(tensor_arr, dim=0).pin_memory()
 
         else:
             with timing.add_time('batcher_mem'):

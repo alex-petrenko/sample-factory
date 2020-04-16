@@ -403,7 +403,7 @@ class LearnerWorker:
             if key == 'obs':
                 self._prepare_observations(item, gpu_buffer['obs'])
             else:
-                gpu_tensor = item.detach().to(self.device, copy=True)
+                gpu_tensor = item.detach().to(self.device, copy=True, non_blocking=True)
                 gpu_buffer[key] = gpu_tensor.float()
 
         return gpu_buffer
@@ -879,7 +879,7 @@ class LearnerWorker:
 
         cuda_envvars(self.policy_id)
         torch.multiprocessing.set_sharing_strategy('file_system')
-        torch.set_num_threads(1)
+        torch.set_num_threads(self.cfg.learner_main_loop_num_cores)
 
         timing = Timing()
 
