@@ -236,7 +236,7 @@ class MlpEncoder(EncoderBase):
         assert len(obs_shape.obs) == 1
 
         if cfg.encoder_subtype == 'mlp_quads':
-            fc_encoder_layer = 256
+            fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
                 nn.Linear(obs_shape.obs[0], fc_encoder_layer),
                 nonlinearity(cfg),
