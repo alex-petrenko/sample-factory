@@ -10,6 +10,8 @@ from utils.utils import log, AttrDict, cfg_file
 
 
 def get_algo_class(algo):
+    algo_class = None
+
     if algo == 'APPO':
         from algorithms.appo.appo import APPO
         algo_class = APPO
@@ -17,8 +19,7 @@ def get_algo_class(algo):
         from algorithms.dummy_sampler.sampler import DummySampler
         algo_class = DummySampler
     else:
-        log.error('Algorithm %s is not supported', algo)
-        raise RuntimeError(f'{algo} is not supported')
+        log.warning('Algorithm %s is not supported', algo)
 
     return algo_class
 
