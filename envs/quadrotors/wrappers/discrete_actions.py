@@ -3,6 +3,7 @@ import numpy as np
 import gym
 
 from algorithms.utils.spaces.discretized import Discretized
+from utils.utils import log
 
 
 class QuadsDiscreteActionsWrapper(gym.Wrapper):
@@ -30,4 +31,7 @@ class QuadsDiscreteActionsWrapper(gym.Wrapper):
             cont_actions[i] = self.action_space.spaces[i].to_continuous(a)
 
         obs, rew, done, info = self.env.step(cont_actions)
+
+        # log.warning('Min/max state %.2f, %.2f', obs.min(), obs.max())
+
         return obs, rew, done, info

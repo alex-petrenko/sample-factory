@@ -80,7 +80,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         self.action_parameterization = self.get_action_parameterization(core_out_size)
 
         self.apply(self.initialize_weights)
-        self.train()
+        self.train()  # eval() for inference?
 
     def forward_head(self, obs_dict):
         x = self.encoder(obs_dict)
@@ -202,7 +202,7 @@ def create_actor_critic(cfg, obs_space, action_space, timing=None):
     def make_core(encoder):
         return create_core(cfg, encoder.get_encoder_out_size())
 
-    if cfg.actor_critic_share_weigths:
+    if cfg.actor_critic_share_weights:
         return _ActorCriticSharedWeights(make_encoder, make_core, action_space, cfg, timing)
     else:
         return _ActorCriticSeparateWeights(make_encoder, make_core, action_space, cfg, timing)

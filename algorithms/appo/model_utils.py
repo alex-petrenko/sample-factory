@@ -23,7 +23,7 @@ def get_hidden_size(cfg):
     if cfg.rnn_type == 'lstm':
         size *= 2
 
-    if not cfg.actor_critic_share_weigths:
+    if not cfg.actor_critic_share_weights:
         # both actor and critic need separate weights
         size *= 2
 
