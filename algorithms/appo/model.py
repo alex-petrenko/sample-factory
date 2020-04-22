@@ -131,6 +131,8 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         self.encoders = [self.actor_encoder, self.critic_encoder]
         self.cores = [self.actor_core, self.critic_core]
 
+        self.core_func = self._core_rnn if self.cfg.use_rnn else self._core_empty
+
         self.critic_linear = nn.Linear(self.critic_core.get_core_out_size(), 1)
 
         self.action_parameterization = self.get_action_parameterization(self.critic_core.get_core_out_size())
@@ -139,14 +141,12 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
 
         self.train()
 
-    def forward_head(self, obs_dict):
-        head_outputs = []
-        for e in self.encoders:
-            head_outputs.append(e(obs_dict))
+    def _core_rnn(self, head_output, rnn_states):
+        """
+        This is actually pretty slow due to all these split and cat operations.
+        Consider using shared weights when training RNN policies.
+        """
 
-        return torch.cat(head_outputs, dim=1)
-
-    def forward_core(self, head_output, rnn_states):
         num_cores = len(self.cores)
         head_outputs_split = head_output.chunk(num_cores, dim=1)
         rnn_states_split = rnn_states.chunk(num_cores, dim=1)
@@ -160,6 +160,21 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         outputs = torch.cat(outputs, dim=1)
         new_rnn_states = torch.cat(new_rnn_states, dim=1)
         return outputs, new_rnn_states
+
+    @staticmethod
+    def _core_empty(head_output, fake_rnn_states):
+        """Optimization for the feed-forward case."""
+        return head_output, fake_rnn_states
+
+    def forward_head(self, obs_dict):
+        head_outputs = []
+        for e in self.encoders:
+            head_outputs.append(e(obs_dict))
+
+        return torch.cat(head_outputs, dim=1)
+
+    def forward_core(self, head_output, rnn_states):
+        return self.core_func(head_output, rnn_states)
 
     def forward_tail(self, core_output, with_action_distribution=False):
         core_outputs = core_output.chunk(len(self.cores), dim=1)
