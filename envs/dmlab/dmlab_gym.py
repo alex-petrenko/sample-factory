@@ -198,12 +198,19 @@ class DmlabGymEnv(gym.Env):
         if self.last_observation is None and self.dmlab.is_running():
             self.last_observation = self.dmlab.observations()
 
-        img = self.last_observation[self.main_observation]
+        if self.main_observation in self.last_observation:
+            img = self.last_observation[self.main_observation]
+        elif 'obs' in self.last_observation:
+            img = self.last_observation['obs']
+        else:
+            raise Exception('self.last_observation has no key: obs or %s', self.main_observation)
+
         if mode == 'rgb_array':
             return img
         elif mode != 'human':
             raise Exception(f'Rendering mode {mode} not supported')
 
+        img = np.transpose(img, axes=[1, 2, 0])
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
         scale = self.render_scale

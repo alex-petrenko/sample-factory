@@ -1,9 +1,6 @@
-import math
-
 import torch
 from torch import nn
 
-from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
 from algorithms.utils.algo_utils import EPS
 from algorithms.utils.pytorch_utils import calc_num_elements
 from utils.utils import AttrDict
@@ -15,19 +12,13 @@ ENCODER_REGISTRY = dict()
 
 
 def get_hidden_size(cfg):
-    if cfg.use_rnn:
-        size = cfg.hidden_size
-    else:
-        size = 1
+    if not cfg.use_rnn:
+        return 1
 
     if cfg.rnn_type == 'lstm':
-        size *= 2
-
-    if not cfg.actor_critic_share_weights:
-        # both actor and critic need separate weights
-        size *= 2
-
-    return size
+        return cfg.hidden_size * 2
+    else:
+        return cfg.hidden_size
 
 
 def fc_after_encoder_size(cfg):
@@ -76,9 +67,6 @@ class EncoderBase(nn.Module):
 
         self.fc_after_enc = None
         self.encoder_out_size = -1  # to be initialized in the constuctor of derived class
-
-    def get_encoder_out_size(self):
-        return self.encoder_out_size
 
     def init_fc_blocks(self, input_size):
         layers = []
@@ -236,18 +224,16 @@ class MlpEncoder(EncoderBase):
         assert len(obs_shape.obs) == 1
 
         if cfg.encoder_subtype == 'mlp_quads':
-            fc_encoder_layer = cfg.hidden_size
+            fc_encoder_output_size = 256
             encoder_layers = [
-                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
-                nonlinearity(cfg),
-                nn.Linear(fc_encoder_layer, fc_encoder_layer),
+                nn.Linear(obs_shape.obs[0], fc_encoder_output_size),
                 nonlinearity(cfg),
             ]
         else:
             raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
 
         self.mlp_head = nn.Sequential(*encoder_layers)
-        self.init_fc_blocks(fc_encoder_layer)
+        self.init_fc_blocks(fc_encoder_output_size)
 
     def forward(self, obs_dict):
         normalize_obs(obs_dict, self.cfg)
@@ -280,20 +266,9 @@ def create_standard_encoder(cfg, obs_space, timing):
     return encoder
 
 
-class PolicyCoreBase(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-
-        self.cfg = cfg
-        self.core_output_size = -1
-
-    def get_core_out_size(self):
-        return self.core_output_size
-
-
-class PolicyCoreRNN(PolicyCoreBase):
+class PolicyCoreRNN(nn.Module):
     def __init__(self, cfg, input_size):
-        super().__init__(cfg)
+        super().__init__()
 
         self.cfg = cfg
         self.is_gru = False
@@ -305,8 +280,6 @@ class PolicyCoreRNN(PolicyCoreBase):
             self.core = nn.LSTMCell(input_size, cfg.hidden_size)
         else:
             raise RuntimeError(f'Unknown RNN type {cfg.rnn_type}')
-
-        self.core_output_size = cfg.hidden_size
 
     def forward(self, head_output, rnn_states):
         if self.is_gru:
@@ -320,79 +293,28 @@ class PolicyCoreRNN(PolicyCoreBase):
         return x, new_rnn_states
 
 
-class PolicyCoreFeedForward(PolicyCoreBase):
-    """A noop core (no recurrency)."""
-
+class PolicyCoreFC(nn.Module):
     def __init__(self, cfg, input_size):
-        super().__init__(cfg)
-        self.cfg = cfg
-        self.core_output_size = input_size
+        super().__init__()
 
-    def forward(self, head_output, fake_rnn_states):
-        return head_output, fake_rnn_states
+        self.cfg = cfg
+
+        self.core = nn.Sequential(
+            nn.Linear(input_size, cfg.hidden_size),
+            nonlinearity(cfg),
+        )
+
+    def forward(self, head_output, unused_rnn_states):
+        x = self.core(head_output)
+        fake_new_rnn_states = torch.zeros([x.shape[0], get_hidden_size(self.cfg)], device=x.device)
+        return x, fake_new_rnn_states
 
 
 def create_core(cfg, core_input_size):
     if cfg.use_rnn:
         core = PolicyCoreRNN(cfg, core_input_size)
     else:
-        core = PolicyCoreFeedForward(cfg, core_input_size)
+        core = PolicyCoreFC(cfg, core_input_size)
 
     return core
 
-
-class ActionsParameterizationBase(nn.Module):
-    def __init__(self, cfg, action_space):
-        super().__init__()
-        self.cfg = cfg
-        self.action_space = action_space
-
-
-class ActionParameterizationDefault(ActionsParameterizationBase):
-    """
-    A single fully-connected layer to output all parameters of the action distribution. Suitable for
-    categorical action distributions, as well as continuous actions with learned state-dependent stddev.
-
-    """
-
-    def __init__(self, cfg, core_out_size, action_space):
-        super().__init__(cfg, action_space)
-
-        num_action_outputs = calc_num_logits(action_space)
-        self.distribution_linear = nn.Linear(core_out_size, num_action_outputs)
-
-    def forward(self, actor_core_output):
-        """Just forward the FC layer and generate the distribution object."""
-        action_distribution_params = self.distribution_linear(actor_core_output)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
-        return action_distribution_params, action_distribution
-
-
-class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterizationBase):
-    """Use a single learned parameter for action stddevs."""
-
-    def __init__(self, cfg, core_out_size, action_space):
-        super().__init__(cfg, action_space)
-
-        assert not cfg.adaptive_stddev
-        assert is_continuous_action_space(self.action_space), \
-            'Non-adaptive stddev makes sense only for continuous action spaces'
-
-        num_action_outputs = calc_num_logits(action_space)
-
-        # calculate only action means using the policy neural network
-        self.distribution_linear = nn.Linear(core_out_size, num_action_outputs // 2)
-
-        # stddev is a single learned parameter
-        initial_stddev = torch.empty([num_action_outputs // 2])
-        initial_stddev.fill_(math.log(self.cfg.initial_stddev))
-        self.learned_stddev = nn.Parameter(initial_stddev, requires_grad=True)
-
-    def forward(self, actor_core_output):
-        action_means = self.distribution_linear(actor_core_output)
-
-        batch_size = action_means.shape[0]
-        action_stddevs = self.learned_stddev.repeat(batch_size, 1)
-        action_distribution_params = torch.cat((action_means, action_stddevs), dim=1)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
-        return action_distribution_params, action_distribution

@@ -35,6 +35,7 @@ DMLAB_ENVS = [
     DmLabSpec('dmlab_30', [dmlab30_level_name_to_level(l) for l in DMLAB30_LEVELS]),
     DmLabSpec('dmlab_level_cache', [dmlab30_level_name_to_level(l) for l in DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE]),
 
+    DmLabSpec('dmlab_lasertag_three_opponents_small', 'contributed/dmlab30/lasertag_three_opponents_small'),
     # this is very hard to work with as a benchmark, because FPS fluctuates a lot due to slow resets.
     # also depends a lot on whether levels are in level cache or not
     DmLabSpec('dmlab_benchmark_slow_reset', 'contributed/dmlab30/rooms_keys_doors_puzzle'),
@@ -118,8 +119,8 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
         cfg.dmlab_use_level_cache, gpu_idx, spec.extra_cfg,
     )
 
-    if env_config:
-        env.seed(env_config['env_id'])
+    # if env_config:
+    #     env.seed(env_config['env_id'])
 
     if 'record_to' in cfg and cfg.record_to is not None:
         env = RecordingWrapper(env, cfg.record_to, 0)

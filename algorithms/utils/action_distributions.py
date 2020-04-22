@@ -6,7 +6,6 @@ import torch
 from torch.distributions import Categorical, Normal, Independent
 from torch.nn import functional
 
-from algorithms.utils.algo_utils import EPS
 from utils.utils import log
 
 
@@ -35,10 +34,6 @@ def calc_num_logits(action_space):
         return np.prod(action_space.shape) * 2
     else:
         raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
-
-
-def is_continuous_action_space(action_space):
-    return isinstance(action_space, gym.spaces.Box)
 
 
 def get_action_distribution(action_space, raw_logits):
@@ -201,39 +196,18 @@ class TupleActionDistribution:
 
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
-    stddev_min = 1e-5
-    stddev_max = 2.0 + EPS
-    stddev_span = stddev_max - stddev_min
+    dist_min_clamp = math.log(1e-6)
+    dist_max_clamp = math.log(1e6)
 
     def __init__(self, params):
         num_actions = params.shape[-1] // 2
-        self.means, self.log_std = torch.split(params, num_actions, dim=1)
+        means, log_std = torch.split(params, num_actions, dim=1)
+        log_std = log_std.clamp(self.dist_min_clamp, self.dist_max_clamp)
+        stddev = log_std.exp()
 
-        # self.stddevs = self.log_std.exp().sigmoid()
-        # self.stddevs.mul_(self.stddev_span).add_(self.stddev_min)
-        # self.stddevs = self.stddevs * self.stddev_span + self.stddev_min
-
-        self.stddevs = self.log_std.exp()
-        self.stddevs = torch.clamp(self.stddevs, self.stddev_min, self.stddev_max)
-
-        normal_dist = Normal(self.means, self.stddevs)
+        normal_dist = Normal(means, stddev)
         super().__init__(normal_dist, 1)
 
     def kl_divergence(self, other):
         kl = torch.distributions.kl.kl_divergence(self, other)
         return kl
-
-    def summaries(self):
-        return dict(
-            action_mean=self.means.mean(),
-            action_mean_min=self.means.min(),
-            action_mean_max=self.means.max(),
-
-            action_log_std_mean=self.log_std.mean(),
-            action_log_std_min=self.log_std.min(),
-            action_log_std_max=self.log_std.max(),
-
-            action_stddev_mean=self.stddev.mean(),
-            action_stddev_min=self.stddev.min(),
-            action_stddev_max=self.stddev.max(),
-        )

@@ -484,9 +484,20 @@ class RecordingWrapper(gym.core.Wrapper):
 
     def _record(self, img):
         frame_name = f'{self._frame_id:05d}.png'
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(join(self._episode_recording_dir, frame_name), img)
+        img = np.array(img['obs'], dtype=np.uint8)
+
+        if img.shape[0] == 3:
+            img = np.transpose(img, (2, 0, 1))
+        try:
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(join(self._episode_recording_dir, frame_name), img)
+        except:
+            log.info('img.shape: %r', img.shape)
+
+
         self._frame_id += 1
+        if self._frame_id % 500 == 2:
+            print(self._frame_id)
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)

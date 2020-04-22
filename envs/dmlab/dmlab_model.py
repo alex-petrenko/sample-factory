@@ -67,6 +67,7 @@ class DmlabEncoder(EncoderBase):
                 instr = instr[:, :max_instr_len]
 
         with self.timing.add_time('dmlab_encode_instr'):
+            instr = instr.type(torch.LongTensor)
             instr_embed = self.word_embedding(instr)
             instr_packed = torch.nn.utils.rnn.pack_padded_sequence(
                 instr_embed, instr_lengths, batch_first=True, enforce_sorted=False,

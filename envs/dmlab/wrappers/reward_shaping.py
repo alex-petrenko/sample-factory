@@ -2,6 +2,9 @@ from math import tanh
 
 import gym
 
+from envs.dmlab.dmlab30 import HUMAN_SCORES, RANDOM_SCORES, LEVEL_MAPPING
+
+
 RAW_SCORE_SUMMARY_KEY_SUFFIX = 'dmlab_raw_score'
 
 

@@ -87,7 +87,7 @@ class PopulationBasedTraining:
         self.policy_reward_shaping = [dict() for _ in range(self.cfg.num_policies)]
 
         # initializing this with [True] prevents PBT from starting to replace params too quickly
-        self.policy_is_the_best = [deque([True], maxlen=10) for _ in range(self.cfg.num_policies)]
+        self.policy_is_the_best = [deque([True], maxlen=5) for _ in range(self.cfg.num_policies)]
 
         self.default_reward_shaping = default_reward_shaping
 

@@ -2,10 +2,32 @@ from filelock import FileLock, Timeout
 from ray.tune import register_env
 
 from algorithms.utils.arguments import default_cfg
+from envs.atari.atari_utils import ATARI_ENVS, make_atari_env
 from envs.dmlab.dmlab_env import DMLAB_ENVS, make_dmlab_env
 from envs.doom.doom_utils import DOOM_ENVS, make_doom_env
 
 DOOM_LOCK_PATH = '/tmp/doom_rllib_lock'
+
+def register_atari_envs_rllib(**kwargs):
+    for spec in ATARI_ENVS:
+        def make_env_func(env_config):
+            print('Creating env!!!')
+            cfg = default_cfg(env=spec.name)
+            cfg.pixel_format = 'HWC'  # tensorflow models expect HWC by default
+
+            if 'skip_frames' in env_config:
+                cfg.env_frameskip = env_config['skip_frames']
+            if 'res_w' in env_config:
+                cfg.res_w = env_config['res_w']
+            if 'res_h' in env_config:
+                cfg.res_h = env_config['res_h']
+            if 'env_framestack' in env_config:
+                cfg.env_framestack = env_config['env_framestack']
+
+            env = make_atari_env(spec.name, env_config=env_config, cfg=cfg, **kwargs)
+            return env
+
+        register_env(spec.name, make_env_func)
 
 
 def register_doom_envs_rllib(**kwargs):

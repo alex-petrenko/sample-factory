@@ -61,5 +61,5 @@ def make_atari_env(env_name, cfg, **kwargs):
     if cfg.env_framestack == 1:
         env = SkipFramesWrapper(env, skip_frames=cfg.env_frameskip)
     else:
-        env = SkipAndStackFramesWrapper(env, skip_frames=cfg.env_frameskip, stack_frames=4, channel_config='CHW')
+        env = SkipAndStackFramesWrapper(env, skip_frames=cfg.env_frameskip, stack_frames=4, channel_config=cfg.pixel_format)
     return env

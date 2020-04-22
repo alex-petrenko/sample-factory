@@ -24,7 +24,7 @@ def add_dmlab_env_args(env, parser):
     p.add_argument('--dmlab_gpus', default=[0], nargs='+', type=int, help='Indices of GPUs to use for rendering, only works in hardware mode')
     p.add_argument('--dmlab30_dataset', default='~/datasets/brady_konkle_oliva2008', type=str, help='Path to dataset needed for some of the environments in DMLab-30')
     p.add_argument('--dmlab_with_instructions', default=True, type=str2bool, help='Whether to use text instructions or not')
-    p.add_argument('--dmlab_extended_action_set', default=False, type=str2bool, help='Use larger action set from newer papers (e.g. PopART and R2D2)')
+    p.add_argument('--dmlab_extended_action_set', default=False, type=str2bool, help='Use larger action set from newer papers')
     p.add_argument('--dmlab_use_level_cache', default=True, type=str2bool, help='Whether to use the local level cache (highly recommended)')
     p.add_argument(
         '--dmlab_one_task_per_worker', default=False, type=str2bool,

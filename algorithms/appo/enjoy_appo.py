@@ -138,7 +138,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 def main():
     """Script entry point."""
     cfg = parse_args(evaluation=True)
-    return enjoy(cfg)
+    # cfg.no_render = True
+    return enjoy(cfg, max_num_episodes=10)
 
 
 if __name__ == '__main__':

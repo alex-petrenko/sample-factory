@@ -9,4 +9,3 @@ def add_eval_args(parser):
     parser.add_argument('--record_to', default=join(project_root(), '..', 'recs'), type=str, help='Record episodes to this folder')
     parser.add_argument('--no_render', action='store_true', help='Do not render the environment during evaluation')
     parser.add_argument('--policy_index', default=0, type=int, help='Policy to evaluate in case of multi-policy training')
-

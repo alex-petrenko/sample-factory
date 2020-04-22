@@ -6,7 +6,6 @@ from collections import deque
 import numpy as np
 import ray
 import yaml
-from ray.rllib.agents.impala import ImpalaTrainer
 from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
 from ray.rllib.models import ModelCatalog
 from ray.tests.cluster_utils import Cluster
@@ -17,10 +16,10 @@ from ray.tune.registry import register_trainable
 from ray.tune.tune import _make_scheduler, run
 from ray.tune.util import merge_dicts
 
-from benchmarks.rllib.vizdoom_model import VizdoomVisionNetwork
 from benchmarks.rllib.custom_appo_policy import CustomAPPOTFPolicy
 from benchmarks.rllib.custom_ppo_policy import CustomPPOTFPolicy
-from envs.ray_envs import register_doom_envs_rllib, register_dmlab_envs_rllib
+from benchmarks.rllib.vizdoom_model import VizdoomVisionNetwork
+from envs.ray_envs import register_doom_envs_rllib, register_dmlab_envs_rllib, register_atari_envs_rllib
 from utils.utils import log
 
 EXAMPLE_USAGE = """
@@ -313,6 +312,7 @@ def run_experiment(args, parser):
 
 
 def main():
+    register_atari_envs_rllib()
     register_doom_envs_rllib()
     register_dmlab_envs_rllib()
 
