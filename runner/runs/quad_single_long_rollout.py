@@ -1,10 +1,9 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params_clip = ParamGrid([
-    ('seed', [1000, 2000]),
     ('batch_size', [128]),
     ('ppo_epochs', [1, 2]),
-    ('num_batches_per_iteration', [5, 10, 15]),
+    ('num_batches_per_iteration', [5, 10, 15, 20]),
 ])
 
 _experiment_clip = Experiment(
