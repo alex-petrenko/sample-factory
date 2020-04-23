@@ -1,6 +1,5 @@
 import glob
 import os
-import random
 import shutil
 import signal
 import threading
@@ -162,7 +161,7 @@ class LearnerWorker:
         r = rollout
         self.traj_tensors_available[r.worker_idx, r.split_idx][r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
 
-    def _prepare_train_buffer(self, rollouts, batch_size, timing):
+    def _prepare_train_buffer(self, rollouts, macro_batch_size, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
 
         with timing.add_time('buffers'):
@@ -188,7 +187,7 @@ class LearnerWorker:
             # concatenate rollouts from different workers into a single batch efficiently
             # that is, if we already have memory for the buffers allocated, we can just copy the data into
             # existing cached tensors instead of creating new ones. This is a performance optimization.
-            buffer = self.tensor_batcher.cat(buffer, batch_size, timing)
+            buffer = self.tensor_batcher.cat(buffer, macro_batch_size, timing)
 
         with timing.add_time('buff_ready'):
             for r in rollouts:
@@ -223,7 +222,7 @@ class LearnerWorker:
             env_steps += rollout['env_steps']
 
         with timing.add_time('prepare'):
-            buffer = self._prepare_train_buffer(rollouts, batch_size, timing)
+            buffer = self._prepare_train_buffer(rollouts, macro_batch_size, timing)
             self.experience_buffer_queue.put((buffer, batch_size, samples, env_steps))
 
     def _process_rollouts(self, rollouts, timing):
@@ -423,6 +422,10 @@ class LearnerWorker:
             clip_value = self.cfg.ppo_clip_value
             gamma = self.cfg.gamma
             recurrence = self.cfg.recurrence
+
+            if self.cfg.with_vtrace:
+                assert recurrence == self.cfg.rollout and recurrence > 1, \
+                    'V-trace requires to recurrence and rollout to be equal'
 
             force_summaries = False
             num_sgd_steps = 0

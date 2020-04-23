@@ -11,6 +11,7 @@ from algorithms.appo.actor_worker import transform_dict_observations
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.model import create_actor_critic
 from algorithms.appo.model_utils import get_hidden_size
+from algorithms.utils.action_distributions import ContinuousActionDistribution
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent import MultiAgentWrapper
 from envs.create_env import create_env
@@ -82,8 +83,16 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                 for key, x in obs_torch.items():
                     obs_torch[key] = torch.from_numpy(x).to(device).float()
 
-                policy_outputs = actor_critic(obs_torch, rnn_states)
-                actions = policy_outputs.actions.cpu().numpy()
+                policy_outputs = actor_critic(obs_torch, rnn_states, with_action_distribution=True)
+
+                # action_distribution = policy_outputs.action_distribution
+                # if isinstance(action_distribution, ContinuousActionDistribution):
+                #     actions = action_distribution.means
+                # else:
+                #     actions = policy_outputs.actions
+
+                actions = policy_outputs.actions
+                actions = actions.cpu().numpy()
                 rnn_states = policy_outputs.rnn_states
 
                 for _ in range(render_action_repeat):
@@ -103,10 +112,12 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                     if all(done):
                         log.debug('Finished episode!')
-                        for player in [1, 2, 3, 4, 5, 6, 7, 8]:
-                            key = f'PLAYER{player}_FRAGCOUNT'
-                            if key in infos[0]:
-                                log.debug('Score for player %d: %r', player, infos[0][key])
+
+                        # VizDoom multiplayer stuff
+                        # for player in [1, 2, 3, 4, 5, 6, 7, 8]:
+                        #     key = f'PLAYER{player}_FRAGCOUNT'
+                        #     if key in infos[0]:
+                        #         log.debug('Score for player %d: %r', player, infos[0][key])
 
                     episode_reward += np.mean(rew)
                     num_frames += 1

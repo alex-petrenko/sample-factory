@@ -110,10 +110,10 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
         return result
 
-    def forward(self, obs_dict, rnn_states):
+    def forward(self, obs_dict, rnn_states, with_action_distribution=False):
         x = self.forward_head(obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x)
+        result = self.forward_tail(x, with_action_distribution=with_action_distribution)
         result.rnn_states = new_rnn_states
         return result
 
@@ -199,10 +199,10 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
 
         return result
 
-    def forward(self, obs_dict, rnn_states):
+    def forward(self, obs_dict, rnn_states, with_action_distribution=False):
         x = self.forward_head(obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x)
+        result = self.forward_tail(x, with_action_distribution=with_action_distribution)
         result.rnn_states = new_rnn_states
         return result
 

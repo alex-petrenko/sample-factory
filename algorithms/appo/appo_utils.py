@@ -155,14 +155,19 @@ class TensorBatcher:
     def __init__(self, batch_pool):
         self.batch_pool = batch_pool
 
-    def cat(self, dict_of_tensor_arrays, batch_size, timing):
+    def cat(self, dict_of_tensor_arrays, macro_batch_size, timing):
+        """
+        Here 'macro_batch' is the overall size of experience per iteration.
+        Macro-batch = mini-batch * num_batches_per_iteration
+        """
+
         tensor_batch = self.batch_pool.get()
 
         if tensor_batch is not None:
             old_batch_size = tensor_batch_size(tensor_batch)
-            if old_batch_size != batch_size:
+            if old_batch_size != macro_batch_size:
                 # this can happen due to PBT changing batch size during the experiment
-                log.warning('Tensor batch size changed from %d to %d!', old_batch_size, batch_size)
+                log.warning('Tensor macro-batch size changed from %d to %d!', old_batch_size, macro_batch_size)
                 log.warning('Discarding the cached tensor batch!')
                 del tensor_batch
                 tensor_batch = None
