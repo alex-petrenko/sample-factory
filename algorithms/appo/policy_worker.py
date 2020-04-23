@@ -157,10 +157,12 @@ class PolicyWorker:
                     self.actor_critic.load_state_dict(self.shared_model_weights)
 
             self.latest_policy_version = learner_policy_version
-            log.info(
-                'Updated weights on worker %d-%d, policy_version %d (%.5f)',
-                self.policy_id, self.worker_idx, self.latest_policy_version, timing.weight_update,
-            )
+
+            if self.latest_policy_version % 10 == 0:
+                log.info(
+                    'Updated weights on worker %d-%d, policy_version %d (%.5f)',
+                    self.policy_id, self.worker_idx, self.latest_policy_version, timing.weight_update,
+                )
 
     # noinspection PyProtectedMember
     def _run(self):

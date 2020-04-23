@@ -1,3 +1,6 @@
+from utils.utils import str2bool
+
+
 def quadrotors_override_defaults(env, parser):
     parser.set_defaults(
         encoder_type='mlp',
@@ -13,3 +16,4 @@ def add_quadrotors_env_args(env, parser):
     p = parser
 
     p.add_argument('--quads_discretize_actions', default=-1, type=int, help='Discretize actions into N bins for each individual action. Default (-1) means no discretization')
+    p.add_argument('--quads_clip_input', default=False, type=str2bool, help='Whether to clip input to ensure it stays relatively small')
