@@ -1,6 +1,7 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params_clip = ParamGrid([
+    ('seed', [1000, 1111, 2222, 3333]),
     ('batch_size', [256]),
     ('ppo_epochs', [1]),
     ('nonlinearity', ['tanh']),
