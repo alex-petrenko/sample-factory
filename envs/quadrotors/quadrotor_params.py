@@ -17,3 +17,4 @@ def add_quadrotors_env_args(env, parser):
 
     p.add_argument('--quads_discretize_actions', default=-1, type=int, help='Discretize actions into N bins for each individual action. Default (-1) means no discretization')
     p.add_argument('--quads_clip_input', default=False, type=str2bool, help='Whether to clip input to ensure it stays relatively small')
+    p.add_argument('--quads_effort_reward', default=None, type=float, help='Override default value for effort reward')

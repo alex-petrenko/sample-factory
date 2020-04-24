@@ -1,8 +1,6 @@
+import gym
 import numpy as np
 
-import gym
-
-from utils.utils import log
 
 DEFAULT_QUAD_REWARD_SHAPING = dict(
     quad_rewards=dict(

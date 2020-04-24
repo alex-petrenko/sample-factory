@@ -1,3 +1,5 @@
+import copy
+
 from gym_art.quadrotor.quadrotor import QuadrotorEnv
 
 from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrapper
@@ -32,7 +34,11 @@ def make_quadrotor_env(env_name, cfg=None, **kwargs):
     if cfg.quads_discretize_actions > 0:
         env = QuadsDiscreteActionsWrapper(env, cfg.quads_discretize_actions)
 
-    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=DEFAULT_QUAD_REWARD_SHAPING)
+    reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
+    if cfg.quads_effort_reward is not None:
+        reward_shaping['quad_rewards']['effort'] = cfg.quads_effort_reward
+
+    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
 
     if cfg.quads_clip_input:
         env = QuadsAdditionalInputWrapper(env)

@@ -611,11 +611,6 @@ class LearnerWorker:
                     epoch + 1, num_sgd_steps, loss_delta_abs,
                 )
                 break
-            else:
-                log.debug(
-                    'NO!!! early stopping after %d epochs (%d sgd steps), loss delta %.7f', #TODO
-                    epoch + 1, num_sgd_steps, loss_delta_abs,
-                )
 
             prev_epoch_actor_loss = new_epoch_actor_loss
             epoch_actor_losses = []
