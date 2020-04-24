@@ -22,6 +22,7 @@ from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae
 from algorithms.utils.multi_env import safe_get
+from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
 from utils.timing import Timing
 from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill
@@ -409,6 +410,11 @@ class LearnerWorker:
 
     def _train(self, gpu_buffer, batch_size, experience_size, timing):
         with torch.no_grad():
+            early_stopping_tolerance = 1e-6
+            early_stop = False
+            prev_epoch_actor_loss = 1e9
+            epoch_actor_losses = []
+
             # V-trace parameters
             # noinspection PyArgumentList
             rho_hat = torch.Tensor([self.cfg.vtrace_rho])
@@ -427,21 +433,27 @@ class LearnerWorker:
                 assert recurrence == self.cfg.rollout and recurrence > 1, \
                     'V-trace requires to recurrence and rollout to be equal'
 
-            force_summaries = False
             num_sgd_steps = 0
 
-            stats = None
+            stats_and_summaries = None
             if not self.with_training:
-                return stats
+                return stats_and_summaries
 
         for epoch in range(self.cfg.ppo_epochs):
-            minibatches = self._get_minibatches(batch_size, experience_size)
+            with timing.add_time('epoch_init'):
+                if early_stop or self.terminate:
+                    break
+
+                summary_this_epoch = force_summaries = False
+
+                minibatches = self._get_minibatches(batch_size, experience_size)
 
             for batch_num in range(len(minibatches)):
-                indices = minibatches[batch_num]
+                with timing.add_time('minibatch_init'):
+                    indices = minibatches[batch_num]
 
-                # current minibatch consisting of short trajectory segments with length == recurrence
-                mb = self._get_minibatch(gpu_buffer, indices)
+                    # current minibatch consisting of short trajectory segments with length == recurrence
+                    mb = self._get_minibatch(gpu_buffer, indices)
 
                 # calculate policy head outside of recurrent loop
                 with timing.add_time('forward_head'):
@@ -540,107 +552,141 @@ class LearnerWorker:
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
 
+                    entropy = action_distribution.entropy()
+                    if self.cfg.entropy_loss_coeff > 0.0:
+                        entropy_loss = -self.cfg.entropy_loss_coeff * entropy.mean()
+                    else:
+                        entropy_loss = 0.0
+
+                    actor_loss = policy_loss + entropy_loss
+                    epoch_actor_losses.append(actor_loss.item())
+
                     targets = targets.to(self.device)
                     old_values = mb.values
                     value_loss = self._value_loss(values, old_values, targets, clip_value)
+                    critic_loss = value_loss
 
-                    # entropy loss
-                    entropy = action_distribution.entropy()
-                    entropy_loss = -self.cfg.entropy_loss_coeff * entropy.mean()
+                    loss = actor_loss + critic_loss
 
-                    loss = policy_loss + value_loss + entropy_loss
-
-                    high_loss = 5.0
-                    if abs(policy_loss.item()) > high_loss or abs(value_loss.item()) > high_loss or abs(entropy_loss.item()) > high_loss:
-                        log.warning('High loss value: %.4f %.4f %.4f %.4f', loss.item(), policy_loss.item(), value_loss.item(), entropy_loss.item())
+                    high_loss = 30.0
+                    if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(entropy_loss)) > high_loss:
+                        log.warning(
+                            'High loss value: %.4f %.4f %.4f %.4f',
+                            to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(entropy_loss),
+                        )
                         force_summaries = True
 
-                with timing.add_time('update'):
-                    # update the weights
-                    self.optimizer.zero_grad()
-                    loss.backward()
+                    with timing.add_time('update'):
+                        # update the weights
+                        self.optimizer.zero_grad()
+                        loss.backward()
 
-                    if self.cfg.max_grad_norm > 0.0:
-                        with timing.add_time('clip'):
-                            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
+                        if self.cfg.max_grad_norm > 0.0:
+                            with timing.add_time('clip'):
+                                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
-                    curr_policy_version = self.train_step  # policy version before the weight update
-                    with self.policy_lock:
-                        self.optimizer.step()
+                        curr_policy_version = self.train_step  # policy version before the weight update
+                        with self.policy_lock:
+                            self.optimizer.step()
 
-                    num_sgd_steps += 1
+                        num_sgd_steps += 1
 
-                with torch.no_grad():
-                    self._after_optimizer_step()
+                    with torch.no_grad():
+                        with timing.add_time('after_optimizer'):
+                            self._after_optimizer_step()
 
-                    # collect and report summaries
-                    with_summaries = self._should_save_summaries()
-                    if with_summaries or force_summaries:
-                        self.last_summary_time = time.time()
-                        stats = AttrDict()
+                            # collect and report summaries
+                            with_summaries = self._should_save_summaries() or force_summaries
+                            if with_summaries and not summary_this_epoch:
+                                stats_and_summaries = self._record_summaries(AttrDict(locals()))
+                                summary_this_epoch = True
+                                force_summaries = False
 
-                        grad_norm = sum(
-                            p.grad.data.norm(2).item() ** 2
-                            for p in self.actor_critic.parameters()
-                            if p.grad is not None
-                        ) ** 0.5
-                        stats.grad_norm = grad_norm
-                        stats.loss = loss
-                        stats.value = result.values.mean()
-                        stats.entropy = action_distribution.entropy().mean()
-                        stats.policy_loss = policy_loss
-                        stats.value_loss = value_loss
-                        stats.entropy_loss = entropy_loss
-                        stats.adv_min = adv.min()
-                        stats.adv_max = adv.max()
-                        stats.adv_std = adv_std
-                        stats.max_abs_logprob = torch.abs(mb.action_logits).max()
+            new_epoch_actor_loss = np.mean(epoch_actor_losses)
+            loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
+            if loss_delta_abs < early_stopping_tolerance:
+                early_stop = True
+                log.debug(
+                    'Early stopping after %d epochs (%d sgd steps), loss delta %.7f',
+                    epoch + 1, num_sgd_steps, loss_delta_abs,
+                )
+                break
+            else:
+                log.debug(
+                    'NO!!! early stopping after %d epochs (%d sgd steps), loss delta %.7f', #TODO
+                    epoch + 1, num_sgd_steps, loss_delta_abs,
+                )
 
-                        if hasattr(action_distribution, 'summaries'):
-                            stats.update(action_distribution.summaries())
+            prev_epoch_actor_loss = new_epoch_actor_loss
+            epoch_actor_losses = []
 
-                        if epoch == self.cfg.ppo_epochs - 1 and batch_num == len(minibatches) - 1:
-                            # we collect these stats only for the last PPO batch, or every time if we're only doing
-                            # one batch, IMPALA-style
-                            ratio_mean = torch.abs(1.0 - ratio).mean().detach()
-                            ratio_min = ratio.min().detach()
-                            ratio_max = ratio.max().detach()
-                            # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
+        return stats_and_summaries
 
-                            value_delta = torch.abs(values - old_values)
-                            value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
+    def _record_summaries(self, train_loop_vars):
+        var = train_loop_vars
 
-                            # calculate KL-divergence with the behaviour policy action distribution
-                            old_action_distribution = get_action_distribution(
-                                self.actor_critic.action_space, mb.action_logits,
-                            )
-                            kl_old = action_distribution.kl_divergence(old_action_distribution)
-                            kl_old_mean = kl_old.mean()
+        self.last_summary_time = time.time()
+        stats = AttrDict()
 
-                            stats.kl_divergence = kl_old_mean
-                            stats.value_delta = value_delta_avg
-                            stats.value_delta_max = value_delta_max
-                            stats.fraction_clipped = ((ratio < clip_ratio_low).float() + (ratio > clip_ratio_high).float()).mean()
-                            stats.ratio_mean = ratio_mean
-                            stats.ratio_min = ratio_min
-                            stats.ratio_max = ratio_max
-                            stats.num_sgd_steps = num_sgd_steps
+        grad_norm = sum(
+            p.grad.data.norm(2).item() ** 2
+            for p in self.actor_critic.parameters()
+            if p.grad is not None
+        ) ** 0.5
+        stats.grad_norm = grad_norm
+        stats.loss = var.loss
+        stats.value = var.result.values.mean()
+        stats.entropy = var.action_distribution.entropy().mean()
+        stats.policy_loss = var.policy_loss
+        stats.value_loss = var.value_loss
+        stats.entropy_loss = var.entropy_loss
+        stats.adv_min = var.adv.min()
+        stats.adv_max = var.adv.max()
+        stats.adv_std = var.adv_std
+        stats.max_abs_logprob = torch.abs(var.mb.action_logits).max()
 
-                        # this caused numerical issues on some versions of PyTorch with second moment getting to infinity
-                        adam_max_second_moment = 0.0
-                        for key, tensor_state in self.optimizer.state.items():
-                            adam_max_second_moment = max(tensor_state['exp_avg_sq'].max().item(), adam_max_second_moment)
-                        stats.adam_max_second_moment = adam_max_second_moment
+        if hasattr(var.action_distribution, 'summaries'):
+            stats.update(var.action_distribution.summaries())
 
-                        version_diff = curr_policy_version - mb.policy_version
-                        stats.version_diff_avg = version_diff.mean()
-                        stats.version_diff_min = version_diff.min()
-                        stats.version_diff_max = version_diff.max()
+        if var.epoch == self.cfg.ppo_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
+            # we collect these stats only for the last PPO batch, or every time if we're only doing one batch, IMPALA-style
+            ratio_mean = torch.abs(1.0 - var.ratio).mean().detach()
+            ratio_min = var.ratio.min().detach()
+            ratio_max = var.ratio.max().detach()
+            # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
 
-                        # we want this statistic for the last batch of the last epoch
-                        for key, value in stats.items():
-                            if isinstance(value, torch.Tensor):
-                                stats[key] = value.item()
+            value_delta = torch.abs(var.values - var.old_values)
+            value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
+
+            # calculate KL-divergence with the behaviour policy action distribution
+            old_action_distribution = get_action_distribution(
+                self.actor_critic.action_space, var.mb.action_logits,
+            )
+            kl_old = var.action_distribution.kl_divergence(old_action_distribution)
+            kl_old_mean = kl_old.mean()
+
+            stats.kl_divergence = kl_old_mean
+            stats.value_delta = value_delta_avg
+            stats.value_delta_max = value_delta_max
+            stats.fraction_clipped = ((var.ratio < var.clip_ratio_low).float() + (var.ratio > var.clip_ratio_high).float()).mean()
+            stats.ratio_mean = ratio_mean
+            stats.ratio_min = ratio_min
+            stats.ratio_max = ratio_max
+            stats.num_sgd_steps = var.num_sgd_steps
+
+        # this caused numerical issues on some versions of PyTorch with second moment reaching infinity
+        adam_max_second_moment = 0.0
+        for key, tensor_state in self.optimizer.state.items():
+            adam_max_second_moment = max(tensor_state['exp_avg_sq'].max().item(), adam_max_second_moment)
+        stats.adam_max_second_moment = adam_max_second_moment
+
+        version_diff = var.curr_policy_version - var.mb.policy_version
+        stats.version_diff_avg = version_diff.mean()
+        stats.version_diff_min = version_diff.min()
+        stats.version_diff_max = version_diff.max()
+
+        for key, value in stats.items():
+            stats[key] = to_scalar(value)
 
         return stats
 
@@ -723,9 +769,10 @@ class LearnerWorker:
             # this does not help with a single experiment
             # but seems to do better when we're running more than one experiment in parallel
             torch.set_num_threads(1)
-            torch.backends.cudnn.benchmark = True
 
             if self.cfg.device == 'gpu':
+                torch.backends.cudnn.benchmark = True
+
                 # we should already see only one CUDA device, because of env vars
                 assert torch.cuda.device_count() == 1
                 self.device = torch.device('cuda', index=0)
