@@ -188,7 +188,8 @@ class LearnerWorker:
             # concatenate rollouts from different workers into a single batch efficiently
             # that is, if we already have memory for the buffers allocated, we can just copy the data into
             # existing cached tensors instead of creating new ones. This is a performance optimization.
-            buffer = self.tensor_batcher.cat(buffer, macro_batch_size, timing)
+            use_pinned_memory = self.cfg.device == 'gpu'
+            buffer = self.tensor_batcher.cat(buffer, macro_batch_size, use_pinned_memory, timing)
 
         with timing.add_time('buff_ready'):
             for r in rollouts:
@@ -260,7 +261,7 @@ class LearnerWorker:
             rollouts = rollouts[rollouts_in_macro_batch:]
 
             self._process_macro_batch(rollouts_to_process, batch_size, timing)
-            # log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
+            log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
 
         return rollouts
 
@@ -602,6 +603,10 @@ class LearnerWorker:
                                 summary_this_epoch = True
                                 force_summaries = False
 
+            # end of an epoch
+            # this will force policy update on the inference worker (policy worker)
+            self.policy_versions[self.policy_id] = self.train_step
+
             new_epoch_actor_loss = np.mean(epoch_actor_losses)
             loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
             if loss_delta_abs < early_stopping_tolerance:
@@ -802,9 +807,8 @@ class LearnerWorker:
 
             self._update_pbt()
 
-            # log.debug('Training policy %d on %d samples', self.policy_id, samples)
+            log.debug('Training policy %d on %d samples', self.policy_id, samples)
             train_stats = self._train(buffer, batch_size, experience_size, timing)
-            self.policy_versions[self.policy_id] = self.train_step
 
             if train_stats is not None:
                 stats['train'] = train_stats
@@ -857,8 +861,9 @@ class LearnerWorker:
             num_batches_processed += 1
 
             if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and num_batches_processed < 50):
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
+                if self.cfg.device == 'gpu':
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
                 last_cache_cleanup = time.time()
 
         time.sleep(0.3)
@@ -926,7 +931,9 @@ class LearnerWorker:
         except psutil.AccessDenied:
             log.error('Low niceness requires sudo!!!')
 
-        cuda_envvars(self.policy_id)
+        if self.cfg.device == 'gpu':
+            cuda_envvars(self.policy_id)
+
         torch.multiprocessing.set_sharing_strategy('file_system')
         torch.set_num_threads(self.cfg.learner_main_loop_num_cores)
 

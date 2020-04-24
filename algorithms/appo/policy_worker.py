@@ -56,6 +56,7 @@ class PolicyWorker:
         self.policy_versions = traj_buffers.policy_versions
 
         self.latest_policy_version = -1
+        self.num_policy_updates = 0
 
         self.requests = []
 
@@ -158,11 +159,13 @@ class PolicyWorker:
 
             self.latest_policy_version = learner_policy_version
 
-            if self.latest_policy_version % 10 == 0:
+            if self.num_policy_updates % 10 == 0:
                 log.info(
                     'Updated weights on worker %d-%d, policy_version %d (%.5f)',
                     self.policy_id, self.worker_idx, self.latest_policy_version, timing.weight_update,
                 )
+
+            self.num_policy_updates += 1
 
     # noinspection PyProtectedMember
     def _run(self):
@@ -247,7 +250,8 @@ class PolicyWorker:
                     last_report_samples = self.total_num_samples
 
                 if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
-                    torch.cuda.empty_cache()
+                    if self.cfg.device == 'gpu':
+                        torch.cuda.empty_cache()
                     last_cache_cleanup = time.time()
 
             except KeyboardInterrupt:

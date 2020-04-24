@@ -154,7 +154,7 @@ class TensorBatcher:
     def __init__(self, batch_pool):
         self.batch_pool = batch_pool
 
-    def cat(self, dict_of_tensor_arrays, macro_batch_size, timing):
+    def cat(self, dict_of_tensor_arrays, macro_batch_size, use_pinned_memory, timing):
         """
         Here 'macro_batch' is the overall size of experience per iteration.
         Macro-batch = mini-batch * num_batches_per_iteration
@@ -176,8 +176,9 @@ class TensorBatcher:
             log.info('Allocating new CPU tensor batch (could not get from the pool)')
 
             for d1, cache_d, key, tensor_arr, _ in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
-                cache_d[key] = torch.cat(tensor_arr, dim=0).pin_memory()
-
+                cache_d[key] = torch.cat(tensor_arr, dim=0)
+                if use_pinned_memory:
+                    cache_d[key] = cache_d[key].pin_memory()
         else:
             with timing.add_time('batcher_mem'):
                 for d1, cache_d, key, tensor_arr, cache_t in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
