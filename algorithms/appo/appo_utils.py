@@ -136,13 +136,12 @@ def cuda_envvars(policy_id):
 
 def memory_stats(process, device):
     memory_mb = memory_consumption_mb()
-    gpu_mem_mb = torch.cuda.memory_allocated(device) / 1e6
-    gpu_cache_mb = torch.cuda.memory_cached(device) / 1e6
-    stats = {
-        f'memory_{process}': memory_mb,
-        f'gpu_mem_{process}': gpu_mem_mb,
-        f'gpu_cache_{process}': gpu_cache_mb,
-    }
+    stats = {f'memory_{process}': memory_mb}
+    if device.type != 'cpu':
+        gpu_mem_mb = torch.cuda.memory_allocated(device) / 1e6
+        gpu_cache_mb = torch.cuda.memory_cached(device) / 1e6
+        stats.update({f'gpu_mem_{process}': gpu_mem_mb, f'gpu_cache_{process}': gpu_cache_mb})
+
     return stats
 
 

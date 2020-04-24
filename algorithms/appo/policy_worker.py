@@ -184,7 +184,12 @@ class PolicyWorker:
 
             # we should already see only one CUDA device, because of env vars
             assert torch.cuda.device_count() == 1
-            self.device = torch.device('cuda', index=0)
+
+            if self.cfg.device == 'gpu':
+                self.device = torch.device('cuda', index=0)
+            else:
+                self.device = torch.device('cpu')
+
             self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space, timing)
             self.actor_critic.model_to_device(self.device)
 

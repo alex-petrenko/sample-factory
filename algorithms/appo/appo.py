@@ -83,7 +83,7 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
-        p.add_argument('--max_policy_lag', default=25, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
+        p.add_argument('--max_policy_lag', default=30, type=int, help='Max policy lag in policy versions. Discard all experience that is older than this.')
         p.add_argument(
             '--min_traj_buffers_per_worker', default=2, type=int,
             help='How many shared rollout tensors to allocate per actor worker to exchange information between actors and learners'
@@ -104,7 +104,7 @@ class APPO(ReinforcementLearningAlgorithm):
                  'For environments with a fixed episode length it can prevent the reset from happening in the same rollout for all envs simultaneously, which makes experience collection more uniform.',
         )
 
-        p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction')
+        p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction. If this is True, then GAE is not used')
         p.add_argument('--vtrace_rho', default=1.0, type=float, help='rho_hat clipping parameter of the V-trace algorithm (importance sampling truncation)')
         p.add_argument('--vtrace_c', default=1.0, type=float, help='c_hat clipping parameter of the V-trace algorithm. Low values for c_hat can reduce variance of the advantage estimates (similar to GAE lambda < 1)')
 

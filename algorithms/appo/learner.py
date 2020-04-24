@@ -725,9 +725,12 @@ class LearnerWorker:
             torch.set_num_threads(1)
             torch.backends.cudnn.benchmark = True
 
-            # we should already see only one CUDA device, because of env vars
-            assert torch.cuda.device_count() == 1
-            self.device = torch.device('cuda', index=0)
+            if self.cfg.device == 'gpu':
+                # we should already see only one CUDA device, because of env vars
+                assert torch.cuda.device_count() == 1
+                self.device = torch.device('cuda', index=0)
+            else:
+                self.device = torch.device('cpu')
             self.init_model(timing)
 
             self.optimizer = torch.optim.Adam(
@@ -1179,3 +1182,14 @@ class LearnerWorker:
 # [2020-04-16 23:35:47,147][24811] Workers joined!
 # [2020-04-16 23:35:47,157][24811] Collected {0: 2015232}, FPS: 46004.9
 # [2020-04-16 23:35:47,157][24811] Timing: experience: 43.6267
+
+# Version V90 (added ability to train on CPU as well)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v90_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-04-23 19:12:12,927][30120] Env runner 0, rollouts 780: timing wait_actor: 0.0000, waiting: 0.6942, reset: 14.9306, save_policy_outputs: 0.9456, env_step: 35.5135, overhead: 3.5594, complete_rollouts: 0.0152, enqueue_policy_requests: 0.1761, one_step: 0.0168, work: 42.1509
+# [2020-04-23 19:12:12,934][30124] Env runner 1, rollouts 820: timing wait_actor: 0.0000, waiting: 0.6884, reset: 14.4668, save_policy_outputs: 1.0144, env_step: 35.3751, overhead: 3.5973, complete_rollouts: 0.0161, enqueue_policy_requests: 0.1624, one_step: 0.0148, work: 42.1716
+# [2020-04-23 19:12:13,174][30119] Policy worker avg. requests 2.94, timing: init: 1.9893, wait_policy_total: 15.1174, wait_policy: 0.0008, handle_policy_step: 41.1058, one_step: 0.0037, deserialize: 1.4255, obs_to_device: 5.4478, stack: 13.9475, forward: 15.0436, postprocess: 4.8951, weight_update: 0.0005
+# [2020-04-23 19:12:13,283][30106] GPU learner timing: extract: 0.1877, buffers: 0.0664, batching: 5.0616, buff_ready: 0.2413, tensors_gpu_float: 5.8271, squeeze: 0.0056, prepare: 11.2599, batcher_mem: 4.9639
+# [2020-04-23 19:12:13,589][30106] Train loop timing: init: 1.3502, train_wait: 0.2526, forward_head: 9.8003, bptt_initial: 1.1674, bptt_forward_core: 7.8029, bptt_rnn_states: 4.9400, bptt: 12.9313, tail: 0.4384, vtrace: 1.4388, losses: 0.3578, clip: 8.5222, update: 12.6351, train: 41.3112
+# [2020-04-23 19:12:13,749][30073] Workers joined!
+# [2020-04-23 19:12:13,759][30073] Collected {0: 2015232}, FPS: 47151.6
+# [2020-04-23 19:12:13,760][30073] Timing: experience: 42.5657

@@ -20,10 +20,10 @@ class TestModel(TestCase):
         env = create_env(env_name, cfg=cfg)
 
         torch.set_num_threads(1)
-        # torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.benchmark = True
 
         actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
-        device = torch.device('cuda')
+        device = torch.device('cpu')
         actor_critic.to(device)
 
         timing = Timing()
@@ -36,13 +36,14 @@ class TestModel(TestCase):
 
             output = actor_critic(observations, rnn_states)
 
-            with timing.add_time('trace'):
-                actor_critic_traced = torch.jit.trace(actor_critic, (observations, rnn_states), check_trace=False)
+            # with timing.add_time('trace'):
+            #     actor_critic_traced = torch.jit.trace(actor_critic, (observations, rnn_states), check_trace=False)
 
             n = 10000
             for i in range(n):
                 with timing.add_time('forward'):
-                    output = actor_critic_traced(observations, rnn_states)
+                    # output = actor_critic_traced(observations, rnn_states)
+                    output = actor_critic(observations, rnn_states)
 
                 if i % 100 == 0:
                     log.debug('Progress %d/%d', i, n)
