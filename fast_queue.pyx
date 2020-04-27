@@ -13,6 +13,7 @@ _ForkingPickler = context.reduction.ForkingPickler
 
 cimport fast_queue_def as Q
 
+
 cdef size_t q_addr(q):
     cdef size_t obj_buffer_ptr = ctypes.addressof(q.queue_obj_buffer)
     return obj_buffer_ptr

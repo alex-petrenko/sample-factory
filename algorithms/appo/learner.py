@@ -927,7 +927,7 @@ class LearnerWorker:
         max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
         if max_minibatches_to_accumulate == -1:
             # default value
-            max_minibatches_to_accumulate = self.cfg.num_batches_per_iteration
+            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
 
         # allow the max batches to accumulate, plus the minibatches we're currently training on
         max_minibatches_on_learner = max_minibatches_to_accumulate + self.cfg.num_batches_per_iteration
@@ -1275,3 +1275,14 @@ class LearnerWorker:
 # [2020-04-23 19:12:13,749][30073] Workers joined!
 # [2020-04-23 19:12:13,759][30073] Collected {0: 2015232}, FPS: 47151.6
 # [2020-04-23 19:12:13,760][30073] Timing: experience: 42.5657
+
+# Version V92 (new mechanism to control experience collection rate, unlock GIL in C++ queue)
+# minor slowdown is expected, but mostly in the very beginning
+# [2020-04-27 03:19:56,923][31305] Env runner 1, rollouts 800: timing wait_actor: 0.0000, waiting: 1.8314, reset: 12.8639, save_policy_outputs: 0.9403, env_step: 35.6297, overhead: 3.5156, complete_rollouts: 0.0145, enqueue_policy_requests: 0.1547, one_step: 0.0147, work: 42.1625
+# [2020-04-27 03:19:56,950][31303] Env runner 0, rollouts 800: timing wait_actor: 0.0000, waiting: 1.7260, reset: 14.4580, save_policy_outputs: 0.9853, env_step: 35.5968, overhead: 3.6064, complete_rollouts: 0.0157, enqueue_policy_requests: 0.1596, one_step: 0.0153, work: 42.2983
+# [2020-04-27 03:19:57,173][31302] Policy worker avg. requests 3.12, timing: init: 1.8919, wait_policy_total: 16.3687, wait_policy: 0.0051, handle_policy_step: 41.0353, one_step: 0.0000, deserialize: 1.4363, obs_to_device: 5.3862, stack: 13.9244, forward: 14.8523, postprocess: 4.9664, weight_update: 0.0004
+# [2020-04-27 03:19:57,280][31288] GPU learner timing: extract: 0.1831, buffers: 0.0648, batching: 4.7433, buff_ready: 0.2306, tensors_gpu_float: 1.7101, squeeze: 0.0050, prepare: 6.8177, batcher_mem: 4.6762
+# [2020-04-27 03:19:57,613][31288] Train loop timing: init: 1.2959, train_wait: 0.4145, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.4530, bptt_initial: 0.0178, bptt_forward_core: 0.8444, bptt_rnn_states: 0.1981, bptt: 1.1631, tail: 0.2899, vtrace: 0.8977, clip: 6.3809, update: 10.1215, after_optimizer: 0.0815, losses: 10.4773, train: 15.6995
+# [2020-04-27 03:19:57,746][31256] Workers joined!
+# [2020-04-27 03:19:57,754][31256] Collected {0: 2015232}, FPS: 46069.8
+# [2020-04-27 03:19:57,754][31256] Timing: experience: 43.5652
