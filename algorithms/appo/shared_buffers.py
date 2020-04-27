@@ -46,7 +46,7 @@ class PolicyOutput:
         self.size = size
 
 
-class TrajectoryBuffers:
+class SharedBuffers:
     def __init__(self, cfg, num_agents, obs_space, action_space):
         self.cfg = cfg
         self.num_agents = num_agents
@@ -92,6 +92,8 @@ class TrajectoryBuffers:
 
         ensure_memory_shared(self.tensors)
 
+        # this is for performance optimization
+        # indexing in numpy arrays is faster than in PyTorch tensors
         self.tensors_individual_transitions = self.tensor_dict_to_numpy(len(self.tensor_dimensions()))
         self.tensor_trajectories = self.tensor_dict_to_numpy(len(self.tensor_dimensions()) - 1)
 
@@ -128,6 +130,11 @@ class TrajectoryBuffers:
 
         self.policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
         self.policy_versions.share_memory_()
+
+        # a list of boolean flags to be shared among components that indicate that experience collection should be
+        # temporarily stopped (e.g. due to too much experience accumulated on the learner)
+        self.stop_experience_collection = torch.ones([self.cfg.num_policies], dtype=torch.bool)
+        self.stop_experience_collection.share_memory_()
 
     def calc_num_trajectory_buffers(self):
         # calculate how many buffers are required per env runner to collect one "macro batch" for training

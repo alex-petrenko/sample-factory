@@ -181,7 +181,7 @@ class ActorState:
 
 
 class VectorEnvRunner:
-    def __init__(self, cfg, num_envs, worker_idx, split_idx, num_agents, traj_buffers, pbt_reward_shaping):
+    def __init__(self, cfg, num_envs, worker_idx, split_idx, num_agents, shared_buffers, pbt_reward_shaping):
         self.cfg = cfg
 
         self.num_envs = num_envs
@@ -194,11 +194,11 @@ class VectorEnvRunner:
         self.num_agents = num_agents  # queried from env
 
         index = (worker_idx, split_idx)
-        self.traj_tensors = traj_buffers.tensors_individual_transitions.index(index)
-        self.traj_tensors_available = traj_buffers.is_traj_tensor_available[index]
-        self.num_traj_buffers = traj_buffers.num_traj_buffers
-        self.policy_outputs = traj_buffers.policy_outputs
-        self.policy_output_tensors = traj_buffers.policy_output_tensors[index]
+        self.traj_tensors = shared_buffers.tensors_individual_transitions.index(index)
+        self.traj_tensors_available = shared_buffers.is_traj_tensor_available[index]
+        self.num_traj_buffers = shared_buffers.num_traj_buffers
+        self.policy_outputs = shared_buffers.policy_outputs
+        self.policy_output_tensors = shared_buffers.policy_output_tensors[index]
 
         self.envs, self.actor_states, self.episode_rewards = [], [], []
 
@@ -449,7 +449,7 @@ class ActorWorker:
     """
 
     def __init__(
-        self, cfg, obs_space, action_space, num_agents, worker_idx, traj_buffers,
+        self, cfg, obs_space, action_space, num_agents, worker_idx, shared_buffers,
         task_queue, policy_queues, report_queue, learner_queues,
     ):
         self.cfg = cfg
@@ -459,7 +459,7 @@ class ActorWorker:
 
         self.worker_idx = worker_idx
 
-        self.traj_buffers = traj_buffers
+        self.shared_buffers = shared_buffers
 
         self.terminate = False
 
@@ -493,7 +493,7 @@ class ActorWorker:
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
                 self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.num_agents,
-                self.traj_buffers, self.reward_shaping,
+                self.shared_buffers, self.reward_shaping,
             )
             env_runner.init()
             self.env_runners.append(env_runner)

@@ -3,7 +3,7 @@ import numpy as np
 from unittest import TestCase
 
 from algorithms.appo.appo_utils import make_env_func
-from algorithms.appo.trajectory_buffers import TrajectoryBuffers
+from algorithms.appo.shared_buffers import SharedBuffers
 from algorithms.utils.arguments import default_cfg
 from utils.timing import Timing
 from utils.utils import log
@@ -20,7 +20,7 @@ class TestAppoUtils(TestCase):
         action_space = tmp_env.action_space
         tmp_env.close()
 
-        traj_buffers = TrajectoryBuffers(cfg, num_agents, obs_space, action_space)
+        traj_buffers = SharedBuffers(cfg, num_agents, obs_space, action_space)
 
         # t = traj_buffers.tensors['obs']['obs']
         t = traj_buffers.tensors_individual_transitions['obs']['obs']

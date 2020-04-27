@@ -18,7 +18,7 @@ from algorithms.appo.appo_utils import make_env_func, iterate_recursively
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
-from algorithms.appo.trajectory_buffers import TrajectoryBuffers
+from algorithms.appo.shared_buffers import SharedBuffers
 from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISODIC_STATS_PROCESSING
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
@@ -71,6 +71,18 @@ class APPO(ReinforcementLearningAlgorithm):
                  'Here and throughout the codebase: macro batch is the portion of experience that learner processes per iteration (consisting of 1 or several minibatches)',
         )
         p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
+
+        p.add_argument(
+            '--num_minibatches_to_accumulate', default=-1, type=int,
+            help='This parameter governs the maximum number of minibatches the learner can accumulate before further experience collection is stopped.'
+                 'The default value (-1) will set this to the same value as num_batches_per_iteration, so if the experience collection is faster than the training,'
+                 'the learner will accumulate just enough minibatches to start the next iteration of training immediately after the previous one is finished (but no more).'
+                 'When the limit is reached, the learner will notify the policy workers that they ought to stop the experience collection until accumulated minibatches'
+                 'are processed.'
+                 'If the experience collection is very non-uniform, increasing this parameter can increase overall throughput, at the cost of increased policy-lag.'
+                 'A value of 0 is treated specially. This means the experience accumulation is turned off, and all experience collection will be halted during training.'
+                 'This is the regime with potentially lowest policy-lag.',
+        )
 
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
@@ -168,7 +180,7 @@ class APPO(ReinforcementLearningAlgorithm):
         tmp_env.close()
 
         # shared memory allocation
-        self.traj_buffers = TrajectoryBuffers(self.cfg, self.num_agents, self.obs_space, self.action_space)
+        self.traj_buffers = SharedBuffers(self.cfg, self.num_agents, self.obs_space, self.action_space)
 
         self.actor_workers = None
 
@@ -322,13 +334,14 @@ class APPO(ReinforcementLearningAlgorithm):
 
         log.info('Initializing GPU learners...')
         policy_locks = [multiprocessing.Lock() for _ in range(self.cfg.num_policies)]
+        resume_experience_collection_cv = [multiprocessing.Condition() for _ in range(self.cfg.num_policies)]
 
         learner_idx = 0
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
                 self.report_queue, policy_worker_queues[policy_id], self.traj_buffers,
-                policy_locks[policy_id],
+                policy_locks[policy_id], resume_experience_collection_cv[policy_id],
             )
             learner_worker.start_process()
             learner_worker.init()
@@ -347,7 +360,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 policy_worker = PolicyWorker(
                     i, policy_id, self.cfg, self.obs_space, self.action_space, self.traj_buffers,
                     policy_queue, actor_queues, self.report_queue, policy_worker_queues[policy_id][i],
-                    policy_locks[policy_id],
+                    policy_locks[policy_id], resume_experience_collection_cv[policy_id],
                 )
                 self.policy_workers[policy_id].append(policy_worker)
                 policy_worker.start_process()

@@ -4,7 +4,6 @@
 
 import ctypes
 import multiprocessing
-import time
 
 from ctypes import c_size_t
 from multiprocessing import context
@@ -14,26 +13,22 @@ _ForkingPickler = context.reduction.ForkingPickler
 
 cimport fast_queue_def as Q
 
-from utils.utils import log
-
-
-
-cpdef size_t q_addr(q):
+cdef size_t q_addr(q):
     cdef size_t obj_buffer_ptr = ctypes.addressof(q.queue_obj_buffer)
     return obj_buffer_ptr
 
 
-cpdef size_t buf_addr(q):
+cdef size_t buf_addr(q):
     cdef size_t buffer_ptr = ctypes.addressof(q.shared_memory)
     return buffer_ptr
 
 
-cpdef size_t msg_buf_addr(q):
+cdef size_t msg_buf_addr(q):
     cdef size_t buffer_ptr = ctypes.addressof(q.message_buffer)
     return buffer_ptr
 
 
-cpdef size_t bytes_to_ptr(b):
+cdef size_t bytes_to_ptr(b):
     ptr = ctypes.cast(b, ctypes.POINTER(ctypes.c_byte))
     return ctypes.addressof(ptr.contents)
 
@@ -72,7 +67,25 @@ class Queue:
 
     def put(self, x, block=True, timeout=float(1e3)):
         x = _ForkingPickler.dumps(x).tobytes()
-        status = Q.queue_put(<void *>q_addr(self), <void *>buf_addr(self), <void *>bytes_to_ptr(x), len(x), int(block), timeout)
+
+        # explicitly convert all function parameters to corresponding C-types
+        cdef void* c_q_addr = <void*>q_addr(self)
+        cdef void* c_buf_addr = <void*>buf_addr(self)
+        cdef void* c_x_ptr = <void*>bytes_to_ptr(x)
+
+        cdef size_t c_len_x = len(x)
+        cdef int c_block = block
+        cdef float c_timeout = timeout
+
+        cdef int c_status = 0
+
+        with nogil:
+            c_status = Q.queue_put(
+                c_q_addr, c_buf_addr, c_x_ptr, c_len_x,
+                c_block, c_timeout,
+            )
+
+        status = c_status
 
         if status == Q.Q_SUCCESS:
             pass
@@ -94,16 +107,30 @@ class Queue:
         messages_size = ctypes.c_size_t(0)  # this is how much memory we need to allocate to read more messages
         cdef size_t messages_size_ptr = ctypes.addressof(messages_size)
 
-        status = Q.queue_get(
-            <void *>q_addr(self),
-            <void *>buf_addr(self),
-            <void *>msg_buf_addr(self), len(self.message_buffer),
-            max_messages_to_get, self.max_bytes_to_read,
-            <size_t *>messages_read_ptr,
-            <size_t *>bytes_read_ptr,
-            <size_t *>messages_size_ptr,
-            int(block), timeout,
-        )
+        # explicitly convert all function parameters to corresponding C-types
+        cdef void* c_q_addr = <void*>q_addr(self)
+        cdef void* c_buf_addr = <void*>buf_addr(self)
+        cdef void* c_msg_buf_addr = <void*>msg_buf_addr(self)
+
+        cdef int c_block = block
+        cdef float c_timeout = timeout
+        cdef size_t c_max_messages_to_get = max_messages_to_get
+        cdef size_t c_max_bytes_to_read = self.max_bytes_to_read
+        cdef size_t c_len_message_buffer = len(self.message_buffer)
+
+        cdef int c_status = 0
+
+        with nogil:
+            c_status = Q.queue_get(
+                c_q_addr, c_buf_addr, c_msg_buf_addr, c_len_message_buffer,
+                c_max_messages_to_get, c_max_bytes_to_read,
+                <size_t *>messages_read_ptr,
+                <size_t *>bytes_read_ptr,
+                <size_t *>messages_size_ptr,
+                c_block, c_timeout,
+            )
+
+        status = c_status
 
         if status == Q.Q_MSG_BUFFER_TOO_SMALL and messages_read.value <= 0:
             # could not read any messages because msg buffer was too small

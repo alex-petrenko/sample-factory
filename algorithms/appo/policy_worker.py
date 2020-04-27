@@ -1,3 +1,4 @@
+import multiprocessing
 import signal
 import time
 from collections import deque
@@ -24,8 +25,8 @@ def dict_of_lists_append(dict_of_lists, new_data, index):
 
 class PolicyWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, traj_buffers, policy_queue, actor_queues,
-        report_queue, task_queue, policy_lock,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, shared_buffers, policy_queue, actor_queues,
+        report_queue, task_queue, policy_lock, resume_experience_collection_cv
     ):
         log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
 
@@ -40,6 +41,7 @@ class PolicyWorker:
         self.actor_critic = None
         self.shared_model_weights = None
         self.policy_lock = policy_lock
+        self.resume_experience_collection_cv = resume_experience_collection_cv
 
         self.policy_queue = policy_queue
         self.actor_queues = actor_queues
@@ -50,10 +52,13 @@ class PolicyWorker:
 
         self.initialized = False
         self.terminate = False
+        self.initialized_event = multiprocessing.Event()
+        self.initialized_event.clear()
 
-        self.traj_buffers = traj_buffers
-        self.tensors_individual_transitions = self.traj_buffers.tensors_individual_transitions
-        self.policy_versions = traj_buffers.policy_versions
+        self.shared_buffers = shared_buffers
+        self.tensors_individual_transitions = self.shared_buffers.tensors_individual_transitions
+        self.policy_versions = shared_buffers.policy_versions
+        self.stop_experience_collection = shared_buffers.stop_experience_collection
 
         self.latest_policy_version = -1
         self.num_policy_updates = 0
@@ -70,6 +75,7 @@ class PolicyWorker:
     def _init(self):
         log.info('GPU worker %d-%d initialized', self.policy_id, self.worker_idx)
         self.initialized = True
+        self.initialized_event.set()
 
     def _filter_requests(self):
         requests = self.requests
@@ -82,7 +88,7 @@ class PolicyWorker:
                 observations = AttrDict()
                 rnn_states = []
 
-                traj_tensors = self.traj_buffers.tensors_individual_transitions
+                traj_tensors = self.shared_buffers.tensors_individual_transitions
                 for request in self.requests:
                     actor_idx, split_idx, request_data = request
 
@@ -112,7 +118,7 @@ class PolicyWorker:
 
             # concat all tensors into a single tensor for performance
             output_tensors = []
-            for policy_output in self.traj_buffers.policy_outputs:
+            for policy_output in self.shared_buffers.policy_outputs:
                 tensor_name = policy_output.name
                 output_value = policy_outputs[tensor_name].float()
                 if len(output_value.shape) == 1:
@@ -130,7 +136,7 @@ class PolicyWorker:
         output_idx = 0
         outputs_ready = set()
 
-        policy_outputs = self.traj_buffers.policy_output_tensors
+        policy_outputs = self.shared_buffers.policy_output_tensors
 
         for request in requests:
             actor_idx, split_idx, request_data = request
@@ -204,6 +210,10 @@ class PolicyWorker:
 
         while not self.terminate:
             try:
+                while self.stop_experience_collection[self.policy_id]:
+                    with self.resume_experience_collection_cv:
+                        self.resume_experience_collection_cv.wait(timeout=0.05)
+
                 try:
                     with timing.timeit('wait_policy'), timing.add_time('wait_policy_total'):
                         policy_requests = self.policy_queue.get_many(timeout=0.005)
@@ -266,7 +276,7 @@ class PolicyWorker:
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))
-        self.task_queue.join()
+        self.initialized_event.wait()
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))

@@ -30,8 +30,8 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_o
 
 class LearnerWorker:
     def __init__(
-        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues, traj_buffers,
-        policy_lock,
+        self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues, shared_buffers,
+        policy_lock, resume_experience_collection_cv,
     ):
         log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
 
@@ -51,14 +51,16 @@ class LearnerWorker:
         self.obs_space = obs_space
         self.action_space = action_space
 
-        self.rollout_tensors = traj_buffers.tensor_trajectories
-        self.traj_tensors_available = traj_buffers.is_traj_tensor_available
-        self.policy_versions = traj_buffers.policy_versions
+        self.rollout_tensors = shared_buffers.tensor_trajectories
+        self.traj_tensors_available = shared_buffers.is_traj_tensor_available
+        self.policy_versions = shared_buffers.policy_versions
+        self.stop_experience_collection = shared_buffers.stop_experience_collection
 
         self.device = None
         self.actor_critic = None
         self.optimizer = None
         self.policy_lock = policy_lock
+        self.resume_experience_collection_cv = resume_experience_collection_cv
 
         self.task_queue = fast_queue.Queue()
         self.report_queue = report_queue
@@ -84,7 +86,7 @@ class LearnerWorker:
         self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
         self.train_thread_initialized = threading.Event()
 
-        self.processing_experience_batch = threading.Condition()
+        self.is_training = False
 
         self.train_step = self.env_steps = 0
 
@@ -261,7 +263,7 @@ class LearnerWorker:
             rollouts = rollouts[rollouts_in_macro_batch:]
 
             self._process_macro_batch(rollouts_to_process, batch_size, timing)
-            log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
+            # log.info('Unprocessed rollouts: %d (%d samples)', len(rollouts), len(rollouts) * self.cfg.rollout)
 
         return rollouts
 
@@ -794,6 +796,8 @@ class LearnerWorker:
         self.train_thread_initialized.set()
 
     def _process_training_data(self, data, timing, wait_stats=None):
+        self.is_training = True
+
         buffer, batch_size, samples, env_steps = data
         assert samples == batch_size * self.cfg.num_batches_per_iteration
 
@@ -807,7 +811,6 @@ class LearnerWorker:
 
             self._update_pbt()
 
-            log.debug('Training policy %d on %d samples', self.policy_id, samples)
             train_stats = self._train(buffer, batch_size, experience_size, timing)
 
             if train_stats is not None:
@@ -824,6 +827,7 @@ class LearnerWorker:
 
                 stats['stats'] = memory_stats('learner', self.device)
 
+        self.is_training = False
         self.report_queue.put(stats)
 
     def _train_loop(self):
@@ -837,9 +841,6 @@ class LearnerWorker:
         while not self.terminate:
             with timing.timeit('train_wait'):
                 data = safe_get(self.experience_buffer_queue)
-
-            with self.processing_experience_batch:
-                self.processing_experience_batch.notify_all()
 
             if self.terminate:
                 break
@@ -922,6 +923,32 @@ class LearnerWorker:
                 assert policy_id == self.policy_id
                 self.new_cfg = new_cfg
 
+    def _accumulated_too_much_experience(self, rollouts):
+        max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
+        if max_minibatches_to_accumulate == -1:
+            # default value
+            max_minibatches_to_accumulate = self.cfg.num_batches_per_iteration
+
+        # allow the max batches to accumulate, plus the minibatches we're currently training on
+        max_minibatches_on_learner = max_minibatches_to_accumulate + self.cfg.num_batches_per_iteration
+
+        minibatches_currently_training = int(self.is_training) * self.cfg.num_batches_per_iteration
+
+        assert self.cfg.batch_size % self.cfg.rollout == 0, \
+            'Rollout length should divide minibatch size'
+
+        rollouts_per_minibatch = self.cfg.batch_size // self.cfg.rollout
+
+        # count contribution from unprocessed rollouts
+        minibatches_currently_accumulated = len(rollouts) // rollouts_per_minibatch
+
+        # count minibatches ready for training
+        minibatches_currently_accumulated += self.experience_buffer_queue.qsize() * self.cfg.num_batches_per_iteration
+
+        total_minibatches_on_learner = minibatches_currently_training + minibatches_currently_accumulated
+
+        return total_minibatches_on_learner >= max_minibatches_on_learner
+
     def _run(self):
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -929,7 +956,7 @@ class LearnerWorker:
         try:
             psutil.Process().nice(self.cfg.default_niceness)
         except psutil.AccessDenied:
-            log.error('Low niceness requires sudo!!!')
+            log.error('Low niceness requires sudo!')
 
         if self.cfg.device == 'gpu':
             cuda_envvars(self.policy_id)
@@ -971,9 +998,17 @@ class LearnerWorker:
                 except Empty:
                     break
 
-            while self.experience_buffer_queue.qsize() >= 1:
-                with self.processing_experience_batch:
-                    self.processing_experience_batch.wait(timeout=0.01)
+            if self._accumulated_too_much_experience(rollouts):
+                # if we accumulated too much experience, signal the policy workers to stop experience collection
+                if not self.stop_experience_collection[self.policy_id]:
+                    log.debug('Learner %d accumulated too much experience, stop experience collection!', self.policy_id)
+                self.stop_experience_collection[self.policy_id] = True
+            elif self.stop_experience_collection[self.policy_id]:
+                # otherwise, resume the experience collection if it was stopped
+                self.stop_experience_collection[self.policy_id] = False
+                with self.resume_experience_collection_cv:
+                    log.debug('Learner %d is resuming experience collection!', self.policy_id)
+                    self.resume_experience_collection_cv.notify_all()
 
             with torch.no_grad():
                 rollouts = self._process_rollouts(rollouts, timing)
@@ -981,8 +1016,6 @@ class LearnerWorker:
             if not self.train_in_background:
                 while not self.experience_buffer_queue.empty():
                     training_data = self.experience_buffer_queue.get()
-                    with self.processing_experience_batch:
-                        self.processing_experience_batch.notify_all()
                     self._process_training_data(training_data, timing)
 
             self._experience_collection_rate_stats()
