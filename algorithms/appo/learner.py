@@ -20,7 +20,7 @@ from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists,
 from algorithms.appo.model import create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
-from algorithms.utils.algo_utils import calculate_gae
+from algorithms.utils.algo_utils import calculate_gae, EPS
 from algorithms.utils.multi_env import safe_get
 from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
@@ -879,13 +879,13 @@ class LearnerWorker:
             self.discarded_experience_over_time.append((now, self.num_discarded_rollouts))
 
     def _discarding_rate(self):
-        if len(self.discarded_experience_over_time) <= 0:
+        if len(self.discarded_experience_over_time) <= 1:
             return 0
 
         first, last = self.discarded_experience_over_time[0], self.discarded_experience_over_time[-1]
         delta_rollouts = last[1] - first[1]
         delta_time = last[0] - first[0]
-        discarding_rate = delta_rollouts / delta_time
+        discarding_rate = delta_rollouts / (delta_time + EPS)
         return discarding_rate
 
     def _extract_rollouts(self, data):
@@ -934,13 +934,10 @@ class LearnerWorker:
 
         minibatches_currently_training = int(self.is_training) * self.cfg.num_batches_per_iteration
 
-        assert self.cfg.batch_size % self.cfg.rollout == 0, \
-            'Rollout length should divide minibatch size'
-
-        rollouts_per_minibatch = self.cfg.batch_size // self.cfg.rollout
+        rollouts_per_minibatch = self.cfg.batch_size / self.cfg.rollout
 
         # count contribution from unprocessed rollouts
-        minibatches_currently_accumulated = len(rollouts) // rollouts_per_minibatch
+        minibatches_currently_accumulated = len(rollouts) / rollouts_per_minibatch
 
         # count minibatches ready for training
         minibatches_currently_accumulated += self.experience_buffer_queue.qsize() * self.cfg.num_batches_per_iteration
