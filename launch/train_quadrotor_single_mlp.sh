@@ -10,7 +10,6 @@ python -m algorithms.appo.train_appo --env=quadrotor_single \
 --ppo_epochs=1 \
 --rollout=32 \
 --recurrence=32 \
---macro_batch=1024 \
 --batch_size=1024 \
 --benchmark=False \
 --with_pbt=False \
