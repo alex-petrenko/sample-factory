@@ -15,4 +15,4 @@ _experiment_earlystop = Experiment(
     _params_earlystop.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('quads_single_gridsearch_v92_h256', experiments=[_experiment_earlystop])
+RUN_DESCRIPTION = RunDescription('quads_single_gridsearch_v93_h256', experiments=[_experiment_earlystop])
