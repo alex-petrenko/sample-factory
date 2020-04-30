@@ -2,10 +2,10 @@ import random
 from unittest import TestCase
 
 import gym
-import torch
 import numpy as np
+import torch
 
-from algorithms.utils.action_distributions import get_action_distribution, calc_num_logits, sample_actions_log_probs
+from algorithms.utils.action_distributions import get_action_distribution, calc_num_logits
 
 
 class TestActionDistributions(TestCase):
@@ -86,6 +86,6 @@ class TestActionDistributions(TestCase):
                 action = torch.tensor([[a1, a2]])
                 log_prob = tuple_distr.log_prob(action)
                 probability = torch.exp(log_prob)[0].item()
-                self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2])
+                self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2], delta=1e-6)
 
 

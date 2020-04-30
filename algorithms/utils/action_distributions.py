@@ -51,7 +51,7 @@ def get_action_distribution(action_space, raw_logits):
     assert calc_num_logits(action_space) == raw_logits.shape[-1]
 
     if isinstance(action_space, gym.spaces.Discrete):
-        return CategoricalActionDistribution(functional.log_softmax(raw_logits, dim=1))
+        return CategoricalActionDistribution(raw_logits)
     elif isinstance(action_space, gym.spaces.Tuple):
         return TupleActionDistribution(action_space, logits_flat=raw_logits)
     elif isinstance(action_space, gym.spaces.Box):
@@ -81,8 +81,7 @@ class CategoricalActionDistribution(Categorical):
         Ctor.
         :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
         """
-        log_probabilities = functional.log_softmax(raw_logits, dim=1)
-        super().__init__(logits=log_probabilities)
+        super().__init__(logits=raw_logits)
 
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
@@ -206,12 +205,7 @@ class ContinuousActionDistribution(Independent):
     stddev_span = stddev_max - stddev_min
 
     def __init__(self, params):
-        num_actions = params.shape[-1] // 2
-        self.means, self.log_std = torch.split(params, num_actions, dim=1)
-
-        # self.stddevs = self.log_std.exp().sigmoid()
-        # self.stddevs.mul_(self.stddev_span).add_(self.stddev_min)
-        # self.stddevs = self.stddevs * self.stddev_span + self.stddev_min
+        self.means, self.log_std = torch.chunk(params, 2, dim=1)
 
         self.stddevs = self.log_std.exp()
         self.stddevs = torch.clamp(self.stddevs, self.stddev_min, self.stddev_max)

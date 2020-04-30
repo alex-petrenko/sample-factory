@@ -201,6 +201,8 @@ class PolicyWorker:
 
             self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space, timing)
             self.actor_critic.model_to_device(self.device)
+            for p in self.actor_critic.parameters():
+                p.requires_grad = False  # we don't train anything here
 
             log.info('Initialized model on the policy worker %d-%d!', self.policy_id, self.worker_idx)
 

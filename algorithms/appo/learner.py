@@ -91,9 +91,9 @@ class LearnerWorker:
         self.train_step = self.env_steps = 0
 
         # decay rate at which summaries are collected
-        # save summaries every 30 seconds in the beginning, but decay to every 5 minutes in the limit, because we
+        # save summaries every 20 seconds in the beginning, but decay to every 4 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
-        self.summary_rate_decay_seconds = LinearDecay([(0, 30), (100000, 120), (1000000, 300)])
+        self.summary_rate_decay_seconds = LinearDecay([(0, 20), (100000, 120), (1000000, 240)])
         self.last_summary_time = 0
 
         self.last_saved_time = self.last_milestone_time = 0
@@ -482,7 +482,7 @@ class LearnerWorker:
                             # zero-out RNN states on the episode boundary
                             with timing.add_time('bptt_rnn_states'):
                                 is_same_episode_step = is_same_episode[i::recurrence]
-                                rnn_states.mul_(is_same_episode_step)
+                                rnn_states = rnn_states * is_same_episode_step
 
                 with timing.add_time('tail'):
                     # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
@@ -549,7 +549,7 @@ class LearnerWorker:
 
                     adv_mean = adv.mean()
                     adv_std = adv.std()
-                    adv = (adv - adv_mean) / max(1e-2, adv_std)  # normalize advantage
+                    adv = (adv - adv_mean) / max(1e-3, adv_std)  # normalize advantage
                     adv = adv.to(self.device)
 
                 with timing.add_time('losses'):
@@ -1280,6 +1280,15 @@ class LearnerWorker:
 # [2020-04-27 03:19:57,173][31302] Policy worker avg. requests 3.12, timing: init: 1.8919, wait_policy_total: 16.3687, wait_policy: 0.0051, handle_policy_step: 41.0353, one_step: 0.0000, deserialize: 1.4363, obs_to_device: 5.3862, stack: 13.9244, forward: 14.8523, postprocess: 4.9664, weight_update: 0.0004
 # [2020-04-27 03:19:57,280][31288] GPU learner timing: extract: 0.1831, buffers: 0.0648, batching: 4.7433, buff_ready: 0.2306, tensors_gpu_float: 1.7101, squeeze: 0.0050, prepare: 6.8177, batcher_mem: 4.6762
 # [2020-04-27 03:19:57,613][31288] Train loop timing: init: 1.2959, train_wait: 0.4145, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.4530, bptt_initial: 0.0178, bptt_forward_core: 0.8444, bptt_rnn_states: 0.1981, bptt: 1.1631, tail: 0.2899, vtrace: 0.8977, clip: 6.3809, update: 10.1215, after_optimizer: 0.0815, losses: 10.4773, train: 15.6995
-# [2020-04-27 03:19:57,746][31256] Workers joined!
 # [2020-04-27 03:19:57,754][31256] Collected {0: 2015232}, FPS: 46069.8
 # [2020-04-27 03:19:57,754][31256] Timing: experience: 43.5652
+
+# Version V93 (fixed the mul_ issue in the learner loop, slightly reworked action distributions)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v93_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-04-30 00:40:06,303][21412] Env runner 0, rollouts 800: timing wait_actor: 0.0000, waiting: 1.4730, reset: 15.9357, save_policy_outputs: 0.9807, env_step: 35.6301, overhead: 3.5418, complete_rollouts: 0.0152, enqueue_policy_requests: 0.1777, one_step: 0.0185, work: 42.2857
+# [2020-04-30 00:40:06,309][21413] Env runner 1, rollouts 780: timing wait_actor: 0.0000, waiting: 1.5991, reset: 16.8050, save_policy_outputs: 0.9356, env_step: 35.6926, overhead: 3.4544, complete_rollouts: 0.0145, enqueue_policy_requests: 0.1600, one_step: 0.0151, work: 42.1568
+# [2020-04-30 00:40:06,541][21411] Policy worker avg. requests 3.62, timing: init: 1.8576, wait_policy_total: 16.5957, wait_policy: 0.0000, handle_policy_step: 40.9567, one_step: 0.0022, deserialize: 1.4473, obs_to_device: 5.3679, stack: 13.9106, forward: 14.9962, postprocess: 4.8318, weight_update: 0.0005
+# [2020-04-30 00:40:06,650][21397] GPU learner timing: extract: 0.1846, buffers: 0.0664, batching: 4.7068, buff_ready: 0.2618, tensors_gpu_float: 1.7512, squeeze: 0.0067, prepare: 6.8604, batcher_mem: 4.6318
+# [2020-04-30 00:40:06,957][21397] Train loop timing: init: 1.3771, train_wait: 0.4144, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.4586, bptt_initial: 0.0177, bptt_forward_core: 0.8403, bptt_rnn_states: 0.2238, bptt: 1.1868, tail: 0.2921, vtrace: 0.8646, clip: 6.3309, update: 9.9849, after_optimizer: 0.0954, losses: 10.3387, train: 15.4936
+# [2020-04-30 00:40:07,139][21362] Collected {0: 2015232}, FPS: 46308.9
+# [2020-04-30 00:40:07,139][21362] Timing: experience: 43.3403
