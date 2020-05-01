@@ -257,6 +257,35 @@ class MlpEncoder(EncoderBase):
         return x
 
 
+class MujocoEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing):
+        super().__init__(cfg, timing)
+
+        obs_shape = get_obs_shape(obs_space)
+        assert len(obs_shape.obs) == 1
+
+        if cfg.encoder_subtype == 'mujoco_mlp':
+            fc_encoder_layer = cfg.hidden_size
+            encoder_layers = [
+                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                nonlinearity(cfg),
+                nn.Linear(fc_encoder_layer, fc_encoder_layer),
+                nonlinearity(cfg),
+            ]
+        else:
+            raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
+
+        self.mlp_head = nn.Sequential(*encoder_layers)
+        self.init_fc_blocks(fc_encoder_layer)
+
+    def forward(self, obs_dict):
+        normalize_obs(obs_dict, self.cfg)
+        x = self.mlp_head(obs_dict['obs'])
+
+        x = self.forward_fc_blocks(x)
+        return x
+
+
 def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:
         encoder_cls = ENCODER_REGISTRY[cfg.encoder_custom]
@@ -274,6 +303,8 @@ def create_standard_encoder(cfg, obs_space, timing):
         encoder = ResnetEncoder(cfg, obs_space, timing)
     elif cfg.encoder_type == 'mlp':
         encoder = MlpEncoder(cfg, obs_space, timing)
+    elif cfg.encoder_type == 'mujoco':
+        encoder = MujocoEncoder(cfg, obs_space, timing)
     else:
         raise Exception('Encoder type not supported')
 
