@@ -128,7 +128,7 @@ class ActorState:
         self.traj_tensors['rewards'][traj_buffer_idx, rollout_step][0] = float(reward)
         self.traj_tensors['dones'][traj_buffer_idx, rollout_step][0] = done
 
-        env_steps = num_env_steps([info])
+        env_steps = info.get('num_frames', 1)
         self.rollout_env_steps += env_steps
         self.last_episode_duration += env_steps
 
@@ -210,7 +210,7 @@ class VectorEnvRunner:
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func(self.cfg, env_config=env_config)
 
-            env.seed(self.worker_idx * 1000 + env_i)
+            env.seed(env_id)
             self.envs.append(env)
 
             actor_states_env, episode_rewards_env = [], []

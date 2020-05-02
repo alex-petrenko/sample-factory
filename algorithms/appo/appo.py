@@ -426,7 +426,7 @@ class APPO(Algorithm):
 
         fps = []
         for avg_interval in self.avg_stats_intervals:
-            past_moment, past_frames = self.fps_stats[max(0, len(self.fps_stats) - avg_interval)]
+            past_moment, past_frames = self.fps_stats[max(0, len(self.fps_stats) - 1 - avg_interval)]
             fps.append((total_env_steps - past_frames) / (now - past_moment))
 
         sample_throughput = dict()

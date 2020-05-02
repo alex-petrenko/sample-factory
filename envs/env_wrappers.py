@@ -397,7 +397,11 @@ class PixelFormatChwWrapper(ObservationWrapper):
         low, high = img_obs_space.low.flat[0], img_obs_space.high.flat[0]
         new_shape = [c, h, w]
 
-        dtype = env.observation_space.dtype if env.observation_space.dtype is not None else np.float32
+        if self.dict_obs_space:
+            dtype = env.observation_space.spaces['obs'].dtype if env.observation_space.spaces['obs'].dtype is not None else np.float32
+        else:
+            dtype = env.observation_space.dtype if env.observation_space.dtype is not None else np.float32
+
         new_img_obs_space = spaces.Box(low, high, shape=new_shape, dtype=dtype)
 
         if self.dict_obs_space:
