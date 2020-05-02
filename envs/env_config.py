@@ -14,6 +14,9 @@ def env_override_defaults(env, parser):
     elif env.startswith('quad'):
         from envs.quadrotors.quadrotor_params import quadrotors_override_defaults
         quadrotors_override_defaults(env, parser)
+    elif env.startswith('mujoco'):
+        from envs.mujoco.mujoco_params import mujoco_override_defaults
+        mujoco_override_defaults(env, parser)
 
 
 def add_env_args(env, parser):
@@ -32,3 +35,6 @@ def add_env_args(env, parser):
     elif env.startswith('quad'):
         from envs.quadrotors.quadrotor_params import add_quadrotors_env_args
         add_quadrotors_env_args(env, parser)
+    elif env.startswith('mujoco'):
+        from envs.mujoco.mujoco_params import add_mujoco_env_args
+        add_mujoco_env_args(env, parser)
