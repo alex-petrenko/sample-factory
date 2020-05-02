@@ -16,6 +16,9 @@ def create_env(env, **kwargs):
     elif env.startswith('quadrotor_'):
         from envs.quadrotors.quad_utils import make_quadrotor_env
         return make_quadrotor_env(env, **kwargs)
+    elif env.startswith('mujoco_'):
+        from envs.mujoco.mujoco_utils import make_mujoco_env
+        return make_mujoco_env(env, **kwargs)
     else:
         raise Exception('Unsupported env {0}'.format(env))
 

@@ -243,6 +243,14 @@ class MlpEncoder(EncoderBase):
                 nn.Linear(fc_encoder_layer, fc_encoder_layer),
                 nonlinearity(cfg),
             ]
+        elif cfg.encoder_subtype == 'mlp_mujoco':
+            fc_encoder_layer = cfg.hidden_size
+            encoder_layers = [
+                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                nonlinearity(cfg),
+                nn.Linear(fc_encoder_layer, fc_encoder_layer),
+                nonlinearity(cfg),
+            ]
         else:
             raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
 
@@ -274,6 +282,8 @@ def create_standard_encoder(cfg, obs_space, timing):
         encoder = ResnetEncoder(cfg, obs_space, timing)
     elif cfg.encoder_type == 'mlp':
         encoder = MlpEncoder(cfg, obs_space, timing)
+    elif cfg.encoder_type == 'mujoco':
+        encoder = MujocoEncoder(cfg, obs_space, timing)
     else:
         raise Exception('Encoder type not supported')
 
