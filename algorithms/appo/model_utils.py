@@ -282,8 +282,6 @@ def create_standard_encoder(cfg, obs_space, timing):
         encoder = ResnetEncoder(cfg, obs_space, timing)
     elif cfg.encoder_type == 'mlp':
         encoder = MlpEncoder(cfg, obs_space, timing)
-    elif cfg.encoder_type == 'mujoco':
-        encoder = MujocoEncoder(cfg, obs_space, timing)
     else:
         raise Exception('Encoder type not supported')
 

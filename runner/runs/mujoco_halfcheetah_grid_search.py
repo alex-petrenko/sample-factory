@@ -1,6 +1,7 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
+    ('seed', [0, 1, 2, 3]),
     ('with_vtrace', ['False']),
     ('learning_rate', [0.0003]),
     ('max_grad_norm', [0.5]),
@@ -13,7 +14,7 @@ _params = ParamGrid([
     ('adaptive_stddev', ['False']),
 
     ('ppo_epochs', [10]),
-    ('ppo_clip_ratio', [4]),
+    ('ppo_clip_ratio', [0.2, 4]),
     ('batch_size', [4096]),
     ('num_batches_per_iteration', [16]),
     ('rollout', [64]),
@@ -27,7 +28,7 @@ _experiment = Experiment(
 
 RUN_DESCRIPTION = RunDescription('mujoco_halfcheetah_gridsearch_v89_seeds_v1', experiments=[_experiment])
 
-
+# python -m runner.run --run=mujoco_halfcheetah_grid_search --runner=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1
 
 # Avg episode reward: [(0, '-298.590')
 # lse_lea_0.0003_bat_4096_num_16_max_0.5_use_False_rec_1_num__0_dev_cpu_act_False_max__1000000_ppo_8_rol_128_ada_False/.summary/0
