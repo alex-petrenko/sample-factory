@@ -579,31 +579,31 @@ class LearnerWorker:
                         )
                         force_summaries = True
 
-                    with timing.add_time('update'):
-                        # update the weights
-                        self.optimizer.zero_grad()
-                        loss.backward()
+                with timing.add_time('update'):
+                    # update the weights
+                    self.optimizer.zero_grad()
+                    loss.backward()
 
-                        if self.cfg.max_grad_norm > 0.0:
-                            with timing.add_time('clip'):
-                                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
+                    if self.cfg.max_grad_norm > 0.0:
+                        with timing.add_time('clip'):
+                            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
-                        curr_policy_version = self.train_step  # policy version before the weight update
-                        with self.policy_lock:
-                            self.optimizer.step()
+                    curr_policy_version = self.train_step  # policy version before the weight update
+                    with self.policy_lock:
+                        self.optimizer.step()
 
-                        num_sgd_steps += 1
+                    num_sgd_steps += 1
 
-                    with torch.no_grad():
-                        with timing.add_time('after_optimizer'):
-                            self._after_optimizer_step()
+                with torch.no_grad():
+                    with timing.add_time('after_optimizer'):
+                        self._after_optimizer_step()
 
-                            # collect and report summaries
-                            with_summaries = self._should_save_summaries() or force_summaries
-                            if with_summaries and not summary_this_epoch:
-                                stats_and_summaries = self._record_summaries(AttrDict(locals()))
-                                summary_this_epoch = True
-                                force_summaries = False
+                        # collect and report summaries
+                        with_summaries = self._should_save_summaries() or force_summaries
+                        if with_summaries and not summary_this_epoch:
+                            stats_and_summaries = self._record_summaries(AttrDict(locals()))
+                            summary_this_epoch = True
+                            force_summaries = False
 
             # end of an epoch
             # this will force policy update on the inference worker (policy worker)
