@@ -243,6 +243,14 @@ class MlpEncoder(EncoderBase):
                 nn.Linear(fc_encoder_layer, fc_encoder_layer),
                 nonlinearity(cfg),
             ]
+        elif cfg.encoder_subtype == 'mlp_mujoco':
+            fc_encoder_layer = cfg.hidden_size
+            encoder_layers = [
+                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                nonlinearity(cfg),
+                nn.Linear(fc_encoder_layer, fc_encoder_layer),
+                nonlinearity(cfg),
+            ]
         else:
             raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
 
