@@ -23,7 +23,7 @@ class _ActorCriticBase(nn.Module):
                 self.cfg, core_output_size, self.action_space,
             )
         else:
-            action_parameterization = ActionParameterizationDefault(self.cfg, core_output_size, self.action_space)
+            action_parameterization = ActionParameterizationDefault(self.cfg, core_output_size, self.action_space, self.timing)
 
         return action_parameterization
 
@@ -91,12 +91,15 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         return x, new_rnn_states
 
     def forward_tail(self, core_output, with_action_distribution=False):
-        values = self.critic_linear(core_output)
+        with self.timing.add_time('f_cri_lin'):
+            values = self.critic_linear(core_output)
 
-        action_distribution_params, action_distribution = self.action_parameterization(core_output)
+        with self.timing.add_time('f_act_param'):
+            action_distribution_params, action_distribution = self.action_parameterization(core_output)
 
         # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(action_distribution)
+        with self.timing.add_time('f_sample'):
+            actions, log_prob_actions = sample_actions_log_probs(action_distribution)
 
         result = AttrDict(dict(
             actions=actions,
@@ -111,9 +114,12 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         return result
 
     def forward(self, obs_dict, rnn_states, with_action_distribution=False):
-        x = self.forward_head(obs_dict)
-        x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x, with_action_distribution=with_action_distribution)
+        with self.timing.add_time('f_head'):
+            x = self.forward_head(obs_dict)
+        with self.timing.add_time('f_core'):
+            x, new_rnn_states = self.forward_core(x, rnn_states)
+        with self.timing.add_time('f_tail'):
+            result = self.forward_tail(x, with_action_distribution=with_action_distribution)
         result.rnn_states = new_rnn_states
         return result
 

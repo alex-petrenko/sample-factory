@@ -363,16 +363,20 @@ class ActionParameterizationDefault(ActionsParameterizationBase):
 
     """
 
-    def __init__(self, cfg, core_out_size, action_space):
+    def __init__(self, cfg, core_out_size, action_space, timing):
         super().__init__(cfg, action_space)
+
+        self.timing=timing
 
         num_action_outputs = calc_num_logits(action_space)
         self.distribution_linear = nn.Linear(core_out_size, num_action_outputs)
 
     def forward(self, actor_core_output):
         """Just forward the FC layer and generate the distribution object."""
-        action_distribution_params = self.distribution_linear(actor_core_output)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        with self.timing.add_time('f_distr_linear'):
+            action_distribution_params = self.distribution_linear(actor_core_output)
+        with self.timing.add_time('f_distribution'):
+            action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
         return action_distribution_params, action_distribution
 
 
