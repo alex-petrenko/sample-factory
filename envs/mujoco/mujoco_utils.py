@@ -8,6 +8,7 @@ class MujocoSpec:
 
 
 MUJOCO_ENVS = [
+    MujocoSpec('mujoco_hopper', 'Hopper-v2'),
     MujocoSpec('mujoco_halfcheetah', 'HalfCheetah-v2'),
     MujocoSpec('mujoco_humanoid', 'Humanoid-v2'),
 ]

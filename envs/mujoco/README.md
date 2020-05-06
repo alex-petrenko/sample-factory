@@ -35,7 +35,7 @@ git clone https://github.com/openai/mujoco-py.git
 bash -c "cd mujoco-py && conda activate sample-factory && python setup.py install"
 ```
 
-- Install extra environments
+- Install extra dependencies to support evaluation and rendering
 
 ```
 sudo apt-get update -y
