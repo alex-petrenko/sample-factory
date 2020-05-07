@@ -37,13 +37,17 @@ class _ActorCritic(nn.Module):
         return x, new_rnn_states
 
     def forward_tail(self, core_output, with_action_distribution=False):
-        values = self.critic_linear(core_output)
-        action_logits = self.distribution_linear(core_output)
+        with self.timing.add_time('f_critic'):
+            values = self.critic_linear(core_output)
+        with self.timing.add_time('f_dist_linear'):
+            action_logits = self.distribution_linear(core_output)
 
-        dist = get_action_distribution(self.action_space, raw_logits=action_logits)
+        with self.timing.add_time('f_act_distr'):
+            dist = get_action_distribution(self.action_space, raw_logits=action_logits)
 
-        # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(dist)
+        with self.timing.add_time('f_sample'):
+            # for non-trivial action spaces it is faster to do these together
+            actions, log_prob_actions = sample_actions_log_probs(dist)
 
         result = AttrDict(dict(
             actions=actions,
@@ -58,9 +62,12 @@ class _ActorCritic(nn.Module):
         return result
 
     def forward(self, obs_dict, rnn_states):
-        x = self.forward_head(obs_dict)
-        x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x)
+        with self.timing.add_time('f_head'):
+            x = self.forward_head(obs_dict)
+        with self.timing.add_time('f_core'):
+            x, new_rnn_states = self.forward_core(x, rnn_states)
+        with self.timing.add_time('f_tail'):
+            result = self.forward_tail(x)
         result.rnn_states = new_rnn_states
         return result
 
