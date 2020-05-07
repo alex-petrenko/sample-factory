@@ -127,4 +127,5 @@ dependencies:
     - termcolor==1.1.0
     - werkzeug==1.0.0
     - wrapt==1.12.1
+    - threadpoolctl==2.0.0
     - git+https://github.com/alex-petrenko/ViZDoom@doom_bot_project#egg=vizdoom
