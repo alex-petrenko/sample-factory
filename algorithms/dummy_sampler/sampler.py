@@ -155,11 +155,12 @@ class DummySampler(AlgorithmBase):
                 log.error('Unknown exception in worker %d, terminating...', proc_idx)
                 self.report_queue.put(dict(proc_idx=proc_idx, crash=True))
 
-            time.sleep(proc_idx * 0.1 + 0.1)
+            time.sleep(proc_idx * 0.01 + 0.01)
             log.info('Process %d finished sampling. Timing: %s', proc_idx, timing)
 
             for env_idx, env in enumerate(envs):
-                log.warning('Level %s avg episode len %d', env_key[env_idx], np.mean(episode_lengths[env_idx]))
+                if len(episode_lengths[env_idx]) > 0:
+                    log.warning('Level %s avg episode len %d', env_key[env_idx], np.mean(episode_lengths[env_idx]))
 
             for env in envs:
                 env.close()
@@ -208,7 +209,7 @@ class DummySampler(AlgorithmBase):
         while not self.terminate.value:
             try:
                 try:
-                    msgs = self.report_queue.get_many(timeout=0.1)
+                    msgs = self.report_queue.get_many(timeout=self.report_every_sec * 1.5)
                     for msg in msgs:
                         last_process_report[msg['proc_idx']] = time.time()
 

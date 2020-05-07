@@ -128,6 +128,12 @@ class APPO(ReinforcementLearningAlgorithm):
                  'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
                  'that can use parallel CPU cores for level generation.',
         )
+        p.add_argument(
+            '--force_envs_single_thread', default=True, type=str2bool,
+            help='Some environments may themselves use parallel libraries such as OpenMP or MKL. Since we parallelize environments on the level of workers, there is no need to keep this parallel semantic.'
+                 'This flag uses threadpoolctl to force libraries such as OpenMP and MKL to use only a single thread within the environment.'
+                 'Default value (True) is recommended unless you are running fewer workers than CPU cores.',
+        )
         p.add_argument('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
         p.add_argument('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
