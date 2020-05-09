@@ -218,6 +218,7 @@ class PolicyWorker:
         # batches)
         min_num_requests = self.cfg.num_workers // (self.cfg.num_policies * self.cfg.policy_workers_per_policy)
         min_num_requests //= 3
+        min_num_requests = max(1, min_num_requests)
 
         # Again, very conservative timer. Only wait a little bit, then continue operation.
         wait_for_min_requests = 0.025
