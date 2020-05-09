@@ -5,7 +5,6 @@ import numbers
 import os
 import random
 import time
-from collections import deque
 from enum import Enum
 from os.path import join
 
@@ -53,9 +52,13 @@ class PbtTask(Enum):
 
 
 HYPERPARAMS_TO_TUNE = {
-    'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
-    'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
+    'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value',
 }
+
+# HYPERPARAMS_TO_TUNE_EXTENDED = {
+#     'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
+#     'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
+# }
 
 SPECIAL_PERTURBATION = dict(
     gamma=perturb_exponential_decay,
