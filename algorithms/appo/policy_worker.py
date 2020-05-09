@@ -216,7 +216,7 @@ class PolicyWorker:
         # Although if your workflow involves very lengthy operations that often freeze workers, it can be beneficial
         # to set min_num_requests to 1 (at a cost of potential inefficiency, i.e. policy worker will use very small
         # batches)
-        min_num_requests = self.cfg.num_workers // self.cfg.num_policies
+        min_num_requests = self.cfg.num_workers // (self.cfg.num_policies * self.cfg.policy_workers_per_policy)
         min_num_requests //= 3
 
         # Again, very conservative timer. Only wait a little bit, then continue operation.
