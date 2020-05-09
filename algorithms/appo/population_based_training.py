@@ -86,9 +86,6 @@ class PopulationBasedTraining:
         self.policy_cfg = [dict() for _ in range(self.cfg.num_policies)]
         self.policy_reward_shaping = [dict() for _ in range(self.cfg.num_policies)]
 
-        # initializing this with [True] prevents PBT from starting to replace params too quickly
-        self.policy_is_the_best = [deque([True], maxlen=10) for _ in range(self.cfg.num_policies)]
-
         self.default_reward_shaping = default_reward_shaping
 
         self.summary_writers = summary_writers
@@ -279,18 +276,6 @@ class PopulationBasedTraining:
 
         best_policies = policies_sorted[:replace_number]
         worst_policies = policies_sorted[-replace_number:]
-
-        # record this boolean value for the last several PBT intervals
-        is_the_best = policy_id == best_policies[0]
-        self.policy_is_the_best[policy_id].append(is_the_best)
-
-        if True in self.policy_is_the_best[policy_id]:
-            log.debug(
-                'Policy %d was the best at least once in the last %d intervals (%r). Do not touch it, it is doing okay!',
-                policy_id, self.policy_is_the_best[policy_id].maxlen, self.policy_is_the_best[policy_id],
-            )
-            # don't touch the policies that are doing well
-            return
 
         if policy_id in best_policies:
             # don't touch the policies that are doing well

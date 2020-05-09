@@ -201,10 +201,11 @@ class TupleActionDistribution:
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
     stddev_min = 1e-5
-    stddev_max = 2.0 + EPS
+    stddev_max = 1e5
     stddev_span = stddev_max - stddev_min
 
     def __init__(self, params):
+        # using torch.chunk here is slightly faster than plain indexing
         self.means, self.log_std = torch.chunk(params, 2, dim=1)
 
         self.stddevs = self.log_std.exp()
