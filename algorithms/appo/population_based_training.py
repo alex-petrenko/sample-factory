@@ -174,7 +174,8 @@ class PopulationBasedTraining:
         elif type(param) is bool:
             new_value = not param
         elif isinstance(param, numbers.Number):
-            new_value = perturb_float(float(param))
+            perturb_amount = random.uniform(1.01, 1.5)
+            new_value = perturb_float(float(param), perturb_amount=perturb_amount)
         else:
             raise RuntimeError('Unsupported parameter type')
 

@@ -15,7 +15,7 @@ from algorithms.appo.model import create_actor_critic
 from algorithms.appo.model_utils import get_hidden_size
 from algorithms.utils.action_distributions import ContinuousActionDistribution
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
-from algorithms.utils.multi_agent import MultiAgentWrapper
+from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
 from envs.create_env import create_env
 from utils.utils import log, AttrDict
 

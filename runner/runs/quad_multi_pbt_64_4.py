@@ -10,4 +10,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('quads_single_pbt_v96_multi', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('quads_multi_pbt_v96_64_4', experiments=[_experiment])
