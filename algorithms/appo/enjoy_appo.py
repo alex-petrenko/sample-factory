@@ -1,7 +1,9 @@
 import datetime
+import math
 import os
 import sys
 import time
+from collections import deque
 from os.path import join
 
 import numpy as np
@@ -62,6 +64,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     actor_critic.load_state_dict(checkpoint_dict['model'])
 
     episode_rewards = []
+    true_rewards = deque([], maxlen=100)
     num_frames = 0
 
     last_render_start = time.time()
@@ -85,13 +88,12 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                 policy_outputs = actor_critic(obs_torch, rnn_states, with_action_distribution=True)
 
-                # action_distribution = policy_outputs.action_distribution
-                # if isinstance(action_distribution, ContinuousActionDistribution):
-                #     actions = action_distribution.means
-                # else:
-                #     actions = policy_outputs.actions
+                action_distribution = policy_outputs.action_distribution
+                if isinstance(action_distribution, ContinuousActionDistribution):
+                    actions = action_distribution.means
+                else:
+                    actions = policy_outputs.actions
 
-                actions = policy_outputs.actions
                 actions = actions.cpu().numpy()
                 rnn_states = policy_outputs.rnn_states
 
@@ -110,20 +112,21 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                     obs, rew, done, infos = env.step(actions)
 
+                    episode_reward += np.mean(rew)
+                    num_frames += 1
+
                     if all(done):
-                        log.debug('Finished episode!')
+                        true_rewards.append(infos[0].get('true_reward', math.nan))
+                        log.info(
+                            'Episode finished at %d frames, true rew %.3f avg true rew %.3d',
+                            num_frames, true_rewards[-1], np.mean(true_rewards),
+                        )
 
                         # VizDoom multiplayer stuff
                         # for player in [1, 2, 3, 4, 5, 6, 7, 8]:
                         #     key = f'PLAYER{player}_FRAGCOUNT'
                         #     if key in infos[0]:
                         #         log.debug('Score for player %d: %r', player, infos[0][key])
-
-                    episode_reward += np.mean(rew)
-                    num_frames += 1
-
-                    if all(done):
-                        log.info('Episode finished at %d frames', num_frames)
                         break
 
                 if all(done) or max_frames_reached(num_frames):
