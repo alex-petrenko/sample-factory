@@ -64,6 +64,11 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
                     info['episode_extra_stats'][f'z_action{action_idx}_mean'] = mean_action
                     info['episode_extra_stats'][f'z_action{action_idx}_std'] = std_action
 
+                self.cumulative_rewards[i] = dict()
+
+        if any(dones_multi):
+            self.episode_actions = []
+
         return obs, rewards, dones, infos
 
     def close(self):
