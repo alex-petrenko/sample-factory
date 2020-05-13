@@ -40,7 +40,7 @@ class APPO(ReinforcementLearningAlgorithm):
     def add_cli_args(cls, parser):
         p = parser
         super().add_cli_args(p)
-        p.add_argument('--experiment_summaries_interval', default=30, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
+        p.add_argument('--experiment_summaries_interval', default=20, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
 
         p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')

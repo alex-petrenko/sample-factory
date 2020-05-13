@@ -3,11 +3,10 @@ from unittest import TestCase
 from algorithms.appo import env_runner
 from algorithms.appo.env_runner import VectorEnvRunner, TaskType
 from algorithms.utils.algo_utils import num_env_steps
-from algorithms.utils.multi_env import safe_get
 from envs.doom.doom_utils import make_doom_env
 from envs.tests.test_envs import default_doom_cfg
 from utils.timing import Timing
-from utils.utils import log
+from utils.utils import log, safe_get
 
 
 class TestDoom(TestCase):

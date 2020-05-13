@@ -21,11 +21,10 @@ from algorithms.appo.model import create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae, EPS
-from algorithms.utils.multi_env import safe_get
 from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill, safe_get
 
 
 class LearnerWorker:
