@@ -10,7 +10,7 @@ _params = ParamGrid([
 _experiments = [
     Experiment(
         'basic_envs_fs4',
-        'algorithms.appo.train_appo --train_for_env_steps=200000000 --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=72 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --wide_aspect_ratio=False',
+        'algorithms.appo.train_appo --train_for_env_steps=200000000 --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=72 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --wide_aspect_ratio=False --policy_workers_per_policy=3',
         _params.generate_params(randomize=False),
     ),
 ]
