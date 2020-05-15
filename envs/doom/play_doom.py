@@ -6,7 +6,7 @@ from envs.doom.doom_utils import doom_env_by_name, make_doom_multiplayer_env, ma
 
 
 def main():
-    env_name = 'doom_health_gathering_supreme'
+    env_name = 'doom_health_gathering'
     cfg = default_cfg(env=env_name)
     env = make_doom_env_impl(doom_env_by_name(env_name), cfg=cfg, custom_resolution='1280x720')
 
