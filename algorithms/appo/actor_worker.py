@@ -485,6 +485,10 @@ class ActorWorker:
     def _init(self):
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
+        if self.cfg.force_envs_single_thread:
+            from threadpoolctl import threadpool_limits
+            threadpool_limits(limits=1, user_api=None)
+
         if self.cfg.set_workers_cpu_affinity:
             set_process_cpu_affinity(self.worker_idx, self.cfg.num_workers)
         psutil.Process().nice(min(self.cfg.default_niceness + 10, 20))
@@ -649,7 +653,10 @@ class ActorWorker:
 
         if self.worker_idx <= 1:
             time.sleep(0.1)
-            log.info('Env runner %d, rollouts %d: timing %s', self.worker_idx, self.num_complete_rollouts, timing)
+            log.info(
+                'Env runner %d, CPU aff. %r, rollouts %d: timing %s',
+                self.worker_idx, psutil.Process().cpu_affinity(), self.num_complete_rollouts, timing,
+            )
 
     def init(self):
         self.task_queue.put((TaskType.INIT, None))

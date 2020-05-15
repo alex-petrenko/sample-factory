@@ -34,7 +34,10 @@ def parse_args(argv=None, evaluation=False):
     parser.add_argument('--algo', type=str, default=None, required=True)
     parser.add_argument('--env', type=str, default=None, required=True)
     parser.add_argument('--experiment', type=str, default=None, required=True)
-    parser.add_argument('--experiments_root', type=str, default=None, required=False, help='If not None, store experiment data in the specified subfolder of train_dir. Useful for groups of experiments (e.g. gridsearch)')
+    parser.add_argument(
+        '--experiments_root', type=str, default=None, required=False,
+        help='If not None, store experiment data in the specified subfolder of train_dir. Useful for groups of experiments (e.g. gridsearch)',
+    )
 
     basic_args, _ = parser.parse_known_args(argv)
     algo = basic_args.algo

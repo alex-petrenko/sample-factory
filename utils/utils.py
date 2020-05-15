@@ -1,8 +1,10 @@
 """Utilities."""
+
 import argparse
 import logging
 import operator
 import os
+from _queue import Empty
 from os.path import join
 
 import numpy as np
@@ -36,7 +38,7 @@ log.propagate = False  # workaround for duplicated logs in ipython
 log.addHandler(ch)
 
 
-# general utilities
+# general Python utilities
 
 class AttrDict(dict):
     __setattr__ = dict.__setitem__
@@ -89,6 +91,15 @@ def static_vars(**kwargs):
             setattr(func, k, kwargs[k])
         return func
     return decorate
+
+
+def safe_get(q, timeout=1e6, msg='Queue timeout'):
+    """Using queue.get() with timeout is necessary, otherwise KeyboardInterrupt is not handled."""
+    while True:
+        try:
+            return q.get(timeout=timeout)
+        except Empty:
+            log.info('Queue timed out (%s), timeout %.3f', msg, timeout)
 
 
 # CLI args

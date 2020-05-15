@@ -21,11 +21,10 @@ from algorithms.appo.model import create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution
 from algorithms.utils.algo_utils import calculate_gae, EPS
-from algorithms.utils.multi_env import safe_get
 from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill, safe_get
 
 
 class LearnerWorker:
@@ -579,31 +578,31 @@ class LearnerWorker:
                         )
                         force_summaries = True
 
-                    with timing.add_time('update'):
-                        # update the weights
-                        self.optimizer.zero_grad()
-                        loss.backward()
+                with timing.add_time('update'):
+                    # update the weights
+                    self.optimizer.zero_grad()
+                    loss.backward()
 
-                        if self.cfg.max_grad_norm > 0.0:
-                            with timing.add_time('clip'):
-                                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
+                    if self.cfg.max_grad_norm > 0.0:
+                        with timing.add_time('clip'):
+                            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
-                        curr_policy_version = self.train_step  # policy version before the weight update
-                        with self.policy_lock:
-                            self.optimizer.step()
+                    curr_policy_version = self.train_step  # policy version before the weight update
+                    with self.policy_lock:
+                        self.optimizer.step()
 
-                        num_sgd_steps += 1
+                    num_sgd_steps += 1
 
-                    with torch.no_grad():
-                        with timing.add_time('after_optimizer'):
-                            self._after_optimizer_step()
+                with torch.no_grad():
+                    with timing.add_time('after_optimizer'):
+                        self._after_optimizer_step()
 
-                            # collect and report summaries
-                            with_summaries = self._should_save_summaries() or force_summaries
-                            if with_summaries and not summary_this_epoch:
-                                stats_and_summaries = self._record_summaries(AttrDict(locals()))
-                                summary_this_epoch = True
-                                force_summaries = False
+                        # collect and report summaries
+                        with_summaries = self._should_save_summaries() or force_summaries
+                        if with_summaries and not summary_this_epoch:
+                            stats_and_summaries = self._record_summaries(AttrDict(locals()))
+                            summary_this_epoch = True
+                            force_summaries = False
 
             # end of an epoch
             # this will force policy update on the inference worker (policy worker)
@@ -1269,7 +1268,6 @@ class LearnerWorker:
 # [2020-04-23 19:12:13,174][30119] Policy worker avg. requests 2.94, timing: init: 1.9893, wait_policy_total: 15.1174, wait_policy: 0.0008, handle_policy_step: 41.1058, one_step: 0.0037, deserialize: 1.4255, obs_to_device: 5.4478, stack: 13.9475, forward: 15.0436, postprocess: 4.8951, weight_update: 0.0005
 # [2020-04-23 19:12:13,283][30106] GPU learner timing: extract: 0.1877, buffers: 0.0664, batching: 5.0616, buff_ready: 0.2413, tensors_gpu_float: 5.8271, squeeze: 0.0056, prepare: 11.2599, batcher_mem: 4.9639
 # [2020-04-23 19:12:13,589][30106] Train loop timing: init: 1.3502, train_wait: 0.2526, forward_head: 9.8003, bptt_initial: 1.1674, bptt_forward_core: 7.8029, bptt_rnn_states: 4.9400, bptt: 12.9313, tail: 0.4384, vtrace: 1.4388, losses: 0.3578, clip: 8.5222, update: 12.6351, train: 41.3112
-# [2020-04-23 19:12:13,749][30073] Workers joined!
 # [2020-04-23 19:12:13,759][30073] Collected {0: 2015232}, FPS: 47151.6
 # [2020-04-23 19:12:13,760][30073] Timing: experience: 42.5657
 
@@ -1292,3 +1290,22 @@ class LearnerWorker:
 # [2020-04-30 00:40:06,957][21397] Train loop timing: init: 1.3771, train_wait: 0.4144, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.4586, bptt_initial: 0.0177, bptt_forward_core: 0.8403, bptt_rnn_states: 0.2238, bptt: 1.1868, tail: 0.2921, vtrace: 0.8646, clip: 6.3309, update: 9.9849, after_optimizer: 0.0954, losses: 10.3387, train: 15.4936
 # [2020-04-30 00:40:07,139][21362] Collected {0: 2015232}, FPS: 46308.9
 # [2020-04-30 00:40:07,139][21362] Timing: experience: 43.3403
+
+# Version V95 (threadpoolctl)
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v95_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-05-07 00:20:28,984][24986] Env runner 0, CPU aff. [0], rollouts 800: timing wait_actor: 0.0000, waiting: 1.5409, reset: 15.0362, save_policy_outputs: 0.9470, env_step: 35.7530, overhead: 3.6169, complete_rollouts: 0.0151, enqueue_policy_requests: 0.1806, one_step: 0.0148, work: 42.4392
+# [2020-05-07 00:20:28,993][24987] Env runner 1, CPU aff. [1], rollouts 780: timing wait_actor: 0.0000, waiting: 1.6076, reset: 12.7877, save_policy_outputs: 0.9770, env_step: 35.7734, overhead: 3.5536, complete_rollouts: 0.0156, enqueue_policy_requests: 0.1630, one_step: 0.0146, work: 42.3769
+# [2020-05-07 00:20:29,232][24985] Policy worker avg. requests 3.34, timing: init: 1.7801, wait_policy_total: 15.0389, wait_policy: 0.0051, handle_policy_step: 40.9999, one_step: 0.0000, deserialize: 1.4367, obs_to_device: 5.3197, stack: 13.9150, forward: 14.8686, postprocess: 4.8007, weight_update: 0.0005
+# [2020-05-07 00:20:29,339][24965] GPU learner timing: extract: 0.1923, buffers: 0.0661, batching: 4.7009, buff_ready: 0.2363, tensors_gpu_float: 1.5160, squeeze: 0.0051, prepare: 6.5952, batcher_mem: 4.6232
+# [2020-05-07 00:20:29,647][24965] Train loop timing: init: 1.3167, train_wait: 0.3439, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.4390, bptt_initial: 0.0178, bptt_forward_core: 0.8403, bptt_rnn_states: 0.2221, bptt: 1.1842, tail: 0.2767, vtrace: 0.8588, losses: 0.2639, clip: 6.2482, update: 9.9498, after_optimizer: 0.1336, train: 15.5308
+# [2020-05-07 00:20:29,819][24921] Collected {0: 2015232}, FPS: 45853.0
+# [2020-05-07 00:20:29,819][24921] Timing: experience: 43.7712
+
+# Version V96 (min num requests on policy worker)
+# [2020-05-09 03:14:52,420][16416] Env runner 0, CPU aff. [0], rollouts 800: timing wait_actor: 0.0000, waiting: 1.2325, reset: 11.7978, save_policy_outputs: 0.9999, env_step: 35.6990, overhead: 3.7528, complete_rollouts: 0.0160, enqueue_policy_requests: 0.1988, one_step: 0.0151, work: 42.6707
+# [2020-05-09 03:14:52,436][16417] Env runner 1, CPU aff. [1], rollouts 800: timing wait_actor: 0.0000, waiting: 1.2668, reset: 14.4219, save_policy_outputs: 0.9878, env_step: 35.8100, overhead: 3.6445, complete_rollouts: 0.0156, enqueue_policy_requests: 0.2179, one_step: 0.0155, work: 42.6389
+# [2020-05-09 03:14:52,682][16415] Policy worker avg. requests 6.66, timing: init: 1.7922, wait_policy_total: 13.1051, wait_policy: 0.0051, handle_policy_step: 33.6309, one_step: 0.0018, deserialize: 1.1954, obs_to_device: 4.3513, stack: 11.7198, forward: 11.2005, postprocess: 4.1313, weight_update: 0.0005
+# [2020-05-09 03:14:52,778][16392] GPU learner timing: extract: 0.1836, buffers: 0.0659, batching: 4.6835, buff_ready: 0.2483, tensors_gpu_float: 1.6530, squeeze: 0.0051, prepare: 6.7244, batcher_mem: 4.5886
+# [2020-05-09 03:14:53,086][16392] Train loop timing: init: 1.3396, train_wait: 0.3579, epoch_init: 0.0013, minibatch_init: 0.0006, forward_head: 0.4487, bptt_initial: 0.0198, bptt_forward_core: 0.8462, bptt_rnn_states: 0.2294, bptt: 1.1992, tail: 0.2761, vtrace: 0.8823, losses: 0.2344, clip: 6.2738, update: 10.0010, after_optimizer: 0.0852, train: 15.5468
+# [2020-05-09 03:14:53,250][16344] Collected {0: 2015232}, FPS: 46004.4
+# [2020-05-09 03:14:53,250][16344] Timing: experience: 43.6271

@@ -14,15 +14,17 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
         super().__init__(env)
 
         self.reward_shaping_scheme = reward_shaping_scheme
-        self.cumulative_rewards = dict()
-        self.episode_actions = []
+        self.cumulative_rewards = None
+        self.episode_actions = None
+
+        self.num_agents = env.num_agents if hasattr(env, 'num_agents') else 1
 
         # save a reference to this wrapper in the actual env class, for other wrappers
         self.env.unwrapped._reward_shaping_wrapper = self
 
     def reset(self):
         obs = self.env.reset()
-        self.cumulative_rewards = dict()
+        self.cumulative_rewards = [dict() for _ in range(self.num_agents)]
         self.episode_actions = []
         return obs
 
@@ -34,30 +36,40 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
         for key, weight in self.reward_shaping_scheme['quad_rewards'].items():
             env_reward_shaping[key] = weight
 
-        obs, rew, done, info = self.env.step(action)
+        obs, rewards, dones, infos = self.env.step(action)
+        if self.num_agents == 1:
+            infos_multi, dones_multi = [infos], [dones]
+        else:
+            infos_multi, dones_multi = infos, dones
 
-        rew_dict = info['rewards']
+        for i, info in enumerate(infos_multi):
+            rew_dict = info['rewards']
 
-        for key, value in rew_dict.items():
-            if key.startswith('rewraw'):
-                if key not in self.cumulative_rewards:
-                    self.cumulative_rewards[key] = 0
-                self.cumulative_rewards[key] += value
+            for key, value in rew_dict.items():
+                if key.startswith('rewraw'):
+                    if key not in self.cumulative_rewards[i]:
+                        self.cumulative_rewards[i][key] = 0
+                    self.cumulative_rewards[i][key] += value
 
-        if done:
-            true_reward = self.cumulative_rewards['rewraw_main']
-            info['true_reward'] = true_reward
-            info['episode_extra_stats'] = self.cumulative_rewards
+            if dones_multi[i]:
+                true_reward = self.cumulative_rewards[i]['rewraw_main']
+                info['true_reward'] = true_reward
+                info['episode_extra_stats'] = self.cumulative_rewards[i]
 
-            episode_actions = np.array(self.episode_actions)
-            episode_actions = episode_actions.transpose()
-            for action_idx in range(episode_actions.shape[0]):
-                mean_action = np.mean(episode_actions[action_idx])
-                std_action = np.std(episode_actions[action_idx])
-                info['episode_extra_stats'][f'z_action{action_idx}_mean'] = mean_action
-                info['episode_extra_stats'][f'z_action{action_idx}_std'] = std_action
+                episode_actions = np.array(self.episode_actions)
+                episode_actions = episode_actions.transpose()
+                for action_idx in range(episode_actions.shape[0]):
+                    mean_action = np.mean(episode_actions[action_idx])
+                    std_action = np.std(episode_actions[action_idx])
+                    info['episode_extra_stats'][f'z_action{action_idx}_mean'] = mean_action
+                    info['episode_extra_stats'][f'z_action{action_idx}_std'] = std_action
 
-        return obs, rew, done, info
+                self.cumulative_rewards[i] = dict()
+
+        if any(dones_multi):
+            self.episode_actions = []
+
+        return obs, rewards, dones, infos
 
     def close(self):
         self.env.unwrapped._reward_shaping_wrapper = None

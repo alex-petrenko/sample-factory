@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from gym import spaces, Wrapper
 
-from algorithms.utils.multi_agent import MultiAgentWrapper
+from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
 from envs.create_env import create_env
 from utils.get_available_gpus import get_available_gpus_without_triggering_pytorch_cuda_initialization
 from utils.utils import log, memory_consumption_mb

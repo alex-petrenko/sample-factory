@@ -40,7 +40,7 @@ class APPO(ReinforcementLearningAlgorithm):
     def add_cli_args(cls, parser):
         p = parser
         super().add_cli_args(p)
-        p.add_argument('--experiment_summaries_interval', default=30, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
+        p.add_argument('--experiment_summaries_interval', default=20, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
 
         p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
@@ -127,6 +127,12 @@ class APPO(ReinforcementLearningAlgorithm):
             help='Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
                  'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
                  'that can use parallel CPU cores for level generation.',
+        )
+        p.add_argument(
+            '--force_envs_single_thread', default=True, type=str2bool,
+            help='Some environments may themselves use parallel libraries such as OpenMP or MKL. Since we parallelize environments on the level of workers, there is no need to keep this parallel semantic.'
+                 'This flag uses threadpoolctl to force libraries such as OpenMP and MKL to use only a single thread within the environment.'
+                 'Default value (True) is recommended unless you are running fewer workers than CPU cores.',
         )
         p.add_argument('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
@@ -510,7 +516,13 @@ class APPO(ReinforcementLearningAlgorithm):
             for key, stat in self.policy_avg_stats.items():
                 if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and self.total_train_seconds > 300):
                     stat_value = np.mean(stat[policy_id])
-                    self.writers[policy_id].add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
+                    writer = self.writers[policy_id]
+                    writer.add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
+
+                    # for key stats report min/max as well
+                    if key in ('reward', 'true_reward', 'len'):
+                        writer.add_scalar(f'0_aux/avg_{key}_min', float(min(stat[policy_id])), env_steps)
+                        writer.add_scalar(f'0_aux/avg_{key}_max', float(max(stat[policy_id])), env_steps)
 
             for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:
                 extra_summaries_func(policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg)

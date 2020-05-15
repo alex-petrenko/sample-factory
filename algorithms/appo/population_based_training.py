@@ -5,7 +5,6 @@ import numbers
 import os
 import random
 import time
-from collections import deque
 from enum import Enum
 from os.path import join
 
@@ -53,9 +52,13 @@ class PbtTask(Enum):
 
 
 HYPERPARAMS_TO_TUNE = {
-    'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
-    'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
+    'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value',
 }
+
+# HYPERPARAMS_TO_TUNE_EXTENDED = {
+#     'learning_rate', 'entropy_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
+#     'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
+# }
 
 SPECIAL_PERTURBATION = dict(
     gamma=perturb_exponential_decay,
@@ -85,9 +88,6 @@ class PopulationBasedTraining:
 
         self.policy_cfg = [dict() for _ in range(self.cfg.num_policies)]
         self.policy_reward_shaping = [dict() for _ in range(self.cfg.num_policies)]
-
-        # initializing this with [True] prevents PBT from starting to replace params too quickly
-        self.policy_is_the_best = [deque([True], maxlen=10) for _ in range(self.cfg.num_policies)]
 
         self.default_reward_shaping = default_reward_shaping
 
@@ -174,7 +174,8 @@ class PopulationBasedTraining:
         elif type(param) is bool:
             new_value = not param
         elif isinstance(param, numbers.Number):
-            new_value = perturb_float(float(param))
+            perturb_amount = random.uniform(1.01, 1.5)
+            new_value = perturb_float(float(param), perturb_amount=perturb_amount)
         else:
             raise RuntimeError('Unsupported parameter type')
 
@@ -279,18 +280,6 @@ class PopulationBasedTraining:
 
         best_policies = policies_sorted[:replace_number]
         worst_policies = policies_sorted[-replace_number:]
-
-        # record this boolean value for the last several PBT intervals
-        is_the_best = policy_id == best_policies[0]
-        self.policy_is_the_best[policy_id].append(is_the_best)
-
-        if True in self.policy_is_the_best[policy_id]:
-            log.debug(
-                'Policy %d was the best at least once in the last %d intervals (%r). Do not touch it, it is doing okay!',
-                policy_id, self.policy_is_the_best[policy_id].maxlen, self.policy_is_the_best[policy_id],
-            )
-            # don't touch the policies that are doing well
-            return
 
         if policy_id in best_policies:
             # don't touch the policies that are doing well

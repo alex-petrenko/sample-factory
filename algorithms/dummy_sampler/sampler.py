@@ -76,89 +76,94 @@ class DummySampler(AlgorithmBase):
 
         timing = Timing()
 
-        if self.cfg.set_workers_cpu_affinity:
-            set_process_cpu_affinity(proc_idx, self.cfg.num_workers)
-        initial_cpu_affinity = psutil.Process().cpu_affinity()
-        psutil.Process().nice(10)
+        from threadpoolctl import threadpool_limits
+        with threadpool_limits(limits=1, user_api=None):
+            if self.cfg.set_workers_cpu_affinity:
+                set_process_cpu_affinity(proc_idx, self.cfg.num_workers)
 
-        with timing.timeit('env_init'):
-            envs = []
-            env_key = ['env' for _ in range(self.cfg.num_envs_per_worker)]
+            initial_cpu_affinity = psutil.Process().cpu_affinity()
+            psutil.Process().nice(10)
 
-            for env_idx in range(self.cfg.num_envs_per_worker):
-                global_env_id = proc_idx * self.cfg.num_envs_per_worker + env_idx
-                env_config = AttrDict(worker_index=proc_idx, vector_index=env_idx, env_id=global_env_id)
-                env = create_env(self.cfg.env, cfg=self.cfg, env_config=env_config)
-                env.seed(global_env_id)
-                envs.append(env)
+            with timing.timeit('env_init'):
+                envs = []
+                env_key = ['env' for _ in range(self.cfg.num_envs_per_worker)]
 
-                # this is to track the performance for individual DMLab levels
-                if hasattr(env.unwrapped, 'level_name'):
-                    env_key[env_idx] = env.unwrapped.level_name
+                for env_idx in range(self.cfg.num_envs_per_worker):
+                    global_env_id = proc_idx * self.cfg.num_envs_per_worker + env_idx
+                    env_config = AttrDict(worker_index=proc_idx, vector_index=env_idx, env_id=global_env_id)
+                    env = create_env(self.cfg.env, cfg=self.cfg, env_config=env_config)
+                    log.debug('CPU affinity after create_env: %r', psutil.Process().cpu_affinity())
+                    env.seed(global_env_id)
+                    envs.append(env)
 
-            episode_length = [0 for _ in envs]
-            episode_lengths = [deque([], maxlen=20) for _ in envs]
+                    # this is to track the performance for individual DMLab levels
+                    if hasattr(env.unwrapped, 'level_name'):
+                        env_key[env_idx] = env.unwrapped.level_name
 
-        try:
-            with timing.timeit('first_reset'):
-                for env_idx, env in enumerate(envs):
-                    env.reset()
-                    log.info('Process %d finished resetting %d/%d envs', proc_idx, env_idx + 1, len(envs))
+                episode_length = [0 for _ in envs]
+                episode_lengths = [deque([], maxlen=20) for _ in envs]
 
-                self.report_queue.put(dict(proc_idx=proc_idx, finished_reset=True))
-
-            self.start_event.wait()
-
-            with timing.timeit('work'):
-                last_report = last_report_frames = total_env_frames = 0
-                while not self.terminate.value and total_env_frames < self.cfg.sample_env_frames_per_worker:
+            try:
+                with timing.timeit('first_reset'):
                     for env_idx, env in enumerate(envs):
-                        action = env.action_space.sample()
-                        with timing.add_time(f'{env_key[env_idx]}.step'):
-                            obs, reward, done, info = env.step(action)
+                        env.reset()
+                        log.info('Process %d finished resetting %d/%d envs', proc_idx, env_idx + 1, len(envs))
 
-                        num_frames = info.get('num_frames', 1)
-                        total_env_frames += num_frames
-                        episode_length[env_idx] += num_frames
+                    self.report_queue.put(dict(proc_idx=proc_idx, finished_reset=True))
 
-                        if done:
-                            with timing.add_time(f'{env_key[env_idx]}.reset'):
-                                env.reset()
+                self.start_event.wait()
 
-                            episode_lengths[env_idx].append(episode_length[env_idx])
-                            episode_length[env_idx] = 0
+                with timing.timeit('work'):
+                    last_report = last_report_frames = total_env_frames = 0
+                    while not self.terminate.value and total_env_frames < self.cfg.sample_env_frames_per_worker:
+                        for env_idx, env in enumerate(envs):
+                            action = env.action_space.sample()
+                            with timing.add_time(f'{env_key[env_idx]}.step'):
+                                obs, reward, done, info = env.step(action)
 
-                    with timing.add_time('report'):
-                        now = time.time()
-                        if now - last_report > self.report_every_sec:
-                            last_report = now
-                            frames_since_last_report = total_env_frames - last_report_frames
-                            last_report_frames = total_env_frames
-                            self.report_queue.put(dict(proc_idx=proc_idx, env_frames=frames_since_last_report))
+                            num_frames = info.get('num_frames', 1)
+                            total_env_frames += num_frames
+                            episode_length[env_idx] += num_frames
 
-            # Extra check to make sure cpu affinity is preserved throughout the execution.
-            # I observed weird effect when some environments tried to alter affinity of the current process, leading
-            # to decreased performance.
-            # This can be caused by some interactions between deep learning libs, OpenCV, MKL, OpenMP, etc.
-            # At least user should know about it if this is happening.
-            cpu_affinity = psutil.Process().cpu_affinity()
-            assert initial_cpu_affinity == cpu_affinity, \
-                f'Worker CPU affinity was changed from {initial_cpu_affinity} to {cpu_affinity}!' \
-                f'This can significantly affect performance!'
+                            if done:
+                                with timing.add_time(f'{env_key[env_idx]}.reset'):
+                                    env.reset()
 
-        except:
-            log.exception('Unknown exception')
-            log.error('Unknown exception in worker %d, terminating...', proc_idx)
-            self.report_queue.put(dict(proc_idx=proc_idx, crash=True))
+                                episode_lengths[env_idx].append(episode_length[env_idx])
+                                episode_length[env_idx] = 0
 
-        time.sleep(proc_idx * 0.1 + 0.1)
-        log.info('Process %d finished sampling. Timing: %s', proc_idx, timing)
+                        with timing.add_time('report'):
+                            now = time.time()
+                            if now - last_report > self.report_every_sec:
+                                last_report = now
+                                frames_since_last_report = total_env_frames - last_report_frames
+                                last_report_frames = total_env_frames
+                                self.report_queue.put(dict(proc_idx=proc_idx, env_frames=frames_since_last_report))
 
-        for env_idx, env in enumerate(envs):
-            log.warning('Level %s avg episode len %d', env_key[env_idx], np.mean(episode_lengths[env_idx]))
+                # Extra check to make sure cpu affinity is preserved throughout the execution.
+                # I observed weird effect when some environments tried to alter affinity of the current process, leading
+                # to decreased performance.
+                # This can be caused by some interactions between deep learning libs, OpenCV, MKL, OpenMP, etc.
+                # At least user should know about it if this is happening.
+                cpu_affinity = psutil.Process().cpu_affinity()
+                assert initial_cpu_affinity == cpu_affinity, \
+                    f'Worker CPU affinity was changed from {initial_cpu_affinity} to {cpu_affinity}!' \
+                    f'This can significantly affect performance!'
 
-        for env in envs:
-            env.close()
+            except:
+                log.exception('Unknown exception')
+                log.error('Unknown exception in worker %d, terminating...', proc_idx)
+                self.report_queue.put(dict(proc_idx=proc_idx, crash=True))
+
+            time.sleep(proc_idx * 0.01 + 0.01)
+            log.info('Process %d finished sampling. Timing: %s', proc_idx, timing)
+
+            for env_idx, env in enumerate(envs):
+                if len(episode_lengths[env_idx]) > 0:
+                    log.warning('Level %s avg episode len %d', env_key[env_idx], np.mean(episode_lengths[env_idx]))
+
+            for env in envs:
+                env.close()
 
     def report(self, env_frames):
         now = time.time()
@@ -204,7 +209,7 @@ class DummySampler(AlgorithmBase):
         while not self.terminate.value:
             try:
                 try:
-                    msgs = self.report_queue.get_many(timeout=0.1)
+                    msgs = self.report_queue.get_many(timeout=self.report_every_sec * 1.5)
                     for msg in msgs:
                         last_process_report[msg['proc_idx']] = time.time()
 
@@ -255,5 +260,5 @@ class DummySampler(AlgorithmBase):
         log.debug('Done joining!')
 
 
-# --algo=DUMMY_SAMPLER --env=doom_benchmark --env_frameskip=4 --res_w=128 --res_h=72 --wide_aspect_ratio=False --num_workers=20 --num_envs_per_worker=10 --sample_env_frames=2000000 --experiment=test
-# --algo=DUMMY_SAMPLER --env=dmlab_benchmark --env_frameskip=4 --num_workers=20 --num_envs_per_worker=10 --sample_env_frames=2000000 --experiment=test
+# python -m run_algorithm --algo=DUMMY_SAMPLER --env=doom_benchmark --env_frameskip=4 --res_w=128 --res_h=72 --wide_aspect_ratio=False --num_workers=20 --num_envs_per_worker=10 --sample_env_frames=2000000 --experiment=test
+# python -m run_algorithm --algo=DUMMY_SAMPLER --env=dmlab_benchmark --env_frameskip=4 --num_workers=20 --num_envs_per_worker=10 --sample_env_frames=2000000 --experiment=test

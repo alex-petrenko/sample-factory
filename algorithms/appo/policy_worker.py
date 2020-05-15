@@ -210,18 +210,33 @@ class PolicyWorker:
         last_report_samples = 0
         request_count = deque(maxlen=50)
 
+        # very conservative limit on the minimum number of requests to wait for
+        # this will almost guarantee that the system will continue collecting experience
+        # at max rate even when 2/3 of workers are stuck for some reason (e.g. doing a long env reset)
+        # Although if your workflow involves very lengthy operations that often freeze workers, it can be beneficial
+        # to set min_num_requests to 1 (at a cost of potential inefficiency, i.e. policy worker will use very small
+        # batches)
+        min_num_requests = self.cfg.num_workers // (self.cfg.num_policies * self.cfg.policy_workers_per_policy)
+        min_num_requests //= 3
+        min_num_requests = max(1, min_num_requests)
+
+        # Again, very conservative timer. Only wait a little bit, then continue operation.
+        wait_for_min_requests = 0.025
+
         while not self.terminate:
             try:
                 while self.stop_experience_collection[self.policy_id]:
                     with self.resume_experience_collection_cv:
                         self.resume_experience_collection_cv.wait(timeout=0.05)
 
-                try:
-                    with timing.timeit('wait_policy'), timing.add_time('wait_policy_total'):
-                        policy_requests = self.policy_queue.get_many(timeout=0.005)
-                    self.requests.extend(policy_requests)
-                except Empty:
-                    pass
+                waiting_started = time.time()
+                while len(self.requests) < min_num_requests and time.time() - waiting_started < wait_for_min_requests:
+                    try:
+                        with timing.timeit('wait_policy'), timing.add_time('wait_policy_total'):
+                            policy_requests = self.policy_queue.get_many(timeout=0.005)
+                        self.requests.extend(policy_requests)
+                    except Empty:
+                        pass
 
                 self._update_weights(timing)
 
