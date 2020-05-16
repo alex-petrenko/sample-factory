@@ -15,7 +15,7 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 
 formatter = ColoredFormatter(
-    "%(log_color)s[%(asctime)s][%(process)05d] %(message)s",
+    '%(log_color)s[%(asctime)s][%(process)05d] %(message)s',
     datefmt=None,
     reset=True,
     log_colors={

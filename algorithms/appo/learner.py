@@ -383,10 +383,17 @@ class LearnerWorker:
         return loss
 
     def _value_loss(self, new_values, old_values, target, clip_value):
-        value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
         value_original_loss = (new_values - target).pow(2)
-        value_clipped_loss = (value_clipped - target).pow(2)
-        value_loss = torch.max(value_original_loss, value_clipped_loss)
+
+        if clip_value > 0.0:
+            value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
+            value_clipped_loss = (value_clipped - target).pow(2)
+
+            # if unclipped, the two losses should be equal, and it does not matter which one is "chosen"
+            value_loss = torch.max(value_original_loss, value_clipped_loss)
+        else:
+            value_loss = value_original_loss
+
         value_loss = value_loss.mean()
         value_loss *= self.cfg.value_loss_coeff
 

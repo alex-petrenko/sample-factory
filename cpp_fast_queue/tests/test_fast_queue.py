@@ -22,7 +22,6 @@ def produce(q, p_idx, num_messages):
                 log.info('Produce: %d %d', i, p_idx)
             i += 1
         except Full:
-            # time.sleep(0.001)
             pass
         except Exception as exc:
             log.exception(exc)
@@ -39,7 +38,7 @@ def consume(q, p_idx, consume_many, total_num_messages=int(1e9)):
 
             for msg in msgs:
                 messages_received += 1
-                if msg[0] % 1000 == 0:
+                if msg[0] % 10000 == 0:
                     log.info('Consume: %r %d num_msgs: %d', msg, p_idx, len(msgs))
 
             if messages_received >= total_num_messages:
@@ -63,14 +62,14 @@ class TestFastQueue(TestCase):
     def test_multiproc(self):
         q = Queue()
 
-        consume_many = 1000
+        consume_many = 10
 
         producers = []
         consumers = []
-        for j in range(20):
-            p = multiprocessing.Process(target=produce, args=(q, j, 1000001))
+        for j in range(1):
+            p = multiprocessing.Process(target=produce, args=(q, j, 500001))
             producers.append(p)
-        for j in range(3):
+        for j in range(1):
             p = multiprocessing.Process(target=consume, args=(q, j, consume_many))
             consumers.append(p)
 
@@ -97,3 +96,25 @@ class TestFastQueue(TestCase):
         log.debug('Got object %r', res)
         self.assertEqual(py_obj, res)
 
+# fast queue 200K messages per producer
+# 20p 3c consume_many = 1: 29.9s
+# 20p 3c consume_many = 2: 17.2s
+# 20p 3c consume_many = 10: 4.7s
+# 20p 3c consume_many = 100: 2.4s
+# 20p 3c consume_many = 1000: 2.3s
+
+# 3p 20c consume_many = 1: 4.52s
+# 3p 20c consume_many = 2: 4.30s
+# 3p 20c consume_many = 10: 4.27s
+# 3p 20c consume_many = 100: 4.37s
+# 3p 20c consume_many = 1000: 4.29s
+
+# fast queue 500K messages per producer
+# 1p 1c consume_many = 1: 2.11s
+# 1p 1c consume_many = 2: 2.11s
+# 1p 1c consume_many = 10: 2.21s
+
+# multiprocessing.Queue
+# 20p 3c: 64s
+# 3p 20c: 18s
+# 1p 1c: 6.4s
