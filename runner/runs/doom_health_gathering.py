@@ -1,11 +1,9 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('seed', [1111, 2222]),
+    ('seed', [1111, 2222, 3333, 4444, 5555]),
     ('env', ['doom_health_gathering_supreme']),
     ('with_vtrace', ['True', 'False']),
-    ('gae_lambda', [0.95, 1.0]),
-    ('entropy_loss', [0.001, 0.003]),
 ])
 
 _experiments = [
@@ -17,4 +15,4 @@ _experiments = [
 ]
 
 
-RUN_DESCRIPTION = RunDescription('doom_health_gathering_v96_fs4', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription('doom_health_gathering_v97_fs4', experiments=_experiments)
