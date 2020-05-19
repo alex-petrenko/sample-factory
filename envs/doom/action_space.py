@@ -12,6 +12,20 @@ def key_to_action_basic(key):
     return table.get(key, None)
 
 
+def doom_turn_and_attack_only():
+    """
+    TURN_LEFT
+    TURN_RIGHT
+    ATTACK
+    """
+    space = gym.spaces.Tuple((
+        Discrete(3),  # noop, turn left, turn right
+        Discrete(2),  # noop, attack
+    ))
+
+    return space
+
+
 def doom_action_space_basic():
     """
     TURN_LEFT
@@ -25,6 +39,27 @@ def doom_action_space_basic():
     ))
 
     space.key_to_action = key_to_action_basic
+    return space
+
+
+def doom_action_space_extended():
+    """
+    This function assumes the following list of available buttons:
+    TURN_LEFT
+    TURN_RIGHT
+    MOVE_FORWARD
+    MOVE_BACKWARD
+    MOVE_LEFT
+    MOVE_RIGHT
+    ATTACK
+    """
+    space = gym.spaces.Tuple((
+        Discrete(3),  # noop, turn left, turn right
+        Discrete(3),  # noop, forward, backward
+        Discrete(3),  # noop, strafe left, strafe right
+        Discrete(2),  # noop, attack
+    ))
+
     return space
 
 

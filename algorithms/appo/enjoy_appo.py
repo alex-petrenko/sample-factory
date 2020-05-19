@@ -117,10 +117,9 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                     if all(done):
                         true_rewards.append(infos[0].get('true_reward', math.nan))
-                        log.info(
-                            'Episode finished at %d frames, true rew %.3f avg true rew %.3d',
-                            num_frames, true_rewards[-1], np.mean(true_rewards),
-                        )
+                        log.info('Episode finished at %d frames', num_frames)
+                        if not math.isnan(np.mean(true_rewards)):
+                            log.info('true rew %.3f avg true rew %.3f', true_rewards[-1], np.mean(true_rewards))
 
                         # VizDoom multiplayer stuff
                         # for player in [1, 2, 3, 4, 5, 6, 7, 8]:

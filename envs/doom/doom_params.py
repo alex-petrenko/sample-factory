@@ -8,8 +8,8 @@ def doom_override_defaults(env, parser):
         encoder_subtype='convnet_simple',
         encoder_custom='vizdoom',
         hidden_size=512,
-        obs_subtract_mean=128.0,
-        obs_scale=128.0,
+        obs_subtract_mean=0.0,
+        obs_scale=255.0,
         env_frameskip=4,
     )
 

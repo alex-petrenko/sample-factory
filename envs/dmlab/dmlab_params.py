@@ -7,7 +7,7 @@ def dmlab_override_defaults(env, parser):
         encoder_subtype='convnet_simple',
         encoder_custom=None,
         hidden_size=512,
-        obs_subtract_mean=128.0,
+        obs_subtract_mean=128.0,  # TODO: consider using mean 0.0 and scale 255.0, it seemed to have improved the result in Doom
         obs_scale=128.0,
         env_frameskip=4,
     )
