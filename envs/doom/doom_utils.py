@@ -89,11 +89,11 @@ DOOM_ENVS = [
     DoomSpec('doom_defend_the_center', 'defend_the_center.cfg', doom_turn_and_attack_only(), 1.0),
     DoomSpec('doom_defend_the_line', 'defend_the_line.cfg', doom_turn_and_attack_only(), 1.0),
     DoomSpec(
-        'doom_health_gathering', 'health_gathering.cfg', doom_action_space_basic(), 1.0,
+        'doom_health_gathering', 'health_gathering.cfg', Discrete(1 + 4), 1.0,
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
     DoomSpec(
-        'doom_health_gathering_supreme', 'health_gathering_supreme.cfg', doom_action_space_basic(), 1.0,
+        'doom_health_gathering_supreme', 'health_gathering_supreme.cfg', Discrete(1 + 4), 1.0,
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
 
