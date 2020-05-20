@@ -188,7 +188,7 @@ class ResBlock(nn.Module):
             identity = x
             out = self.res_block_core(x)
             with self.timing.add_time('res_block_plus'):
-                out.add_(identity)  # is this a valid use of an in-place operation?
+                out = out + identity
             return out
 
 
