@@ -57,14 +57,22 @@ def get_obs_shape(obs_space):
 
 
 def normalize_obs(obs_dict, cfg):
-    mean = cfg.obs_subtract_mean
-    scale = cfg.obs_scale
+    with torch.no_grad():
+        mean = cfg.obs_subtract_mean
+        scale = cfg.obs_scale
 
-    if obs_dict['obs'].dtype != torch.float:
-        obs_dict['obs'] = obs_dict['obs'].float()
+        if obs_dict['obs'].dtype != torch.float:
+            obs_dict['obs'] = obs_dict['obs'].float()
 
-    if abs(mean) > EPS and abs(scale - 1.0) > EPS:
-        obs_dict['obs'].sub_(mean).mul_(1.0 / scale)  # convert rgb observations to [-1, 1] in-place
+        if abs(mean) > EPS:
+            # TODO
+            # carefully check if this actually works! even though most in-place operations are not
+            # generally differentiable, we don't need differentiability in this part of the graph
+            # empirically, using non-zero mean makes training a lot slower, and we currently have no explanation why
+            obs_dict['obs'].sub_(mean)
+
+        if abs(scale - 1.0) > EPS:
+            obs_dict['obs'].mul_(1.0 / scale)
 
 
 class EncoderBase(nn.Module):
@@ -180,7 +188,7 @@ class ResBlock(nn.Module):
             identity = x
             out = self.res_block_core(x)
             with self.timing.add_time('res_block_plus'):
-                out.add_(identity)
+                out = out + identity
             return out
 
 

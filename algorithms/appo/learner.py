@@ -118,6 +118,7 @@ class LearnerWorker:
     def _broadcast_model_weights(self):
         state_dict = self.actor_critic.state_dict()
         policy_version = self.train_step
+        log.debug('Broadcast model weights for model version %d', policy_version)
         model_state = (policy_version, state_dict)
         for q in self.policy_worker_queues:
             q.put((TaskType.INIT_MODEL, model_state))
@@ -1309,3 +1310,13 @@ class LearnerWorker:
 # [2020-05-09 03:14:53,086][16392] Train loop timing: init: 1.3396, train_wait: 0.3579, epoch_init: 0.0013, minibatch_init: 0.0006, forward_head: 0.4487, bptt_initial: 0.0198, bptt_forward_core: 0.8462, bptt_rnn_states: 0.2294, bptt: 1.1992, tail: 0.2761, vtrace: 0.8823, losses: 0.2344, clip: 6.2738, update: 10.0010, after_optimizer: 0.0852, train: 15.5468
 # [2020-05-09 03:14:53,250][16344] Collected {0: 2015232}, FPS: 46004.4
 # [2020-05-09 03:14:53,250][16344] Timing: experience: 43.6271
+
+# Version V97 (change observation scaling for VizDoom to [0,1] instead of [-1,1])
+# python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v97_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+# [2020-05-18 20:03:54,747][19288] Env runner 0, CPU aff. [0], rollouts 780: timing wait_actor: 0.0000, waiting: 1.1639, reset: 14.3063, save_policy_outputs: 0.9860, env_step: 35.5967, overhead: 3.7164, complete_rollouts: 0.0164, enqueue_policy_requests: 0.2321, one_step: 0.0152, work: 42.5622
+# [2020-05-18 20:03:54,757][19289] Env runner 1, CPU aff. [1], rollouts 780: timing wait_actor: 0.0000, waiting: 1.2497, reset: 15.2774, save_policy_outputs: 0.9574, env_step: 35.5351, overhead: 3.7291, complete_rollouts: 0.0206, enqueue_policy_requests: 0.2408, one_step: 0.0153, work: 42.4875
+# [2020-05-18 20:03:54,997][19287] Policy worker avg. requests 6.92, timing: init: 1.8965, wait_policy_total: 13.0253, wait_policy: 0.0051, handle_policy_step: 33.3739, one_step: 0.0052, deserialize: 1.1815, obs_to_device: 4.3630, stack: 11.7451, forward: 11.0673, postprocess: 4.0783, weight_update: 0.0005
+# [2020-05-18 20:03:55,098][19275] GPU learner timing: extract: 0.1850, buffers: 0.0664, batching: 4.6744, buff_ready: 0.2426, tensors_gpu_float: 1.5915, squeeze: 0.0084, prepare: 6.6508, batcher_mem: 4.5997
+# [2020-05-18 20:03:55,404][19275] Train loop timing: init: 1.3000, train_wait: 0.4041, epoch_init: 0.0013, minibatch_init: 0.0006, forward_head: 0.4497, bptt_initial: 0.0182, bptt_forward_core: 0.8330, bptt_rnn_states: 0.2242, bptt: 1.1801, tail: 0.2728, vtrace: 0.8815, losses: 0.2466, clip: 6.2452, update: 9.8733, after_optimizer: 0.0879, train: 14.9738
+# [2020-05-18 20:03:55,558][19245] Collected {0: 2015232}, FPS: 46254.9
+# [2020-05-18 20:03:55,558][19245] Timing: experience: 43.3909

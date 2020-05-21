@@ -1,7 +1,8 @@
 from gym.spaces import Discrete
 
 from envs.doom.action_space import doom_action_space, \
-    doom_action_space_full_discretized, doom_action_space_basic, doom_action_space_discretized_no_weap
+    doom_action_space_full_discretized, doom_action_space_basic, doom_action_space_discretized_no_weap, \
+    doom_action_space_extended, doom_turn_and_attack_only
 from envs.doom.doom_gym import VizdoomEnv
 
 from envs.doom.doom_model import register_models
@@ -81,12 +82,15 @@ DOOM_ENVS = [
 
     # <==== Environments used in the paper ====>
 
+    # this is for comparison with other frameworks (wall-time test)
+    DoomSpec('doom_defend_the_center_flat_actions', 'defend_the_center.cfg', Discrete(1 + 3), 1.0),
+
     # "basic" single-player envs
 
-    DoomSpec('doom_my_way_home', 'my_way_home.cfg', Discrete(1 + 4), 1.0),
-    DoomSpec('doom_deadly_corridor', 'deadly_corridor.cfg', Discrete(1 + 7), 0.01),
-    DoomSpec('doom_defend_the_center', 'defend_the_center.cfg', Discrete(1 + 3), 1.0),
-    DoomSpec('doom_defend_the_line', 'defend_the_line.cfg', Discrete(1 + 3), 1.0),
+    DoomSpec('doom_my_way_home', 'my_way_home.cfg', doom_action_space_basic(), 1.0),
+    DoomSpec('doom_deadly_corridor', 'deadly_corridor.cfg', doom_action_space_extended(), 0.01),
+    DoomSpec('doom_defend_the_center', 'defend_the_center.cfg', doom_turn_and_attack_only(), 1.0),
+    DoomSpec('doom_defend_the_line', 'defend_the_line.cfg', doom_turn_and_attack_only(), 1.0),
     DoomSpec(
         'doom_health_gathering', 'health_gathering.cfg', Discrete(1 + 4), 1.0,
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
@@ -95,7 +99,6 @@ DOOM_ENVS = [
         'doom_health_gathering_supreme', 'health_gathering_supreme.cfg', Discrete(1 + 4), 1.0,
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
-
 
     # "challenging" single-player envs
     DoomSpec(

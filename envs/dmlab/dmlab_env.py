@@ -118,7 +118,7 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
         cfg.dmlab_use_level_cache, gpu_idx, spec.extra_cfg,
     )
 
-    if env_config:
+    if env_config and 'env_id' in env_config:
         env.seed(env_config['env_id'])
 
     if 'record_to' in cfg and cfg.record_to is not None:
