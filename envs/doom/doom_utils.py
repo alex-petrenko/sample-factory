@@ -82,6 +82,9 @@ DOOM_ENVS = [
 
     # <==== Environments used in the paper ====>
 
+    # this is for comparison with other frameworks (wall-time test)
+    DoomSpec('doom_defend_the_center_flat_actions', 'defend_the_center.cfg', Discrete(1 + 3), 1.0),
+
     # "basic" single-player envs
 
     DoomSpec('doom_my_way_home', 'my_way_home.cfg', doom_action_space_basic(), 1.0),
@@ -96,7 +99,6 @@ DOOM_ENVS = [
         'doom_health_gathering_supreme', 'health_gathering_supreme.cfg', Discrete(1 + 4), 1.0,
         extra_wrappers=[(DoomGatheringRewardShaping, {})],  # same as https://arxiv.org/pdf/1904.01806.pdf
     ),
-
 
     # "challenging" single-player envs
     DoomSpec(
