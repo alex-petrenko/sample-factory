@@ -25,3 +25,5 @@ if "bootstrap_value" in self.samples_np.agent:
     self.bootstrap_value_pair[alt][:] = self.agent.value(*agent_inputs_pair[alt])
 otherwise it crashes
 ```
+
+5) Run one of the scripts in this folder 

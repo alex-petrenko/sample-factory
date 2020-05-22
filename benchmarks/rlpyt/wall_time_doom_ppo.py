@@ -208,9 +208,23 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         env_kwargs=dict(game=game),
         batch_T=n_timestep,
         batch_B=n_env,
-        max_decorrelation_steps=0,
+        max_decorrelation_steps=1000,
     )
-    algo = PPO(minibatches=1, epochs=1)
+    algo = PPO(
+        learning_rate=0.0001,
+        value_loss_coeff=0.5,
+        entropy_loss_coeff=0.003,
+        OptimCls=torch.optim.Adam,
+        optim_kwargs=None,
+        clip_grad_norm=4.,
+        initial_optim_state_dict=None,
+        gae_lambda=0.95,
+        minibatches=1,
+        epochs=1,
+        ratio_clip=0.1,
+        linear_lr_schedule=False,
+        normalize_advantage=True,
+    )
 
     agent = DoomLstmAgent()
 
@@ -220,7 +234,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         algo=algo,
         agent=agent,
         sampler=sampler,
-        n_steps=50e6,
+        n_steps=1e8,
         log_interval_steps=1e5,
         affinity=affinity,
     )
