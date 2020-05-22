@@ -1,9 +1,9 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('env', ['doom_defend_the_center']),
-    ('num_envs_per_worker', [8, 16]),
-    ('batch_size', [2048]),
+    ('env', ['doom_defend_the_center', 'doom_my_way_home']),
+    ('num_envs_per_worker', [16, 24]),
+    ('adam_beta1', [0.0, 0.9]),
 ])
 
 _experiments = [

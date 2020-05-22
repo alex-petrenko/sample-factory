@@ -5,7 +5,7 @@ from unittest import TestCase
 
 from algorithms.utils.algo_utils import num_env_steps
 from algorithms.utils.arguments import default_cfg
-from algorithms.utils.multi_env import MultiEnv
+
 from envs.doom.doom_gym import VizdoomEnv
 from envs.doom.doom_utils import make_doom_env
 from utils.timing import Timing
@@ -153,3 +153,14 @@ class TestDmlab(TestCase):
 
     def test_dmlab_performance_multi(self):
         test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(3e5))
+
+
+class TestAtari(TestCase):
+    # noinspection PyUnusedLocal
+    @staticmethod
+    def make_env(env_config):
+        from envs.atari.atari_utils import make_atari_env
+        return make_atari_env('atari_breakout', cfg=default_cfg(env='atari_breakout'))
+
+    def test_atari_performance(self):
+        test_env_performance(self.make_env, 'atari')
