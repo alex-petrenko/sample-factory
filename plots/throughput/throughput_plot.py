@@ -15,15 +15,19 @@ system_2_xticks = [0, 500, 1000, 1500, 2000]
 system_2_xmax = 2000
 
 measurements = {
-    'system_1_doom': dict(filename='10_core_doom.csv', x_ticks=system_1_xticks, y_ticks=[10000, 20000, 30000, 40000, 50000, 60000], x_max=system_1_xmax, y_max=60000, y_label=False),
+    'system_1_atari': dict(filename='10_core_atari.csv', x_ticks=system_1_xticks,y_ticks=[10000, 20000, 30000, 40000, 50000, 60000], x_max=system_1_xmax, y_max=61000,y_label=False),
+    'system_1_doom': dict(filename='10_core_vizdoom.csv', x_ticks=system_1_xticks, y_ticks=[10000, 20000, 30000, 40000, 50000, 60000], x_max=system_1_xmax, y_max=61000, y_label=False),
     'system_1_dmlab': dict(filename='10_core_dmlab.csv', x_ticks=system_1_xticks, y_ticks=[2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000], x_max=system_1_xmax, y_max=16000, y_label=False),
-    'system_2_doom': dict(filename='36_core_doom.csv', x_ticks=system_2_xticks, y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax, y_max=140000, y_label=False),
+    'system_2_atari': dict(filename='36_core_atari.csv', x_ticks=system_2_xticks,y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax,y_max=143000, y_label=False),
+    'system_2_doom': dict(filename='36_core_vizdoom.csv', x_ticks=system_2_xticks, y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax, y_max=143000, y_label=False),
     'system_2_dmlab': dict(filename='36_core_dmlab.csv', x_ticks=system_2_xticks, y_ticks=[10000, 20000, 30000, 40000, 50000], x_max=system_2_xmax, y_max=50000, y_label=False),
 }
 
 titles = {
+    'system_1_atari': 'Atari throughput, System #1',
     'system_1_doom': 'VizDoom throughput, System #1',
     'system_1_dmlab': 'DMLab throughput, System #1',
+    'system_2_atari': 'Atari throughput, System #2',
     'system_2_doom': 'VizDoom throughput, System #2',
     'system_2_dmlab': 'DMLab throughput, System #2',
 }
@@ -33,11 +37,11 @@ titles = {
 matplotlib.rcParams['mathtext.fontset'] = 'cm'
 # matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['font.size'] = 8
-plt.rcParams['figure.figsize'] = (10.0, 2.5) #(2.5, 2.0) 7.5， 4
-
+plt.rcParams['figure.figsize'] = (10.0, 3.6) #(2.5, 2.0) 7.5， 4
 
 def build_plot(name, measurement, ax, count):
-    data = pd.read_csv(join('data', measurement['filename']))
+    # data = pd.read_csv(join('data', measurement['filename']))
+    data = pd.read_csv(measurement['filename'])
 
     x = data.values[:, 0]
 
@@ -55,10 +59,12 @@ def build_plot(name, measurement, ax, count):
     # rllib_y_p2 = rllib.values[4::, 1]
 
     # scalable_agent
-    sa_y_p1 = data.values[:, 4]
-
+    sa_y_p1 = data.values[:, 4].astype('float')
     # sa_x_p2 = scalable_agent.values[2::, 0]
     # sa_y_p2 = scalable_agent.values[2::, 1]
+
+    # seed-rl
+    seedrl_y_p1 = data.values[:, 5]
 
     mkfunc = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%dK' % int(x * 1e-3) if x >= 1e3 else '%d' % int(x)
     mkformatter = matplotlib.ticker.FuncFormatter(mkfunc)
@@ -76,9 +82,10 @@ def build_plot(name, measurement, ax, count):
     # Title and label
     title = titles[name]
     ax.set_title(title, fontsize=8)
-    ax.set_xlabel('Num. environments', fontsize=8)
+    if count >= 3:
+        ax.set_xlabel('Num. environments', fontsize=8)
 
-    if count == 0:
+    if count %3 == 0:
         ax.set_ylabel('FPS, frameskip = 4', fontsize=8)
 
     # for spine in ax.spines.values():
@@ -134,6 +141,10 @@ def build_plot(name, measurement, ax, count):
     sa_p1, = ax.plot(x, sa_y_p1, color='#d62728', label='DeepMind IMPALA', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
     # sa_p2, = plt.plot(sa_x_p2, sa_y_p2, color='#d62728', marker="x", markersize=marker_size_cross, linestyle=":")
 
+    # seel-rl
+    seed_rl, = ax.plot(x, seedrl_y_p1, color='#7F7F7F', label='SeedRL IMPALA', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
+
+
     # plot legend
     # sa_legend = plt.legend([sf_plot, rlpyt_plot, (rllib_p1, rllib_p2), (sa_p1, sa_p2)],
     #                        ['SampleFactory', 'rlpyt', 'rllib', 'IMPALA'], numpoints=1,
@@ -150,11 +161,10 @@ def main():
     # 5) Export in eps
     # 6) Markers. Little circles for every data point
     # 7) Dashed lines for missing data
-
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4)
+    fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2, 3)
     count = 0
 
-    ax = (ax1, ax2, ax3, ax4)
+    ax = (ax1, ax2, ax3, ax4, ax5, ax6)
     for name, measurement in measurements.items():
         build_plot(name, measurement, ax[count], count)
         count += 1
@@ -162,7 +172,7 @@ def main():
     handles, labels = ax[-1].get_legend_handles_labels()
     # fig.legend(handles, labels, loc='upper center')
     # lgd = fig.legend(handles, labels, bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left', ncol=4, mode="expand")
-    lgd = fig.legend(handles, labels, bbox_to_anchor=(0.1, 0.88, 0.8, 0.2), loc='lower left', ncol=4, mode="expand")
+    lgd = fig.legend(handles, labels, bbox_to_anchor=(0.05, 0.88, 0.9, 0.5), loc='lower left', ncol=5, mode="expand")
     lgd.set_in_layout(True)
 
     # plt.show()
