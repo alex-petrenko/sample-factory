@@ -83,6 +83,7 @@ DOOM_ENVS = [
     # <==== Environments used in the paper ====>
 
     # this is for comparison with other frameworks (wall-time test)
+    DoomSpec('doom_my_way_home_flat_actions', 'my_way_home.cfg', Discrete(1 + 4), 1.0),
     DoomSpec('doom_defend_the_center_flat_actions', 'defend_the_center.cfg', Discrete(1 + 3), 1.0),
 
     # "basic" single-player envs
