@@ -240,7 +240,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
     )
     config = dict(game=game)
     name = "ppo_" + game
-    log_dir = "doom_ppo"
+    log_dir = "doom_ppo_rlpyt_wall_time_" + game
 
     with logger_context(log_dir, run_ID, name, config):
         runner.train()
@@ -255,6 +255,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_parallel', help='number of sampler workers', type=int, default=12)
     parser.add_argument('--n_env', help='number of environments', type=int, default=16)
     parser.add_argument('--n_timestep', help='number of time steps', type=int, default=20)
+    parser.add_argument('--total_steps', help='total training duration in env samples (not considering frameskip)', type=int, default=25 * 1000 * 1000)
     parser.add_argument('--sample_mode', help='serial or parallel sampling',
                         type=str, default='serial', choices=['serial', 'cpu', 'gpu', 'alternating'])
 
