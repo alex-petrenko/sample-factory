@@ -177,7 +177,7 @@ class DoomLstmAgent(DoomMixin, AlternatingRecurrentCategoricalPgAgent):
 
 
 def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-1,
-                    n_env=-1, n_timestep=-1, sample_mode=None):
+                    n_env=-1, n_timestep=-1, sample_mode=None, total_steps=1):
     affinity = dict(cuda_idx=cuda_idx, workers_cpus=list(range(n_parallel)))
 
     gpu_cpu = "CPU" if cuda_idx is None else f"GPU {cuda_idx}"
@@ -234,7 +234,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         algo=algo,
         agent=agent,
         sampler=sampler,
-        n_steps=1e8,
+        n_steps=total_steps,
         log_interval_steps=1e5,
         affinity=affinity,
     )
@@ -268,4 +268,5 @@ if __name__ == "__main__":
         n_env=args.n_env,
         n_timestep=args.n_timestep,
         sample_mode=args.sample_mode,
+        total_steps=args.total_steps,
     )
