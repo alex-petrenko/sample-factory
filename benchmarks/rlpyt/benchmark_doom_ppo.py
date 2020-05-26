@@ -225,7 +225,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
         affinity=affinity,
     )
     config = dict(game=game)
-    name = "ppo_" + game
+    name = "ppo_" + game + str(n_env)
     log_dir = "doom_ppo"
 
     with logger_context(log_dir, run_ID, name, config):
