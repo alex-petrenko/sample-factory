@@ -4,11 +4,11 @@ from utils.utils import str2bool
 def dmlab_override_defaults(env, parser):
     parser.set_defaults(
         encoder_type='conv',
-        encoder_subtype='convnet_simple',
+        encoder_subtype='convnet_impala',
         encoder_custom=None,
         hidden_size=512,
-        obs_subtract_mean=128.0,  # TODO: consider using mean 0.0 and scale 255.0, it seemed to have improved the result in Doom
-        obs_scale=128.0,
+        obs_subtract_mean=0.0,
+        obs_scale=255.0,
         env_frameskip=4,
     )
 

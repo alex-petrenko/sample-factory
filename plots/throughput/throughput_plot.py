@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # sns.set()
+from utils.utils import ensure_dir_exists
 
 system_1_xticks = [0, 100, 200, 300, 400, 500, 600, 700]
 system_1_xmax = 700
@@ -184,7 +185,10 @@ def main():
 
     plt.tight_layout(rect=(0, 0, 1.0, 0.9))
     # plt.show()
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
+
+    plot_dir = ensure_dir_exists(os.path.join(os.getcwd(), '../final_plots'))
+
+    plt.savefig(os.path.join(plot_dir, f'../final_plots/{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
     # plt.savefig(os.path.join(os.getcwd(), f'../final_plots/{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0, bbox_extra_artists=(lgd,))
 
 

@@ -11,6 +11,7 @@ def doom_override_defaults(env, parser):
         obs_subtract_mean=0.0,
         obs_scale=255.0,
         env_frameskip=4,
+        fps=35,
     )
 
 

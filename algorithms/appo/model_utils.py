@@ -65,10 +65,6 @@ def normalize_obs(obs_dict, cfg):
             obs_dict['obs'] = obs_dict['obs'].float()
 
         if abs(mean) > EPS:
-            # TODO
-            # carefully check if this actually works! even though most in-place operations are not
-            # generally differentiable, we don't need differentiability in this part of the graph
-            # empirically, using non-zero mean makes training a lot slower, and we currently have no explanation why
             obs_dict['obs'].sub_(mean)
 
         if abs(scale - 1.0) > EPS:

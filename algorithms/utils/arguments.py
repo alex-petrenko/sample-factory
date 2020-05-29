@@ -50,11 +50,11 @@ def parse_args(argv=None, evaluation=False):
     # env-specific parameters (e.g. for Doom env)
     add_env_args(env, parser)
 
-    # env-specific default values for algo parameters (e.g. model size and convolutional head configuration)
-    env_override_defaults(env, parser)
-
     if evaluation:
         add_eval_args(parser)
+
+    # env-specific default values for algo parameters (e.g. model size and convolutional head configuration)
+    env_override_defaults(env, parser)
 
     # parse all the arguments (algo, env, and optionally evaluation)
     args = parser.parse_args(argv)
