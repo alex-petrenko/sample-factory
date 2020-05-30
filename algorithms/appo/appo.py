@@ -24,7 +24,7 @@ from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict
 
-import fast_queue
+import faster_fifo
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -196,7 +196,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         self.actor_workers = None
 
-        self.report_queue = fast_queue.Queue()
+        self.report_queue = faster_fifo.Queue()
         self.policy_workers = dict()
         self.policy_queues = dict()
 
@@ -336,7 +336,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
     # noinspection PyUnresolvedReferences
     def init_workers(self):
-        actor_queues = [fast_queue.Queue() for _ in range(self.cfg.num_workers)]
+        actor_queues = [faster_fifo.Queue() for _ in range(self.cfg.num_workers)]
 
         policy_worker_queues = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -365,7 +365,7 @@ class APPO(ReinforcementLearningAlgorithm):
         for policy_id in range(self.cfg.num_policies):
             self.policy_workers[policy_id] = []
 
-            policy_queue = fast_queue.Queue()
+            policy_queue = faster_fifo.Queue()
             self.policy_queues[policy_id] = policy_queue
 
             for i in range(self.cfg.policy_workers_per_policy):
