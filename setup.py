@@ -1,15 +1,4 @@
-from Cython.Build import cythonize
-from setuptools import setup, Extension
-
-
-extensions = [
-    Extension(
-        name='fast_queue',
-        sources=['fast_queue.pyx', 'cpp_fast_queue/cpp_lib/fast_queue.cpp'],
-        language='c++',
-        include_dirs=['cpp_fast_queue/cpp_lib'],
-    ),
-]
+from setuptools import setup
 
 setup(
     # Information
@@ -21,7 +10,5 @@ setup(
     keywords='asynchronous reinforcement learning policy gradient ppo impala',
 
     # Build instructions
-    ext_modules=cythonize(extensions),
-
     setup_requires=['setuptools>=45.2.0', 'cython>=0.29'],
 )

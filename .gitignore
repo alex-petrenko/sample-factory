@@ -118,6 +118,12 @@ train_dir_old/**
 .idea/doom-rl.iml
 .idea/misc.xml
 .idea/modules.xml
+.idea
+
+# vscode
+.vscode
+
+.tmp
 
 # macOS
 .DS_Store
@@ -132,4 +138,3 @@ train_dir_old/**
 *~
 
 cmake-build*
-fast_queue.cpp

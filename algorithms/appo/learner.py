@@ -14,7 +14,7 @@ import psutil
 import torch
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
-import fast_queue
+import faster_fifo
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars, \
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
 from algorithms.appo.model import create_actor_critic
@@ -61,7 +61,7 @@ class LearnerWorker:
         self.policy_lock = policy_lock
         self.resume_experience_collection_cv = resume_experience_collection_cv
 
-        self.task_queue = fast_queue.Queue()
+        self.task_queue = faster_fifo.Queue()
         self.report_queue = report_queue
 
         self.initialized_event = MultiprocessingEvent()
