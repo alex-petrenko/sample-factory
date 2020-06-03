@@ -234,7 +234,8 @@ def plot(env, key, interpolated_key, ax, count):
 
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)
-    y_plus_std = np.minimum(y_mean + y_std, y_np.max())
+    # y_plus_std = np.minimum(y_mean + y_std, y_np.max())
+    y_plus_std = y_mean + y_std
     y_minus_std = y_mean - y_std
 
     # Configuration
@@ -278,7 +279,7 @@ def plot(env, key, interpolated_key, ax, count):
     ax.set_xlim(xmin=-x_delta, xmax=x[-1] + x_delta)
 
     y_delta = 0.06 * max(np.max(y_mean), BASELINES[env])
-    ax.set_ylim(ymin=min(np.min(y_mean) - y_delta, 0.0), ymax=max(np.max(y_mean), BASELINES[env]) + y_delta)
+    ax.set_ylim(ymin=min(np.min(y_mean) - y_delta, 0.0), ymax=max(np.max(y_plus_std), BASELINES[env]) + y_delta)
     # plt.grid(False)
 
     # plt.ticklabel_format(style='sci', axis='x', scilimits=(8, 8))
@@ -372,7 +373,7 @@ def main():
     # plot_name = f'{env}_{key.replace("/", " ")}'
     plt.tight_layout()
     # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=1, wspace=0)
-    plt.subplots_adjust(wspace=0.12, hspace=0.15)
+    plt.subplots_adjust(wspace=0.16, hspace=0.18)
 
     plt.margins(0, 0)
     plot_name = f'six_final_plots'

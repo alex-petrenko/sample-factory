@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # sns.set()
+from plots.plot_utils import BLUE, DARK_GREY
 from utils.utils import ensure_dir_exists
 
 system_1_xticks = [0, 100, 200, 300, 400, 500, 600, 700]
@@ -16,7 +17,7 @@ system_2_xticks = [0, 500, 1000, 1500, 2000]
 system_2_xmax = 2000
 
 measurements = {
-    'system_1_atari': dict(filename='10_core_atari.csv', x_ticks=system_1_xticks,y_ticks=[10000, 20000, 30000, 40000, 50000, 60000], x_max=system_1_xmax, y_max=61000,y_label=False),
+    'system_1_atari': dict(filename='10_core_atari.csv', x_ticks=system_1_xticks,y_ticks=[10000, 20000, 30000, 40000, 50000], x_max=system_1_xmax, y_max=51000,y_label=False),
     'system_1_doom': dict(filename='10_core_vizdoom.csv', x_ticks=system_1_xticks, y_ticks=[10000, 20000, 30000, 40000, 50000, 60000], x_max=system_1_xmax, y_max=61000, y_label=False),
     'system_1_dmlab': dict(filename='10_core_dmlab.csv', x_ticks=system_1_xticks, y_ticks=[2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000], x_max=system_1_xmax, y_max=16000, y_label=False),
     'system_2_atari': dict(filename='36_core_atari.csv', x_ticks=system_2_xticks,y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax,y_max=143000, y_label=False),
@@ -38,7 +39,7 @@ titles = {
 matplotlib.rcParams['mathtext.fontset'] = 'cm'
 # matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['font.size'] = 8
-plt.rcParams['figure.figsize'] = (10.0, 3.6) #(2.5, 2.0) 7.5， 4
+plt.rcParams['figure.figsize'] = (10.0, 4.0) #(2.5, 2.0) 7.5， 4
 
 def build_plot(name, measurement, ax, count):
     # data = pd.read_csv(join('data', measurement['filename']))
@@ -131,8 +132,8 @@ def build_plot(name, measurement, ax, count):
 
     sf_plot, = ax.plot(x, sf_y, color='#FF7F0E', label='SampleFactory APPO', marker="o", markersize=marker_size, linewidth=lw)
 
-    # rlpyt
-    rlpyt_plot, = ax.plot(x, rlpyt_y, color='#1F77B4', label='rlpyt PPO', marker="o", markersize=marker_size, linewidth=lw)
+    # seed-rl
+    seed_rl, = ax.plot(x, seedrl_y_p1, color=BLUE, label='SeedRL V-trace', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
 
     # plt.plot(rllib_x_p1, rllib_y_p1,  color='skyblue', label='rllib',marker="o")
     rllib_p1, = ax.plot(x, rllib_y_p1, color='#2CA02C', label='RLlib IMPALA', marker="o", markersize=marker_size, linewidth=lw)
@@ -142,8 +143,8 @@ def build_plot(name, measurement, ax, count):
     sa_p1, = ax.plot(x, sa_y_p1, color='#d62728', label='DeepMind IMPALA', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
     # sa_p2, = plt.plot(sa_x_p2, sa_y_p2, color='#d62728', marker="x", markersize=marker_size_cross, linestyle=":")
 
-    # seel-rl
-    seed_rl, = ax.plot(x, seedrl_y_p1, color='#7F7F7F', label='SeedRL IMPALA', marker="o", markersize=marker_size, linewidth=lw)  # label='scalable_agent',
+    # rlpyt
+    rlpyt_plot, = ax.plot(x, rlpyt_y, color=DARK_GREY, label='rlpyt PPO', marker="o", markersize=marker_size, linewidth=lw)
 
 
     # plot legend

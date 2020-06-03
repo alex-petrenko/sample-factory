@@ -8,6 +8,7 @@ import matplotlib
 BLUE = '#1F77B4'
 ORANGE = '#FF7F0E'
 GREEN = '#2CA02C'
+DARK_GREY = '#7F7F7F'
 
 
 def copy_plot_themes():
