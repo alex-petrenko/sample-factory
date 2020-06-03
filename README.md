@@ -31,12 +31,6 @@ conda env create -f environment.yml
 conda activate sample-factory
 ```
 
-- Build a fast C++ IPC queue extension
-
-```
-python setup.py build_ext --inplace --force
-```
-
 ## Running experiments
 
 ```

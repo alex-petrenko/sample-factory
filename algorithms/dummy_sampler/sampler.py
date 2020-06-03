@@ -19,7 +19,7 @@ import numpy as np
 
 from algorithms.algorithm import AlgorithmBase
 from envs.create_env import create_env
-from fast_queue import Queue
+from faster_fifo import Queue
 from utils.timing import Timing
 from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool
 
