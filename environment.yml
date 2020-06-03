@@ -99,7 +99,7 @@ dependencies:
     - cloudpickle==1.3.0
     - colorlog==4.1.0
     - cython==0.29.15
-    - faster-fifo==1.0.0
+    - faster-fifo==1.0.4
     - filelock==3.0.12
     - future==0.18.2
     - gast==0.2.2
