@@ -7,10 +7,8 @@ from queue import Empty, Queue
 import cv2
 import filelock
 import gym
-import numpy as np
 from filelock import FileLock
 
-from algorithms.utils.multi_env import MultiEnv, MsgType
 from envs.doom.doom_gym import doom_lock_file
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
@@ -338,50 +336,3 @@ class MultiAgentEnv(gym.Env):
 
         worker.result_queue.task_done()
         worker.task_queue.join()
-
-
-class MultiAgentEnvAggregator(MultiEnv):
-    """
-    Vectorized wrapper for multi-agent envs. This is for a special usecase where all agents (policies) are the same,
-    and therefore each agent in a multi-env can be treated as a separate env.
-    """
-    def __init__(self, num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing=True):
-        tmp_env = make_env_func(None)
-        if hasattr(tmp_env, 'num_agents'):
-            self.num_agents = tmp_env.num_agents
-        else:
-            raise Exception('Expected multi-agent environment')
-
-        global DEFAULT_UDP_PORT
-        DEFAULT_UDP_PORT = find_available_port(DEFAULT_UDP_PORT)
-        log.debug('Default UDP port changed to %r', DEFAULT_UDP_PORT)
-        time.sleep(0.1)
-
-        super().__init__(num_envs, num_workers, make_env_func, stats_episodes, use_multiprocessing)
-
-    def _num_actors(self):
-        return self.num_envs * self.num_agents
-
-    def _preprocess_data(self, data):
-        """Each multi-agent environment expects a dict, with one action per agent."""
-        if data is None:
-            data = [None] * self.num_agents * self.num_envs
-
-        assert len(data) == self.num_agents * self.num_envs
-        data = np.array(data)
-        data = np.reshape(data, [self.num_envs, self.num_agents] + list(data.shape[1:]))
-        data = np.split(data, self.num_workers)
-        assert len(data) == self.num_workers
-        return data
-
-    def step(self, actions, reset=None):
-        if reset is None:
-            results = self.await_tasks(actions, MsgType.STEP_REAL)
-        else:
-            results = self.await_tasks(list(zip(actions, reset)), MsgType.STEP_REAL_RESET)
-
-        log.info('After await tasks')
-        observations, rewards, dones, infos = zip(*results)
-
-        self._update_stats(rewards, dones, infos)
-        return observations, rewards, dones, infos
