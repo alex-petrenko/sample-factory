@@ -21,7 +21,7 @@ measurements = {
     'system_1_doom': dict(filename='10_core_vizdoom.csv', x_ticks=system_1_xticks, y_ticks=[10000, 20000, 30000, 40000, 50000, 60000], x_max=system_1_xmax, y_max=61000, y_label=False),
     'system_1_dmlab': dict(filename='10_core_dmlab.csv', x_ticks=system_1_xticks, y_ticks=[2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000], x_max=system_1_xmax, y_max=16000, y_label=False),
     'system_2_atari': dict(filename='36_core_atari.csv', x_ticks=system_2_xticks,y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax,y_max=143000, y_label=False),
-    'system_2_doom': dict(filename='36_core_vizdoom.csv', x_ticks=system_2_xticks, y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax, y_max=143000, y_label=False),
+    'system_2_doom': dict(filename='36_core_vizdoom.csv', x_ticks=system_2_xticks, y_ticks=[20000, 40000, 60000, 80000, 100000, 120000, 140000], x_max=system_2_xmax, y_max=150000, y_label=False),
     'system_2_dmlab': dict(filename='36_core_dmlab.csv', x_ticks=system_2_xticks, y_ticks=[10000, 20000, 30000, 40000, 50000], x_max=system_2_xmax, y_max=50000, y_label=False),
 }
 
