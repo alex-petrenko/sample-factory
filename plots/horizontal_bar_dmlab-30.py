@@ -73,7 +73,7 @@ sample_factory_performance = np.array(sample_factory_performance)
 impala_performance = np.array(impala_performance)
 width = 0.4
 ax.barh(y_pos, sample_factory_performance, width, align='center', color='#ff7f0e', label='Sample Factory')
-ax.barh(y_pos + width, impala_performance, width, align='center', color='#1f77b4', label='IMPALA')
+ax.barh(y_pos + width, impala_performance, width, align='center', color='#1f77b4', label='DeepMind IMPALA')
 # ax.legend(bbox_to_anchor=(0., 1.02, 1., 0.102), ncol=2, loc='lower left', mode='expend')
 handles, labels = ax.get_legend_handles_labels()
 

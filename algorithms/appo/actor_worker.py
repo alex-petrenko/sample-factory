@@ -1,4 +1,3 @@
-import random
 import signal
 import time
 from collections import OrderedDict
@@ -10,6 +9,7 @@ import torch
 from torch.multiprocessing import Process as TorchProcess
 
 from algorithms.appo.appo_utils import TaskType, make_env_func
+from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
@@ -58,7 +58,7 @@ class ActorState:
         self, cfg, env, worker_idx, split_idx, env_idx, agent_idx,
         traj_tensors, num_traj_buffers,
         policy_outputs_info, policy_output_tensors,
-        pbt_reward_shaping,
+        pbt_reward_shaping, policy_mgr,
     ):
         self.cfg = cfg
         self.env = env
@@ -67,7 +67,8 @@ class ActorState:
         self.env_idx = env_idx
         self.agent_idx = agent_idx
 
-        self.curr_policy_id = self._sample_random_policy()
+        self.policy_mgr = policy_mgr
+        self.curr_policy_id = self.policy_mgr.get_policy_for_agent(agent_idx)
         self._env_set_curr_policy()
 
         self.traj_tensors = traj_tensors
@@ -94,9 +95,6 @@ class ActorState:
         self.new_episode = False
 
         self.pbt_reward_shaping = pbt_reward_shaping
-
-    def _sample_random_policy(self):
-        return random.randint(0, self.cfg.num_policies - 1)
 
     def _env_set_curr_policy(self):
         """
@@ -154,7 +152,7 @@ class ActorState:
         self.rollout_env_steps = 0
 
         if self.new_episode:
-            new_policy_id = self._sample_random_policy()
+            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
                 self._env_set_curr_policy()
@@ -181,7 +179,10 @@ class ActorState:
 
 
 class VectorEnvRunner:
-    def __init__(self, cfg, num_envs, worker_idx, split_idx, num_agents, shared_buffers, pbt_reward_shaping):
+    def __init__(
+        self, cfg, num_envs, worker_idx, split_idx, num_agents, shared_buffers, pbt_reward_shaping, policy_mgr,
+    ):
+
         self.cfg = cfg
 
         self.num_envs = num_envs
@@ -203,6 +204,8 @@ class VectorEnvRunner:
         self.envs, self.actor_states, self.episode_rewards = [], [], []
 
         self.pbt_reward_shaping = pbt_reward_shaping
+
+        self.policy_mgr = policy_mgr
 
     def init(self):
         for env_i in range(self.num_envs):
@@ -228,7 +231,7 @@ class VectorEnvRunner:
                     self.cfg, env, self.worker_idx, self.split_idx, env_i, agent_idx,
                     agent_traj_tensors, self.num_traj_buffers,
                     self.policy_outputs, self.policy_output_tensors[env_i, agent_idx],
-                    self.pbt_reward_shaping,
+                    self.pbt_reward_shaping, self.policy_mgr,
                 )
                 actor_states_env.append(actor_state)
                 episode_rewards_env.append(0.0)
@@ -479,6 +482,8 @@ class ActorWorker:
 
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
+        self.policy_mgr = PolicyManager(self.num_agents, self.cfg.num_policies)
+
         self.process = TorchProcess(target=self._run, daemon=True)
         self.process.start()
 
@@ -497,7 +502,7 @@ class ActorWorker:
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
                 self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.num_agents,
-                self.shared_buffers, self.reward_shaping,
+                self.shared_buffers, self.reward_shaping, self.policy_mgr,
             )
             env_runner.init()
             self.env_runners.append(env_runner)
