@@ -179,10 +179,7 @@ class ActorState:
 
 
 class VectorEnvRunner:
-    def __init__(
-        self, cfg, num_envs, worker_idx, split_idx, num_agents, shared_buffers, pbt_reward_shaping, policy_mgr,
-    ):
-
+    def __init__(self, cfg, num_envs, worker_idx, split_idx, num_agents, shared_buffers, pbt_reward_shaping):
         self.cfg = cfg
 
         self.num_envs = num_envs
@@ -205,7 +202,7 @@ class VectorEnvRunner:
 
         self.pbt_reward_shaping = pbt_reward_shaping
 
-        self.policy_mgr = policy_mgr
+        self.policy_mgr = PolicyManager(self.num_agents, self.cfg.num_policies)
 
     def init(self):
         for env_i in range(self.num_envs):
@@ -482,8 +479,6 @@ class ActorWorker:
 
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
-        self.policy_mgr = PolicyManager(self.num_agents, self.cfg.num_policies)
-
         self.process = TorchProcess(target=self._run, daemon=True)
         self.process.start()
 
@@ -502,7 +497,7 @@ class ActorWorker:
         for split_idx in range(self.num_splits):
             env_runner = VectorEnvRunner(
                 self.cfg, self.vector_size // self.num_splits, self.worker_idx, split_idx, self.num_agents,
-                self.shared_buffers, self.reward_shaping, self.policy_mgr,
+                self.shared_buffers, self.reward_shaping,
             )
             env_runner.init()
             self.env_runners.append(env_runner)

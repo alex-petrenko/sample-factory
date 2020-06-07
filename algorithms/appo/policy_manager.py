@@ -1,4 +1,6 @@
 import random
+
+import numpy as np
 import time
 
 
@@ -21,17 +23,19 @@ class PolicyManager:
     """
 
     def __init__(self, num_agents, num_policies):
+        self.rng = np.random.RandomState(seed=random.randint(0, 2**32 - 1))
+
         self.num_agents = num_agents
         self.num_policies = num_policies
 
-        self.curr_policies_per_agent = []
+        self.curr_policies_per_agent = None
         self._resample()
 
         self.last_sampled = time.time()
-        self.resample_interval_sec = 30
+        self.resample_interval_sec = 10
 
     def _resample(self):
-        self.curr_policies_per_agent = [random.randint(0, self.num_policies - 1) for _ in range(self.num_agents)]
+        self.curr_policies_per_agent = [self.rng.randint(0, self.num_policies) for _ in range(self.num_agents)]
 
     def get_policy_for_agent(self, agent_idx):
         now = time.time()
