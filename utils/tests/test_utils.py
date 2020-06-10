@@ -1,8 +1,12 @@
 from unittest import TestCase
 from utils.utils import cores_for_worker_process
+from utils.network import is_udp_port_available
 
 
 class TestNetwork(TestCase):
+    def test_udp(self):
+        is_udp_port_available(50301)
+
     def test_cpu_affinity(self):
         num_workers = 44
         cpu_count = 20
