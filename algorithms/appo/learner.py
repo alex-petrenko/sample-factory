@@ -6,7 +6,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 from os.path import join
-from queue import Empty, Queue
+from queue import Empty, Queue, Full
 from threading import Thread
 
 import numpy as np
@@ -828,7 +828,11 @@ class LearnerWorker:
                 stats['stats'] = memory_stats('learner', self.device)
 
         self.is_training = False
-        self.report_queue.put(stats)
+
+        try:
+            self.report_queue.put(stats)
+        except Full:
+            log.warning('Could not report training stats, the report queue is full!')
 
     def _train_loop(self):
         timing = Timing()

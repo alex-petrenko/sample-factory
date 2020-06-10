@@ -196,7 +196,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         self.actor_workers = None
 
-        self.report_queue = faster_fifo.Queue()
+        self.report_queue = faster_fifo.Queue(20 * 1000 * 1000)
         self.policy_workers = dict()
         self.policy_queues = dict()
 
