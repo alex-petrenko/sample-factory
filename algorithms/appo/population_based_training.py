@@ -6,6 +6,7 @@ import os
 import random
 import time
 from enum import Enum
+from faster_fifo import Full
 from os.path import join
 
 import numpy as np
@@ -236,7 +237,11 @@ class PopulationBasedTraining:
         log.debug('Sending latest reward scheme to actors for policy %d...', policy_id)
         for actor_worker in self.actor_workers:
             reward_scheme_task = (PbtTask.UPDATE_REWARD_SCHEME, (policy_id, self.policy_reward_shaping[policy_id]))
-            actor_worker.task_queue.put((TaskType.PBT, reward_scheme_task))
+            task = (TaskType.PBT, reward_scheme_task)
+            try:
+                actor_worker.task_queue.put(task, timeout=0.1)
+            except Full:
+                log.warning('Could not add task %r to queue, it is likely that worker died', task)
 
     @staticmethod
     def _write_dict_summaries(dictionary, writer, name, env_steps):
