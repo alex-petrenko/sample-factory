@@ -49,8 +49,13 @@ def run(run_description, args):
     while len(processes) > 0 or next_experiment is not None:
         while can_squeeze_another_process() and next_experiment is not None:
             cmd, name, root_dir, exp_env_vars = next_experiment
-            cmd_tokens = [sys.executable, '-m']
-            cmd_tokens += cmd.split(' ')
+
+            cmd_tokens = cmd.split(' ')
+
+            # workaround to make sure we're running the correct python executable from our virtual env
+            if cmd_tokens[0] == 'python':
+                cmd_tokens[0] = sys.executable
+                log.debug('Using Python executable %s', cmd_tokens[0])
 
             logfile = open(join(experiment_dir(name, root_dir), 'log.txt'), 'wb')
             envvars = os.environ.copy()
