@@ -3,7 +3,7 @@ import sys
 import argparse
 
 
-def parse_args():
+def runner_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--run', default=None, type=str, help='Name of the python script that describes the run, e.g. doom_battle_hybrid')
     parser.add_argument('--runner', default='processes', choices=['processes', 'slurm'])
@@ -13,7 +13,11 @@ def parse_args():
     parser.add_argument('--experiments_per_gpu', default=-1, type=int, help='How many experiments can we squeeze on a single GPU (-1 for not altering CUDA_VISIBLE_DEVICES at all)')
     parser.add_argument('--max_parallel', default=4, type=int, help='Maximum simultaneous experiments')
 
-    args = parser.parse_args()
+    return parser
+
+
+def parse_args():
+    args = runner_argparser().parse_args(sys.argv[1:])
     return args
 
 

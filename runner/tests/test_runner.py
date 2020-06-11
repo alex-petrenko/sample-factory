@@ -6,6 +6,7 @@ import numpy as np
 
 from unittest import TestCase
 
+from runner.run import runner_argparser
 from runner.run_description import ParamGrid, ParamList, Experiment, RunDescription
 from runner.run_processes import run
 from utils.utils import experiments_dir
@@ -79,8 +80,13 @@ class TestRunner(TestCase):
             Experiment('test_echo2', 'echo', echo_params.generate_params(randomize=False)),
         ]
         root_dir_name = '__test_run__'
-        rd = RunDescription(root_dir_name, experiments, max_parallel=10)
-        run(rd)
+        rd = RunDescription(root_dir_name, experiments)
+
+        args = runner_argparser().parse_args([])
+        args.max_parallel = 8
+        args.pause_between = 0
+
+        run(rd, args)
         logging.disable(logging.NOTSET)
 
         shutil.rmtree(join(experiments_dir(), root_dir_name))
