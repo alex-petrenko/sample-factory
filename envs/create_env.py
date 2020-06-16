@@ -1,3 +1,6 @@
+from envs.env_registry import global_env_registry
+
+
 def create_env(full_env_name, cfg=None, env_config=None):
     """
     Factory function that creates environment instances.
@@ -14,8 +17,7 @@ def create_env(full_env_name, cfg=None, env_config=None):
     :return: environment instance
     """
 
-    join
-
-    ensure_env_registry_initialized()
-
+    env_registry = global_env_registry()
+    env_registry_entry = env_registry.resolve_env_name(full_env_name)
+    env = env_registry_entry.make_env_func(full_env_name, cfg=cfg, env_config=env_config)
     return env

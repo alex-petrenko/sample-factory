@@ -22,15 +22,11 @@ from algorithms.appo.shared_buffers import SharedBuffers
 from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISODIC_STATS_PROCESSING
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
-    ensure_dir_exists, list_child_processes, kill_processes, AttrDict
+    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename
 
 import faster_fifo
 
 torch.multiprocessing.set_sharing_strategy('file_system')
-
-
-def done_filename(cfg):
-    return join(experiment_dir(cfg=cfg), 'done')
 
 
 class APPO(ReinforcementLearningAlgorithm):

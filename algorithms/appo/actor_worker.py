@@ -673,4 +673,3 @@ class ActorWorker:
 
     def join(self):
         join_or_kill(self.process)
-

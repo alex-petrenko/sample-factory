@@ -1,6 +1,3 @@
-from utils.utils import str2bool
-
-
 def mujoco_override_defaults(env, parser):
     parser.set_defaults(
         encoder_type='mlp',
