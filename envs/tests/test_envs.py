@@ -55,36 +55,37 @@ def test_env_performance(make_env, env_type, verbose=False):
     log.debug('Took %.3f sec to collect %d frames on one CPU, %.1f FPS', t.experience, total_num_frames, fps)
     log.debug('Avg. reset time %.3f s', t.reset / num_resets)
     log.debug('Timing: %s', t)
-
     env.close()
 
 
-def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=100000):
-    t = Timing()
-    frames = 0
-
-    with t.timeit('init'):
-        multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
-
-    with t.timeit('first_reset'):
-        multi_env.reset()
-
-    next_print = print_step = 10000
-
-    with t.timeit('experience'):
-        while frames < total_num_frames:
-            _, rew, done, info = multi_env.step([multi_env.action_space.sample()] * num_envs)
-            frames += num_env_steps(info)
-            if frames > next_print:
-                log.info('Collected %d frames of experience...', frames)
-                next_print += print_step
-
-    fps = total_num_frames / t.experience
-    log.debug('%s performance:', env_type)
-    log.debug('Took %.3f sec to collect %d frames in parallel, %.1f FPS', t.experience, total_num_frames, fps)
-    log.debug('Timing: %s', t)
-
-    multi_env.close()
+# def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=1000):
+#     t = Timing()
+#     frames = 0
+#
+#     with t.timeit('init'):
+#         multi_env = make_env(AttrDict({'num_envs': num_envs,
+#                                        'num_envs_per_worker': num_workers}))
+#         # multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
+#
+#     with t.timeit('first_reset'):
+#         multi_env.reset()
+#
+#     next_print = print_step = 10000
+#
+#     with t.timeit('experience'):
+#         while frames < total_num_frames:
+#             _, rew, done, info = multi_env.step([multi_env.action_space.sample()] * num_envs)
+#             frames += num_env_steps(info)
+#             if frames > next_print:
+#                 log.info('Collected %d frames of experience...', frames)
+#                 next_print += print_step
+#
+#     fps = total_num_frames / t.experience
+#     log.debug('%s performance:', env_type)
+#     log.debug('Took %.3f sec to collect %d frames in parallel, %.1f FPS', t.experience, total_num_frames, fps)
+#     log.debug('Timing: %s', t)
+#
+#     multi_env.close()
 
 
 class TestDoom(TestCase):
@@ -103,14 +104,14 @@ class TestDoom(TestCase):
     def test_doom_performance(self):
         test_env_performance(self.make_env_singleplayer, 'doom')
 
-    def test_doom_performance_multi(self):
-        test_multi_env_performance(self.make_env_singleplayer, 'doom', num_envs=200, num_workers=20)
+    # def test_doom_performance_multi(self):
+    #     test_multi_env_performance(self.make_env_singleplayer, 'doom', num_envs=2, num_workers=2)
 
     def test_doom_performance_bots_hybrid_actions(self):
         test_env_performance(self.make_env_bots_hybrid_actions, 'doom')
 
-    def test_doom_performance_bots_multi(self):
-        test_multi_env_performance(self.make_env_bots_hybrid_actions, 'doom', num_envs=200, num_workers=20)
+    # def test_doom_performance_bots_multi(self):
+    #     test_multi_env_performance(self.make_env_bots_hybrid_actions, 'doom', num_envs=200, num_workers=20)
 
     def test_doom_two_color(self):
         test_env_performance(
@@ -146,13 +147,13 @@ class TestDmlab(TestCase):
     @staticmethod
     def make_env(env_config):
         from envs.dmlab.dmlab_env import make_dmlab_env
-        return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'))
+        return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'), env_config=None)
 
     def test_dmlab_performance(self):
         test_env_performance(self.make_env, 'dmlab')
 
-    def test_dmlab_performance_multi(self):
-        test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(3e5))
+    # def test_dmlab_performance_multi(self):
+    #     test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(3e5))
 
 
 class TestAtari(TestCase):
