@@ -1,6 +1,6 @@
 import logging
 import shutil
-from os.path import join
+from os.path import join, split
 
 import numpy as np
 
@@ -49,9 +49,10 @@ class TestRunner(TestCase):
         cmd = 'python super_rl.py'
         ex = Experiment('test', cmd, params.generate_params(randomize=False))
         cmds = ex.generate_experiments()
-        for command, name in cmds:
+        for index, value in enumerate(cmds):
+            command, name = value
             self.assertTrue(command.startswith(cmd))
-            self.assertTrue(name.startswith('test'))
+            self.assertTrue(name.startswith(f'0{index}_test'))
 
     def test_descr(self):
         params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
@@ -61,10 +62,11 @@ class TestRunner(TestCase):
         ]
         rd = RunDescription('test_run', experiments)
         cmds = rd.generate_experiments()
-        for command, name, root_dir in cmds:
+        for command, name, root_dir, env_vars in cmds:
+            exp_name = split(root_dir)[-1]
             self.assertIn('--experiment', command)
             self.assertIn('--experiments_root', command)
-            self.assertTrue(name.startswith('test'))
+            self.assertTrue(exp_name in name)
             self.assertTrue(root_dir.startswith('test_run'))
 
     def test_simple_cmd(self):

@@ -26,7 +26,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'mujoco_hopper',
-    'run_algorithm --env=mujoco_hopper --train_for_env_steps=7000000 --algo=APPO --num_workers=16 --num_envs_per_worker=4 --benchmark=False --with_pbt=False',
+    'python -m run_algorithm --env=mujoco_hopper --train_for_env_steps=7000000 --algo=APPO --num_workers=16 --num_envs_per_worker=4 --benchmark=False --with_pbt=False',
     _params.generate_params(randomize=False),
 )
 
