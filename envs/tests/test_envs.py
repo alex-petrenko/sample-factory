@@ -1,5 +1,6 @@
 import os
 import time
+import unittest
 from os.path import join
 from unittest import TestCase
 
@@ -58,36 +59,6 @@ def test_env_performance(make_env, env_type, verbose=False):
     env.close()
 
 
-# def test_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=1000):
-#     t = Timing()
-#     frames = 0
-#
-#     with t.timeit('init'):
-#         multi_env = make_env(AttrDict({'num_envs': num_envs,
-#                                        'num_envs_per_worker': num_workers}))
-#         # multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
-#
-#     with t.timeit('first_reset'):
-#         multi_env.reset()
-#
-#     next_print = print_step = 10000
-#
-#     with t.timeit('experience'):
-#         while frames < total_num_frames:
-#             _, rew, done, info = multi_env.step([multi_env.action_space.sample()] * num_envs)
-#             frames += num_env_steps(info)
-#             if frames > next_print:
-#                 log.info('Collected %d frames of experience...', frames)
-#                 next_print += print_step
-#
-#     fps = total_num_frames / t.experience
-#     log.debug('%s performance:', env_type)
-#     log.debug('Took %.3f sec to collect %d frames in parallel, %.1f FPS', t.experience, total_num_frames, fps)
-#     log.debug('Timing: %s', t)
-#
-#     multi_env.close()
-
-
 class TestDoom(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
@@ -140,22 +111,6 @@ class TestDoom(TestCase):
         self.assertFalse(os.path.isfile(demo_path))
 
 
-class TestDmlab(TestCase):
-    """DMLab tests fail too often just randomly (EGL errors), so we're skipping them for now."""
-
-    # noinspection PyUnusedLocal
-    @staticmethod
-    def make_env(env_config):
-        from envs.dmlab.dmlab_env import make_dmlab_env
-        return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'), env_config=None)
-
-    def test_dmlab_performance(self):
-        test_env_performance(self.make_env, 'dmlab')
-
-    # def test_dmlab_performance_multi(self):
-    #     test_multi_env_performance(self.make_env, 'dmlab', num_envs=64, num_workers=64, total_num_frames=int(3e5))
-
-
 class TestAtari(TestCase):
     # noinspection PyUnusedLocal
     @staticmethod
@@ -165,3 +120,23 @@ class TestAtari(TestCase):
 
     def test_atari_performance(self):
         test_env_performance(self.make_env, 'atari')
+
+
+class TestDmlab(TestCase):
+    """DMLab tests fail too often just randomly (EGL errors), so we're skipping them for now."""
+
+    try:
+        import deepmind_lab
+        dmlab_installed = True
+    except ImportError:
+        dmlab_installed = False
+
+    # noinspection PyUnusedLocal
+    @staticmethod
+    def make_env(env_config):
+        from envs.dmlab.dmlab_env import make_dmlab_env
+        return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'), env_config=None)
+
+    @unittest.skipUnless(dmlab_installed, 'Dmlab package not installed')
+    def test_dmlab_performance(self):
+        test_env_performance(self.make_env, 'dmlab')

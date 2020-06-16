@@ -1,3 +1,4 @@
+import unittest
 from unittest import TestCase
 
 from algorithms.utils.arguments import default_cfg
@@ -6,6 +7,13 @@ from utils.utils import log
 
 
 class TestMinigrid(TestCase):
+    try:
+        import gym_minigrid
+        gym_minigrid_installed = True
+    except ImportError:
+        gym_minigrid_installed = False
+
+    @unittest.skipUnless(gym_minigrid_installed, 'Gym minigrid not installed')
     def test_minigrid_env(self):
         env_name = 'MiniGrid-Empty-Random-5x5-v0'
         env = create_env(env_name, cfg=default_cfg(env=env_name))
