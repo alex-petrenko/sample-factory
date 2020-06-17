@@ -2,7 +2,7 @@ import torch
 
 from torch import nn
 
-from algorithms.appo.model_utils import ENCODER_REGISTRY, create_standard_encoder, EncoderBase
+from algorithms.appo.model_utils import ENCODER_REGISTRY, create_standard_encoder, EncoderBase, register_custom_encoder
 from envs.dmlab.dmlab30 import DMLAB_VOCABULARY_SIZE, DMLAB_INSTRUCTIONS
 from utils.utils import log
 
@@ -86,5 +86,4 @@ class DmlabEncoder(EncoderBase):
 
 
 def dmlab_register_models():
-    log.info('Adding model class %r to registry', DmlabEncoder)
-    ENCODER_REGISTRY['dmlab_instructions'] = DmlabEncoder
+    register_custom_encoder('dmlab_instructions', DmlabEncoder)

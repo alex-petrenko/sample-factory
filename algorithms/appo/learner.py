@@ -32,7 +32,7 @@ class LearnerWorker:
         self, worker_idx, policy_id, cfg, obs_space, action_space, report_queue, policy_worker_queues, shared_buffers,
         policy_lock, resume_experience_collection_cv,
     ):
-        log.info('Initializing GPU learner %d for policy %d', worker_idx, policy_id)
+        log.info('Initializing the learner %d for policy %d', worker_idx, policy_id)
 
         self.worker_idx = worker_idx
         self.policy_id = policy_id
@@ -107,9 +107,9 @@ class LearnerWorker:
         self.process.start()
 
     def _init(self):
-        log.info('Waiting for GPU learner to initialize...')
+        log.info('Waiting for the learner to initialize...')
         self.train_thread_initialized.wait()
-        log.info('GPU learner %d initialized', self.worker_idx)
+        log.info('Learner %d initialized', self.worker_idx)
         self.initialized_event.set()
 
     def _terminate(self):
@@ -198,17 +198,17 @@ class LearnerWorker:
                 self._mark_rollout_buffer_free(r)
 
         with timing.add_time('tensors_gpu_float'):
-            gpu_buffer = self._copy_train_data_to_gpu(buffer)
+            device_buffer = self._copy_train_data_to_device(buffer)
 
         with timing.add_time('squeeze'):
             # will squeeze actions only in simple categorical case
             tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
             for tensor_name in tensors_to_squeeze:
-                gpu_buffer[tensor_name].squeeze_()
+                device_buffer[tensor_name].squeeze_()
 
         # we no longer need the cached buffer, and can put it back into the pool
         self.tensor_batch_pool.put(buffer)
-        return gpu_buffer
+        return device_buffer
 
     def _macro_batch_size(self, batch_size):
         return self.cfg.num_batches_per_iteration * batch_size
@@ -399,17 +399,17 @@ class LearnerWorker:
             tensor = v.detach().to(device, copy=True).type(dtype)
             gpu_d[k] = tensor
 
-    def _copy_train_data_to_gpu(self, buffer):
-        gpu_buffer = copy_dict_structure(buffer)
+    def _copy_train_data_to_device(self, buffer):
+        device_buffer = copy_dict_structure(buffer)
 
         for key, item in buffer.items():
             if key == 'obs':
-                self._prepare_observations(item, gpu_buffer['obs'])
+                self._prepare_observations(item, device_buffer['obs'])
             else:
-                gpu_tensor = item.detach().to(self.device, copy=True, non_blocking=True)
-                gpu_buffer[key] = gpu_tensor.float()
+                device_tensor = item.detach().to(self.device, copy=True, non_blocking=True)
+                device_buffer[key] = device_tensor.float()
 
-        return gpu_buffer
+        return device_buffer
 
     def _train(self, gpu_buffer, batch_size, experience_size, timing):
         with torch.no_grad():

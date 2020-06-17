@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from algorithms.appo.model_utils import ENCODER_REGISTRY, get_obs_shape, nonlinearity, \
-    create_standard_encoder, EncoderBase
+from algorithms.appo.model_utils import get_obs_shape, nonlinearity, create_standard_encoder, EncoderBase, \
+    register_custom_encoder
 from algorithms.utils.pytorch_utils import calc_num_elements
 from utils.utils import log
 
@@ -39,5 +39,4 @@ class VizdoomEncoder(EncoderBase):
 
 
 def register_models():
-    log.info('Adding model class %r to registry', VizdoomEncoder)
-    ENCODER_REGISTRY['vizdoom'] = VizdoomEncoder
+    register_custom_encoder('vizdoom', VizdoomEncoder)

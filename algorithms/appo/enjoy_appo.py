@@ -14,10 +14,10 @@ from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.model import create_actor_critic
 from algorithms.appo.model_utils import get_hidden_size
 from algorithms.utils.action_distributions import ContinuousActionDistribution
+from algorithms.utils.algo_utils import ExperimentStatus
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
 from envs.create_env import create_env
-from utils.timing import Timing
 from utils.utils import log, AttrDict
 
 
@@ -56,7 +56,8 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
         env.unwrapped.reset_on_init = False
 
     actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
-    device = torch.device('cuda')
+
+    device = torch.device('cpu' if cfg.device == 'cpu' else 'cuda')
     actor_critic.model_to_device(device)
 
     policy_id = cfg.policy_index
@@ -148,11 +149,14 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
     env.close()
 
+    return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
+
 
 def main():
     """Script entry point."""
     cfg = parse_args(evaluation=True)
-    return enjoy(cfg)
+    status, avg_reward = enjoy(cfg)
+    return status
 
 
 if __name__ == '__main__':

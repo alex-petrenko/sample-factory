@@ -1,7 +1,6 @@
 from utils.utils import str2bool
 
 
-# noinspection PyUnusedLocal
 def add_doom_env_args(env, parser):
     p = parser
 

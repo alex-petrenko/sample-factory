@@ -28,7 +28,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
 
         p.add_argument('--device', default='gpu', type=str, choices=['gpu', 'cpu'], help='CPU training is only recommended for smaller e.g. MLP policies')
 
-        p.add_argument('--save_every_sec', default=300, type=int, help='Checkpointing rate')
+        p.add_argument('--save_every_sec', default=120, type=int, help='Checkpointing rate')
         p.add_argument('--keep_checkpoints', default=3, type=int, help='Number of model checkpoints to keep')
         p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
 

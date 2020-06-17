@@ -14,6 +14,14 @@ from utils.utils import log
 ENCODER_REGISTRY = dict()
 
 
+def register_custom_encoder(custom_encoder_name, encoder_cls):
+    assert issubclass(encoder_cls, EncoderBase), 'Custom encoders must be derived from EncoderBase'
+    assert custom_encoder_name not in ENCODER_REGISTRY
+
+    log.debug('Adding model class %r to registry (with name %s)', encoder_cls, custom_encoder_name)
+    ENCODER_REGISTRY[custom_encoder_name] = encoder_cls
+
+
 def get_hidden_size(cfg):
     if cfg.use_rnn:
         size = cfg.hidden_size
@@ -24,7 +32,7 @@ def get_hidden_size(cfg):
         size *= 2
 
     if not cfg.actor_critic_share_weights:
-        # both actor and critic need separate weights
+        # actor and critic need separate states
         size *= 2
 
     return size
@@ -155,8 +163,6 @@ class ConvEncoder(EncoderBase):
         self.init_fc_blocks(self.conv_head_out_size)
 
     def forward(self, obs_dict):
-        normalize_obs(obs_dict, self.cfg)
-
         x = self.conv_head(obs_dict['obs'])
         x = x.view(-1, self.conv_head_out_size)
 
@@ -224,7 +230,6 @@ class ResnetEncoder(EncoderBase):
         self.init_fc_blocks(self.conv_head_out_size)
 
     def forward(self, obs_dict):
-        normalize_obs(obs_dict, self.cfg)
         x = self.conv_head(obs_dict['obs'])
         x = x.view(-1, self.conv_head_out_size)
 
@@ -262,9 +267,7 @@ class MlpEncoder(EncoderBase):
         self.init_fc_blocks(fc_encoder_layer)
 
     def forward(self, obs_dict):
-        normalize_obs(obs_dict, self.cfg)
         x = self.mlp_head(obs_dict['obs'])
-
         x = self.forward_fc_blocks(x)
         return x
 

@@ -107,8 +107,12 @@ def extend_array_by(x, extra_len):
     return np.append(x, tail, axis=0)
 
 
-def set_global_cuda_envvars():
-    available_gpus = get_available_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
+def set_global_cuda_envvars(cfg):
+    if cfg.device == 'cpu':
+        available_gpus = ''
+    else:
+        available_gpus = get_available_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
+
     if CUDA_ENVVAR not in os.environ:
         os.environ[CUDA_ENVVAR] = available_gpus
     os.environ[f'{CUDA_ENVVAR}_backup_'] = os.environ[CUDA_ENVVAR]
@@ -117,7 +121,7 @@ def set_global_cuda_envvars():
 
 def cuda_envvars(policy_id):
     orig_visible_devices = os.environ[f'{CUDA_ENVVAR}_backup_']
-    available_gpus = [int(g) for g in orig_visible_devices.split(',')]
+    available_gpus = [int(g) for g in orig_visible_devices.split(',') if g]
     log.info('Available GPUs: %r', available_gpus)
 
     # it is crucial to proper CUDA_VISIBLE_DEVICES properly before calling any torch.cuda methods, e.g. device_count()
@@ -125,13 +129,14 @@ def cuda_envvars(policy_id):
 
     num_gpus = len(available_gpus)
     if num_gpus == 0:
-        raise RuntimeError('This app requires a GPU and none seem to be available, sorry')
+        log.warning('Not using a GPU for policy %d', policy_id)
+        os.environ[CUDA_ENVVAR] = ''
+    else:
+        gpu_idx_to_use = available_gpus[policy_id % num_gpus]
+        os.environ[CUDA_ENVVAR] = str(gpu_idx_to_use)
+        log.info('Set environment var %s to %r for policy %d', CUDA_ENVVAR, os.environ[CUDA_ENVVAR], policy_id)
 
-    gpu_idx_to_use = available_gpus[policy_id % num_gpus]
-    os.environ[CUDA_ENVVAR] = str(gpu_idx_to_use)
-    log.info('Set environment var %s to %r for policy %d', CUDA_ENVVAR, os.environ[CUDA_ENVVAR], policy_id)
-
-    log.debug('Visible devices: %r', torch.cuda.device_count())
+        log.debug('Visible devices: %r', torch.cuda.device_count())
 
 
 def memory_stats(process, device):
@@ -139,7 +144,7 @@ def memory_stats(process, device):
     stats = {f'memory_{process}': memory_mb}
     if device.type != 'cpu':
         gpu_mem_mb = torch.cuda.memory_allocated(device) / 1e6
-        gpu_cache_mb = torch.cuda.memory_cached(device) / 1e6
+        gpu_cache_mb = torch.cuda.memory_reserved(device) / 1e6
         stats.update({f'gpu_mem_{process}': gpu_mem_mb, f'gpu_cache_{process}': gpu_cache_mb})
 
     return stats

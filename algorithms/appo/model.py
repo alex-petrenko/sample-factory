@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from algorithms.appo.model_utils import create_encoder, create_core, ActionParameterizationContinuousNonAdaptiveStddev, \
-    ActionParameterizationDefault
+    ActionParameterizationDefault, normalize_obs
 from algorithms.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
 from utils.timing import Timing
 from utils.utils import AttrDict
@@ -83,6 +83,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         self.train()  # eval() for inference?
 
     def forward_head(self, obs_dict):
+        normalize_obs(obs_dict, self.cfg)
         x = self.encoder(obs_dict)
         return x
 
@@ -167,6 +168,8 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         return head_output, fake_rnn_states
 
     def forward_head(self, obs_dict):
+        normalize_obs(obs_dict, self.cfg)
+
         head_outputs = []
         for e in self.encoders:
             head_outputs.append(e(obs_dict))

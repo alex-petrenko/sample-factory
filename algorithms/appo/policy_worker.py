@@ -28,7 +28,7 @@ class PolicyWorker:
         self, worker_idx, policy_id, cfg, obs_space, action_space, shared_buffers, policy_queue, actor_queues,
         report_queue, task_queue, policy_lock, resume_experience_collection_cv
     ):
-        log.info('Initializing GPU worker %d for policy %d', worker_idx, policy_id)
+        log.info('Initializing policy worker %d for policy %d', worker_idx, policy_id)
 
         self.worker_idx = worker_idx
         self.policy_id = policy_id
@@ -73,7 +73,7 @@ class PolicyWorker:
         self.process.start()
 
     def _init(self):
-        log.info('GPU worker %d-%d initialized', self.policy_id, self.worker_idx)
+        log.info('Policy worker %d-%d initialized', self.policy_id, self.worker_idx)
         self.initialized = True
         self.initialized_event.set()
 
@@ -191,10 +191,9 @@ class PolicyWorker:
 
             torch.set_num_threads(1)
 
-            # we should already see only one CUDA device, because of env vars
-            assert torch.cuda.device_count() == 1
-
             if self.cfg.device == 'gpu':
+                # we should already see only one CUDA device, because of env vars
+                assert torch.cuda.device_count() == 1
                 self.device = torch.device('cuda', index=0)
             else:
                 self.device = torch.device('cpu')

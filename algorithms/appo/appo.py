@@ -19,7 +19,8 @@ from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
 from algorithms.appo.shared_buffers import SharedBuffers
-from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISODIC_STATS_PROCESSING
+from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISODIC_STATS_PROCESSING, \
+    ExperimentStatus
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename
@@ -89,10 +90,19 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
 
         # APPO-specific
-        p.add_argument('--num_envs_per_worker', default=2, type=int, help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-20 range for Atari/VizDoom')
-        p.add_argument('--worker_num_splits', default=2, type=int, help='Typically we split a vector of envs into two parts for "double buffered" experience collection')
+        p.add_argument(
+            '--num_envs_per_worker', default=2, type=int,
+            help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-30 range for Atari/VizDoom'
+                 'Must be even for double-buffered sampling!',
+        )
+        p.add_argument(
+            '--worker_num_splits', default=2, type=int,
+            help='Typically we split a vector of envs into two parts for "double buffered" experience collection'
+                 'Set this to 1 to disable double buffering. Set this to 3 for triple buffering!',
+        )
+
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
-        p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of GPU workers that compute policy forward pass (per policy)')
+        p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of policy workers that compute forward pass (per policy)')
         p.add_argument(
             '--max_policy_lag', default=40, type=int,
             help='Max policy lag in policy versions. Discard all experience that is older than this. This should be increased for configurations with multiple epochs of SGD because naturally'
@@ -340,7 +350,7 @@ class APPO(ReinforcementLearningAlgorithm):
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker_queues[policy_id].append(TorchJoinableQueue())
 
-        log.info('Initializing GPU learners...')
+        log.info('Initializing learners...')
         policy_locks = [multiprocessing.Lock() for _ in range(self.cfg.num_policies)]
         resume_experience_collection_cv = [multiprocessing.Condition() for _ in range(self.cfg.num_policies)]
 
@@ -357,7 +367,7 @@ class APPO(ReinforcementLearningAlgorithm):
             self.learner_workers[policy_id] = learner_worker
             learner_idx += 1
 
-        log.info('Initializing GPU workers...')
+        log.info('Initializing policy workers...')
         for policy_id in range(self.cfg.num_policies):
             self.policy_workers[policy_id] = []
 
@@ -538,9 +548,11 @@ class APPO(ReinforcementLearningAlgorithm):
         return end
 
     def run(self):
+        status = ExperimentStatus.SUCCESS
+
         if os.path.isfile(done_filename(self.cfg)):
             log.warning('Training already finished! Remove "done" file to continue training')
-            return
+            return status
 
         self.init_workers()
         self.init_pbt()
@@ -550,6 +562,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         timing = Timing()
         with timing.timeit('experience'):
+            # noinspection PyBroadException
             try:
                 while not self._should_end_training():
                     try:
@@ -570,8 +583,10 @@ class APPO(ReinforcementLearningAlgorithm):
 
             except Exception:
                 log.exception('Exception in driver loop')
+                status = ExperimentStatus.FAILURE
             except KeyboardInterrupt:
                 log.warning('Keyboard interrupt detected in driver loop, exiting...')
+                status = ExperimentStatus.INTERRUPTED
 
         for learner in self.learner_workers.values():
             # timeout is needed here because some environments may crash on KeyboardInterrupt (e.g. VizDoom)
@@ -608,3 +623,5 @@ class APPO(ReinforcementLearningAlgorithm):
 
         time.sleep(0.5)
         log.info('Done!')
+
+        return status

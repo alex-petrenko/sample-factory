@@ -4,13 +4,13 @@ import time
 from os.path import join
 
 import cv2
-import numpy as np
 
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
 from envs.create_env import create_env
 from utils.utils import log
 
 
+# noinspection DuplicatedCode
 def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     cfg = load_from_checkpoint(cfg)
 

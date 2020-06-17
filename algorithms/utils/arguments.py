@@ -24,10 +24,11 @@ def get_algo_class(algo):
     return algo_class
 
 
-def parse_args(argv=None, evaluation=False):
+def arg_parser(argv=None, evaluation=False):
     if argv is None:
         argv = sys.argv[1:]
 
+    # noinspection PyTypeChecker
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # common args
@@ -55,6 +56,16 @@ def parse_args(argv=None, evaluation=False):
 
     # env-specific default values for algo parameters (e.g. model size and convolutional head configuration)
     env_override_defaults(env, parser)
+
+    return parser
+
+
+def parse_args(argv=None, evaluation=False, parser=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    if parser is None:
+        parser = arg_parser(argv, evaluation)
 
     # parse all the arguments (algo, env, and optionally evaluation)
     args = parser.parse_args(argv)

@@ -123,8 +123,6 @@ dependencies:
     - scipy==1.4.1
     - tensorboard==1.15.0
     - tensorboardx==2.0
-    - tensorflow-estimator==1.15.1
-    - tensorflow-gpu==1.15.0
     - termcolor==1.1.0
     - werkzeug==1.0.0
     - wrapt==1.12.1

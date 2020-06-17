@@ -4,6 +4,10 @@ import numpy as np
 EPS = 1e-8
 
 
+class ExperimentStatus:
+    SUCCESS, FAILURE, INTERRUPTED = range(3)
+
+
 # custom experiments can define functions to this list to do something extra with the raw episode summaries
 # coming from the environments
 EXTRA_EPISODIC_STATS_PROCESSING = []
