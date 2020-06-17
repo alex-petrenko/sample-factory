@@ -4,6 +4,8 @@ import argparse
 import logging
 import operator
 import os
+import pwd
+import tempfile
 from _queue import Empty
 from os.path import join
 
@@ -159,8 +161,8 @@ def figure_to_numpy(figure):
 
 # os-related stuff
 
-def get_free_disk_space_mb():
-    statvfs = os.statvfs(project_root())
+def get_free_disk_space_mb(cfg):
+    statvfs = os.statvfs(experiments_dir(cfg))
     return statvfs.f_frsize * statvfs.f_bfree / (1024 * 1024)
 
 
@@ -272,31 +274,27 @@ def remove_if_exists(file):
         os.remove(file)
 
 
-def project_root():
-    """
-    Keep models, parameters and summaries at the root of this project's directory tree.
-    :return: full path to the root dir of this project.
-    """
-    return os.path.dirname(os.path.dirname(__file__))
+def get_username():
+    return pwd.getpwuid(os.getuid()).pw_name
 
 
 def project_tmp_dir():
-    return ensure_dir_exists(join(project_root(), '.tmp'))
+    tmp_dir_name = f'sample_factory_{get_username()}'
+    return ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name))
 
 
-def experiments_dir():
-    return ensure_dir_exists(join(project_root(), 'train_dir'))
+def experiments_dir(cfg):
+    return ensure_dir_exists(cfg.train_dir)
 
 
-def experiment_dir(experiment=None, experiments_root=None, cfg=None):
-    if cfg is not None:
-        experiment = cfg.experiment
-        experiments_root = cfg.experiments_root
+def experiment_dir(cfg):
+    experiment = cfg.experiment
+    experiments_root = cfg.experiments_root
 
     if experiments_root is None:
-        experiments_root = experiments_dir()
+        experiments_root = experiments_dir(cfg)
     else:
-        experiments_root = join(experiments_dir(), experiments_root)
+        experiments_root = join(experiments_dir(cfg), experiments_root)
 
     return ensure_dir_exists(join(experiments_root, experiment))
 

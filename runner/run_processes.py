@@ -6,11 +6,12 @@ import sys
 import time
 from os.path import join
 
-from utils.utils import log, experiment_dir
+from utils.utils import log, ensure_dir_exists
 
 
 def run(run_description, args):
     experiments = run_description.experiments
+    train_dir = run_description.train_dir
     max_parallel = args.max_parallel
 
     log.info('Starting processes with base cmds: %r', [e.cmd for e in experiments])
@@ -57,7 +58,8 @@ def run(run_description, args):
                 cmd_tokens[0] = sys.executable
                 log.debug('Using Python executable %s', cmd_tokens[0])
 
-            logfile = open(join(experiment_dir(name, root_dir), 'log.txt'), 'wb')
+            experiment_dir = ensure_dir_exists(join(train_dir, root_dir, name))
+            logfile = open(join(experiment_dir, 'log.txt'), 'wb')
             envvars = os.environ.copy()
 
             best_gpu = None

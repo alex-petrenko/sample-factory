@@ -6,9 +6,9 @@ import shutil
 from os.path import join
 from pathlib import Path
 
-from utils.utils import ensure_dir_exists, log, project_root, safe_ensure_dir_exists
+from utils.utils import ensure_dir_exists, log, safe_ensure_dir_exists
 
-LEVEL_CACHE_DIR = join(project_root(), '.dmlab_cache')
+
 LEVEL_SEEDS_FILE_EXT = 'dm_lvl_seeds'
 
 # we normally don't need more than 30 tasks (for DMLab-30), or 57 tasks for Atari
@@ -210,7 +210,7 @@ class DmlabLevelCacheGlobal:
             # anymore in this experiment
 
 
-def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experiment, num_policies):
+def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experiment, num_policies, level_cache_dir):
     global DMLAB_GLOBAL_LEVEL_CACHE
 
     assert multiprocessing.current_process().name == 'MainProcess', \
@@ -222,5 +222,5 @@ def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experim
         # it's easiest to achieve
 
         log.info('Initializing level cache for policy %d...', policy_id)
-        cache = DmlabLevelCacheGlobal(LEVEL_CACHE_DIR, experiment_dir, all_levels_for_experiment, policy_id)
+        cache = DmlabLevelCacheGlobal(level_cache_dir, experiment_dir, all_levels_for_experiment, policy_id)
         DMLAB_GLOBAL_LEVEL_CACHE.append(cache)

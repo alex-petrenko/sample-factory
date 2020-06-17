@@ -1,4 +1,6 @@
+import os
 from abc import ABC
+from os.path import join
 
 from utils.utils import str2bool
 
@@ -23,6 +25,8 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
     @classmethod
     def add_cli_args(cls, parser):
         p = parser
+
+        p.add_argument('--train_dir', default=join(os.getcwd(), 'train_dir'), type=str, help='Root for all experiments')
 
         p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
 

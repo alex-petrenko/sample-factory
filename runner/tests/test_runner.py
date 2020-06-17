@@ -9,7 +9,7 @@ from unittest import TestCase
 from runner.run import runner_argparser
 from runner.run_description import ParamGrid, ParamList, Experiment, RunDescription
 from runner.run_processes import run
-from utils.utils import experiments_dir
+from utils.utils import experiments_dir, ensure_dir_exists, project_tmp_dir
 
 
 class TestParams(TestCase):
@@ -81,8 +81,9 @@ class TestRunner(TestCase):
             Experiment('test_echo1', 'echo', echo_params.generate_params(randomize=True)),
             Experiment('test_echo2', 'echo', echo_params.generate_params(randomize=False)),
         ]
+        train_dir = ensure_dir_exists(join(project_tmp_dir(), 'tests'))
         root_dir_name = '__test_run__'
-        rd = RunDescription(root_dir_name, experiments)
+        rd = RunDescription(root_dir_name, experiments, train_dir)
 
         args = runner_argparser().parse_args([])
         args.max_parallel = 8
@@ -91,4 +92,4 @@ class TestRunner(TestCase):
         run(rd, args)
         logging.disable(logging.NOTSET)
 
-        shutil.rmtree(join(experiments_dir(), root_dir_name))
+        shutil.rmtree(join(train_dir, root_dir_name))

@@ -1,8 +1,11 @@
+import os
 from os.path import join
 
 import numpy as np
 
 from collections import OrderedDict
+
+from utils.utils import ensure_dir_exists
 
 
 class ParamGenerator:
@@ -123,7 +126,11 @@ class Experiment:
 
 
 class RunDescription:
-    def __init__(self, run_name, experiments):
+    def __init__(self, run_name, experiments, train_dir=None):
+        if train_dir is None:
+            train_dir = ensure_dir_exists(join(os.getcwd(), 'train_dir'))
+
+        self.train_dir = train_dir
         self.run_name = run_name
         self.experiments = experiments
 
@@ -134,5 +141,5 @@ class RunDescription:
 
             experiment_cmds = experiment.generate_experiments()
             for experiment_cmd, experiment_name in experiment_cmds:
-                experiment_cmd += f' --experiments_root {root_dir}'
+                experiment_cmd += f' --train_dir={self.train_dir} --experiments_root={root_dir}'
                 yield experiment_cmd, experiment_name, root_dir, experiment.env_vars

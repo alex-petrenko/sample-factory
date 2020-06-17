@@ -11,8 +11,7 @@ import numpy as np
 
 from envs.dmlab import dmlab_level_cache
 from envs.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
-from envs.dmlab.dmlab_level_cache import LEVEL_CACHE_DIR
-from utils.utils import log
+from utils.utils import log, ensure_dir_exists
 
 ACTION_SET = (
     (0, 0, 0, 1, 0, 0, 0),    # Forward
@@ -58,7 +57,8 @@ def string_to_hash_bucket(s, vocabulary_size):
 class DmlabGymEnv(gym.Env):
     def __init__(
             self, task_id, level, action_repeat, res_w, res_h, benchmark_mode, renderer, dataset_path,
-            with_instructions, extended_action_set, use_level_cache, gpu_index, extra_cfg=None,
+            with_instructions, extended_action_set, use_level_cache, level_cache_path,
+            gpu_index, extra_cfg=None,
     ):
         self.width = res_w
         self.height = res_h
@@ -98,6 +98,8 @@ class DmlabGymEnv(gym.Env):
         config = {k: str(v) for k, v in config.items()}
 
         self.use_level_cache = use_level_cache
+        self.level_cache_path = ensure_dir_exists(level_cache_path)
+
         env_level_cache = self if use_level_cache else None
         self.env_uses_level_cache = False  # will be set to True when this env instance queries the cache
         self.last_reset_seed = None
@@ -225,7 +227,7 @@ class DmlabGymEnv(gym.Env):
             self.env_uses_level_cache = True
             # log.debug('Env %s uses level cache!', self.level_name)
 
-        path = join(LEVEL_CACHE_DIR, key)
+        path = join(self.level_cache_path, key)
 
         if os.path.isfile(path):
             # copy the cached file to the path expected by DeepMind Lab

@@ -49,7 +49,7 @@ class TestExample(TestCase):
         cfg.device = 'cpu'
         status, avg_reward = enjoy(cfg, max_num_episodes=5)
 
-        directory = experiment_dir(experiment=experiment_name, cfg=cfg)
+        directory = experiment_dir(cfg=cfg)
         self.assertTrue(isdir(directory))
         shutil.rmtree(directory)
         self.assertFalse(isdir(directory))

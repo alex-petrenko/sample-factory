@@ -96,8 +96,8 @@ class DmlabLevelGenerator(DummySampler):
                             last_report_frames = total_env_frames
                             self.report_queue.put(dict(proc_idx=proc_idx, env_frames=frames_since_last_report))
 
-                            if get_free_disk_space_mb() < 3 * 1024:
-                                log.error('Not enough disk space! %d', get_free_disk_space_mb())
+                            if get_free_disk_space_mb(self.cfg) < 3 * 1024:
+                                log.error('Not enough disk space! %d', get_free_disk_space_mb(self.cfg))
                                 time.sleep(200)
         except:
             log.exception('Unknown exception')

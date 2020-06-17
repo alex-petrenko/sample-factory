@@ -2,10 +2,10 @@
 
 1) Use standard sample-factory Conda environment setup (main README file for instructions)
 
-2) From the root of the repo:
+2) Install Ray from the wheel you will find next to this readme:
 
 ```
-pip install setup/ray-0.8.0.dev2-cp37-cp37m-manylinux1_x86_64.whl
+pip install ray-0.8.0.dev2-cp37-cp37m-manylinux1_x86_64.whl
 
 ```
 

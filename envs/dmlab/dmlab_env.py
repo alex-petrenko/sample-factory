@@ -115,7 +115,8 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
     env = DmlabGymEnv(
         task_id, level, skip_frames, cfg.res_w, cfg.res_h, cfg.dmlab_throughput_benchmark, cfg.dmlab_renderer,
         get_dataset_path(cfg), cfg.dmlab_with_instructions, cfg.dmlab_extended_action_set,
-        cfg.dmlab_use_level_cache, gpu_idx, spec.extra_cfg,
+        cfg.dmlab_use_level_cache, cfg.dmlab_level_cache_path,
+        gpu_idx, spec.extra_cfg,
     )
 
     if env_config and 'env_id' in env_config:
@@ -248,6 +249,7 @@ def ensure_initialized(cfg, env_name):
 
     num_policies = cfg.num_policies if hasattr(cfg, 'num_policies') else 1
     all_levels = list_all_levels_for_experiment(env_name)
-    dmlab_ensure_global_cache_initialized(experiment_dir(cfg=cfg), all_levels, num_policies)
+    level_cache_dir = cfg.dmlab_level_cache_path
+    dmlab_ensure_global_cache_initialized(experiment_dir(cfg=cfg), all_levels, num_policies, level_cache_dir)
 
     DMLAB_INITIALIZED = True

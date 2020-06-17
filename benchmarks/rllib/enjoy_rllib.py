@@ -20,7 +20,7 @@ from ray.tune.util import merge_dicts
 
 from benchmarks.rllib.vizdoom_model import VizdoomVisionNetwork
 from envs.ray_envs import register_doom_envs_rllib
-from utils.utils import log, project_root
+from utils.utils import log
 
 
 def create_parser_custom():
@@ -82,7 +82,7 @@ def create_parser_custom():
     )
     parser.add_argument(
         '--record-to',
-        default=join(project_root(), '..', 'doom_episodes'),
+        default=join(os.getcwd(), '..', 'doom_episodes'),
         type=str,
         help='Record episodes to this folder using Doom functionality',
     )
