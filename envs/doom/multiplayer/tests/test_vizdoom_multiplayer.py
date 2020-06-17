@@ -55,7 +55,7 @@ class TestDoom(TestCase):
         self.doom_multiagent(self.make_standard_dm, worker_index=0)
 
     def test_doom_multiagent_parallel(self):
-        num_workers = 16
+        num_workers = 1
         workers = []
 
         for i in range(num_workers):

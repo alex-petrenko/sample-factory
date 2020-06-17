@@ -24,7 +24,9 @@ class TestModel(TestCase):
         torch.backends.cudnn.benchmark = True
 
         actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
-        device = torch.device('cuda')
+        device_type = 'gpu' if torch.cuda.is_available() else 'cpu'
+
+        device = torch.device(device_type)
         actor_critic.to(device)
 
         timing = Timing()
