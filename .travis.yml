@@ -15,10 +15,8 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - pip install coverage
+  - conda env create -f ./.travis/environment.yml
+  - conda activate sample-factory
 
 script:
-  - coverage run -m unittest
-
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  - python -m unittest
