@@ -7,7 +7,9 @@ notifications:
   email: false
 
 before_install:
-  - sudo apt-get install libboost-dev
+  - sudo apt-get install libboost-all-dev
+  - sudo apt-get install gtk2.0
+  - sudo apt-get install libsdl2-dev
 
 install:
   - sudo apt update
