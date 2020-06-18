@@ -1,4 +1,4 @@
-name: sample-factory-1
+name: sample-factory
 channels:
   - pytorch
   - conda-forge
