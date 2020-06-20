@@ -295,12 +295,27 @@ python -m run_algorithm --algo=DUMMY_SAMPLER --env=doom_benchmark --num_workers=
 
 ```
 
+### Tests
+
+To run unit tests please execute `./all_tests.sh` from the root of the repo.
+Consider installing VizDoom for a more comprehensive set of tests.
+
+### Caveats
+
+- Multiplayer VizDoom environments can freeze your console sometimes, simple `reset` takes care of this
+- Sometimes VizDoom instances don't clear their internal shared memory buffers used to communicate between Python and
+a Doom executable. The file descriptors for these buffers tend to pile up. `rm /dev/shm/ViZDoom*` will take care of this issue.
+- It's best to use the standard `--fps=35` to visualize VizDoom results. `--fps=0` enables
+Async execution mode for the Doom environments. For an unidentified reason the performance of the agent may be worse
+in this regime.
+- Multiplayer VizDoom environments are significantly slower than single-player envs because actual network
+communication between the environment instances is required which results in a lot of syscalls.
+For prototyping and testing consider single-player environments with bots instead.
+
 ## Citing
 
 If you use this repository in your work or otherwise wish to cite it, please make reference to our paper.
 _TODO_
-
-
 
 
 For questions, issues, inquiries please email apetrenko1991@gmail.com. 
