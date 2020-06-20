@@ -7,7 +7,9 @@ Designed to establish the upper bound on the RL algorithm throughput.
 
 import ctypes
 import multiprocessing
+import os
 import signal
+from os.path import join
 
 import psutil
 import time
@@ -28,6 +30,7 @@ class DummySampler(AlgorithmBase):
     @classmethod
     def add_cli_args(cls, parser):
         p = parser
+        super().add_cli_args(p)
 
         p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of processes to use to sample the environment.')
         p.add_argument('--num_envs_per_worker', default=1, type=int, help='Number of envs on a single CPU sampled sequentially.')

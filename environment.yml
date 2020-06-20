@@ -1,4 +1,4 @@
-name: sample-factory
+name: sample-factory-no-vizdoom
 channels:
   - pytorch
   - conda-forge
@@ -127,4 +127,4 @@ dependencies:
     - werkzeug==1.0.0
     - wrapt==1.12.1
     - threadpoolctl==2.0.0
-    - git+https://github.com/alex-petrenko/ViZDoom@doom_bot_project#egg=vizdoom
+

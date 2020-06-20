@@ -1,5 +1,4 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
-from runner.run_processes import run
 
 _params = ParamGrid([
     ('env', ['doom_two_colors_easy', 'doom_two_colors_hard']),
@@ -13,6 +12,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-gridsearch = RunDescription('doom_two_colors_grid', experiments=[_experiment], pause_between_experiments=30)
-
-run(gridsearch)
+RUN_DESCRIPTION = RunDescription('doom_two_colors_grid', experiments=[_experiment])

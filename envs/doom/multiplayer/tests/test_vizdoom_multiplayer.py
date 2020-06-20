@@ -1,15 +1,19 @@
 import time
+import unittest
 from multiprocessing import Process
 from unittest import TestCase
 
-from envs.doom.doom_utils import make_doom_env
-from envs.tests.test_envs import default_doom_cfg
+from envs.env_utils import vizdoom_available
 from utils.utils import log, AttrDict
 
 
+@unittest.skipUnless(vizdoom_available(), 'Please install VizDoom to run a full test suite')
 class TestDoom(TestCase):
     @staticmethod
     def make_standard_dm(env_config):
+        from envs.doom.doom_utils import make_doom_env
+        from envs.tests.test_envs import default_doom_cfg
+
         cfg = default_doom_cfg()
         cfg.env_frameskip = 2
         env = make_doom_env('doom_deathmatch_full', cfg=cfg, env_config=env_config)

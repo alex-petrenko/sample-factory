@@ -3,18 +3,13 @@ from unittest import TestCase
 
 from algorithms.utils.arguments import default_cfg
 from envs.create_env import create_env
+from envs.env_utils import quadrotors_available
 from utils.timing import Timing
 from utils.utils import log
 
 
 class TestQuads(TestCase):
-    try:
-        import gym_art
-        gym_art_installed = True
-    except ImportError:
-        gym_art_installed = False
-
-    @unittest.skipUnless(gym_art_installed, 'quadrotor env package is not installed')
+    @unittest.skipUnless(quadrotors_available(), 'quadrotor env package is not installed')
     def test_quad_env(self):
         env_name = 'quadrotor_single'
         cfg = default_cfg(env=env_name)
@@ -34,7 +29,7 @@ class TestQuads(TestCase):
 
         log.debug('Time %s, FPS %.1f', timing, n_frames / timing.step)
 
-    @unittest.skipUnless(gym_art_installed, 'quadrotor env package is not installed')
+    @unittest.skipUnless(quadrotors_available(), 'quadrotor env package is not installed')
     def test_quad_multi_env(self):
         env_name = 'quadrotor_multi'
         cfg = default_cfg(env=env_name)

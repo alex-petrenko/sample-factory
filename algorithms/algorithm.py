@@ -9,6 +9,13 @@ class AlgorithmBase:
     def __init__(self, cfg):
         self.cfg = cfg
 
+    @classmethod
+    def add_cli_args(cls, parser):
+        p = parser
+
+        p.add_argument('--train_dir', default=join(os.getcwd(), 'train_dir'), type=str, help='Root for all experiments')
+        p.add_argument('--device', default='gpu', type=str, choices=['gpu', 'cpu'], help='CPU training is only recommended for smaller e.g. MLP policies')
+
     def initialize(self):
         raise NotImplementedError()
 
@@ -25,12 +32,9 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
     @classmethod
     def add_cli_args(cls, parser):
         p = parser
-
-        p.add_argument('--train_dir', default=join(os.getcwd(), 'train_dir'), type=str, help='Root for all experiments')
+        super().add_cli_args(p)
 
         p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
-
-        p.add_argument('--device', default='gpu', type=str, choices=['gpu', 'cpu'], help='CPU training is only recommended for smaller e.g. MLP policies')
 
         p.add_argument('--save_every_sec', default=120, type=int, help='Checkpointing rate')
         p.add_argument('--keep_checkpoints', default=3, type=int, help='Number of model checkpoints to keep')

@@ -20,5 +20,6 @@ setup(
         'gym>=0.17.1',
         'tensorboard>=1.15.0',
         'tensorboardx>=2.0',
+        'psutil>=5.7.0',
     ]
 )

@@ -1,4 +1,3 @@
-import unittest
 from unittest import TestCase
 
 import torch
@@ -13,7 +12,7 @@ from utils.utils import log
 
 class TestModel(TestCase):
     def test_forward_pass(self):
-        env_name = 'doom_benchmark'
+        env_name = 'atari_breakout'
         cfg = default_cfg(algo='APPO', env=env_name)
         cfg.actor_critic_share_weights = True
         cfg.hidden_size = 128
@@ -32,7 +31,8 @@ class TestModel(TestCase):
         with timing.timeit('all'):
             batch = 128
             with timing.add_time('input'):
-                observations = dict(obs=torch.rand([batch, 3, 72, 128]).to(device))
+                # better avoid hardcoding here...
+                observations = dict(obs=torch.rand([batch, 4, 84, 84]).to(device))
                 rnn_states = torch.rand([batch, get_hidden_size(cfg)]).to(device)
 
             n = 200

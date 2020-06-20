@@ -1,6 +1,7 @@
 """Utilities."""
 
 import argparse
+import importlib
 import logging
 import operator
 import os
@@ -41,6 +42,14 @@ log.addHandler(ch)
 
 
 # general Python utilities
+
+def is_module_available(module_name):
+    try:
+        importlib.import_module(module_name)
+        return True
+    except ImportError:
+        return False
+
 
 class AttrDict(dict):
     __setattr__ = dict.__setitem__
