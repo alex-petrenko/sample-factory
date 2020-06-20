@@ -67,16 +67,31 @@ class TestDoom(TestCase):
         self.doom_multiagent(self.make_standard_dm, worker_index=0)
 
     def test_doom_multiagent_parallel_2(self):
+        log.info("********")
+        log.info("2 workers")
+        log.info("********")
         self.run_parallel_workers(2)
 
     def test_doom_multiagent_parallel_5(self):
+        log.info("********")
+        log.info("5 workers")
+        log.info("********")
         self.run_parallel_workers(5)
 
     def test_doom_multiagent_parallel_7(self):
+        log.info("********")
+        log.info("7 workers")
+        log.info("********")
         self.run_parallel_workers(7)
 
     def test_doom_multiagent_parallel_10(self):
+        log.info("********")
+        log.info("10 workers")
+        log.info("********")
         self.run_parallel_workers(7)
 
     def test_doom_multiagent_parallel_16(self):
+        log.info("********")
+        log.info("16 workers")
+        log.info("********")
         self.run_parallel_workers(16)
