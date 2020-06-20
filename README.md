@@ -1,6 +1,6 @@
 # Sample Factory
 
-High throughput asynchronous reinforcement learning.
+Codebase for high throughput asynchronous reinforcement learning.
 
 Website: https://sites.google.com/view/sample-factory
 
@@ -107,10 +107,10 @@ Although if you have an existing codebase and want to use Sample Factory to run 
 installed as an editable pip package. Just execute `pip install -e .` from the root of Sample Factory repo.
  
 Script `examples/train_custom_env_custom_model.py` demonstrates how to add a custom user-defined environment
-and policy network architecture through external API.
+and policy network architecture through high-level API.
  
-Modules `algorithms.appo.train_appo` and `algorithms.appo.enjoy_appo` define entry points to train and evaluate
-agents respectively. Run these commands from the repository root to train the agent and visualize the policy:
+Modules `algorithms.appo.train_appo` and `algorithms.appo.enjoy_appo` define entry points for training and evaluation
+respectively. Run these commands from the repository root to train the agent and visualize the policy:
 
 ```
 python -m algorithms.appo.train_appo --env=doom_basic --algo=APPO --train_for_env_steps=3000000 --num_workers=20 --num_envs_per_worker=20 --experiment=doom_basic
@@ -121,16 +121,16 @@ python -m algorithms.appo.enjoy_appo --env=doom_basic --algo=APPO --experiment=d
  
 Sample Factory experiments are configured via command line parameters.
 Once the new experiment is started, a directory containing experiment-related files is created in `--train_dir`
-location (or `./train_dir` in `cwd` if not passed from command line). This directory contains a file
+location (or `./train_dir` in `cwd` if `--train_dir` is not passed from command line). This directory contains a file
 `cfg.json` where all the experiment parameters are saved (including those instantiated from their default values).
 
 Most default parameter values and their help strings can be found in `algorithms/algorithm.py` and
 `algorithms/appo/appo.py`. Besides that, additional parameters can be defined for specific families of environments.
-Simple text search in the codebase will yield definitions and help strings for these parameters too.
+Simple text search in the codebase will yield definitions and help strings for these parameters as well.
 
-The key few parameters are:
+The key parameters are:
 
-- `--algo` (required) algorithm to use, pass value `APPO` to train agents with fast async PPO
+- `--algo` (required) algorithm to use, pass value `APPO` to train agents with fast Async PPO.
 
 - `--env` (required) full name that uniquely identifies the environment, starting with the env family prefix
 (e.g. `doom_`, `dmlab_` or `atari_` for built-in Sample Factory envs). E.g. `doom_battle` or `atari_breakout`.
@@ -156,10 +156,10 @@ to use odd number of envs per worker (e.g. 1 env). (Default: 2)
 
 `algorithms/algorithm.py` contains parameters that allow users to customize the architectures of neural networks
 involved in the training process. Sample Factory includes a few popular NN architectures for RL, such as shallow
-convnets for Atari and VizDoom, and deeper ResNet models for DMLab, MLPs for continuous control tasks.
+convnets for Atari and VizDoom, deeper ResNet models for DMLab, MLPs for continuous control tasks.
 CLI parameters allow users to choose between
 these existing architectures, as well as specify the type of the policy core (LSTM/GRU/feed-forward), nonlinearities,
-etc. Consult `cfg.json` and the source code for full list of parameters.
+etc. Consult experiment-specific `cfg.json` and the source code for full list of parameters.
 
 `envs.dmlab.dmlab_model` and `envs.doom.doom_model` demonstrate how to handle environment-specific
 additional input spaces (e.g. natural language and/or numerical vector inputs).
@@ -170,7 +170,7 @@ to override `_ActorCriticBase` following examples in `algorithms/appo/model.py`.
 ## Running experiments
 
 Here we provide command lines that can be used to reproduce the experiments from the paper.
-Use these as an exaple to construct custom experiments.
+Use these as an example to construct custom experiments.
 
 #### VizDoom
 
