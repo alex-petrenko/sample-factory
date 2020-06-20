@@ -139,3 +139,4 @@ trained_policies/**
 *~
 
 cmake-build*
+envs/doom/multiplayer/tests/_vizdoom/

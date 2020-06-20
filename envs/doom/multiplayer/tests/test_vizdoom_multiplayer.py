@@ -51,13 +51,8 @@ class TestDoom(TestCase):
 
         multi_env.close()
 
-    def test_doom_multiagent(self):
-        self.doom_multiagent(self.make_standard_dm, worker_index=0)
-
-    def test_doom_multiagent_parallel(self):
-        num_workers = 1
+    def run_parallel_workers(self, num_workers):
         workers = []
-
         for i in range(num_workers):
             log.info('Starting worker #%d', i)
             worker = Process(target=self.doom_multiagent, args=(self.make_standard_dm, i, 200))
@@ -67,3 +62,21 @@ class TestDoom(TestCase):
 
         for i in range(num_workers):
             workers[i].join()
+
+    def test_doom_multiagent(self):
+        self.doom_multiagent(self.make_standard_dm, worker_index=0)
+
+    def test_doom_multiagent_parallel_2(self):
+        self.run_parallel_workers(2)
+
+    def test_doom_multiagent_parallel_5(self):
+        self.run_parallel_workers(5)
+
+    def test_doom_multiagent_parallel_7(self):
+        self.run_parallel_workers(7)
+
+    def test_doom_multiagent_parallel_10(self):
+        self.run_parallel_workers(7)
+
+    def test_doom_multiagent_parallel_16(self):
+        self.run_parallel_workers(16)

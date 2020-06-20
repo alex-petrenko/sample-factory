@@ -1,0 +1,29 @@
+7a8
+>   - astroid=2.4.0=py37_0
+13c14
+<   - cudatoolkit=10.1.243=h6bb024c_0
+---
+>   - cpuonly=1.0=0
+30a32
+>   - isort=4.3.21=py37_0
+33a36
+>   - lazy-object-proxy=1.4.3=py37h7b6447c_0
+50a54
+>   - mccabe=0.6.1=py37_1
+68a73
+>   - pylint=2.5.0=py37_1
+71c76
+<   - pytorch=1.4.0=py3.7_cuda10.1.243_cudnn7.6.3_0
+---
+>   - pytorch=1.5.0=py3.7_cpu_0
+78c83,85
+<   - torchvision=0.5.0=py37_cu101
+---
+>   - toml=0.10.0=py37h28b3542_0
+>   - torchvision=0.6.0=py37_cpu
+>   - typed-ast=1.4.1=py37h7b6447c_0
+101a109,110
+>     - dm-env==1.2
+>     - dm-tree==0.1.5
+109a119
+>     - gym-minigrid==1.0.1

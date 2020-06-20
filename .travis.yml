@@ -20,7 +20,8 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda env create -q -f ./.travis/environment.yml
+  - patch ./.travis/patchfile.patch environment.yml
+  - conda env create -q -f environment.yml
   - conda activate sample-factory
 
 script:
