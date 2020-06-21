@@ -22,8 +22,10 @@
 >   - toml=0.10.0=py37h28b3542_0
 >   - torchvision=0.6.0=py37_cpu
 >   - typed-ast=1.4.1=py37h7b6447c_0
-101a109,110
->     - dm-env==1.2
->     - dm-tree==0.1.5
-109a119
+109a117
 >     - gym-minigrid==1.0.1
+125a134,135
+>     - tensorflow-cpu==1.15.0
+>     - tensorflow-estimator==1.15.1
+129a140
+>     - git+https://github.com/alex-petrenko/ViZDoom@doom_bot_project#egg=vizdoom
