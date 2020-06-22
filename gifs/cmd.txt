@@ -1,0 +1,8 @@
+python -m envs.doom.doom_play_demo --env=doom_duel --demo_path=/home/alex/all/projects/recorded_episodes/doom_duel_00_bots_ssl2_fs2_ppo_1/2020_06_22__02_59_54/ep_000_rec.lmp
+(for multiplayer env go to doom_utils and set num_agents to 1 to force it to instantiate a "single-player" env, otherwise it will just wait for other players to join)
+
+This will generate a folder with png images next to ep_000_rec.lmp
+To turn them into a gif:
+
+ffmpeg -r 35 -f image2 -i %05d.png -vf scale=256:-1:flags=lanczos,palettegen palette.png
+ffmpeg -r 35 -f image2 -i %05d.png -i palette.png -filter_complex "fps=35,scale=256:-1:flags=lanczos[x];[x][1:v]paletteuse" battle.gif
