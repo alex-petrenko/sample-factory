@@ -126,7 +126,9 @@ location (or `./train_dir` in `cwd` if `--train_dir` is not passed from command 
 
 Most default parameter values and their help strings can be found in `algorithms/algorithm.py` and
 `algorithms/appo/appo.py`. Besides that, additional parameters can be defined for specific families of environments.
-Simple text search in the codebase will yield definitions and help strings for these parameters as well.
+Some default parameter values are also overridden for some environments, primarily to save typing.
+Simple text search in the codebase will yield definitions, default values, and help strings for these parameters as well
+(see e.g. `doom_params.py` or `dmlab_params.py`).
 
 The key parameters are:
 
@@ -312,10 +314,18 @@ in this regime.
 communication between the environment instances is required which results in a lot of syscalls.
 For prototyping and testing consider single-player environments with bots instead.
 
-## Citing
+## Citation
 
 If you use this repository in your work or otherwise wish to cite it, please make reference to our paper.
-_TODO_
+
+```
+@inproceedings{petrenko2020sf,
+  title={Sample Factory: Egocentric 3D Control from Pixels at 100000 FPS with Asynchronous Reinforcement Learning},
+  author={Petrenko, Aleksei and Huang, Zhehui and Kumar, Tushar and Sukhatme, Gaurav and Koltun, Vladlen},
+  booktitle={ICML},
+  year={2020}
+}
+```
 
 
 For questions, issues, inquiries please email apetrenko1991@gmail.com. 

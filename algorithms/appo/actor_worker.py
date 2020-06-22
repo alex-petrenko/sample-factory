@@ -404,9 +404,9 @@ class VectorEnvRunner:
             self.rollout_step = 0
             self.traj_buffer_idx = (self.traj_buffer_idx + 1) % self.num_traj_buffers
 
-            # wait for the next set of buffers to be released, if it's not ready yet
-            # this should be a no-op, unless we are collecting experience faster than we can learn from it, in which
-            # case this will act as a speed adjusting mechanism
+            # Wait for the next set of buffers to be released, if it's not ready yet.
+            # This should be a no-op, unless we are collecting experience faster than we can learn from it, in which
+            # case this will act as a speed adjusting mechanism.
             if self.traj_tensors_available[:, :, self.traj_buffer_idx].min() == 0:
                 with timing.add_time('wait_buffers'):
                     self.wait_for_traj_buffers()
