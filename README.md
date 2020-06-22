@@ -4,6 +4,13 @@ Codebase for high throughput asynchronous reinforcement learning.
 
 Website: https://sites.google.com/view/sample-factory
 
+VizDoom agents trained with Sample Factory playing in real time:
+
+<p align="middle">
+<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="320">
+<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="320">
+</p> 
+
 ##### When should I use Sample Factory?
 
 1. Sample Factory is one of the fastest open source single-machine policy gradient implementations (see paper for details).
