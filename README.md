@@ -11,7 +11,7 @@ VizDoom agents trained with Sample Factory playing in real time:
 <img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="320">
 </p> 
 
-##### When should I use Sample Factory?
+#### When should I use Sample Factory?
 
 1. Sample Factory is one of the fastest open source single-machine policy gradient implementations (see paper for details).
 If you plan to train RL agents on large amounts of experience, consider using it.
@@ -28,7 +28,7 @@ Consider using Sample Factory if you train agents in these environments.
 4. Sample Factory can be a good choice as a prototype for a single node in a distributed RL system or as a reference
 codebase for other types of async RL algorithms.
 
-##### What use cases aren't a good fit?
+#### What use cases aren't a good fit?
 
 1. As of now, there is no support for distributed training, although a simple distributed setup should be straightforward.
 
