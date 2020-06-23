@@ -6,7 +6,7 @@ from os.path import join
 import matplotlib
 import matplotlib.pyplot as plt
 
-from plots.plot_utils import GREEN, BLUE
+from plots.plot_utils import GREEN, BLUE, set_matplotlib_params
 from utils.utils import log, ensure_dir_exists
 
 import ast
@@ -21,11 +21,7 @@ import tensorflow as tf
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from tensorflow.core.util.event_pb2 import Event
 
-# zhehui
-# matplotlib.rcParams['text.usetex'] = True
-matplotlib.rcParams['mathtext.fontset'] = 'cm'
-# matplotlib.rcParams['font.family'] = 'serif'
-matplotlib.rcParams['font.size'] = 8
+set_matplotlib_params()
 
 plt.rcParams['figure.figsize'] = (1.5*8.20, 2) #(2.5, 2.0) 7.5， 4
 
@@ -315,16 +311,16 @@ def main():
         return p_list
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path", type=str, help="main path for tensorboard files", default=os.getcwd())
-    parser.add_argument("--subpaths", type=param_list, help="subpath sturctures", default=['test', 'train'])
-    parser.add_argument("--output", type=str, help="aggregation can be saves as tensorboard file (summary) or as table (csv)", default='csv')
+    parser.add_argument('--path', type=str, help='main path for tensorboard files', default=os.getcwd())
+    parser.add_argument('--subpaths', type=param_list, help='subpath sturctures', default=['test', 'train'])
+    parser.add_argument('--output', type=str, help='aggregation can be saves as tensorboard file (summary) or as table (csv)', default='csv')
 
     args = parser.parse_args()
 
     path = Path(args.path)
 
     if not path.exists():
-        raise argparse.ArgumentTypeError("Parameter {} is not a valid path".format(path))
+        raise argparse.ArgumentTypeError('Parameter {} is not a valid path'.format(path))
 
     # hide_file = [f for f in os.listdir(path) if not f.startswith('.') and not f.endswith('.py')]
     # subpaths = [path / dname / subpath for subpath in args.subpaths for dname in os.listdir(path) if dname != FOLDER_NAME and dname in hide_file]

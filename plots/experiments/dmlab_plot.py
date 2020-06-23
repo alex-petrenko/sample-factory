@@ -10,13 +10,10 @@ import numpy as np
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from plots.experiments.wall_time_comparison_sample_factory_seed_rl import interpolate_with_fixed_x_ticks
-from utils.utils import log, ensure_dir_exists, experiments_dir
+from plots.plot_utils import set_matplotlib_params
+from utils.utils import log, ensure_dir_exists
 
-# zhehui
-# matplotlib.rcParams['text.usetex'] = True
-matplotlib.rcParams['mathtext.fontset'] = 'cm'
-# matplotlib.rcParams['font.family'] = 'serif'
-matplotlib.rcParams['font.size'] = 8
+set_matplotlib_params()
 
 plt.rcParams['figure.figsize'] = (4, 2.8) #(2.5, 2.0) 7.5， 4
 
@@ -25,20 +22,7 @@ B = int(1e9)
 
 EXPERIMENTS = {
     'dmlab30': dict(is_pbt=True, dir='dmlab_30_resnet_4pbt_mode2_90_12_v86', key='_dmlab/000_capped_mean_human_norm_score', x_ticks=[0, 2*B, 4*B, 6*B, 8*B, 10*B], max_x=10*B, y_ticks=[0, 10, 20, 30, 40, 50, 60, 70], x_label='Env. frames, skip=4', title='DMLab-30', baselines=((52, 'DeepMind IMPALA'),), legend='Population mean'),
-    # 'doom_battle2': dict(is_pbt=False, dir='doom_battle2_appo_v65_fs4', key='0_aux/avg_true_reward', x_ticks=[0, B, 2*B, 3*B], max_x=3*B, y_ticks=[0, 5, 10, 15, 20, 25], x_label='Env. frames, skip=4', title='Battle2', baselines=((17, 'DFP'), ), legend='SampleFactory'),
-    # 'doom_deathmatch': dict(is_pbt=True, dir='doom_bots_v63_pbt', key='0_aux/avg_true_reward', x_ticks=[0, B//2, B, 3*B//2, 2*B, 5*B//2], max_x=5*B//2, y_ticks=[0, 20, 40, 60, 80], x_label='Env. frames, skip=2', title='Deathmatch vs bots', baselines=((12.6, 'Avg. scripted bot'), (22, 'Best scripted bot')), legend='Population mean'),
-    # 'doom_duel': dict(is_pbt=True, dir='paper_doom_duel_bots_v65_fs2', key='0_aux/avg_true_reward', x_ticks=[0, B//2, B, 3*B//2, 2*B, 5*B//2], max_x=5*B//2, y_ticks=[0, 10, 20, 30, 40], x_label='Env. frames, skip=2', title='Duel vs bots', baselines=((3.66, 'Avg. scripted bot'), (5, 'Best scripted bot')), legend='Population mean'),
 }
-
-PLOT_NAMES = dict(
-    # doom_my_way_home='Find My Way Home',
-    # doom_deadly_corridor='Deadly Corridor',
-    # doom_defend_the_center='Defend the Center',
-    # doom_defend_the_line='Defend the Line',
-    # doom_health_gathering='Health Gathering',
-    # doom_health_gathering_supreme='Health Gathering Supreme',
-)
-
 
 def extract(env, experiments):
     # scalar_accumulators = [EventAccumulator(str(dpath / dname / subpath)).Reload().scalars
@@ -249,7 +233,10 @@ def plot(env, key, interpolated_key, ax, count):
 
 
 def main():
-    all_experiment_dirs_list = [join(experiments_dir(), v['dir']) for k, v in EXPERIMENTS.items()]
+    experiments_dir = '/home/alex/all/projects/sample-factory/train_dir'
+
+    all_experiment_dirs_list = [join(experiments_dir, v['dir']) for k, v in EXPERIMENTS.items()]
+
     for experiment_dir in all_experiment_dirs_list:
         log.debug('Experiment dir: %s', experiment_dir)
 
@@ -257,7 +244,7 @@ def main():
 
     for env, details in EXPERIMENTS.items():
         env_dir = details['dir']
-        env_dir = join(experiments_dir(), env_dir)
+        env_dir = join(experiments_dir, env_dir)
         event_files = Path(env_dir).rglob('*.tfevents.*')
         event_files = list(event_files)
         log.info('Event files: %r', event_files)
@@ -298,7 +285,6 @@ def main():
         plot_name = f'dmlab30'
         plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0, )
         # plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
-
 
     return 0
 

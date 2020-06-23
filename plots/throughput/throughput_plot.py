@@ -1,13 +1,12 @@
 import os
 import sys
-from os.path import join
 
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 
 # sns.set()
-from plots.plot_utils import BLUE, DARK_GREY
+from plots.plot_utils import BLUE, DARK_GREY, set_matplotlib_params
 from utils.utils import ensure_dir_exists
 
 system_1_xticks = [0, 100, 200, 300, 400, 500, 600, 700]
@@ -34,11 +33,8 @@ titles = {
     'system_2_dmlab': 'DMLab throughput, System #2',
 }
 
+set_matplotlib_params()
 
-# matplotlib.rcParams['text.usetex'] = True
-matplotlib.rcParams['mathtext.fontset'] = 'cm'
-# matplotlib.rcParams['font.family'] = 'serif'
-matplotlib.rcParams['font.size'] = 8
 plt.rcParams['figure.figsize'] = (10.0, 4.0) #(2.5, 2.0) 7.5， 4
 
 def build_plot(name, measurement, ax, count):

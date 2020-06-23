@@ -10,14 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-from plots.plot_utils import BLUE, ORANGE
+from plots.plot_utils import BLUE, ORANGE, set_matplotlib_params
 from utils.utils import log, ensure_dir_exists
 
-# zhehui
-# matplotlib.rcParams['text.usetex'] = True
-matplotlib.rcParams['mathtext.fontset'] = 'cm'
-# matplotlib.rcParams['font.family'] = 'serif'
-matplotlib.rcParams['font.size'] = 8
+set_matplotlib_params()
 
 # plt.rcParams['figure.figsize'] = (1.5*8.20, 3) #(2.5, 2.0) 7.5， 4
 plt.rcParams['figure.figsize'] = (5.5, 3.4) #(2.5, 2.0) 7.5， 4
@@ -404,10 +400,10 @@ def plot_envs(interpolated_keys_by_env, top_ax, bottom_ax, framework):
 
 
 def main():
-    sample_factory_runs = '/home/alex/all/projects/doom-neurobot/train_dir/paper_doom_wall_time_v97_fs4'
+    sample_factory_runs = '/home/alex/all/projects/sample-factory/train_dir/paper_doom_wall_time_v97_fs4'
     sample_factory_runs_path = Path(sample_factory_runs)
 
-    seed_rl_runs = '/home/alex/all/projects/doom-neurobot/train_dir/seedrl/seed_rl_csv'
+    seed_rl_runs = '/home/alex/all/projects/sample-factory/train_dir/seedrl/seed_rl_csv'
     seed_rl_runs_path = Path(seed_rl_runs)
 
     fig, (top_ax, bottom_ax) = plt.subplots(2, 2)

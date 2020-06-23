@@ -3,6 +3,8 @@ import os
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+
+from plots.plot_utils import set_matplotlib_params
 from utils.utils import ensure_dir_exists
 
 # Fixing random state for reproducibility
@@ -40,8 +42,7 @@ DMLAB_30 = {
     76.46110081: dict(name='psychlab_sequential_comparison', sample_factory=76.46110081, impala=0),
 }
 
-matplotlib.rcParams['mathtext.fontset'] = 'cm'
-matplotlib.rcParams['font.size'] = 8
+set_matplotlib_params()
 plt.rcParams['figure.figsize'] = (10, 12)
 
 # plt.rcdefaults()

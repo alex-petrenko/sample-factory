@@ -6,6 +6,7 @@ from os.path import join
 import matplotlib
 import matplotlib.pyplot as plt
 
+from plots.plot_utils import set_matplotlib_params
 from utils.utils import log, ensure_dir_exists
 
 import ast
@@ -20,6 +21,8 @@ import tensorflow as tf
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from tensorflow.core.util.event_pb2 import Event
 
+set_matplotlib_params()
+
 
 ENVS_LIST = [
     ('doom_my_way_home', None),
@@ -29,7 +32,6 @@ ENVS_LIST = [
     ('health_gathering', 'supreme'),
     ('health_gathering_supreme', None),
 ]
-
 
 FOLDER_NAME = 'aggregates'
 hide_file = [f for f in os.listdir(os.getcwd()) if not f.startswith('.') and not f.endswith('.py')]
@@ -199,11 +201,6 @@ def aggregate(env, experiments, output):
 
 
 def plot(env, key, interpolated_key):
-    # matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['mathtext.fontset'] = 'cm'
-    # matplotlib.rcParams['font.family'] = 'serif'
-    matplotlib.rcParams['font.size'] = 8
-
     plt.rcParams['figure.figsize'] = (2.5, 2.0)
 
     x, y = interpolated_key

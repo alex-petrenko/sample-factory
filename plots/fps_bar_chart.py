@@ -28,8 +28,6 @@ data = fps_by_method_36_core_cpu
 # 4 policies: 1600 actors, 116320 FPS
 # 8 policies: 1600 actors,
 
-
-
 x = np.arange(len(labels))  # the label locations
 width = 0.25  # the width of the bars
 

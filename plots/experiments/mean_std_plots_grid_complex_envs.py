@@ -9,13 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-from utils.utils import log, ensure_dir_exists, experiments_dir
+from plots.plot_utils import set_matplotlib_params
+from utils.utils import log, ensure_dir_exists
 
-# zhehui
-# matplotlib.rcParams['text.usetex'] = True
-matplotlib.rcParams['mathtext.fontset'] = 'cm'
-# matplotlib.rcParams['font.family'] = 'serif'
-matplotlib.rcParams['font.size'] = 8
+set_matplotlib_params()
 
 plt.rcParams['figure.figsize'] = (5.5, 2.3) #(2.5, 2.0) 7.5， 4
 
@@ -271,7 +268,9 @@ def plot(env, key, interpolated_key, ax, count):
 
 
 def main():
-    all_experiment_dirs_list = [join(experiments_dir(), v['dir']) for k, v in EXPERIMENTS.items()]
+    experiments_dir = '/home/alex/all/projects/sample-factory/train_dir'
+
+    all_experiment_dirs_list = [join(experiments_dir, v['dir']) for k, v in EXPERIMENTS.items()]
     for experiment_dir in all_experiment_dirs_list:
         log.debug('Experiment dir: %s', experiment_dir)
 
@@ -279,7 +278,7 @@ def main():
 
     for env, details in EXPERIMENTS.items():
         env_dir = details['dir']
-        env_dir = join(experiments_dir(), env_dir)
+        env_dir = join(experiments_dir, env_dir)
         event_files = Path(env_dir).rglob('*.tfevents.*')
         event_files = list(event_files)
         log.info('Event files: %r', event_files)
@@ -303,10 +302,10 @@ def main():
             aggregate(env, experiments, count, ax[count])
             count += 1
 
-        handles, labels = ax[-1].get_legend_handles_labels()
-        lgd = fig.legend(handles, labels, bbox_to_anchor=(0.1, 0.88, 0.8, 0.2), loc='lower left', ncol=4, mode="expand", prop={'size': 6})
-
-        lgd.set_in_layout(True)
+        if group_i != 0:
+            handles, labels = ax[-1].get_legend_handles_labels()
+            lgd = fig.legend(handles, labels, bbox_to_anchor=(0.1, 0.88, 0.8, 0.2), loc='lower left', ncol=4, mode="expand", prop={'size': 6})
+            lgd.set_in_layout(True)
 
         # zhehui
         # plt.show()
@@ -319,9 +318,11 @@ def main():
 
         plt.margins(0, 0)
         plot_name = f'complex_envs_{group_i}'
-        # plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0, )
-        plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
 
+        if group_i == 0:
+            plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0, )
+        else:
+            plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_extra_artists=(lgd,))
 
     return 0
 
