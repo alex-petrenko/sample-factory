@@ -1,3 +1,4 @@
+import unittest
 from unittest import TestCase
 
 import torch
@@ -11,7 +12,9 @@ from utils.utils import log
 
 
 class TestModel(TestCase):
-    def test_forward_pass(self):
+
+    @staticmethod
+    def forward_pass(device_type):
         env_name = 'atari_breakout'
         cfg = default_cfg(algo='APPO', env=env_name)
         cfg.actor_critic_share_weights = True
@@ -24,7 +27,7 @@ class TestModel(TestCase):
         torch.backends.cudnn.benchmark = True
 
         actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
-        device = torch.device('cuda')
+        device = torch.device(device_type)
         actor_critic.to(device)
 
         timing = Timing()
@@ -43,3 +46,10 @@ class TestModel(TestCase):
                 log.debug('Progress %d/%d', i, n)
 
         log.debug('Timing: %s', timing)
+
+    def test_forward_pass_cpu(self):
+        self.forward_pass('cpu')
+
+    @unittest.skipUnless(torch.cuda.is_available(), 'This test requires a GPU')
+    def test_forward_pass_gpu(self):
+        self.forward_pass('cuda')

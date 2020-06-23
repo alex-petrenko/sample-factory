@@ -1,0 +1,28 @@
+language: python
+dist: bionic
+python:
+  - "3.7"
+
+notifications:
+  email: false
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install libboost-all-dev libsdl2-dev zlib1g-dev libbz2-dev
+  - sudo apt-get install libjpeg-dev libfluidsynth-dev libgme-dev libopenal-dev libmpg123-dev
+  - sudo apt-get install libsndfile1-dev libwildmidi-dev libgtk-3-dev timidity nasm tar chrpath
+
+install:
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - source "$HOME/miniconda/etc/profile.d/conda.sh"
+  - hash -r
+  - conda config --set always_yes yes --set changeps1 no
+  - conda update -q conda
+  - conda info -a
+  - patch environment.yml ./.travis/patchfile.patch
+  - conda env create -q -f environment.yml
+  - conda activate sample-factory
+
+script:
+  - python -m unittest

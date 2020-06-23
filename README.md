@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/alex-petrenko/sample-factory.svg?branch=master)](https://travis-ci.org/github/alex-petrenko/sample-factory)
+
 # Sample Factory
 
 Codebase for high throughput asynchronous reinforcement learning.
