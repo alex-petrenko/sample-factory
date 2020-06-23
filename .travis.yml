@@ -22,7 +22,7 @@ install:
   - conda info -a
   - patch environment.yml ./.travis/patchfile.patch
   - conda env create -q -f environment.yml
-  - conda activate sample-factory-no-vizdoom
+  - conda activate sample-factory
 
 script:
   - python -m unittest

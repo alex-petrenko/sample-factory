@@ -15,7 +15,7 @@ class TestModel(TestCase):
 
     @staticmethod
     def forward_pass(device_type):
-        env_name = 'doom_benchmark'
+        env_name = 'atari_breakout'
         cfg = default_cfg(algo='APPO', env=env_name)
         cfg.actor_critic_share_weights = True
         cfg.hidden_size = 128
@@ -27,7 +27,6 @@ class TestModel(TestCase):
         torch.backends.cudnn.benchmark = True
 
         actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
-
         device = torch.device(device_type)
         actor_critic.to(device)
 
@@ -35,7 +34,8 @@ class TestModel(TestCase):
         with timing.timeit('all'):
             batch = 128
             with timing.add_time('input'):
-                observations = dict(obs=torch.rand([batch, 3, 72, 128]).to(device))
+                # better avoid hardcoding here...
+                observations = dict(obs=torch.rand([batch, 4, 84, 84]).to(device))
                 rnn_states = torch.rand([batch, get_hidden_size(cfg)]).to(device)
 
             n = 200
@@ -50,6 +50,6 @@ class TestModel(TestCase):
     def test_forward_pass_cpu(self):
         self.forward_pass('cpu')
 
-    @unittest.skipUnless(torch.cuda.is_available(), "This test requires a GPU")
+    @unittest.skipUnless(torch.cuda.is_available(), 'This test requires a GPU')
     def test_forward_pass_gpu(self):
-        self.forward_pass('gpu')
+        self.forward_pass('cuda')
