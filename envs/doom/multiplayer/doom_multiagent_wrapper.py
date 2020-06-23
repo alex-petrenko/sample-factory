@@ -255,7 +255,7 @@ class MultiAgentEnv(gym.Env):
                             time.sleep(0.05)
 
                     for i, worker in enumerate(self.workers):
-                        worker.result_queue.get(timeout=5)
+                        worker.result_queue.get(timeout=20)
                         worker.result_queue.task_done()
                         worker.task_queue.join()
             except filelock.Timeout:
