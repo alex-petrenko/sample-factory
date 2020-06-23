@@ -7,8 +7,8 @@ Website: https://sites.google.com/view/sample-factory
 VizDoom agents trained with Sample Factory playing in real time:
 
 <p align="middle">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="480">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="480">
+<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="400">
+<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="400">
 </p> 
 
 #### When should I use Sample Factory?
