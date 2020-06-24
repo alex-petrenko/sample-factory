@@ -257,10 +257,10 @@ class MultiAgentEnv(gym.Env):
 
                     for i, worker in enumerate(self.workers):
                         try:
-                            time_out = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
+                            vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
                         except KeyError:
-                            time_out = 4
-                        worker.result_queue.get(timeout=time_out)
+                            vizdoom_env_timeout = 4
+                        worker.result_queue.get(timeout=vizdoom_env_timeout)
                         worker.result_queue.task_done()
                         worker.task_queue.join()
             except filelock.Timeout:
