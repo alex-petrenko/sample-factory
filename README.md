@@ -1,8 +1,6 @@
-<!---
 [![Build Status](https://travis-ci.org/alex-petrenko/sample-factory.svg?branch=master)](https://travis-ci.org/github/alex-petrenko/sample-factory)
 [![codecov](https://codecov.io/gh/alex-petrenko/sample-factory/branch/master/graph/badge.svg)](https://codecov.io/gh/alex-petrenko/sample-factory)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/alex-petrenko/sample-factory/blob/master/LICENSE)
---->
 
 # Sample Factory
 

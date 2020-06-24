@@ -3,6 +3,9 @@ dist: bionic
 python:
   - "3.7"
 
+env:
+  - TRAVIS_VIZDOOM_ENV_TIMEOUT=20
+
 notifications:
   email: false
 
