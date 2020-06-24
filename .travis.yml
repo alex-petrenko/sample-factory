@@ -23,6 +23,10 @@ install:
   - patch environment.yml ./.travis/patchfile.patch
   - conda env create -q -f environment.yml
   - conda activate sample-factory
+  - pip install coverage
 
 script:
-  - python -m unittest
+  - coverage run -m unittest
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
