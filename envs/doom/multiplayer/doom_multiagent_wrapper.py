@@ -3,7 +3,6 @@ import time
 from enum import Enum
 from multiprocessing import Process, JoinableQueue
 from queue import Empty, Queue
-import os
 
 import cv2
 import filelock
