@@ -11,7 +11,6 @@ notifications:
   email: false
 
 before_install:
-  - export TRAVIS_VIZDOOM_ENV_TIMEOUT = $TRAVIS_VIZDOOM_ENV_TIMEOUT
   - sudo apt-get update
   - sudo apt-get install libboost-all-dev libsdl2-dev zlib1g-dev libbz2-dev
   - sudo apt-get install libjpeg-dev libfluidsynth-dev libgme-dev libopenal-dev libmpg123-dev
