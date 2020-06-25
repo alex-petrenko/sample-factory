@@ -8,6 +8,12 @@ from utils.utils import log
 DEFAULT_UDP_PORT = int(os.environ.get('DOOM_DEFAULT_UDP_PORT', 40300))
 log.info('Default UDP port is %r', DEFAULT_UDP_PORT)
 
+# This try except block is increase the env timeout connection flag in travis
+try:
+    vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
+except KeyError:
+    vizdoom_env_timeout = 4
+
 
 def find_available_port(start_port, increment=1000):
     port = start_port
@@ -97,13 +103,9 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 '+sv_nojump 1',  # Disables jumping.
                 '+sv_nofreelook 1',  # Disables free look with a mouse (only keyboard).
                 '+sv_noexit 1',  # Prevents players from exiting the level in deathmatch before timelimit is hit.
-                f'+viz_respawn_delay {self.respawn_delay}'  # Sets delay between respanws (in seconds).
+                f'+viz_respawn_delay {self.respawn_delay}',  # Sets delay between respanws (in seconds).
+                f'+viz_connect_timeout {vizdoom_env_timeout}',
             ]
-            try:
-                vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
-            except KeyError:
-                vizdoom_env_timeout = 4
-            game_args_list.append(f'+viz_connect_timeout {vizdoom_env_timeout}')
             self.game.add_game_args(' '.join(game_args_list))
 
             # Additional commands:
@@ -124,10 +126,6 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 self.game.add_game_args(f'-record {demo_path}')
         else:
             # Join existing game.
-            try:
-                vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
-            except KeyError:
-                vizdoom_env_timeout = 4
             self.game.add_game_args(
                 f'-join 127.0.0.1:{port} '  # Connect to a host for a multiplayer game.
                 f'+viz_connect_timeout {vizdoom_env_timeout} '
