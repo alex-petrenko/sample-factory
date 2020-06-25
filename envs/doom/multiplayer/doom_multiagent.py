@@ -103,7 +103,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
             except KeyError:
                 vizdoom_env_timeout = 4
-            game_args_list.append(f'+viz_connect_timeout {vizdoom_env_timeout}')
+            game_args_list.append(f'+viz_connect_timeout {vizdoom_env_timeout} ')
             self.game.add_game_args(' '.join(game_args_list))
 
             # Additional commands:
