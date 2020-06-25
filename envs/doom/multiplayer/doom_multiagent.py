@@ -103,7 +103,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
             except KeyError:
                 vizdoom_env_timeout = 4
-            game_args_list.append(f'+viz_connect_timeout {vizdoom_env_timeout} ')
+            game_args_list.append(f'+viz_connect_timeout {vizdoom_env_timeout}')
             self.game.add_game_args(' '.join(game_args_list))
 
             # Additional commands:
@@ -130,7 +130,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 vizdoom_env_timeout = 4
             self.game.add_game_args(
                 f'-join 127.0.0.1:{port} '  # Connect to a host for a multiplayer game.
-                f'+viz_connect_timeout {vizdoom_env_timeout}'
+                f'+viz_connect_timeout {vizdoom_env_timeout} '
             )
 
             # Name your agent and select color
