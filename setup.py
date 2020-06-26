@@ -21,5 +21,6 @@ setup(
         'tensorboard>=1.15.0',
         'tensorboardx>=2.0',
         'psutil>=5.7.0',
+        'threadpoolctl>=2.0.0',
     ]
 )
