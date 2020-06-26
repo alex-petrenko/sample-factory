@@ -9,6 +9,7 @@ import pwd
 import tempfile
 from _queue import Empty
 from os.path import join
+from sys import platform
 
 import numpy as np
 import psutil
@@ -253,6 +254,10 @@ def cores_for_worker_process(worker_idx, num_workers, cpu_count):
 
 
 def set_process_cpu_affinity(worker_idx, num_workers):
+    if platform == 'darwin':
+        log.debug('On MacOS, not setting affinity')
+        return
+
     curr_process = psutil.Process()
     cpu_count = psutil.cpu_count()
     cores = cores_for_worker_process(worker_idx, num_workers, cpu_count)

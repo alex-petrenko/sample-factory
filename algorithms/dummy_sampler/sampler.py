@@ -10,6 +10,7 @@ import multiprocessing
 import os
 import signal
 from os.path import join
+from sys import platform
 
 import psutil
 import time
@@ -84,7 +85,7 @@ class DummySampler(AlgorithmBase):
             if self.cfg.set_workers_cpu_affinity:
                 set_process_cpu_affinity(proc_idx, self.cfg.num_workers)
 
-            initial_cpu_affinity = psutil.Process().cpu_affinity()
+            initial_cpu_affinity = psutil.Process().cpu_affinity() if platform != 'darwin' else None
             psutil.Process().nice(10)
 
             with timing.timeit('env_init'):
@@ -95,7 +96,7 @@ class DummySampler(AlgorithmBase):
                     global_env_id = proc_idx * self.cfg.num_envs_per_worker + env_idx
                     env_config = AttrDict(worker_index=proc_idx, vector_index=env_idx, env_id=global_env_id)
                     env = create_env(self.cfg.env, cfg=self.cfg, env_config=env_config)
-                    log.debug('CPU affinity after create_env: %r', psutil.Process().cpu_affinity())
+                    log.debug('CPU affinity after create_env: %r', psutil.Process().cpu_affinity() if platform != 'darwin' else 'MacOS - None')
                     env.seed(global_env_id)
                     envs.append(env)
 
@@ -148,7 +149,7 @@ class DummySampler(AlgorithmBase):
                 # to decreased performance.
                 # This can be caused by some interactions between deep learning libs, OpenCV, MKL, OpenMP, etc.
                 # At least user should know about it if this is happening.
-                cpu_affinity = psutil.Process().cpu_affinity()
+                cpu_affinity = psutil.Process().cpu_affinity() if platform != 'darwin' else None
                 assert initial_cpu_affinity == cpu_affinity, \
                     f'Worker CPU affinity was changed from {initial_cpu_affinity} to {cpu_affinity}!' \
                     f'This can significantly affect performance!'
