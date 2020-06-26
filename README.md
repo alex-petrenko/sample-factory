@@ -112,6 +112,20 @@ Sample Factory includes rudimentary wrappers for other environments such as Mujo
 [Minigrid](https://github.com/maximecb/gym-minigrid), and [Quadrotors](https://github.com/amolchanov86/gym_art).
 Please follow the installation instructions for these respective environments. Sections
 below provide information on how to add user-defined custom environments.
+
+#### Custom multi-agent environments
+
+Multi-agent environments are expected to return lists of observations/dones/rewards (one item for every agent).
+Currently we only support homogenous multi-agent envs (same observation/action space for all agents, same
+episode duration).
+
+It is expected that a multi-agent env exposes a property or a field `num_agents` that the algorithm uses
+to allocate the right amount of memory during startup.
+
+Multi-agent environments require auto-reset. I.e. they reset themselves when the done flag is True and return
+the first observation of the next episode (because we have no use for the last observation of the previous
+episode, we do not act based on it). See `multi_agent_wrapper.py` for example. For simplicity we actually treat all
+environments as multi-agent environments with 1 agent.
  
 ## Using Sample Factory
  
@@ -302,7 +316,7 @@ with a single Tensorboard command.
 ### Dummy sampler
 
 This tool can be useful if you want to estimate the upper bound on performance of any reinforcement learning
-algorithm, i.e. how fast the environment can be sampled by dumb random policy.
+algorithm, i.e. how fast the environment can be sampled by a dumb random policy.
 
 ```
 This achieves 90000+ FPS on a 10-core workstation:
@@ -326,10 +340,15 @@ in this regime.
 - Multiplayer VizDoom environments are significantly slower than single-player envs because actual network
 communication between the environment instances is required which results in a lot of syscalls.
 For prototyping and testing consider single-player environments with bots instead.
+- Vectors of environments on rollout (actor) workers are instantiated on the same CPU thread.
+This can create problems for certain types of environment that require global per-thread or per-process context
+(e.g. OpenGL context). The solution should be an environment wrapper that starts the environment in a 
+separate thread (or process if that's required) and communicates. `doom_multiagent_wrapper.py` is an example,
+although not optimal.
 
 ## Citation
 
-If you use this repository in your work or otherwise wish to cite it, please make reference to our paper.
+If you use this repository in your work or otherwise wish to cite it, please make reference to our ICML2020 paper.
 
 ```
 @inproceedings{petrenko2020sf,

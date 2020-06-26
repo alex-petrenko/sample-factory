@@ -52,7 +52,10 @@ def update_reward_shaping_scheme(env, agent_idx, reward_shaping):
 
 
 class ActorState:
-    """State of a single actor in an environment."""
+    """
+    State of a single actor (agent) in a multi-agent environment.
+    Single-agent environments are treated as multi-agent with one agent for simplicity.
+    """
 
     def __init__(
         self, cfg, env, worker_idx, split_idx, env_idx, agent_idx,

@@ -1,3 +1,16 @@
+"""
+Algorithm entry poing.
+Methods of the APPO class initiate all other components (rollout & policy workers and learners) in the main thread,
+and then fork their separate processes.
+All data structures that are shared between processes are also created during the construction of APPO.
+
+This class contains the algorithm main loop. All the actual work is done in separate worker processes, so
+the only task of the main loop is to collect summaries and stats from the workers and log/save them to disk.
+
+Hyperparameters specific to policy gradient algorithms are defined in this file. See also algorithm.py.
+
+"""
+
 import json
 import math
 import multiprocessing
@@ -278,6 +291,17 @@ class APPO(ReinforcementLearningAlgorithm):
 
     # noinspection PyProtectedMember
     def init_subset(self, indices, actor_queues):
+        """
+        Initialize a subset of actor workers (rollout workers) and wait until the first reset() is completed for all
+        envs on these workers.
+
+        This function will retry if the worker process crashes during the initial reset.
+
+        :param indices: indices of actor workers to initialize
+        :param actor_queues: task queues corresponding to these workers
+        :return: initialized workers
+        """
+
         reset_timelimit_seconds = self.cfg.reset_timeout_seconds  # fail worker if not a single env was reset in that time
 
         workers = dict()
@@ -342,6 +366,10 @@ class APPO(ReinforcementLearningAlgorithm):
 
     # noinspection PyUnresolvedReferences
     def init_workers(self):
+        """
+        Initialize all types of workers and start their worker processes.
+        """
+
         actor_queues = [faster_fifo.Queue() for _ in range(self.cfg.num_workers)]
 
         policy_worker_queues = dict()
@@ -385,6 +413,12 @@ class APPO(ReinforcementLearningAlgorithm):
 
         log.info('Initializing actors...')
 
+        # We support actor worker initialization in groups, which can be useful for some envs that
+        # e.g. crash when too many environments are being initialized in parallel.
+        # Currently the limit is not used since it is not required for any envs supported out of the box,
+        # so we parallelize initialization as hard as we can.
+        # If this is required for your environment, perhaps a better solution would be to use global locks,
+        # like FileLock (see doom_gym.py)
         self.actor_workers = []
         max_parallel_init = int(1e9)  # might be useful to limit this for some envs
         worker_indices = list(range(self.cfg.num_workers))
@@ -443,6 +477,11 @@ class APPO(ReinforcementLearningAlgorithm):
             self.stats.update(report['stats'])
 
     def report(self):
+        """
+        Called periodically (every X seconds, see report_interval).
+        Print experiment stats (FPS, avg rewards) to console and dump TF summaries collected from workers to disk.
+        """
+
         if len(self.env_steps) < self.cfg.num_policies:
             return
 
@@ -548,6 +587,12 @@ class APPO(ReinforcementLearningAlgorithm):
         return end
 
     def run(self):
+        """
+        This function contains the main loop of the algorithm, as well as initialization/cleanup code.
+
+        :return: ExperimentStatus (SUCCESS, FAILURE, INTERRUPTED). Useful in testing.
+        """
+
         status = ExperimentStatus.SUCCESS
 
         if os.path.isfile(done_filename(self.cfg)):
