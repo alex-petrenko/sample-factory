@@ -58,7 +58,20 @@ class APPO(ReinforcementLearningAlgorithm):
 
         p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False')
 
-        p.add_argument('--rollout', default=32, type=int, help='Length of the rollout from each environment in timesteps. Size of the training batch is rollout X num_envs')
+        p.add_argument(
+            '--rollout', default=32, type=int,
+            help='Length of the rollout from each environment in timesteps.'
+                 'Once we collect this many timesteps on actor worker, we send this trajectory to the learner.'
+                 'The length of the rollout will determine how many timesteps are used to calculate bootstrapped'
+                 'Monte-Carlo estimates of discounted rewards, advantages, GAE, or V-trace targets. Shorter rollouts'
+                 'reduce variance, but the estimates are less precise (bias vs variance tradeoff).'
+                 'For RNN policies, this should be a multiple of --recurrence, so every rollout will be split'
+                 'into (n = rollout / recurrence) segments for backpropagation. V-trace algorithm currently requires that'
+                 'rollout == recurrence, which what you want most of the time anyway.'
+                 'Rollout length is independent from the episode length. Episode length can be both shorter or longer than'
+                 'rollout, although for PBT training it is currently recommended that rollout << episode_len'
+                 '(see function finalize_trajectory in actor_worker.py)',
+        )
 
         p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 

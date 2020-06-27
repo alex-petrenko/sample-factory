@@ -62,7 +62,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
 
         # policy size and configuration
-        p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder')
+        p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder. Supported: conv, mlp, resnet (feel free to define more)')
         p.add_argument('--encoder_subtype', default='convnet_simple', type=str, help='Specific encoder design (see model.py)')
         p.add_argument('--encoder_custom', default=None, type=str, help='Use custom encoder class from the registry (see model_utils.py)')
         p.add_argument('--encoder_extra_fc_layers', default=1, type=int, help='Number of fully-connected layers of size "hidden size" to add after the basic encoder (e.g. convolutional)')
