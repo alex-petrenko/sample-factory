@@ -132,7 +132,7 @@ def register_default_envs(env_registry):
     for envs_prefix, env_funcs in default_envs.items():
         env_registry.register_env_deferred(envs_prefix, env_funcs)
 
-    log.debug('Default envs supported: %r', default_envs.keys())
+    log.debug('Default env families supported: %r', [f'{k}*' for k in default_envs.keys()])
 
 
 def ensure_env_registry_initialized():

@@ -55,6 +55,8 @@ class LearnerWorker:
         self.policy_versions = shared_buffers.policy_versions
         self.stop_experience_collection = shared_buffers.stop_experience_collection
 
+        self.stop_experience_collection_num_msgs = self.resume_experience_collection_num_msgs = 0
+
         self.device = None
         self.actor_critic = None
         self.optimizer = None
@@ -1002,13 +1004,25 @@ class LearnerWorker:
             if self._accumulated_too_much_experience(rollouts):
                 # if we accumulated too much experience, signal the policy workers to stop experience collection
                 if not self.stop_experience_collection[self.policy_id]:
-                    log.debug('Learner %d accumulated too much experience, stop experience collection!', self.policy_id)
+                    self.stop_experience_collection_num_msgs += 1
+                    # TODO: add a logger function for this
+                    if self.stop_experience_collection_num_msgs >= 50:
+                        log.info(
+                            'Learner %d accumulated too much experience, stop experience collection! '
+                            'Learner is likely a bottleneck in your experiment (%d times)',
+                            self.policy_id, self.stop_experience_collection_num_msgs,
+                        )
+                        self.stop_experience_collection_num_msgs = 0
+
                 self.stop_experience_collection[self.policy_id] = True
             elif self.stop_experience_collection[self.policy_id]:
                 # otherwise, resume the experience collection if it was stopped
                 self.stop_experience_collection[self.policy_id] = False
                 with self.resume_experience_collection_cv:
-                    log.debug('Learner %d is resuming experience collection!', self.policy_id)
+                    self.resume_experience_collection_num_msgs += 1
+                    if self.resume_experience_collection_num_msgs >= 50:
+                        log.debug('Learner %d is resuming experience collection!', self.policy_id)
+                        self.resume_experience_collection_num_msgs = 0
                     self.resume_experience_collection_cv.notify_all()
 
             with torch.no_grad():

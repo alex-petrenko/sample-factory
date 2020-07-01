@@ -130,7 +130,7 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
         p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of policy workers that compute forward pass (per policy)')
         p.add_argument(
-            '--max_policy_lag', default=40, type=int,
+            '--max_policy_lag', default=100, type=int,
             help='Max policy lag in policy versions. Discard all experience that is older than this. This should be increased for configurations with multiple epochs of SGD because naturally'
                  'policy-lag may exceed this value.',
         )
