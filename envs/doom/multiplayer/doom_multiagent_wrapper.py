@@ -13,6 +13,7 @@ from envs.doom.doom_gym import doom_lock_file
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log
+from envs.env_utils import retry
 
 
 def safe_get(q, timeout=1e6, msg='Queue timeout'):
@@ -226,10 +227,12 @@ class MultiAgentEnv(gym.Env):
 
         return result_lists
 
+    @retry(exception_class=RuntimeError, num_attempts=3, sleep_time=1)
     def _ensure_initialized(self):
         if self.initialized:
             return
-
+        if self.workers is not None:
+            self.close()
         self.workers = [
             MultiAgentEnvWorker(i, self.make_env_func, self.env_config, reset_on_init=self.reset_on_init)
             for i in range(self.num_agents)
