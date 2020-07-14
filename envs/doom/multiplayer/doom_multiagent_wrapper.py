@@ -18,7 +18,7 @@ from functools import wraps
 from time import sleep
 
 
-def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1):
+def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -26,10 +26,15 @@ def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1):
                 try:
                     return func(*args, **kwargs)
                 except exception_class as e:
-                    args[0].initialized = False
-                    args[0].close()
-                    if func.__name__ == 'step':
-                        args[0].reset()
+                    # This accesses the self instance variable
+                    multiagent_wrapper_obj = args[0]
+                    multiagent_wrapper_obj.initialized = False
+                    multiagent_wrapper_obj.close()
+
+                    # This is done to reset if it is in the step function
+                    if should_reset:
+                        multiagent_wrapper_obj.reset()
+
                     if i == num_attempts - 1:
                         raise
                     else:
@@ -37,7 +42,6 @@ def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1):
                         sleep(sleep_time)
 
         return wrapper
-
     return decorator
 
 
@@ -285,19 +289,19 @@ class MultiAgentEnv(gym.Env):
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
         self.initialized = True
 
-    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1)
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
     def info(self):
         self._ensure_initialized()
         info = self.await_tasks(None, TaskType.INFO)[0]
         return info
 
-    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1)
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
     def reset(self):
         self._ensure_initialized()
         observation = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
         return observation
 
-    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1)
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=True)
     def step(self, actions):
         self._ensure_initialized()
 
