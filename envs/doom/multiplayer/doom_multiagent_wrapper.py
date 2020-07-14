@@ -14,7 +14,31 @@ from envs.doom.doom_gym import doom_lock_file
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log
-from envs.env_utils import retry
+from functools import wraps
+from time import sleep
+
+
+def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for i in range(num_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exception_class as e:
+                    args[0].initialized = False
+                    args[0].close()
+                    if func.__name__ == 'step':
+                        args[0].reset()
+                    if i == num_attempts - 1:
+                        raise
+                    else:
+                        log.error('Failed with error %r, trying again', e)
+                        sleep(sleep_time)
+
+        return wrapper
+
+    return decorator
 
 
 def safe_get(q, timeout=1e6, msg='Queue timeout'):
@@ -223,9 +247,7 @@ class MultiAgentEnv(gym.Env):
     def _ensure_initialized(self):
         if self.initialized:
             return
-        if self.workers is not None:
-            self.close()
-            self.initialized = False
+
         self.workers = [
             MultiAgentEnvWorker(i, self.make_env_func, self.env_config, reset_on_init=self.reset_on_init)
             for i in range(self.num_agents)
@@ -263,28 +285,20 @@ class MultiAgentEnv(gym.Env):
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
         self.initialized = True
 
-    @retry(exception_class=Exception, num_attempts=3, sleep_time=1)
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1)
     def info(self):
         self._ensure_initialized()
         info = self.await_tasks(None, TaskType.INFO)[0]
         return info
 
-    @retry(exception_class=Exception, num_attempts=3, sleep_time=1)
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1)
     def reset(self):
-        if self.workers is not None:
-            self.close()
-            self.initialized = False
         self._ensure_initialized()
         observation = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
         return observation
 
-    @retry(exception_class=Exception, num_attempts=3, sleep_time=1)
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1)
     def step(self, actions):
-        if self.workers[0].result_queue.qsize() >= 1:
-            self.close()
-            self.initialized = False
-            self.reset()
-
         self._ensure_initialized()
 
         for frame in range(self.skip_frames - 1):
