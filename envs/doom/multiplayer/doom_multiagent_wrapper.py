@@ -1,8 +1,9 @@
 import threading
 import time
 from enum import Enum
-from multiprocessing import Process, JoinableQueue
-from queue import Empty, Queue
+from multiprocessing import Process
+from queue import Empty
+from faster_fifo import Queue
 
 import cv2
 import filelock
@@ -13,6 +14,35 @@ from envs.doom.doom_gym import doom_lock_file
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
 from utils.utils import log
+from functools import wraps
+from time import sleep
+
+
+def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for i in range(num_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exception_class as e:
+                    # This accesses the self instance variable
+                    multiagent_wrapper_obj = args[0]
+                    multiagent_wrapper_obj.initialized = False
+                    multiagent_wrapper_obj.close()
+
+                    # This is done to reset if it is in the step function
+                    if should_reset:
+                        multiagent_wrapper_obj.reset()
+
+                    if i == num_attempts - 1:
+                        raise
+                    else:
+                        log.error('Failed with error %r, trying again', e)
+                        sleep(sleep_time)
+
+        return wrapper
+    return decorator
 
 
 def safe_get(q, timeout=1e6, msg='Queue timeout'):
@@ -61,12 +91,10 @@ class MultiAgentEnvWorker:
         self.make_env_func = make_env_func
         self.env_config = env_config
         self.reset_on_init = reset_on_init
-
+        self.task_queue, self.result_queue = Queue(), Queue()
         if use_multiprocessing:
-            self.task_queue, self.result_queue = JoinableQueue(), JoinableQueue()
             self.process = Process(target=self.start, daemon=False)
         else:
-            self.task_queue, self.result_queue = Queue(), Queue()
             self.process = threading.Thread(target=self.start)
 
         self.process.start()
@@ -116,12 +144,10 @@ class MultiAgentEnvWorker:
             if task_type == TaskType.INIT:
                 env = self._init(data)
                 self.result_queue.put(None)  # signal we're done
-                self.task_queue.task_done()
                 continue
 
             if task_type == TaskType.TERMINATE:
                 self._terminate(env)
-                self.task_queue.task_done()
                 break
 
             results = None
@@ -141,7 +167,6 @@ class MultiAgentEnvWorker:
                 raise Exception(f'Unknown task type {task_type}')
 
             self.result_queue.put(results)
-            self.task_queue.task_done()
 
 
 class MultiAgentEnv(gym.Env):
@@ -193,7 +218,7 @@ class MultiAgentEnv(gym.Env):
         )
 
         If your "task" returns only one result per agent (e.g. reset() returns only the observation),
-        the result will be a tuple of lenght 1. It is a responsibility of the caller to index appropriately.
+        the result will be a tuple of length 1. It is a responsibility of the caller to index appropriately.
 
         """
         if data is None:
@@ -211,9 +236,6 @@ class MultiAgentEnv(gym.Env):
                 timeout=0.2 if timeout is None else timeout,
                 msg=f'Takes a surprisingly long time to process task {task_type}, retry...',
             )
-
-            worker.result_queue.task_done()
-            worker.task_queue.join()
 
             if not isinstance(results, (tuple, list)):
                 results = [results]
@@ -256,8 +278,7 @@ class MultiAgentEnv(gym.Env):
 
                     for i, worker in enumerate(self.workers):
                         worker.result_queue.get(timeout=20)
-                        worker.result_queue.task_done()
-                        worker.task_queue.join()
+
             except filelock.Timeout:
                 continue
             except Exception:
@@ -268,21 +289,25 @@ class MultiAgentEnv(gym.Env):
         log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
         self.initialized = True
 
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
     def info(self):
         self._ensure_initialized()
         info = self.await_tasks(None, TaskType.INFO)[0]
         return info
 
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
     def reset(self):
         self._ensure_initialized()
         observation = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
         return observation
 
+    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=True)
     def step(self, actions):
         self._ensure_initialized()
 
         for frame in range(self.skip_frames - 1):
             self.await_tasks(actions, TaskType.STEP)
+
         obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
         for info in infos:
             info['num_frames'] = self.skip_frames
@@ -333,6 +358,3 @@ class MultiAgentEnv(gym.Env):
 
         result = safe_get(worker.result_queue, timeout=0.1)
         assert result is None
-
-        worker.result_queue.task_done()
-        worker.task_queue.join()
