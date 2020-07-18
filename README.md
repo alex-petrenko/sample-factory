@@ -103,8 +103,8 @@ Command lines for running experiments with these datasets are provided in the se
  
 #### Atari
  
-ALE envs are supported out-of-the-box, although we used the existing wrappers and hyperparameters
-aren't well optimized for Atari. A better support for Atari is a welcome contribution.
+ALE envs are supported out-of-the-box, although the existing wrappers and hyperparameters
+aren't well optimized for sample efficiency in Atari. A better support for Atari is a welcome contribution.
  
 #### Other types of environments
  
