@@ -85,7 +85,7 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--rnn_type', default='gru', choices=['gru', 'lstm'], type=str, help='Type of RNN cell to use is use_rnn is True')
 
         p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
-        p.add_argument('--ppo_clip_value', default=0.2, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
+        p.add_argument('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
         p.add_argument('--batch_size', default=1024, type=int, help='Minibatch size for SGD')
         p.add_argument(
             '--num_batches_per_iteration', default=1, type=int,

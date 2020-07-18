@@ -576,7 +576,7 @@ class LearnerWorker:
                     high_loss = 30.0
                     if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(entropy_loss)) > high_loss:
                         log.warning(
-                            'High loss value: %.4f %.4f %.4f %.4f',
+                            'High loss value: %.4f %.4f %.4f %.4f (recommended to adjust the --reward_scale parameter)',
                             to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(entropy_loss),
                         )
                         force_summaries = True
