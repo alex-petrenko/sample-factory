@@ -10,4 +10,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('paper_doom_duel_v98_fs2', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('paper_doom_duel_v100_fs2', experiments=[_experiment])
