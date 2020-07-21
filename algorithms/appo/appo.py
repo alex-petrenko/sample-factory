@@ -38,7 +38,11 @@ from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename
 
-import faster_fifo
+if os.name == 'nt':
+    from utils.faster_fifo_stub import Queue as MpQueue
+else:
+    from faster_fifo import Queue as MpQueue
+
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -228,7 +232,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         self.actor_workers = None
 
-        self.report_queue = faster_fifo.Queue(20 * 1000 * 1000)
+        self.report_queue = MpQueue(20 * 1000 * 1000)
         self.policy_workers = dict()
         self.policy_queues = dict()
 
@@ -383,7 +387,7 @@ class APPO(ReinforcementLearningAlgorithm):
         Initialize all types of workers and start their worker processes.
         """
 
-        actor_queues = [faster_fifo.Queue() for _ in range(self.cfg.num_workers)]
+        actor_queues = [MpQueue() for _ in range(self.cfg.num_workers)]
 
         policy_worker_queues = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -412,7 +416,7 @@ class APPO(ReinforcementLearningAlgorithm):
         for policy_id in range(self.cfg.num_policies):
             self.policy_workers[policy_id] = []
 
-            policy_queue = faster_fifo.Queue()
+            policy_queue = MpQueue()
             self.policy_queues[policy_id] = policy_queue
 
             for i in range(self.cfg.policy_workers_per_policy):

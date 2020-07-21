@@ -6,7 +6,7 @@ import os
 import random
 import time
 from enum import Enum
-from faster_fifo import Full
+from queue import Full
 from os.path import join
 
 import numpy as np

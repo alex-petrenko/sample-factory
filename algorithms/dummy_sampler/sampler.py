@@ -9,22 +9,24 @@ import ctypes
 import multiprocessing
 import os
 import signal
-from os.path import join
-from sys import platform
-
-import psutil
 import time
 from _queue import Empty
 from collections import deque
-from multiprocessing.sharedctypes import RawValue
+from sys import platform
 
 import numpy as np
+import psutil
+from multiprocessing.sharedctypes import RawValue
 
 from algorithms.algorithm import AlgorithmBase
 from envs.create_env import create_env
-from faster_fifo import Queue
 from utils.timing import Timing
 from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool
+
+if os.name == 'nt':
+    from utils.faster_fifo_stub import Queue as MpQueue
+else:
+    from faster_fifo import Queue as MpQueue
 
 
 class DummySampler(AlgorithmBase):
@@ -56,7 +58,7 @@ class DummySampler(AlgorithmBase):
         self.start_event = multiprocessing.Event()
         self.start_event.clear()
 
-        self.report_queue = Queue()
+        self.report_queue = MpQueue()
         self.report_every_sec = 1.0
         self.last_report = 0
 

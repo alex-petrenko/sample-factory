@@ -14,7 +14,11 @@ import psutil
 import torch
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
-import faster_fifo
+if os.name == 'nt':
+    from utils.faster_fifo_stub import Queue as MpQueue
+else:
+    from faster_fifo import Queue as MpQueue
+
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars, \
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
 from algorithms.appo.model import create_actor_critic
@@ -63,7 +67,7 @@ class LearnerWorker:
         self.policy_lock = policy_lock
         self.resume_experience_collection_cv = resume_experience_collection_cv
 
-        self.task_queue = faster_fifo.Queue()
+        self.task_queue = MpQueue()
         self.report_queue = report_queue
 
         self.initialized_event = MultiprocessingEvent()
