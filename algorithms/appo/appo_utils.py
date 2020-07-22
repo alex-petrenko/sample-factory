@@ -125,8 +125,9 @@ def get_available_gpus():
     return available_gpus
 
 
-def set_gpus_for_process(process_idx, num_gpus_per_process, process_type):
-    available_gpus = get_available_gpus()
+def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, available_gpus=None):
+    if available_gpus is None:
+        available_gpus = get_available_gpus()
     num_gpus = len(available_gpus)
     gpus_to_use = []
 
@@ -136,7 +137,8 @@ def set_gpus_for_process(process_idx, num_gpus_per_process, process_type):
     else:
         first_gpu_idx = process_idx * num_gpus_per_process
         for i in range(num_gpus_per_process):
-            gpus_to_use.append((first_gpu_idx + i) % num_gpus)
+            index_mod_num_gpus = (first_gpu_idx + i) % num_gpus
+            gpus_to_use.append(available_gpus[index_mod_num_gpus])
 
         os.environ[CUDA_ENVVAR] = ','.join([str(g) for g in gpus_to_use])
         log.info(

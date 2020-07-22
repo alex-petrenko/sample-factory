@@ -14,5 +14,5 @@ def voxel_env_override_defaults(env, parser):
         hidden_size=512,
         obs_subtract_mean=0.0,
         obs_scale=255.0,
-        gpus_per_actor_worker=1,
+        actor_worker_gpus=[0],
     )

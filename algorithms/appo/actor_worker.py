@@ -787,9 +787,10 @@ class ActorWorker:
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        if self.cfg.gpus_per_actor_worker > 0:
+        if self.cfg.actor_worker_gpus:
             set_gpus_for_process(
-                self.worker_idx, num_gpus_per_process=self.cfg.gpus_per_actor_worker, process_type='actor',
+                self.worker_idx,
+                num_gpus_per_process=1, process_type='actor', available_gpus=self.cfg.actor_worker_gpus,
             )
 
         torch.multiprocessing.set_sharing_strategy('file_system')
