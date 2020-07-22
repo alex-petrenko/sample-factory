@@ -19,7 +19,7 @@ if os.name == 'nt':
 else:
     from faster_fifo import Queue as MpQueue
 
-from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars, \
+from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars_for_policy, \
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
 from algorithms.appo.model import create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
@@ -966,7 +966,7 @@ class LearnerWorker:
             log.error('Low niceness requires sudo!')
 
         if self.cfg.device == 'gpu':
-            cuda_envvars(self.policy_id)
+            cuda_envvars_for_policy(self.policy_id, 'learner')
 
         torch.multiprocessing.set_sharing_strategy('file_system')
         torch.set_num_threads(self.cfg.learner_main_loop_num_cores)

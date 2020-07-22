@@ -19,6 +19,7 @@ import psutil
 from multiprocessing.sharedctypes import RawValue
 
 from algorithms.algorithm import AlgorithmBase
+from algorithms.appo.appo_utils import make_env_func
 from envs.create_env import create_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool
@@ -97,7 +98,8 @@ class DummySampler(AlgorithmBase):
                 for env_idx in range(self.cfg.num_envs_per_worker):
                     global_env_id = proc_idx * self.cfg.num_envs_per_worker + env_idx
                     env_config = AttrDict(worker_index=proc_idx, vector_index=env_idx, env_id=global_env_id)
-                    env = create_env(self.cfg.env, cfg=self.cfg, env_config=env_config)
+
+                    env = make_env_func(cfg=self.cfg, env_config=env_config)
                     log.debug('CPU affinity after create_env: %r', psutil.Process().cpu_affinity() if platform != 'darwin' else 'MacOS - None')
                     env.seed(global_env_id)
                     envs.append(env)
@@ -123,18 +125,15 @@ class DummySampler(AlgorithmBase):
                     last_report = last_report_frames = total_env_frames = 0
                     while not self.terminate.value and total_env_frames < self.cfg.sample_env_frames_per_worker:
                         for env_idx, env in enumerate(envs):
-                            action = env.action_space.sample()
+                            actions = [env.action_space.sample() for _ in range(env.num_agents)]
                             with timing.add_time(f'{env_key[env_idx]}.step'):
-                                obs, reward, done, info = env.step(action)
+                                obs, rewards, dones, infos = env.step(actions)
 
-                            num_frames = info.get('num_frames', 1)
+                            num_frames = sum([info.get('num_frames', 1) for info in infos])
                             total_env_frames += num_frames
                             episode_length[env_idx] += num_frames
 
-                            if done:
-                                with timing.add_time(f'{env_key[env_idx]}.reset'):
-                                    env.reset()
-
+                            if all(dones):
                                 episode_lengths[env_idx].append(episode_length[env_idx])
                                 episode_length[env_idx] = 0
 

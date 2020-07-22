@@ -8,7 +8,7 @@ import psutil
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, make_env_func
+from algorithms.appo.appo_utils import TaskType, make_env_func, cuda_envvars_for_policy, set_gpus_for_process
 from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
 from utils.timing import Timing
@@ -786,6 +786,11 @@ class ActorWorker:
 
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        if self.cfg.gpus_per_actor_worker > 0:
+            set_gpus_for_process(
+                self.worker_idx, num_gpus_per_process=self.cfg.gpus_per_actor_worker, process_type='actor',
+            )
 
         torch.multiprocessing.set_sharing_strategy('file_system')
 

@@ -119,24 +119,37 @@ def set_global_cuda_envvars(cfg):
     os.environ[CUDA_ENVVAR] = ''
 
 
-def cuda_envvars(policy_id):
+def get_available_gpus():
     orig_visible_devices = os.environ[f'{CUDA_ENVVAR}_backup_']
     available_gpus = [int(g) for g in orig_visible_devices.split(',') if g]
-    log.info('Available GPUs: %r', available_gpus)
+    return available_gpus
 
-    # it is crucial to proper CUDA_VISIBLE_DEVICES properly before calling any torch.cuda methods, e.g. device_count()
-    # this is why we're forced to use the env vars
 
+def set_gpus_for_process(process_idx, num_gpus_per_process, process_type):
+    available_gpus = get_available_gpus()
     num_gpus = len(available_gpus)
-    if num_gpus == 0:
-        log.warning('Not using a GPU for policy %d', policy_id)
-        os.environ[CUDA_ENVVAR] = ''
-    else:
-        gpu_idx_to_use = available_gpus[policy_id % num_gpus]
-        os.environ[CUDA_ENVVAR] = str(gpu_idx_to_use)
-        log.info('Set environment var %s to %r for policy %d', CUDA_ENVVAR, os.environ[CUDA_ENVVAR], policy_id)
+    gpus_to_use = []
 
+    if num_gpus == 0:
+        os.environ[CUDA_ENVVAR] = ''
+        log.debug('Not using GPUs for %s process %d', process_type, process_idx)
+    else:
+        first_gpu_idx = process_idx * num_gpus_per_process
+        for i in range(num_gpus_per_process):
+            gpus_to_use.append((first_gpu_idx + i) % num_gpus)
+
+        os.environ[CUDA_ENVVAR] = ','.join([str(g) for g in gpus_to_use])
+        log.info(
+            'Set environment var %s to %r for %s process %d',
+            CUDA_ENVVAR, os.environ[CUDA_ENVVAR], process_type, process_idx,
+        )
         log.debug('Visible devices: %r', torch.cuda.device_count())
+
+    return gpus_to_use
+
+
+def cuda_envvars_for_policy(policy_id, process_type):
+    set_gpus_for_process(policy_id, 1, process_type)
 
 
 def memory_stats(process, device):

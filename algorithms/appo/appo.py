@@ -27,7 +27,7 @@ from torch.multiprocessing import JoinableQueue as TorchJoinableQueue
 
 from algorithms.algorithm import ReinforcementLearningAlgorithm
 from algorithms.appo.actor_worker import ActorWorker
-from algorithms.appo.appo_utils import make_env_func, iterate_recursively
+from algorithms.appo.appo_utils import make_env_func, iterate_recursively, set_global_cuda_envvars
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.policy_worker import PolicyWorker
 from algorithms.appo.population_based_training import PopulationBasedTraining
@@ -184,6 +184,7 @@ class APPO(ReinforcementLearningAlgorithm):
                  'Unfortunately debugging can become very tricky in this case. So there is an option to use only a single thread on the learner to simplify the debugging.',
         )
         p.add_argument('--learner_main_loop_num_cores', default=1, type=int, help='When batching on the learner is the bottleneck, increasing the number of cores PyTorch uses can improve the performance')
+        p.add_argument('--gpus_per_actor_worker', default=0, type=int, help='By default, actor workers only use CPUs. Changes this if e.g. you need GPU-based rendering on the actors')
 
         # PBT stuff
         p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
@@ -206,6 +207,9 @@ class APPO(ReinforcementLearningAlgorithm):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+
+        # we should not use CUDA in the main thread, only on the workers
+        set_global_cuda_envvars(cfg)
 
         tmp_env = make_env_func(self.cfg, env_config=None)
         self.obs_space = tmp_env.observation_space

@@ -9,7 +9,7 @@ import psutil
 import torch
 from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, memory_stats, cuda_envvars
+from algorithms.appo.appo_utils import TaskType, memory_stats, cuda_envvars_for_policy
 from algorithms.appo.model import create_actor_critic
 from utils.timing import Timing
 from utils.utils import AttrDict, log, join_or_kill
@@ -180,7 +180,7 @@ class PolicyWorker:
 
         psutil.Process().nice(min(self.cfg.default_niceness + 2, 20))
 
-        cuda_envvars(self.policy_id)
+        cuda_envvars_for_policy(self.policy_id, 'inference')
         torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()

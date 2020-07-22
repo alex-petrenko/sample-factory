@@ -27,4 +27,3 @@ def doom_override_defaults(env, parser):
         env_frameskip=4,
         fps=35,
     )
-
