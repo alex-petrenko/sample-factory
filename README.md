@@ -62,6 +62,8 @@ conda env create -f environment.yml
 conda activate sample-factory
 ```
 
+SF is known to also work on macOS. There is no Windows support at this time.
+
 ### Environment support
 
 Sample Factory comes with built-in support for multiple families of environments,
