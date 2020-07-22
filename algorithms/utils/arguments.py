@@ -28,6 +28,9 @@ def arg_parser(argv=None, evaluation=False):
     if argv is None:
         argv = sys.argv[1:]
 
+    # optionally remove help parameter here
+    argv = [x for x in argv if x not in ['--help', '-h']]
+
     # noinspection PyTypeChecker
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
