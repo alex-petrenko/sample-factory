@@ -59,9 +59,7 @@ class Queue:
         return self.q.full()
 
     def join_thread(self):
-        """This is not implemented as this implementation does not use a background thread"""
         self.q.join_thread()
 
     def cancel_join_thread(self):
-        """This is not implemented as this implementation does not use a background thread"""
         self.q.cancel_join_thread()
