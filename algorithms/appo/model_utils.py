@@ -164,7 +164,7 @@ class ConvEncoder(EncoderBase):
 
     def forward(self, obs_dict):
         x = self.conv_head(obs_dict['obs'])
-        x = x.view(-1, self.conv_head_out_size)
+        x = x.contiguous().view(-1, self.conv_head_out_size)
 
         x = self.forward_fc_blocks(x)
         return x
@@ -231,7 +231,7 @@ class ResnetEncoder(EncoderBase):
 
     def forward(self, obs_dict):
         x = self.conv_head(obs_dict['obs'])
-        x = x.view(-1, self.conv_head_out_size)
+        x = x.contiguous().view(-1, self.conv_head_out_size)
 
         x = self.forward_fc_blocks(x)
         return x
