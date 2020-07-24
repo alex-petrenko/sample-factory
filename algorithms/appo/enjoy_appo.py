@@ -90,11 +90,10 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
 
                 policy_outputs = actor_critic(obs_torch, rnn_states, with_action_distribution=True)
 
-                action_distribution = policy_outputs.action_distribution
-
                 # sample actions from the distribution by default
                 actions = policy_outputs.actions
 
+                action_distribution = policy_outputs.action_distribution
                 if isinstance(action_distribution, ContinuousActionDistribution):
                     if not cfg.continuous_actions_sample:  # TODO: add similar option for discrete actions
                         actions = action_distribution.means

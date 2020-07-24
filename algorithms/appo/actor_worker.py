@@ -6,11 +6,13 @@ from queue import Empty
 import numpy as np
 import psutil
 import torch
+from gym.spaces import Discrete, Tuple
 from torch.multiprocessing import Process as TorchProcess
 
 from algorithms.appo.appo_utils import TaskType, make_env_func, cuda_envvars_for_policy, set_gpus_for_process
 from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
+from algorithms.utils.spaces.discretized import Discretized
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
 
@@ -99,6 +101,20 @@ class ActorState:
 
         self.pbt_reward_shaping = pbt_reward_shaping
 
+        self.integer_actions = False
+        if isinstance(env.action_space, (Discrete, Discretized)):
+            self.integer_actions = True
+        if isinstance(env.action_space, Tuple):
+            all_subspaces_discrete = all(isinstance(s, (Discrete, Discretized)) for s in env.action_space.spaces)
+            if all_subspaces_discrete:
+                self.integer_actions = True
+            else:
+                # tecnhically possible to add support for such spaces, but it's untested
+                # for now, look at Discretized instead.
+                raise Exception(
+                    'Mixed discrete & continuous action spaces are not fully supported (should be an easy fix)'
+                )
+
     def _env_set_curr_policy(self):
         """
         Most environments do not need to know index of the policy that currently collects experience.
@@ -135,7 +151,11 @@ class ActorState:
         """
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
-        actions = self.last_actions.type(torch.int32).numpy()
+        if self.integer_actions:
+            actions = self.last_actions.type(torch.int32).numpy()
+        else:
+            actions = self.last_actions.numpy()
+
         if len(actions) == 1:
             actions = actions.item()
         return actions
