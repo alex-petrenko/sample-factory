@@ -29,16 +29,22 @@ def arg_parser(argv=None, evaluation=False):
         argv = sys.argv[1:]
 
     # noinspection PyTypeChecker
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, add_help=False)
 
     # common args
-    parser.add_argument('--algo', type=str, default=None, required=True)
-    parser.add_argument('--env', type=str, default=None, required=True)
-    parser.add_argument('--experiment', type=str, default=None, required=True)
+    parser.add_argument('--algo', type=str, default=None, required=True, help='Algo type to use (pass "APPO" if in doubt)')
+    parser.add_argument('--env', type=str, default=None, required=True, help='Fully-qualified environment name in the form envfamily_envname, e.g. atari_breakout or doom_battle')
+    parser.add_argument(
+        '--experiment', type=str, default=None, required=True,
+        help='Unique experiment name. This will also be the name for the experiment folder in the train dir.'
+             'If the experiment folder with this name aleady exists the experiment will be RESUMED!'
+             'Any parameters passed from command line that do not match the parameters stored in the experiment cfg.json file will be overridden.',
+    )
     parser.add_argument(
         '--experiments_root', type=str, default=None, required=False,
         help='If not None, store experiment data in the specified subfolder of train_dir. Useful for groups of experiments (e.g. gridsearch)',
     )
+    parser.add_argument('-h', '--help', action='store_true', help='Print the help message', required=False)
 
     basic_args, _ = parser.parse_known_args(argv)
     algo = basic_args.algo
@@ -69,6 +75,11 @@ def parse_args(argv=None, evaluation=False, parser=None):
 
     # parse all the arguments (algo, env, and optionally evaluation)
     args = parser.parse_args(argv)
+
+    if args.help:
+        parser.print_help()
+        sys.exit(0)
+
     args.command_line = ' '.join(argv)
 
     # following is the trick to get only the args passed from the command line

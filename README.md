@@ -147,17 +147,25 @@ python -m algorithms.appo.enjoy_appo --env=doom_basic --algo=APPO --experiment=d
 ```
 
 ### Configuration
- 
-Sample Factory experiments are configured via command line parameters.
+
+Sample Factory experiments are configured via command line parameters. The following command will print the help message
+for the algorithm-environment combination:
+
+```
+python -m algorithms.appo.train_appo --algo=APPO --env=doom_battle --experiment=something --help
+```
+
+This will print the full list of parameters, their descriptions, and their default values.
+Replace `doom_battle` with a different environment name (i.e. `atari_breakout`) to get information about parameters
+specific to this particular environment. 
+
 Once the new experiment is started, a directory containing experiment-related files is created in `--train_dir`
 location (or `./train_dir` in `cwd` if `--train_dir` is not passed from command line). This directory contains a file
 `cfg.json` where all the experiment parameters are saved (including those instantiated from their default values).
 
-Most default parameter values and their help strings can be found in `algorithms/algorithm.py` and
+Most default parameter values and their help strings are defined in `algorithms/algorithm.py` and
 `algorithms/appo/appo.py`. Besides that, additional parameters can be defined for specific families of environments.
 Some default parameter values are also overridden for some environments, primarily to save typing.
-Simple text search in the codebase will yield definitions, default values, and help strings for these parameters as well
-(see e.g. `doom_params.py` or `dmlab_params.py`).
 
 The key parameters are:
 
