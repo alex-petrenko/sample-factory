@@ -36,7 +36,7 @@ from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISOD
     ExperimentStatus
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
-    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename, get_git_commit_hash
+    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename
 
 if os.name == 'nt':
     from utils.faster_fifo_stub import Queue as MpQueue
@@ -292,7 +292,6 @@ class APPO(ReinforcementLearningAlgorithm):
 
     def _save_cfg(self):
         cfg_dict = self._cfg_dict()
-        cfg_dict['git_hash'] = get_git_commit_hash()
         with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 

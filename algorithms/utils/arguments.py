@@ -6,7 +6,7 @@ import sys
 
 from algorithms.utils.evaluation_config import add_eval_args
 from envs.env_config import add_env_args, env_override_defaults
-from utils.utils import log, AttrDict, cfg_file
+from utils.utils import log, AttrDict, cfg_file, get_git_commit_hash
 
 
 def get_algo_class(algo):
@@ -97,7 +97,7 @@ def parse_args(argv=None, evaluation=False, parser=None):
             del cli_args.__dict__[arg_name]
 
     args.cli_args = vars(cli_args)
-
+    args.git_hash = get_git_commit_hash()
     return args
 
 
