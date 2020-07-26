@@ -13,6 +13,7 @@ from sys import platform
 
 import numpy as np
 import psutil
+import subprocess
 from colorlog import ColoredFormatter
 
 ch = logging.StreamHandler()
@@ -102,6 +103,7 @@ def static_vars(**kwargs):
         for k in kwargs:
             setattr(func, k, kwargs[k])
         return func
+
     return decorate
 
 
@@ -119,9 +121,9 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
 def str2bool(v):
     if isinstance(v, bool):
         return v
-    if isinstance(v, str) and v.lower() in ('true', ):
+    if isinstance(v, str) and v.lower() in ('true',):
         return True
-    elif isinstance(v, str) and v.lower() in ('false', ):
+    elif isinstance(v, str) and v.lower() in ('false',):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected')
@@ -328,3 +330,10 @@ def cfg_file(cfg):
 
 def done_filename(cfg):
     return join(experiment_dir(cfg=cfg), 'done')
+
+
+def get_git_commit_hash():
+    path_to_project = os.path.dirname(os.path.realpath(__file__))
+    return subprocess.check_output(['git', 'rev-parse', 'HEAD'],
+                                   cwd=path_to_project,
+                                   timeout=0.1).strip().decode('ascii')
