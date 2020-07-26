@@ -103,7 +103,6 @@ def static_vars(**kwargs):
         for k in kwargs:
             setattr(func, k, kwargs[k])
         return func
-
     return decorate
 
 
@@ -121,9 +120,9 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
 def str2bool(v):
     if isinstance(v, bool):
         return v
-    if isinstance(v, str) and v.lower() in ('true',):
+    if isinstance(v, str) and v.lower() in ('true', ):
         return True
-    elif isinstance(v, str) and v.lower() in ('false',):
+    elif isinstance(v, str) and v.lower() in ('false', ):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected')
