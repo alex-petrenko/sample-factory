@@ -354,3 +354,4 @@ def save_git_diff(directory, origin_branch='origin/master'):
                 stdout=outfile, cwd=path_to_project, timeout=5)
     except CalledProcessError:
         pass
+
