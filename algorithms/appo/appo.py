@@ -36,7 +36,7 @@ from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISOD
     ExperimentStatus
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
-    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename
+    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename, save_git_diff
 
 if os.name == 'nt':
     from utils.faster_fifo_stub import Queue as MpQueue
@@ -297,6 +297,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
     def initialize(self):
         self._save_cfg()
+        save_git_diff(experiment_dir(cfg=self.cfg))
 
     def finalize(self):
         pass

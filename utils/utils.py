@@ -9,11 +9,11 @@ import pwd
 import tempfile
 from _queue import Empty
 from os.path import join
+from subprocess import check_output, CalledProcessError, run
 from sys import platform
 
 import numpy as np
 import psutil
-import subprocess
 from colorlog import ColoredFormatter
 
 ch = logging.StreamHandler()
@@ -333,6 +333,24 @@ def done_filename(cfg):
 
 def get_git_commit_hash():
     path_to_project = os.path.dirname(os.path.realpath(__file__))
-    return subprocess.check_output(['git', 'rev-parse', 'HEAD'],
-                                   cwd=path_to_project,
-                                   timeout=0.1).strip().decode('ascii')
+    try:
+        git_hash = check_output(['git', 'rev-parse', 'HEAD'],
+                                cwd=path_to_project,
+                                timeout=5).strip().decode('ascii')
+    except CalledProcessError:
+        # this scenario is for when there's no git and we are returning an unknown value
+        git_hash = 'unknown'
+    return git_hash
+
+
+def save_git_diff(directory, origin_branch='origin/master'):
+    path_to_project = os.path.dirname(os.path.realpath(__file__))
+    try:
+        current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                                      cwd=path_to_project,
+                                      timeout=5).strip().decode('ascii')
+        with open(join(directory, 'patch.diff'), 'w') as outfile:
+            run(["git", "diff", origin_branch, current_branch],
+                stdout=outfile, cwd=path_to_project, timeout=5)
+    except CalledProcessError:
+        pass
