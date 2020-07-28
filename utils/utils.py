@@ -350,7 +350,7 @@ def save_git_diff(directory, origin_branch='origin/master'):
                                       cwd=path_to_project,
                                       timeout=5).strip().decode('ascii')
         with open(join(directory, 'patch.diff'), 'w') as outfile:
-            run(["git", "diff", origin_branch, current_branch],
+            run(['git', 'diff', origin_branch, current_branch],
                 stdout=outfile, cwd=path_to_project, timeout=5)
     except CalledProcessError:
         pass
