@@ -343,15 +343,11 @@ def get_git_commit_hash():
     return git_hash
 
 
-def save_git_diff(directory, origin_branch='origin/master'):
+def save_git_diff(directory):
     path_to_project = os.path.dirname(os.path.realpath(__file__))
     try:
-        current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                                      cwd=path_to_project,
-                                      timeout=5).strip().decode('ascii')
         with open(join(directory, 'git.diff'), 'w') as outfile:
-            run(['git', 'diff', origin_branch, current_branch],
+            run(['git', 'diff'],
                 stdout=outfile, cwd=path_to_project, timeout=5)
     except CalledProcessError:
         pass
-
