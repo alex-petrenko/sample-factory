@@ -8,6 +8,7 @@ from torch.nn import functional
 
 from algorithms.utils.algo_utils import EPS
 from utils.utils import log
+import math
 
 
 def calc_num_actions(action_space):
@@ -76,7 +77,7 @@ class CategoricalActionDistribution(Categorical):
 
     """
 
-    def __init__(self, raw_logits, prior_probs=None):
+    def __init__(self, raw_logits):
         """
         Ctor.
         :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
@@ -84,15 +85,8 @@ class CategoricalActionDistribution(Categorical):
         super().__init__(logits=raw_logits)
 
         num_categories = raw_logits.shape[-1]
-
-        if prior_probs is None:
-            # use uniform prior by default
-            self.prior_probs = torch.empty(num_categories, device=raw_logits.device)
-            self.prior_probs.fill_(1.0 / num_categories)
-        else:
-            self.prior_probs = torch.tensor(prior_probs, device=raw_logits.device)
-
-        self.log_prior_probs = self.prior_probs.log()
+        self.uniform_prob = 1 / num_categories
+        self.log_uniform_prob = math.log(1 / num_categories)
 
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
@@ -109,8 +103,10 @@ class CategoricalActionDistribution(Categorical):
     def _kl_symmetric(self, other_log_probs):
         return 0.5 * (self._kl(other_log_probs) + self._kl_inverse(other_log_probs))
 
-    def kl_prior(self):
-        return self._kl_symmetric(self.log_prior_probs)
+    def symmetric_kl_with_uniform_prior(self):
+        probs, log_probs = self.probs, self.logits
+        return 0.5 * ((probs * (log_probs - self.log_uniform_prob)).sum(dim=-1)
+                      + (self.uniform_prob * (self.log_uniform_prob - log_probs)).sum(dim=-1))
 
     def kl_divergence(self, other):
         return self._kl(other.logits)

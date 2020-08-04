@@ -259,6 +259,16 @@ class LearnerWorker:
 
         self.process = Process(target=self._run, daemon=True)
 
+        if is_continuous_action_space(self.action_space):
+            raise NotImplementedError(f'Continuous Action spaces not supported!')
+
+        if self.cfg.exploration_loss == 'entropy':
+            self.exploration_loss_func = self.entropy_exploration_loss
+        elif self.cfg.exploration_loss == 'symmetric_kl':
+            self.exploration_loss_func = self.symmetric_kl_exploration_loss
+        else:
+            raise NotImplementedError(f'{self.cfg.exploration_loss} not supported!')
+
     def start_process(self):
         self.process.start()
 
@@ -560,22 +570,22 @@ class LearnerWorker:
 
         return value_loss
 
-    def maximize_entropy(self, action_distribution):
+    def entropy_exploration_loss(self, action_distribution):
         entropy = action_distribution.entropy()
-        if self.cfg.entropy_loss_coeff > 0.0:
-            entropy_loss = -self.cfg.entropy_loss_coeff * entropy.mean()
+        if self.cfg.exploration_loss_coeff > 0.0:
+            entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
         else:
             entropy_loss = 0.0
         return entropy_loss
 
-    def symmetric_kl_with_uniform_prior(self, action_distribution, mb):
-        if is_continuous_action_space(self.actor_critic.action_space):
-            raise NotImplementedError(f'Continuous Action spaces not supported!')
-            
-        if self.cfg.kl_prior_loss_coeff > 0.0:
-            kl_prior = action_distribution.kl_prior()
+    def symmetric_kl_exploration_loss(self, action_distribution):
+        if self.cfg.exploration_loss_coeff > 0.0:
+            kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
+            if not torch.isfinite(kl_prior).all():
+                kl_prior = torch.zeros(kl_prior.shape)
             kl_prior = kl_prior.mean()
-            kl_prior_loss = self.cfg.kl_prior_loss_coeff * kl_prior
+            kl_prior = torch.clamp(kl_prior, max=30)
+            kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
         else:
             kl_prior_loss = 0.0
         return kl_prior_loss
@@ -734,12 +744,7 @@ class LearnerWorker:
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
 
-                    if self.cfg.exploration_loss_type == 'entropy':
-                        exploration_loss = self.maximize_entropy(action_distribution)
-                    elif self.cfg.exploration_loss_type == 'symmetric_kl':
-                        exploration_loss = self.symmetric_kl_with_uniform_prior(action_distribution, mb)
-                    else:
-                        raise NotImplementedError(f'{self.cfg.exploration_loss_type} not supported!')
+                    exploration_loss = self.exploration_loss_func(action_distribution)
                     actor_loss = policy_loss + exploration_loss
                     epoch_actor_losses.append(actor_loss.item())
 

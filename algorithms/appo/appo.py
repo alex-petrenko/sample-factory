@@ -116,18 +116,11 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
-        p.add_argument('--entropy_loss_coeff', default=0.003, type=float, help='Coefficient for the exploration component of the loss function.')
+        p.add_argument('--exploration_loss_coeff', default=0.003, type=float,
+                       help='Coefficient for the exploration component of the loss function.')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
-        p.add_argument('--exploration_loss_type', default='entropy', type=str,
+        p.add_argument('--exploration_loss', default='entropy', type=str,
                        help='Choosing the type of exploration loss', choices=['entropy', 'symmetric_kl'])
-        p.add_argument(
-            '--kl_prior_loss_coeff', default=0.001, type=float,
-            help=(
-                'Coefficient for the exploration component of the symmetric kl exploration loss. '
-                'Typically this is entropy maximization, but here we use KL-divergence between our policy and a prior.'
-                'By default prior is a uniform distribution, and this is numerically equivalent to maximizing entropy.'
-                'Alternatively we can use custom prior distributions, e.g. to encode domain knowledge'),
-        )
 
         # APPO-specific
         p.add_argument(
