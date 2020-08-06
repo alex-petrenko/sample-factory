@@ -259,10 +259,13 @@ class LearnerWorker:
 
         self.process = Process(target=self._run, daemon=True)
 
-        if is_continuous_action_space(self.action_space):
-            raise NotImplementedError(f'Continuous Action spaces not supported!')
+        if is_continuous_action_space(self.action_space) and self.cfg.exploration_loss == 'symmetric_kl':
+            raise NotImplementedError(f'KL-divergence exploration loss is not supported with '
+                                      f'continuous action spaces. Use entropy exploration loss')
 
-        if self.cfg.exploration_loss == 'entropy':
+        if self.cfg.exploration_loss_coeff == 0.0:
+            self.exploration_loss_func = lambda action_distr: 0.0
+        elif self.cfg.exploration_loss == 'entropy':
             self.exploration_loss_func = self.entropy_exploration_loss
         elif self.cfg.exploration_loss == 'symmetric_kl':
             self.exploration_loss_func = self.symmetric_kl_exploration_loss
@@ -581,9 +584,9 @@ class LearnerWorker:
     def symmetric_kl_exploration_loss(self, action_distribution):
         if self.cfg.exploration_loss_coeff > 0.0:
             kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
-            if not torch.isfinite(kl_prior).all():
-                kl_prior = torch.zeros(kl_prior.shape)
             kl_prior = kl_prior.mean()
+            if not torch.isfinite(kl_prior):
+                kl_prior = torch.zeros(kl_prior.shape)
             kl_prior = torch.clamp(kl_prior, max=30)
             kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
         else:

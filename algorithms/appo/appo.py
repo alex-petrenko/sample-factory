@@ -120,7 +120,22 @@ class APPO(ReinforcementLearningAlgorithm):
                        help='Coefficient for the exploration component of the loss function.')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         p.add_argument('--exploration_loss', default='entropy', type=str,
-                       help='Choosing the type of exploration loss', choices=['entropy', 'symmetric_kl'])
+                       help='Usually the exploration loss is based on maximizing the entropy of the probability'
+                            ' distribution. Note that mathematically maximizing entropy of the categorical probability '
+                            'distribution is exactly the same as minimizing the (regular) KL-divergence between'
+                            ' this distribution and a uniform prior. The downside of using the entropy term '
+                            '(or regular asymmetric KL-divergence) is the fact that penalty does not increase as '
+                            'probabilities of some actions approach zero. I.e. numerically, there is almost '
+                            'no difference between an action distribution with a probability epsilon > 0 for '
+                            'some action and an action distribution with a probability = zero for this action.'
+                            ' For many tasks the first (epsilon) distribution is preferrable because we keep some '
+                            '(albeit small) amount of exploration, while the second distribution will never explore '
+                            'this action ever again.'
+                            'Unlike the entropy term, symmetric KL divergence between the action distribution '
+                            'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
+                            ' so it can prevent the pathological situations where the agent stops exploring. '
+                            'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
+                       choices=['entropy', 'symmetric_kl'])
 
         # APPO-specific
         p.add_argument(

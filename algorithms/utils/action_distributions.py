@@ -86,7 +86,7 @@ class CategoricalActionDistribution(Categorical):
 
         num_categories = raw_logits.shape[-1]
         self.uniform_prob = 1 / num_categories
-        self.log_uniform_prob = math.log(1 / num_categories)
+        self.log_uniform_prob = math.log(self.uniform_prob)
 
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
@@ -202,6 +202,10 @@ class TupleActionDistribution:
         kls = torch.cat(kls, dim=1)
         kl = kls.sum(dim=1)
         return kl
+
+    def symmetric_kl_with_uniform_prior(self):
+        kls = [d.symmetric_kl_with_uniform_prior() for d in self.distributions]
+        return kls
 
     def dbg_print(self):
         for d in self.distributions:
