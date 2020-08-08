@@ -174,6 +174,7 @@ class LearnerWorker:
         self.new_cfg = None  # non-None when we need to update the learning hyperparameters
 
         self.terminate = False
+        self.num_batches_processed = 0
 
         self.obs_space = obs_space
         self.action_space = action_space
@@ -361,6 +362,14 @@ class LearnerWorker:
         with timing.add_time('prepare'):
             buffer = self._prepare_train_buffer(rollouts, macro_batch_size, timing)
             self.experience_buffer_queue.put((buffer, batch_size, samples, env_steps))
+
+            if not self.cfg.benchmark:
+                # in PyTorch 1.4.0 there is an intense memory spike when the very first batch is being processed
+                # we wait here until this is over so we can continue queueing more batches onto a GPU without having
+                # a risk to run out of GPU memory
+                while self.num_batches_processed < 1:
+                    log.debug('Waiting for the first batch to be processed')
+                    time.sleep(0.1)
 
     def _process_rollouts(self, rollouts, timing):
         # batch_size can potentially change through PBT, so we should keep it the same and pass it around
@@ -965,7 +974,6 @@ class LearnerWorker:
 
         wait_times = deque([], maxlen=self.cfg.num_workers)
         last_cache_cleanup = time.time()
-        num_batches_processed = 0
 
         while not self.terminate:
             with timing.timeit('train_wait'):
@@ -988,9 +996,9 @@ class LearnerWorker:
                 wait_stats = (wait_avg, wait_min, wait_max)
 
             self._process_training_data(data, timing, wait_stats)
-            num_batches_processed += 1
+            self.num_batches_processed += 1
 
-            if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and num_batches_processed < 50):
+            if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and self.num_batches_processed < 50):
                 if self.cfg.device == 'gpu':
                     torch.cuda.empty_cache()
                     torch.cuda.ipc_collect()
