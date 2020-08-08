@@ -33,12 +33,10 @@ from utils.timing import Timing
 from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill, safe_get
 
 
-
-def _build_pack_info_from_dones(
-    dones, T: int,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    r"""Create the indexing info needed to make the PackedSequence
-    based on the dones.
+# noinspection PyPep8Naming
+def _build_pack_info_from_dones(dones, T: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Create the indexing info needed to make the PackedSequence based on the dones.
 
     PackedSequences are PyTorch's way of supporting a single RNN forward
     call where each input in the batch can have an arbitrary sequence length
@@ -53,46 +51,28 @@ def _build_pack_info_from_dones(
     construct the data for a PackedSequence from a (N*T, ...) tensor
     via x.index_select(0, select_inds)
     """
-    dones = dones.view(-1, T)
-    N = dones.size(0)
-    # Anywhere where t=0 is not already a done, we need to pad on a 1
-    # so that we can have a episode start at all t=0
-    padded_dones = torch.cat([(dones[:, 0:1] == 0.0).to(dtype=dones.dtype), dones], 1)
-    dones_nz = padded_dones.nonzero()
-    # Subtract 1 of all non zero locations that aren't from the padded ones
-    # that we added above
-    dones_nz[dones_nz[:, 1] != 0, 1] -= 1
 
-    # The + dones_nz[:, 0]*T will make the episode_starts index into
-    # the N*T flattened tensors
-    episode_starts = dones_nz[:, 1] + dones_nz[:, 0] * T
+    num_samples = len(dones)
 
-    lengths = (
-        torch.cat(
-            [
-                episode_starts[1:],
-                torch.full(
-                    (1,),
-                    N * T,
-                    device=episode_starts.device,
-                    dtype=episode_starts.dtype,
-                ),
-            ]
-        )
-        - episode_starts
-    )
+    rollout_boundaries = dones.clone().detach()
+    rollout_boundaries[::T] = 1  # beginning of each rollout is the boundary
+    rollout_boundaries = rollout_boundaries.nonzero().squeeze()
 
-    lengths, sorted_indices = torch.sort(lengths, descending=True)
+    rollout_lengths = rollout_boundaries[1:] - rollout_boundaries[:-1]
+    last_length = num_samples - rollout_boundaries[-1]
+    rollout_lengths = torch.cat([rollout_lengths, last_length.unsqueeze(0)])
+
+    lengths, sorted_indices = torch.sort(rollout_lengths, descending=True)
     # We will want these on the CPU for torch.unique_consecutive,
     # so move now.
-    cpu_lengths = lengths.to(device="cpu", non_blocking=True)
+    cpu_lengths = lengths.to(device='cpu', non_blocking=True)
 
-    episode_starts = episode_starts.index_select(0, sorted_indices)
-    select_inds = torch.empty((N * T), device=dones.device, dtype=torch.int64)
+    episode_starts = rollout_boundaries.index_select(0, sorted_indices)
+    select_inds = torch.empty(num_samples, device=dones.device, dtype=torch.int64)
 
     max_length = int(cpu_lengths[0].item())
     # batch_sizes is *always* on the CPU
-    batch_sizes = torch.empty((max_length,), device="cpu", dtype=torch.int64)
+    batch_sizes = torch.empty((max_length,), device='cpu', dtype=torch.int64)
 
     offset = 0
     prev_len = 0
@@ -116,19 +96,23 @@ def _build_pack_info_from_dones(
             )
         ).view(-1)
 
-        select_inds[offset : offset + new_inds.numel()] = new_inds
+        # for a set of sequences [1, 2, 3], [4, 5], [6, 7], [8]
+        # these indices will be 1,4,6,8,2,5,7,3
+        # (all first steps in all trajectories, then all second steps, etc.)
+        select_inds[offset:offset + new_inds.numel()] = new_inds
 
         offset += new_inds.numel()
 
         prev_len = next_len
 
     # Make sure we have an index for all elements
-    assert offset == N * T
+    assert offset == num_samples
 
     return episode_starts, select_inds, batch_sizes, sorted_indices
 
 
-def build_rnn_inputs(x, dones, rnn_states, T: int):
+# noinspection PyPep8Naming
+def build_rnn_inputs(x, dones, dones_cpu, rnn_states, T: int):
     r"""Create a PackedSequence input for an RNN such that each
     set of steps that are part of the same episode are all part of
     a batch in the PackedSequence.
@@ -137,6 +121,7 @@ def build_rnn_inputs(x, dones, rnn_states, T: int):
 
     :param x: A (N*T, -1) tensor of the data to build the PackedSequence out of
     :param dones: A (N*T) tensor where dones[i] == 1.0 indicates an episode is done
+    :param dones_cpu: same but a CPU-bound tensor
     :param rnn_states: A (N*T, -1) tensor of the rnn_hidden_states
     :param T: The length of the rollout
 
@@ -146,29 +131,27 @@ def build_rnn_inputs(x, dones, rnn_states, T: int):
 
         rnn_states are the corresponding rnn state
 
-        select_inds is can be passed to build_core_out_from_seq so the
-            RNN output can be retrieved
+        inverted_select_inds can be passed to build_core_out_from_seq so the RNN output can be retrieved
 
     """
-    (
-        episode_starts,
-        select_inds,
-        batch_sizes,
-        sorted_indices,
-    ) = _build_pack_info_from_dones(dones, T)
+    episode_starts, select_inds, batch_sizes, sorted_indices = _build_pack_info_from_dones(dones_cpu, T)
+
+    inverted_select_inds = invert_permutation(select_inds)
+    select_inds = select_inds.to(device=x.device)
+    inverted_select_inds = inverted_select_inds.to(device=x.device)
+    sorted_indices = sorted_indices.to(device=x.device)
 
     x_seq = PackedSequence(x.index_select(0, select_inds), batch_sizes, sorted_indices)
 
+    episode_starts = episode_starts.to(device=x.device)
     rnn_states = rnn_states.index_select(0, episode_starts) * (
         1 - dones.view(-1, 1)
     ).index_select(0, episode_starts)
 
-    return x_seq, rnn_states, select_inds
+    return x_seq, rnn_states, inverted_select_inds
 
 
-def build_core_out_from_seq(x_seq: PackedSequence, select_inds):
-    inverted_select_inds = invert_permutation(select_inds)
-
+def build_core_out_from_seq(x_seq: PackedSequence, inverted_select_inds):
     return x_seq.data.index_select(0, inverted_select_inds)
 
 
@@ -349,7 +332,10 @@ class LearnerWorker:
 
         with timing.add_time('squeeze'):
             # will squeeze actions only in simple categorical case
-            tensors_to_squeeze = ['actions', 'log_prob_actions', 'policy_version', 'values', 'rewards', 'dones']
+            tensors_to_squeeze = [
+                'actions', 'log_prob_actions', 'policy_version', 'values',
+                'rewards', 'dones', 'rewards_cpu', 'dones_cpu',
+            ]
             for tensor_name in tensors_to_squeeze:
                 device_buffer[tensor_name].squeeze_()
 
@@ -556,6 +542,9 @@ class LearnerWorker:
                 device_tensor = item.detach().to(self.device, copy=True, non_blocking=True)
                 device_buffer[key] = device_tensor.float()
 
+        device_buffer['dones_cpu'] = buffer.dones.to('cpu', copy=True, non_blocking=True).float()
+        device_buffer['rewards_cpu'] = buffer.rewards.to('cpu', copy=True, non_blocking=True).float()
+
         return device_buffer
 
     def _train(self, gpu_buffer, batch_size, experience_size, timing):
@@ -612,31 +601,20 @@ class LearnerWorker:
                 # initial rnn states
                 with timing.add_time('bptt_initial'):
                     if self.cfg.use_rnn:
-                        head_output_seq, rnn_states, select_inds = build_rnn_inputs(
-                            head_outputs, mb.dones, mb.rnn_states, recurrence
+                        head_output_seq, rnn_states, inverted_select_inds = build_rnn_inputs(
+                            head_outputs, mb.dones, mb.dones_cpu, mb.rnn_states, recurrence,
                         )
                     else:
                         rnn_states = mb.rnn_states[::recurrence]
-                        is_same_episode = 1.0 - mb.dones.unsqueeze(dim=1)
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
                     if self.cfg.use_rnn:
                         with timing.add_time('bptt_forward_core'):
-                            (
-                                core_output_seq,
-                                _
-                            ) = self.actor_critic.forward_core(
-                                head_output_seq, rnn_states
-                            )
-                        core_outputs = build_core_out_from_seq(
-                            core_output_seq, select_inds
-                        )
+                            core_output_seq, _ = self.actor_critic.forward_core(head_output_seq, rnn_states)
+                        core_outputs = build_core_out_from_seq(core_output_seq, inverted_select_inds)
                     else:
-                        with timing.add_time('bptt_forward_core'):
-                            core_outputs, _ = self.actor_critic.forward_core(
-                                head_outputs, rnn_states
-                            )
+                        core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
 
                 with timing.add_time('tail'):
                     assert core_outputs.shape[0] == head_outputs.shape[0]
@@ -658,8 +636,8 @@ class LearnerWorker:
                     if self.cfg.with_vtrace:
                         ratios_cpu = ratio.cpu()
                         values_cpu = values.cpu()
-                        rewards_cpu = mb.rewards.cpu()  # we only need this on CPU, potential minor optimization
-                        dones_cpu = mb.dones.cpu()
+                        rewards_cpu = mb.rewards_cpu
+                        dones_cpu = mb.dones_cpu
 
                         vtrace_rho = torch.min(rho_hat, ratios_cpu)
                         vtrace_c = torch.min(c_hat, ratios_cpu)
