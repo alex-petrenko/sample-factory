@@ -47,3 +47,15 @@ python -m run_algorithm --env=doom_benchmark --algo=APPO --train_for_env_steps=1
 [2020-08-08 00:39:19,114][21518] Workers joined!
 [2020-08-08 00:39:19,142][21518] Collected {0: 10027008}, FPS: 120618.2
 [2020-08-08 00:39:19,143][21518] Timing: experience: 82.8585
+
+# Alex
+[2020-08-08 02:23:22,037][43759] Env runner 0, CPU aff. [0], rollouts 1104: timing wait_actor: 0.0021, waiting: 26.5094, reset: 41.3930, save_policy_outputs: 1.5244, env_step: 38.5358, overhead: 4.5780, complete_rollouts: 0.0162, enqueue_policy_requests: 0.2222, one_step: 0.0110, work: 48.3867, wait_buffers: 0.9350
+[2020-08-08 02:23:22,069][43761] Env runner 1, CPU aff. [1], rollouts 1008: timing wait_actor: 0.0000, waiting: 25.4149, reset: 56.6091, save_policy_outputs: 1.5599, env_step: 39.9465, overhead: 4.6733, complete_rollouts: 0.0151, enqueue_policy_requests: 0.2078, one_step: 0.0178, work: 49.5024, wait_buffers: 0.3232
+[2020-08-08 02:23:22,819][43757] Policy worker avg. requests 19.60, timing: init: 2.8532, wait_policy_total: 24.9351, wait_policy: 0.0051, handle_policy_step: 63.6250, one_step: 0.0045, deserialize: 3.4001, obs_to_device: 10.4137, stack: 32.5538, forward: 7.5431, postprocess: 9.1609, weight_update: 0.0008
+[2020-08-08 02:23:22,829][43758] Policy worker avg. requests 20.14, timing: init: 2.9013, wait_policy_total: 23.4420, wait_policy: 0.0051, handle_policy_step: 63.9727, one_step: 0.0000, deserialize: 3.3497, obs_to_device: 10.3753, stack: 32.7767, forward: 7.6225, postprocess: 9.2293, weight_update: 0.0008
+[2020-08-08 02:23:22,929][43743] GPU learner timing: extract: 0.8244, buffers: 0.3436, batching: 32.3067, buff_ready: 1.2112, tensors_gpu_float: 8.9126, squeeze: 0.0075, prepare: 44.5794, batcher_mem: 31.8359
+[2020-08-08 02:23:23,235][43743] Train loop timing: init: 1.9995, train_wait: 0.4071, epoch_init: 0.0016, minibatch_init: 0.0007, forward_head: 0.8202, bptt_initial: 12.0869, bptt_forward_core: 0.5248, bptt: 0.5392, tail: 0.3555, vtrace: 1.2603, losses: 0.3606, update: 3.1894, after_optimizer: 0.5871, train: 20.5231
+[2020-08-08 02:23:24,157][43669] Workers joined!
+[2020-08-08 02:23:24,187][43669] Collected {0: 10027008}, FPS: 123644.0
+[2020-08-08 02:23:24,187][43669] Timing: experience: 74.2053
+[2020-08-08 02:23:24,688][43669] Done!

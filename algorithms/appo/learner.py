@@ -369,7 +369,7 @@ class LearnerWorker:
                 # a risk to run out of GPU memory
                 while self.num_batches_processed < 1:
                     log.debug('Waiting for the first batch to be processed')
-                    time.sleep(0.1)
+                    time.sleep(0.5)
 
     def _process_rollouts(self, rollouts, timing):
         # batch_size can potentially change through PBT, so we should keep it the same and pass it around

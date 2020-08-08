@@ -334,7 +334,7 @@ class PolicyCoreRNN(PolicyCoreBase):
             x, new_rnn_states = self.core(head_output, rnn_states)
         else:
             h, c = torch.split(rnn_states, self.cfg.hidden_size, dim=2)
-            x, (h, c) = self.core(head_output, (h, c))
+            x, (h, c) = self.core(head_output, (h.contiguous(), c.contiguous()))
             new_rnn_states = torch.cat((h, c), dim=2)
 
         if not is_seq:
