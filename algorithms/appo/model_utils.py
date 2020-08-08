@@ -314,23 +314,33 @@ class PolicyCoreRNN(PolicyCoreBase):
         self.is_gru = False
 
         if cfg.rnn_type == 'gru':
-            self.core = nn.GRUCell(input_size, cfg.hidden_size)
+            self.core = nn.GRU(input_size, cfg.hidden_size)
             self.is_gru = True
         elif cfg.rnn_type == 'lstm':
-            self.core = nn.LSTMCell(input_size, cfg.hidden_size)
+            self.core = nn.LSTM(input_size, cfg.hidden_size)
         else:
             raise RuntimeError(f'Unknown RNN type {cfg.rnn_type}')
 
         self.core_output_size = cfg.hidden_size
 
     def forward(self, head_output, rnn_states):
+        is_seq = not torch.is_tensor(head_output)
+        if not is_seq:
+            head_output = head_output.unsqueeze(0)
+
+        rnn_states = rnn_states.unsqueeze(0)
+
         if self.is_gru:
-            x = new_rnn_states = self.core(head_output, rnn_states)
+            x, new_rnn_states = self.core(head_output, rnn_states)
         else:
-            h, c = torch.split(rnn_states, self.cfg.hidden_size, dim=1)
-            h, c = self.core(head_output, (h, c))
-            x = h
-            new_rnn_states = torch.cat((h, c), dim=1)
+            h, c = torch.split(rnn_states, self.cfg.hidden_size, dim=2)
+            x, (h, c) = self.core(head_output, (h, c))
+            new_rnn_states = torch.cat((h, c), dim=2)
+
+        if not is_seq:
+            x = x.squeeze(0)
+
+        new_rnn_states = new_rnn_states.squeeze(0)
 
         return x, new_rnn_states
 

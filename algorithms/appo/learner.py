@@ -1,3 +1,4 @@
+from typing import Tuple
 import glob
 import os
 import shutil
@@ -12,6 +13,7 @@ from threading import Thread
 import numpy as np
 import psutil
 import torch
+from torch.nn.utils.rnn import PackedSequence, invert_permutation
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
 if os.name == 'nt':
@@ -29,6 +31,145 @@ from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
 from utils.timing import Timing
 from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill, safe_get
+
+
+
+def _build_pack_info_from_dones(
+    dones, T: int,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    r"""Create the indexing info needed to make the PackedSequence
+    based on the dones.
+
+    PackedSequences are PyTorch's way of supporting a single RNN forward
+    call where each input in the batch can have an arbitrary sequence length
+
+    They work as follows: Given the sequences [c], [x, y, z], [a, b],
+    we generate data [x, a, c, y, b, z] and batch_sizes [3, 2, 1].  The
+    data is a flattened out version of the input sequences (the ordering in
+    data is determined by sequence length).  batch_sizes tells you that
+    for each index, how many sequences have a length of (index + 1) or greater.
+
+    This method will generate the new index ordering such that you can
+    construct the data for a PackedSequence from a (N*T, ...) tensor
+    via x.index_select(0, select_inds)
+    """
+    dones = dones.view(-1, T)
+    N = dones.size(0)
+    # Anywhere where t=0 is not already a done, we need to pad on a 1
+    # so that we can have a episode start at all t=0
+    padded_dones = torch.cat([(dones[:, 0:1] == 0.0).to(dtype=dones.dtype), dones], 1)
+    dones_nz = padded_dones.nonzero()
+    # Subtract 1 of all non zero locations that aren't from the padded ones
+    # that we added above
+    dones_nz[dones_nz[:, 1] != 0, 1] -= 1
+
+    # The + dones_nz[:, 0]*T will make the episode_starts index into
+    # the N*T flattened tensors
+    episode_starts = dones_nz[:, 1] + dones_nz[:, 0] * T
+
+    lengths = (
+        torch.cat(
+            [
+                episode_starts[1:],
+                torch.full(
+                    (1,),
+                    N * T,
+                    device=episode_starts.device,
+                    dtype=episode_starts.dtype,
+                ),
+            ]
+        )
+        - episode_starts
+    )
+
+    lengths, sorted_indices = torch.sort(lengths, descending=True)
+    # We will want these on the CPU for torch.unique_consecutive,
+    # so move now.
+    cpu_lengths = lengths.to(device="cpu", non_blocking=True)
+
+    episode_starts = episode_starts.index_select(0, sorted_indices)
+    select_inds = torch.empty((N * T), device=dones.device, dtype=torch.int64)
+
+    max_length = int(cpu_lengths[0].item())
+    # batch_sizes is *always* on the CPU
+    batch_sizes = torch.empty((max_length,), device="cpu", dtype=torch.int64)
+
+    offset = 0
+    prev_len = 0
+    num_valid_for_length = lengths.size(0)
+
+    unique_lengths = torch.unique_consecutive(cpu_lengths)
+    # Iterate over all unique lengths in reverse as they sorted
+    # in decreasing order
+    for i in range(len(unique_lengths) - 1, -1, -1):
+        valids = lengths[0:num_valid_for_length] > prev_len
+        num_valid_for_length = int(valids.float().sum().item())
+
+        next_len = int(unique_lengths[i])
+
+        batch_sizes[prev_len:next_len] = num_valid_for_length
+
+        new_inds = (
+            episode_starts[0:num_valid_for_length].view(1, num_valid_for_length)
+            + torch.arange(prev_len, next_len, device=episode_starts.device).view(
+                next_len - prev_len, 1
+            )
+        ).view(-1)
+
+        select_inds[offset : offset + new_inds.numel()] = new_inds
+
+        offset += new_inds.numel()
+
+        prev_len = next_len
+
+    # Make sure we have an index for all elements
+    assert offset == N * T
+
+    return episode_starts, select_inds, batch_sizes, sorted_indices
+
+
+def build_rnn_inputs(x, dones, rnn_states, T: int):
+    r"""Create a PackedSequence input for an RNN such that each
+    set of steps that are part of the same episode are all part of
+    a batch in the PackedSequence.
+
+    Use the returned select_inds and build_core_out_from_seq to invert this.
+
+    :param x: A (N*T, -1) tensor of the data to build the PackedSequence out of
+    :param dones: A (N*T) tensor where dones[i] == 1.0 indicates an episode is done
+    :param rnn_states: A (N*T, -1) tensor of the rnn_hidden_states
+    :param T: The length of the rollout
+
+    :return: tuple(x_seq, rnn_states, select_inds)
+        WHERE
+        x_seq is the PackedSequence version of x to pass to the RNN
+
+        rnn_states are the corresponding rnn state
+
+        select_inds is can be passed to build_core_out_from_seq so the
+            RNN output can be retrieved
+
+    """
+    (
+        episode_starts,
+        select_inds,
+        batch_sizes,
+        sorted_indices,
+    ) = _build_pack_info_from_dones(dones, T)
+
+    x_seq = PackedSequence(x.index_select(0, select_inds), batch_sizes, sorted_indices)
+
+    rnn_states = rnn_states.index_select(0, episode_starts) * (
+        1 - dones.view(-1, 1)
+    ).index_select(0, episode_starts)
+
+    return x_seq, rnn_states, select_inds
+
+
+def build_core_out_from_seq(x_seq: PackedSequence, select_inds):
+    inverted_select_inds = invert_permutation(select_inds)
+
+    return x_seq.data.index_select(0, inverted_select_inds)
 
 
 class LearnerWorker:
@@ -470,35 +611,34 @@ class LearnerWorker:
 
                 # initial rnn states
                 with timing.add_time('bptt_initial'):
-                    rnn_states = mb.rnn_states[::recurrence]
-                    is_same_episode = 1.0 - mb.dones.unsqueeze(dim=1)
+                    if self.cfg.use_rnn:
+                        head_output_seq, rnn_states, select_inds = build_rnn_inputs(
+                            head_outputs, mb.dones, mb.rnn_states, recurrence
+                        )
+                    else:
+                        rnn_states = mb.rnn_states[::recurrence]
+                        is_same_episode = 1.0 - mb.dones.unsqueeze(dim=1)
 
                 # calculate RNN outputs for each timestep in a loop
                 with timing.add_time('bptt'):
-                    core_outputs = []
-                    for i in range(recurrence):
-                        # indices of head outputs corresponding to the current timestep
-                        step_head_outputs = head_outputs[i::recurrence]
-
+                    if self.cfg.use_rnn:
                         with timing.add_time('bptt_forward_core'):
-                            core_output, rnn_states = self.actor_critic.forward_core(step_head_outputs, rnn_states)
-                            core_outputs.append(core_output)
-
-                        if self.cfg.use_rnn:
-                            # zero-out RNN states on the episode boundary
-                            with timing.add_time('bptt_rnn_states'):
-                                is_same_episode_step = is_same_episode[i::recurrence]
-                                rnn_states = rnn_states * is_same_episode_step
+                            (
+                                core_output_seq,
+                                _
+                            ) = self.actor_critic.forward_core(
+                                head_output_seq, rnn_states
+                            )
+                        core_outputs = build_core_out_from_seq(
+                            core_output_seq, select_inds
+                        )
+                    else:
+                        with timing.add_time('bptt_forward_core'):
+                            core_outputs, _ = self.actor_critic.forward_core(
+                                head_outputs, rnn_states
+                            )
 
                 with timing.add_time('tail'):
-                    # transform core outputs from [T, Batch, D] to [Batch, T, D] and then to [Batch x T, D]
-                    # which is the same shape as the minibatch
-                    core_outputs = torch.stack(core_outputs)
-
-                    num_timesteps, num_trajectories = core_outputs.shape[:2]
-                    assert num_timesteps == recurrence
-                    assert num_timesteps * num_trajectories == batch_size
-                    core_outputs = core_outputs.transpose(0, 1).reshape(-1, *core_outputs.shape[2:])
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
                     # calculate policy tail outside of recurrent loop
@@ -513,6 +653,7 @@ class LearnerWorker:
 
                     values = result.values.squeeze()
 
+                num_trajectories = head_outputs.size(0) // recurrence
                 with torch.no_grad():  # these computations are not the part of the computation graph
                     if self.cfg.with_vtrace:
                         ratios_cpu = ratio.cpu()
