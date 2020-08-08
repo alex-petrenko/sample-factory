@@ -1,61 +1,30 @@
-Original version
-python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v101_test --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
-[2020-07-22 20:35:09,474][27996] Env runner 1, CPU aff. [1], rollouts 780: timing wait_actor: 0.0000, waiting: 1.1467, reset: 15.6146, save_policy_outputs: 0.9717, env_step: 36.1261, overhead: 3.7894, complete_rollouts: 0.0151, enqueue_policy_requests: 0.2367, one_step: 0.0153, work: 43.0991
-[2020-07-22 20:35:09,498][27994] Env runner 0, CPU aff. [0], rollouts 800: timing wait_actor: 0.0128, waiting: 1.1866, reset: 17.1803, save_policy_outputs: 0.9691, env_step: 36.1947, overhead: 3.7123, complete_rollouts: 0.0164, enqueue_policy_requests: 0.2368, one_step: 0.0474, work: 43.0848
-[2020-07-22 20:35:09,718][27993] Policy worker avg. requests 6.86, timing: init: 1.8715, wait_policy_total: 14.2155, wait_policy: 0.0051, handle_policy_step: 33.5834, one_step: 0.0035, deserialize: 1.1937, obs_to_device: 4.3637, stack: 11.8305, forward: 11.1642, postprocess: 4.1322, weight_update: 0.0004
-[2020-07-22 20:35:09,811][27976] GPU learner timing: extract: 0.1896, buffers: 0.0666, batching: 4.6337, buff_ready: 0.2378, tensors_gpu_float: 1.6148, squeeze: 0.0049, prepare: 6.6185, batcher_mem: 4.5605
-[2020-07-22 20:35:10,119][27976] Train loop timing: init: 1.3278, train_wait: 0.4263, epoch_init: 0.0011, minibatch_init: 0.0006, forward_head: 0.4501, bptt_initial: 0.0177, bptt_forward_core: 0.8301, bptt_rnn_states: 0.2375, bptt: 1.1895, tail: 0.2771, vtrace: 0.8882, losses: 0.2363, clip: 6.2543, update: 9.8949, after_optimizer: 0.0802, train: 15.0254
-[2020-07-22 20:35:10,285][27940] Collected {0: 2015232}, FPS: 45531.6
-[2020-07-22 20:35:10,285][27940] Timing: experience: 44.0802
-
-10-core (Erik's version)
-[2020-08-08 00:19:25,062][31108] Env runner 0, CPU aff. [0], rollouts 780: timing wait_actor: 0.0000, waiting: 0.9019, reset: 13.5256, save_policy_outputs: 0.9583, env_step: 36.5822, overhead: 3.7361, complete_rollouts: 0.0151, enqueue_policy_requests: 0.2405, one_step: 0.0155, work: 43.4499
-[2020-08-08 00:19:25,068][31109] Env runner 1, CPU aff. [1], rollouts 780: timing wait_actor: 0.0000, waiting: 0.9775, reset: 12.7049, save_policy_outputs: 0.9864, env_step: 36.5810, overhead: 3.6484, complete_rollouts: 0.0144, enqueue_policy_requests: 0.2276, one_step: 0.0156, work: 43.3786
-[2020-08-08 00:19:25,311][31107] Policy worker avg. requests 6.84, timing: init: 1.9717, wait_policy_total: 12.9874, wait_policy: 0.0051, handle_policy_step: 34.5801, one_step: 0.0000, deserialize: 1.1890, obs_to_device: 4.3421, stack: 11.5850, forward: 12.8278, postprocess: 4.1695, weight_update: 0.0005
-[2020-08-08 00:19:25,400][31070] GPU learner timing: extract: 0.1910, buffers: 0.0661, batching: 4.7136, buff_ready: 0.2317, tensors_gpu_float: 1.6993, squeeze: 0.0051, prepare: 6.7843, batcher_mem: 4.6409
-[2020-08-08 00:19:25,708][31070] Train loop timing: init: 1.5233, train_wait: 0.4010, epoch_init: 0.0011, minibatch_init: 0.0006, forward_head: 0.3176, bptt_initial: 4.2649, bptt_forward_core: 0.3185, bptt: 0.5778, tail: 0.2702, vtrace: 0.8340, losses: 0.2959, clip: 6.8092, update: 8.6778, after_optimizer: 0.0853, train: 15.6477
-[2020-08-08 00:19:25,879][31002] Workers joined!
-[2020-08-08 00:19:25,891][31002] Collected {0: 2015232}, FPS: 45515.7
-[2020-08-08 00:19:25,891][31002] Timing: experience: 44.0956
-[2020-08-08 00:19:26,392][31002] Done!
-
-10-core (Alex's version, dones on CPU)
-[2020-08-08 01:38:11,876][23857] Env runner 0, CPU aff. [0], rollouts 800: timing wait_actor: 0.0000, waiting: 1.0163, reset: 10.9365, save_policy_outputs: 0.9328, env_step: 36.1806, overhead: 3.6251, complete_rollouts: 0.0159, enqueue_policy_requests: 0.1976, one_step: 0.0154, work: 42.9292
-[2020-08-08 01:38:11,898][23858] Env runner 1, CPU aff. [1], rollouts 820: timing wait_actor: 0.0000, waiting: 0.9904, reset: 14.2885, save_policy_outputs: 0.9798, env_step: 36.1106, overhead: 3.6674, complete_rollouts: 0.0162, enqueue_policy_requests: 0.2029, one_step: 0.0178, work: 42.9655
-[2020-08-08 01:38:12,152][23856] Policy worker avg. requests 7.04, timing: init: 1.9467, wait_policy_total: 12.8213, wait_policy: 0.0051, handle_policy_step: 34.4092, one_step: 0.0078, deserialize: 1.2303, obs_to_device: 4.3230, stack: 11.5558, forward: 12.8051, postprocess: 4.0857, weight_update: 0.0005
-[2020-08-08 01:38:12,246][23840] GPU learner timing: extract: 0.1903, buffers: 0.0655, batching: 4.7155, buff_ready: 0.2363, tensors_gpu_float: 1.7395, squeeze: 0.0059, prepare: 6.8294, batcher_mem: 4.6444
-[2020-08-08 01:38:12,552][23840] Train loop timing: init: 1.3588, train_wait: 0.2994, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.2971, bptt_initial: 2.6414, bptt_forward_core: 0.3146, bptt: 0.3264, tail: 0.2447, vtrace: 0.9210, losses: 0.2390, clip: 6.5462, update: 8.3493, after_optimizer: 0.0767, train: 13.3816
-[2020-08-08 01:38:12,661][23805] Workers joined!
-[2020-08-08 01:38:12,671][23805] Collected {0: 2015232}, FPS: 46028.1
-[2020-08-08 01:38:12,672][23805] Timing: experience: 43.6046
-
-
-
-
-
 36-core (XEON)
 
-60-sec FPS: 134190
+# Before RNN fix (V102)
 
-python -m run_algorithm --env=doom_benchmark --algo=APPO --train_for_env_steps=10000000 --env_frameskip=4 --use_rnn=True --num_workers=72 --num_envs_per_worker=24 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=8192 --benchmark=False --policy_workers_per_policy=2 --worker_num_splits=2 --max_grad_norm=0.0 --max_policy_lag=40 --wide_aspect_ratio=False --decorrelate_experience_max_seconds=0 --experiment=doom_benchmark_w72v24_v102
-[2020-08-08 00:39:17,554][21619] Env runner 1, CPU aff. [1], rollouts 1092: timing wait_actor: 0.0004, waiting: 30.1876, reset: 33.2612, save_policy_outputs: 1.6911, env_step: 43.2601, overhead: 5.1098, complete_rollouts: 0.0258, enqueue_policy_requests: 0.2492, one_step: 0.0184, work: 53.2969
-[2020-08-08 00:39:17,565][21617] Env runner 0, CPU aff. [0], rollouts 1080: timing wait_actor: 0.0000, waiting: 30.3167, reset: 49.7087, save_policy_outputs: 1.7127, env_step: 43.0944, overhead: 5.1205, complete_rollouts: 0.0176, enqueue_policy_requests: 0.2483, one_step: 0.0191, work: 53.1380
-[2020-08-08 00:39:18,326][21615] Policy worker avg. requests 20.68, timing: init: 2.4115, wait_policy_total: 25.0368, wait_policy: 0.0052, handle_policy_step: 71.2769, one_step: 0.0000, deserialize: 3.6989, obs_to_device: 10.8066, stack: 35.2378, forward: 7.5921, postprocess: 10.2692, weight_update: 0.0008
-[2020-08-08 00:39:18,342][21616] Policy worker avg. requests 20.04, timing: init: 2.3400, wait_policy_total: 26.5271, wait_policy: 0.0051, handle_policy_step: 71.0289, one_step: 0.0000, deserialize: 3.7549, obs_to_device: 10.5213, stack: 35.2217, forward: 7.4355, postprocess: 10.1807, weight_update: 0.0007
-[2020-08-08 00:39:18,427][21597] GPU learner timing: extract: 0.9324, buffers: 0.3714, batching: 35.8648, buff_ready: 1.2928, tensors_gpu_float: 11.0979, squeeze: 0.0073, prepare: 48.8521, batcher_mem: 35.3742
-[2020-08-08 00:39:18,733][21597] Train loop timing: init: 1.6424, train_wait: 0.3608, epoch_init: 0.0017, minibatch_init: 0.0008, forward_head: 1.0594, bptt_initial: 0.0235, bptt_forward_core: 1.4089, bptt_rnn_states: 0.3159, bptt: 1.8897, tail: 0.3808, vtrace: 1.3509, losses: 0.3610, update: 5.3328, after_optimizer: 0.6311, train: 24.9544
-[2020-08-08 00:39:19,114][21518] Workers joined!
-[2020-08-08 00:39:19,142][21518] Collected {0: 10027008}, FPS: 120618.2
-[2020-08-08 00:39:19,143][21518] Timing: experience: 82.8585
+[2020-08-08 02:42:13,347][13040] Env runner 0, CPU aff. [0], rollouts 1644: timing wait_actor: 0.0000, waiting: 45.2234, reset: 52.6006, save_policy_outputs: 2.2844, env_step: 56.3656, overhead: 7.0188, complete_rollouts: 0.0250, enqueue_policy_requests: 0.7757, one_step: 0.0154, work: 70.2934
+[2020-08-08 02:42:13,351][13041] Env runner 1, CPU aff. [1], rollouts 1656: timing wait_actor: 0.0000, waiting: 44.8230, reset: 33.1059, save_policy_outputs: 2.3069, env_step: 56.8657, overhead: 6.8981, complete_rollouts: 0.0245, enqueue_policy_requests: 0.7370, one_step: 0.0152, work: 70.7083
+[2020-08-08 02:42:13,595][13036] Updated weights on worker 0-1, policy_version 494 (0.00058)
+[2020-08-08 02:42:13,817][13037] Updated weights on worker 0-2, policy_version 495 (0.00082)
+[2020-08-08 02:42:14,106][13035] Policy worker avg. requests 7.76, timing: init: 3.6053, wait_policy_total: 32.3517, wait_policy: 0.0051, handle_policy_step: 81.3502, one_step: 0.0071, deserialize: 2.6966, obs_to_device: 8.3384, stack: 32.0727, forward: 11.2441, postprocess: 8.2699, weight_update: 0.0008
+[2020-08-08 02:42:14,115][13036] Policy worker avg. requests 8.92, timing: init: 3.5478, wait_policy_total: 31.4709, wait_policy: 0.0051, handle_policy_step: 81.0752, one_step: 0.0000, deserialize: 2.7804, obs_to_device: 8.6471, stack: 31.3451, forward: 11.4956, postprocess: 8.2409, weight_update: 0.0006
+[2020-08-08 02:42:14,125][13037] Policy worker avg. requests 9.44, timing: init: 3.3727, wait_policy_total: 33.2515, wait_policy: 0.0051, handle_policy_step: 80.8264, one_step: 0.0000, deserialize: 2.6820, obs_to_device: 8.5923, stack: 31.2317, forward: 11.3376, postprocess: 8.3652, weight_update: 0.0008
+[2020-08-08 02:42:14,148][13039] Policy worker avg. requests 11.80, timing: init: 3.5846, wait_policy_total: 31.4387, wait_policy: 0.0051, handle_policy_step: 84.3620, one_step: 0.0000, deserialize: 2.8041, obs_to_device: 11.6364, stack: 34.7885, forward: 11.1058, postprocess: 8.5294, weight_update: 0.0008
+[2020-08-08 02:42:14,235][13022] GPU learner timing: extract: 1.1492, buffers: 0.4280, batching: 50.9383, buff_ready: 1.5414, tensors_gpu_float: 48.7276, squeeze: 0.0104, prepare: 101.9527, batcher_mem: 50.4354
+[2020-08-08 02:42:14,542][13022] Train loop timing: init: 1.8819, train_wait: 0.2692, epoch_init: 0.0026, minibatch_init: 0.0011, forward_head: 1.1496, bptt_initial: 0.0451, bptt_forward_core: 3.3014, bptt_rnn_states: 1.1285, bptt: 4.7257, tail: 0.5916, vtrace: 2.1776, losses: 0.6917, update: 8.7072, after_optimizer: 1.0420, train: 42.9632
+[2020-08-08 02:42:16,343][12945] Collected {0: 15022080}, FPS: 130277.6
+[2020-08-08 02:42:16,343][12945] Timing: experience: 115.0724
 
-# Alex
-[2020-08-08 02:23:22,037][43759] Env runner 0, CPU aff. [0], rollouts 1104: timing wait_actor: 0.0021, waiting: 26.5094, reset: 41.3930, save_policy_outputs: 1.5244, env_step: 38.5358, overhead: 4.5780, complete_rollouts: 0.0162, enqueue_policy_requests: 0.2222, one_step: 0.0110, work: 48.3867, wait_buffers: 0.9350
-[2020-08-08 02:23:22,069][43761] Env runner 1, CPU aff. [1], rollouts 1008: timing wait_actor: 0.0000, waiting: 25.4149, reset: 56.6091, save_policy_outputs: 1.5599, env_step: 39.9465, overhead: 4.6733, complete_rollouts: 0.0151, enqueue_policy_requests: 0.2078, one_step: 0.0178, work: 49.5024, wait_buffers: 0.3232
-[2020-08-08 02:23:22,819][43757] Policy worker avg. requests 19.60, timing: init: 2.8532, wait_policy_total: 24.9351, wait_policy: 0.0051, handle_policy_step: 63.6250, one_step: 0.0045, deserialize: 3.4001, obs_to_device: 10.4137, stack: 32.5538, forward: 7.5431, postprocess: 9.1609, weight_update: 0.0008
-[2020-08-08 02:23:22,829][43758] Policy worker avg. requests 20.14, timing: init: 2.9013, wait_policy_total: 23.4420, wait_policy: 0.0051, handle_policy_step: 63.9727, one_step: 0.0000, deserialize: 3.3497, obs_to_device: 10.3753, stack: 32.7767, forward: 7.6225, postprocess: 9.2293, weight_update: 0.0008
-[2020-08-08 02:23:22,929][43743] GPU learner timing: extract: 0.8244, buffers: 0.3436, batching: 32.3067, buff_ready: 1.2112, tensors_gpu_float: 8.9126, squeeze: 0.0075, prepare: 44.5794, batcher_mem: 31.8359
-[2020-08-08 02:23:23,235][43743] Train loop timing: init: 1.9995, train_wait: 0.4071, epoch_init: 0.0016, minibatch_init: 0.0007, forward_head: 0.8202, bptt_initial: 12.0869, bptt_forward_core: 0.5248, bptt: 0.5392, tail: 0.3555, vtrace: 1.2603, losses: 0.3606, update: 3.1894, after_optimizer: 0.5871, train: 20.5231
-[2020-08-08 02:23:24,157][43669] Workers joined!
-[2020-08-08 02:23:24,187][43669] Collected {0: 10027008}, FPS: 123644.0
-[2020-08-08 02:23:24,187][43669] Timing: experience: 74.2053
-[2020-08-08 02:23:24,688][43669] Done!
+
+# RNNs + Alex's fixes
+python -m run_algorithm --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=72 --num_envs_per_worker=24 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=7680 --benchmark=False --policy_workers_per_policy=4 --worker_num_splits=2 --decorrelate_experience_max_seconds=0 --max_grad_norm=0.0 --max_policy_lag=40 --wide_aspect_ratio=False --experiment=fps_doom_bench_wide_ratio_False_72_24_7680_decor_200_lag_40_id_1_lstm --nonlinearity=relu --rnn_type=lstm --train_for_env_steps=15000000
+[2020-08-08 02:38:02,870][72594] Env runner 0, CPU aff. [0], rollouts 1632: timing wait_actor: 0.0000, waiting: 40.2006, reset: 52.8909, save_policy_outputs: 2.2043, env_step: 56.2090, overhead: 6.8740, complete_rollouts: 0.0232, enqueue_policy_requests: 0.6317, one_step: 0.0144, work: 69.7307
+[2020-08-08 02:38:02,879][72595] Env runner 1, CPU aff. [1], rollouts 1632: timing wait_actor: 0.0100, waiting: 40.6954, reset: 48.3358, save_policy_outputs: 2.1831, env_step: 55.8500, overhead: 6.7982, complete_rollouts: 0.0236, enqueue_policy_requests: 0.6855, one_step: 0.0151, work: 69.2605
+[2020-08-08 02:38:03,687][72591] Policy worker avg. requests 12.32, timing: init: 3.5639, wait_policy_total: 29.3537, wait_policy: 0.0052, handle_policy_step: 86.1460, one_step: 0.0000, deserialize: 2.7130, obs_to_device: 11.3658, stack: 34.8535, forward: 12.2020, postprocess: 8.0823, weight_update: 0.0006
+[2020-08-08 02:38:03,689][72589] Policy worker avg. requests 8.88, timing: init: 3.7138, wait_policy_total: 30.0442, wait_policy: 0.0051, handle_policy_step: 85.4679, one_step: 0.0000, deserialize: 2.5825, obs_to_device: 11.2185, stack: 34.8332, forward: 11.8055, postprocess: 8.0107, weight_update: 0.0004
+[2020-08-08 02:38:03,696][72590] Policy worker avg. requests 9.42, timing: init: 3.4549, wait_policy_total: 29.2796, wait_policy: 0.0051, handle_policy_step: 84.8959, one_step: 0.0000, deserialize: 2.4548, obs_to_device: 11.1305, stack: 34.3272, forward: 11.9468, postprocess: 7.7644, weight_update: 0.0006
+[2020-08-08 02:38:03,719][72593] Policy worker avg. requests 12.14, timing: init: 3.6590, wait_policy_total: 31.5618, wait_policy: 0.0051, handle_policy_step: 84.4849, one_step: 0.0000, deserialize: 2.6500, obs_to_device: 9.2087, stack: 33.0065, forward: 12.5326, postprocess: 7.8350, weight_update: 0.0006
+[2020-08-08 02:38:03,804][72573] GPU learner timing: extract: 1.1678, buffers: 0.4306, batching: 48.4255, buff_ready: 1.5205, tensors_gpu_float: 41.0333, squeeze: 0.0135, prepare: 93.2355, batcher_mem: 48.1010
+[2020-08-08 02:38:04,110][72573] Train loop timing: init: 1.9840, train_wait: 0.5039, epoch_init: 0.0030, minibatch_init: 0.0012, forward_head: 0.9523, bptt_initial: 22.7201, bptt_forward_core: 1.0504, bptt: 1.0761, tail: 0.5712, vtrace: 2.0198, losses: 0.6514, update: 4.2819, after_optimizer: 0.9911, train: 37.2015
+[2020-08-08 02:38:06,019][72496] Collected {0: 15022080}, FPS: 137131.1
+[2020-08-08 02:38:06,019][72496] Timing: experience: 109.3214
