@@ -260,8 +260,8 @@ class LearnerWorker:
         self.process = Process(target=self._run, daemon=True)
 
         if is_continuous_action_space(self.action_space) and self.cfg.exploration_loss == 'symmetric_kl':
-            raise NotImplementedError(f'KL-divergence exploration loss is not supported with '
-                                      f'continuous action spaces. Use entropy exploration loss')
+            raise NotImplementedError('KL-divergence exploration loss is not supported with '
+                                      'continuous action spaces. Use entropy exploration loss')
 
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr: 0.0
@@ -575,22 +575,16 @@ class LearnerWorker:
 
     def entropy_exploration_loss(self, action_distribution):
         entropy = action_distribution.entropy()
-        if self.cfg.exploration_loss_coeff > 0.0:
-            entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
-        else:
-            entropy_loss = 0.0
+        entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
         return entropy_loss
 
     def symmetric_kl_exploration_loss(self, action_distribution):
-        if self.cfg.exploration_loss_coeff > 0.0:
-            kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
-            kl_prior = kl_prior.mean()
-            if not torch.isfinite(kl_prior):
-                kl_prior = torch.zeros(kl_prior.shape)
-            kl_prior = torch.clamp(kl_prior, max=30)
-            kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
-        else:
-            kl_prior_loss = 0.0
+        kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
+        kl_prior = kl_prior.mean()
+        if not torch.isfinite(kl_prior):
+            kl_prior = torch.zeros(kl_prior.shape)
+        kl_prior = torch.clamp(kl_prior, max=30)
+        kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
         return kl_prior_loss
 
     def _prepare_observations(self, obs_tensors, gpu_buffer_obs):

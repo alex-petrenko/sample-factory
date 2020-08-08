@@ -204,8 +204,10 @@ class TupleActionDistribution:
         return kl
 
     def symmetric_kl_with_uniform_prior(self):
-        kls = [d.symmetric_kl_with_uniform_prior() for d in self.distributions]
-        return kls
+        sym_kls = [d.symmetric_kl_with_uniform_prior().unsqueeze(dim=1) for d in self.distributions]
+        sym_kls = torch.cat(sym_kls, dim=1)
+        sym_kl = sym_kls.sum(dim=1)
+        return sym_kl
 
     def dbg_print(self):
         for d in self.distributions:
