@@ -34,7 +34,7 @@ from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_o
 
 
 # noinspection PyPep8Naming
-def _build_pack_info_from_dones(dones, T: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Create the indexing info needed to make the PackedSequence based on the dones.
 
@@ -46,7 +46,6 @@ def _build_pack_info_from_dones(dones, T: int) -> Tuple[torch.Tensor, torch.Tens
     data is a flattened out version of the input sequences (the ordering in
     data is determined by sequence length).  batch_sizes tells you that
     for each index, how many sequences have a length of (index + 1) or greater.
-
     This method will generate the new index ordering such that you can
     construct the data for a PackedSequence from a (N*T, ...) tensor
     via x.index_select(0, select_inds)
@@ -55,19 +54,43 @@ def _build_pack_info_from_dones(dones, T: int) -> Tuple[torch.Tensor, torch.Tens
     num_samples = len(dones)
 
     rollout_boundaries = dones.clone().detach()
-    rollout_boundaries[::T] = 1  # beginning of each rollout is the boundary
-    rollout_boundaries = rollout_boundaries.nonzero().squeeze()
+    rollout_boundaries[T - 1::T] = 1  # end of each rollout is the boundary
+    rollout_boundaries = rollout_boundaries.nonzero().squeeze(dim=1) + 1
 
-    rollout_lengths = rollout_boundaries[1:] - rollout_boundaries[:-1]
-    last_length = num_samples - rollout_boundaries[-1]
-    rollout_lengths = torch.cat([rollout_lengths, last_length.unsqueeze(0)])
+    first_len = rollout_boundaries[0].unsqueeze(0)
+
+    if len(rollout_boundaries) <= 1:
+        log.debug('Only one rollout boundary. This can happen if batch size is 1, probably not during the real training.')
+        rollout_lengths = first_len
+    else:
+        rollout_lengths = rollout_boundaries[1:] - rollout_boundaries[:-1]
+        rollout_lengths = torch.cat([first_len, rollout_lengths])
+
+    rollout_starts_orig = rollout_boundaries - rollout_lengths
+
+    # done=True for the last step in the episode, so done flags rolled 1 step to the right will indicate
+    # first frames in the episodes
+    is_new_episode = dones.clone().detach().view((-1, T))
+    is_new_episode = is_new_episode.roll(1, 1)
+
+    # roll() is cyclical, so done=True in the last position in the rollout will roll to 0th position
+    # we want to avoid it here. (note to self: is there a function that does two of these things at once?)
+    is_new_episode[:, 0] = 0
+    is_new_episode = is_new_episode.view((-1, ))
 
     lengths, sorted_indices = torch.sort(rollout_lengths, descending=True)
     # We will want these on the CPU for torch.unique_consecutive,
     # so move now.
     cpu_lengths = lengths.to(device='cpu', non_blocking=True)
 
-    episode_starts = rollout_boundaries.index_select(0, sorted_indices)
+    # We need to keep the original unpermuted rollout_starts, because the permutation is later applied
+    # internally in the RNN implementation.
+    # From modules/rnn.py:
+    #       Each batch of the hidden state should match the input sequence that
+    #       the user believes he/she is passing in.
+    #       hx = self.permute_hidden(hx, sorted_indices)
+    rollout_starts_sorted = rollout_starts_orig.index_select(0, sorted_indices)
+
     select_inds = torch.empty(num_samples, device=dones.device, dtype=torch.int64)
 
     max_length = int(cpu_lengths[0].item())
@@ -90,10 +113,8 @@ def _build_pack_info_from_dones(dones, T: int) -> Tuple[torch.Tensor, torch.Tens
         batch_sizes[prev_len:next_len] = num_valid_for_length
 
         new_inds = (
-            episode_starts[0:num_valid_for_length].view(1, num_valid_for_length)
-            + torch.arange(prev_len, next_len, device=episode_starts.device).view(
-                next_len - prev_len, 1
-            )
+            rollout_starts_sorted[0:num_valid_for_length].view(1, num_valid_for_length)
+            + torch.arange(prev_len, next_len, device=rollout_starts_sorted.device).view(next_len - prev_len, 1)
         ).view(-1)
 
         # for a set of sequences [1, 2, 3], [4, 5], [6, 7], [8]
@@ -107,46 +128,50 @@ def _build_pack_info_from_dones(dones, T: int) -> Tuple[torch.Tensor, torch.Tens
 
     # Make sure we have an index for all elements
     assert offset == num_samples
+    assert is_new_episode.shape[0] == num_samples
 
-    return episode_starts, select_inds, batch_sizes, sorted_indices
+    return rollout_starts_orig, is_new_episode, select_inds, batch_sizes, sorted_indices
 
 
-# noinspection PyPep8Naming
-def build_rnn_inputs(x, dones, dones_cpu, rnn_states, T: int):
-    r"""Create a PackedSequence input for an RNN such that each
+def build_rnn_inputs(x, dones_cpu, rnn_states, T: int):
+    """
+    Create a PackedSequence input for an RNN such that each
     set of steps that are part of the same episode are all part of
     a batch in the PackedSequence.
-
     Use the returned select_inds and build_core_out_from_seq to invert this.
-
     :param x: A (N*T, -1) tensor of the data to build the PackedSequence out of
-    :param dones: A (N*T) tensor where dones[i] == 1.0 indicates an episode is done
-    :param dones_cpu: same but a CPU-bound tensor
+    :param dones_cpu: A (N*T) tensor where dones[i] == 1.0 indicates an episode is done, a CPU-bound tensor
     :param rnn_states: A (N*T, -1) tensor of the rnn_hidden_states
     :param T: The length of the rollout
-
     :return: tuple(x_seq, rnn_states, select_inds)
         WHERE
         x_seq is the PackedSequence version of x to pass to the RNN
-
-        rnn_states are the corresponding rnn state
-
+        rnn_states are the corresponding rnn state, zeroed on the episode boundary
         inverted_select_inds can be passed to build_core_out_from_seq so the RNN output can be retrieved
-
     """
-    episode_starts, select_inds, batch_sizes, sorted_indices = _build_pack_info_from_dones(dones_cpu, T)
-
+    rollout_starts, is_new_episode, select_inds, batch_sizes, sorted_indices = _build_pack_info_from_dones(dones_cpu, T)
     inverted_select_inds = invert_permutation(select_inds)
-    select_inds = select_inds.to(device=x.device)
-    inverted_select_inds = inverted_select_inds.to(device=x.device)
-    sorted_indices = sorted_indices.to(device=x.device)
+
+    def device(t):
+        return t.to(device=x.device)
+
+    select_inds = device(select_inds)
+    inverted_select_inds = device(inverted_select_inds)
+    sorted_indices = device(sorted_indices)
+    rollout_starts = device(rollout_starts)
+    is_new_episode = device(is_new_episode)
 
     x_seq = PackedSequence(x.index_select(0, select_inds), batch_sizes, sorted_indices)
 
-    episode_starts = episode_starts.to(device=x.device)
-    rnn_states = rnn_states.index_select(0, episode_starts) * (
-        1 - dones.view(-1, 1)
-    ).index_select(0, episode_starts)
+    # We zero-out rnn states for timesteps at the beginning of the episode.
+    # rollout_starts are indices of all starts of sequences
+    # (which can be due to episode boundary or just boundary of a rollout)
+    # (1 - is_new_episode.view(-1, 1)).index_select(0, rollout_starts) gives us a zero for every beginning of
+    # the sequence that is actually also a start of a new episode, and by multiplying this RNN state by zero
+    # we ensure no information transfer across episode boundaries.
+    rnn_states = rnn_states.index_select(0, rollout_starts)
+    is_same_episode = (1 - is_new_episode.view(-1, 1)).index_select(0, rollout_starts)
+    rnn_states = rnn_states * is_same_episode
 
     return x_seq, rnn_states, inverted_select_inds
 
@@ -363,7 +388,7 @@ class LearnerWorker:
             buffer = self._prepare_train_buffer(rollouts, macro_batch_size, timing)
             self.experience_buffer_queue.put((buffer, batch_size, samples, env_steps))
 
-            if not self.cfg.benchmark:
+            if not self.cfg.benchmark and self.cfg.train_in_background_thread:
                 # in PyTorch 1.4.0 there is an intense memory spike when the very first batch is being processed
                 # we wait here until this is over so we can continue queueing more batches onto a GPU without having
                 # a risk to run out of GPU memory
@@ -611,7 +636,7 @@ class LearnerWorker:
                 with timing.add_time('bptt_initial'):
                     if self.cfg.use_rnn:
                         head_output_seq, rnn_states, inverted_select_inds = build_rnn_inputs(
-                            head_outputs, mb.dones, mb.dones_cpu, mb.rnn_states, recurrence,
+                            head_outputs, mb.dones_cpu, mb.rnn_states, recurrence,
                         )
                     else:
                         rnn_states = mb.rnn_states[::recurrence]
