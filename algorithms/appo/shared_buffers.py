@@ -198,6 +198,19 @@ class TensorDict(dict):
             t = x[indices]
             return t
 
+    def slice(self, start, end):
+        return self.slice_func(self, start, end)
+
+    def slice_func(self, x, start, end):
+        if isinstance(x, (dict, TensorDict)):
+            res = TensorDict()
+            for key, value in x.items():
+                res[key] = self.slice_func(value, start, end)
+            return res
+        else:
+            t = x[start:end]
+            return t
+
     def set_data(self, index, new_data):
         self.set_data_func(self, index, new_data)
 

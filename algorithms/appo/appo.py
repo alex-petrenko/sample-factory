@@ -23,7 +23,7 @@ from queue import Empty
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import JoinableQueue as TorchJoinableQueue
+from torch.multiprocessing import JoinableQueue as TorchJoinableQueue, Queue as TorchQueue
 
 from algorithms.algorithm import ReinforcementLearningAlgorithm
 from algorithms.appo.actor_worker import ActorWorker
@@ -394,11 +394,11 @@ class APPO(ReinforcementLearningAlgorithm):
 
         actor_queues = [MpQueue() for _ in range(self.cfg.num_workers)]
 
-        policy_worker_queues = dict()
+        inference_queues = dict()
         for policy_id in range(self.cfg.num_policies):
-            policy_worker_queues[policy_id] = []
+            inference_queues[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
-                policy_worker_queues[policy_id].append(TorchJoinableQueue())
+                inference_queues[policy_id].append(TorchQueue())
 
         log.info('Initializing learners...')
         policy_locks = [multiprocessing.Lock() for _ in range(self.cfg.num_policies)]
@@ -408,7 +408,7 @@ class APPO(ReinforcementLearningAlgorithm):
         for policy_id in range(self.cfg.num_policies):
             learner_worker = LearnerWorker(
                 learner_idx, policy_id, self.cfg, self.obs_space, self.action_space,
-                self.report_queue, policy_worker_queues[policy_id], self.traj_buffers,
+                self.report_queue, inference_queues[policy_id], self.traj_buffers,
                 policy_locks[policy_id], resume_experience_collection_cv[policy_id],
             )
             learner_worker.start_process()
@@ -427,7 +427,7 @@ class APPO(ReinforcementLearningAlgorithm):
             for i in range(self.cfg.policy_workers_per_policy):
                 policy_worker = PolicyWorker(
                     i, policy_id, self.cfg, self.obs_space, self.action_space, self.traj_buffers,
-                    policy_queue, actor_queues, self.report_queue, policy_worker_queues[policy_id][i],
+                    policy_queue, actor_queues, self.report_queue, inference_queues[policy_id][i],
                     policy_locks[policy_id], resume_experience_collection_cv[policy_id],
                 )
                 self.policy_workers[policy_id].append(policy_worker)
