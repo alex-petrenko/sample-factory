@@ -111,21 +111,23 @@ class PolicyWorker:
             with timing.add_time('forward'):
                 policy_outputs = self.actor_critic(observations, rnn_states)
 
-            for key, output_value in policy_outputs.items():
-                policy_outputs[key] = output_value.cpu()
+            with timing.add_time('to_cpu'):
+                for key, output_value in policy_outputs.items():
+                    policy_outputs[key] = output_value.cpu()
 
-            policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
+            with timing.add_time('format_outputs'):
+                policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.latest_policy_version)
 
-            # concat all tensors into a single tensor for performance
-            output_tensors = []
-            for policy_output in self.shared_buffers.policy_outputs:
-                tensor_name = policy_output.name
-                output_value = policy_outputs[tensor_name].float()
-                if len(output_value.shape) == 1:
-                    output_value.unsqueeze_(dim=1)
-                output_tensors.append(output_value)
+                # concat all tensors into a single tensor for performance
+                output_tensors = []
+                for policy_output in self.shared_buffers.policy_outputs:
+                    tensor_name = policy_output.name
+                    output_value = policy_outputs[tensor_name].float()
+                    if len(output_value.shape) == 1:
+                        output_value.unsqueeze_(dim=1)
+                    output_tensors.append(output_value)
 
-            output_tensors = torch.cat(output_tensors, dim=1)
+                output_tensors = torch.cat(output_tensors, dim=1)
 
             with timing.add_time('postprocess'):
                 self._enqueue_policy_outputs(self.requests, output_tensors)

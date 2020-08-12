@@ -22,5 +22,8 @@ setup(
         'tensorboardx>=2.0',
         'psutil>=5.7.0',
         'threadpoolctl>=2.0.0',
+        'colorlog',
+        'faster-fifo',
+        'filelock',
     ]
 )
