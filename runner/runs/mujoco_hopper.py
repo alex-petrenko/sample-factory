@@ -21,7 +21,7 @@ _params = ParamGrid([
     ('num_batches_per_iteration', [10]),
     ('rollout', [128]),
     ('nonlinearity', ['tanh']),
-    ('entropy_loss_coeff', [0.0]),
+    ('exploration_loss_coeff', [0.0]),
 ])
 
 _experiment = Experiment(

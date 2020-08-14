@@ -21,4 +21,4 @@ python -m algorithms.appo.train_appo --env=quadrotor_single \
  --gae_lambda=1.00 \
  --max_grad_norm=0.0 \
  --experiment=quads_single_v102 \
- --entropy_loss_coeff=0.0
+ --exploration_loss_coeff=0.0
