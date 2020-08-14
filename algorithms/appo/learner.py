@@ -25,7 +25,7 @@ from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists,
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
 from algorithms.appo.model import create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
-from algorithms.utils.action_distributions import get_action_distribution
+from algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from algorithms.utils.algo_utils import calculate_gae, EPS
 from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
@@ -258,6 +258,19 @@ class LearnerWorker:
         self.num_discarded_rollouts = 0
 
         self.process = Process(target=self._run, daemon=True)
+
+        if is_continuous_action_space(self.action_space) and self.cfg.exploration_loss == 'symmetric_kl':
+            raise NotImplementedError('KL-divergence exploration loss is not supported with '
+                                      'continuous action spaces. Use entropy exploration loss')
+
+        if self.cfg.exploration_loss_coeff == 0.0:
+            self.exploration_loss_func = lambda action_distr: 0.0
+        elif self.cfg.exploration_loss == 'entropy':
+            self.exploration_loss_func = self.entropy_exploration_loss
+        elif self.cfg.exploration_loss == 'symmetric_kl':
+            self.exploration_loss_func = self.symmetric_kl_exploration_loss
+        else:
+            raise NotImplementedError(f'{self.cfg.exploration_loss} not supported!')
 
     def start_process(self):
         self.process.start()
@@ -560,6 +573,20 @@ class LearnerWorker:
 
         return value_loss
 
+    def entropy_exploration_loss(self, action_distribution):
+        entropy = action_distribution.entropy()
+        entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
+        return entropy_loss
+
+    def symmetric_kl_exploration_loss(self, action_distribution):
+        kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
+        kl_prior = kl_prior.mean()
+        if not torch.isfinite(kl_prior):
+            kl_prior = torch.zeros(kl_prior.shape)
+        kl_prior = torch.clamp(kl_prior, max=30)
+        kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
+        return kl_prior_loss
+
     def _prepare_observations(self, obs_tensors, gpu_buffer_obs):
         for d, gpu_d, k, v, _ in iter_dicts_recursively(obs_tensors, gpu_buffer_obs):
             device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
@@ -714,13 +741,8 @@ class LearnerWorker:
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
 
-                    entropy = action_distribution.entropy()
-                    if self.cfg.entropy_loss_coeff > 0.0:
-                        entropy_loss = -self.cfg.entropy_loss_coeff * entropy.mean()
-                    else:
-                        entropy_loss = 0.0
-
-                    actor_loss = policy_loss + entropy_loss
+                    exploration_loss = self.exploration_loss_func(action_distribution)
+                    actor_loss = policy_loss + exploration_loss
                     epoch_actor_losses.append(actor_loss.item())
 
                     targets = targets.to(self.device)
@@ -731,10 +753,10 @@ class LearnerWorker:
                     loss = actor_loss + critic_loss
 
                     high_loss = 30.0
-                    if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(entropy_loss)) > high_loss:
+                    if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(exploration_loss)) > high_loss:
                         log.warning(
                             'High loss value: %.4f %.4f %.4f %.4f (recommended to adjust the --reward_scale parameter)',
-                            to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(entropy_loss),
+                            to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(exploration_loss),
                         )
                         force_summaries = True
 
@@ -800,7 +822,7 @@ class LearnerWorker:
         stats.entropy = var.action_distribution.entropy().mean()
         stats.policy_loss = var.policy_loss
         stats.value_loss = var.value_loss
-        stats.entropy_loss = var.entropy_loss
+        stats.exploration_loss = var.exploration_loss
         stats.adv_min = var.adv.min()
         stats.adv_max = var.adv.max()
         stats.adv_std = var.adv_std

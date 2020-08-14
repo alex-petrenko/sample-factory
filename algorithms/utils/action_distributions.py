@@ -8,6 +8,7 @@ from torch.nn import functional
 
 from algorithms.utils.algo_utils import EPS
 from utils.utils import log
+import math
 
 
 def calc_num_actions(action_space):
@@ -83,6 +84,10 @@ class CategoricalActionDistribution(Categorical):
         """
         super().__init__(logits=raw_logits)
 
+        num_categories = raw_logits.shape[-1]
+        self.uniform_prob = 1 / num_categories
+        self.log_uniform_prob = math.log(self.uniform_prob)
+
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
         kl = probs * (log_probs - other_log_probs)
@@ -97,6 +102,11 @@ class CategoricalActionDistribution(Categorical):
 
     def _kl_symmetric(self, other_log_probs):
         return 0.5 * (self._kl(other_log_probs) + self._kl_inverse(other_log_probs))
+
+    def symmetric_kl_with_uniform_prior(self):
+        probs, log_probs = self.probs, self.logits
+        return 0.5 * ((probs * (log_probs - self.log_uniform_prob)).sum(dim=-1)
+                      + (self.uniform_prob * (self.log_uniform_prob - log_probs)).sum(dim=-1))
 
     def kl_divergence(self, other):
         return self._kl(other.logits)
@@ -192,6 +202,12 @@ class TupleActionDistribution:
         kls = torch.cat(kls, dim=1)
         kl = kls.sum(dim=1)
         return kl
+
+    def symmetric_kl_with_uniform_prior(self):
+        sym_kls = [d.symmetric_kl_with_uniform_prior().unsqueeze(dim=1) for d in self.distributions]
+        sym_kls = torch.cat(sym_kls, dim=1)
+        sym_kl = sym_kls.sum(dim=1)
+        return sym_kl
 
     def dbg_print(self):
         for d in self.distributions:
