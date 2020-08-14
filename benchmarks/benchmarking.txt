@@ -326,3 +326,12 @@ python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_fram
 [2020-08-09 04:11:47,066][18187] Workers joined!
 [2020-08-09 04:11:47,077][18187] Collected {0: 2015232}, FPS: 46128.0
 [2020-08-09 04:11:47,077][18187] Timing: experience: 43.5102
+
+Version V105 (KL-divergence exploration)
+[2020-08-14 01:03:19,185][28163] Env runner 0, CPU aff. [0], rollouts 780: timing wait_actor: 0.0000, waiting: 1.0017, reset: 14.2128, save_policy_outputs: 0.9824, env_step: 36.4462, overhead: 3.6529, complete_rollouts: 0.0160, enqueue_policy_requests: 0.1855, one_step: 0.0158, work: 43.2764
+[2020-08-14 01:03:19,215][28164] Env runner 1, CPU aff. [1], rollouts 800: timing wait_actor: 0.0000, waiting: 1.0480, reset: 12.1188, save_policy_outputs: 0.9910, env_step: 36.3682, overhead: 3.6898, complete_rollouts: 0.0153, enqueue_policy_requests: 0.1810, one_step: 0.0188, work: 43.2639
+[2020-08-14 01:03:19,450][28162] Policy worker avg. requests 6.36, timing: init: 2.0099, wait_policy_total: 13.3693, wait_policy: 0.0051, handle_policy_step: 34.6174, one_step: 0.0039, deserialize: 1.2006, obs_to_device: 4.3295, stack: 11.5226, forward: 12.8290, to_cpu: 2.7540, format_outputs: 1.1375, postprocess: 4.2561, weight_update: 0.0005
+[2020-08-14 01:03:19,544][28148] GPU learner timing: extract: 0.1886, buffers: 0.0676, batching: 4.6875, buff_ready: 0.2238, tensors_gpu_float: 1.6100, squeeze: 0.0056, prepare: 6.6578, batcher_mem: 4.6076
+[2020-08-14 01:03:19,851][28148] Train loop timing: init: 1.4439, train_wait: 0.3581, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.3226, bptt_initial: 2.6679, bptt_forward_core: 0.3080, bptt: 0.3193, tail: 0.2493, vtrace: 0.8909, losses: 0.2339, clip: 6.4879, update: 8.2991, after_optimizer: 0.0837, train: 13.3566
+[2020-08-14 01:03:20,017][28113] Collected {0: 2015232}, FPS: 45756.6
+[2020-08-14 01:03:20,017][28113] Timing: experience: 43.8634
