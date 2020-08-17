@@ -5,7 +5,7 @@ _params_earlystop = ParamGrid([
     ('learning_rate', [0.001, 0.0004, 0.0002, 0.0001, 0.00005]),
     ('ppo_epochs', [4, 8]),
     ('num_batches_per_iteration', [50]),
-    ('entropy_loss_coeff', [0.0]),
+    ('exploration_loss_coeff', [0.0]),
     ('quads_effort_reward', [0.05]),
 ])
 

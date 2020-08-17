@@ -8,7 +8,7 @@ python -m examples.train_gym_env \
 --gae_lambda 0.99 \
 --experiment=lunar_lander_2 \
 --env=gym_LunarLanderContinuous-v2 \
---entropy_loss_coeff=0.0 \
+--exploration_loss_coeff=0.0 \
 --max_grad_norm=0.0 \
 --encoder_type=mlp \
 --encoder_subtype=mlp_mujoco \

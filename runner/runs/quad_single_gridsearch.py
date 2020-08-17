@@ -6,7 +6,7 @@ _params = ParamGrid([
     ('ppo_epochs', [1]),
     ('nonlinearity', ['tanh']),
     ('learning_rate', [1e-4]),
-    ('entropy_loss_coeff', [0.0005]),
+    ('exploration_loss_coeff', [0.0005]),
     ('actor_critic_share_weights', ['False']),
     ('policy_initialization', ['xavier_uniform']),
     ('max_policy_lag', [50]),
