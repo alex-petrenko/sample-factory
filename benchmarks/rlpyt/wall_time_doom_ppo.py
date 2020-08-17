@@ -213,7 +213,7 @@ def build_and_train(game="doom_benchmark", run_ID=0, cuda_idx=None, n_parallel=-
     algo = PPO(
         learning_rate=0.0001,
         value_loss_coeff=0.5,
-        exploration_loss_coeff=0.003,
+        entropy_loss_coeff=0.003,
         OptimCls=torch.optim.Adam,
         optim_kwargs=None,
         clip_grad_norm=4.,
