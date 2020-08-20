@@ -232,6 +232,11 @@ def kill_processes(processes):
 
 
 def cores_for_worker_process(worker_idx, num_workers, cpu_count):
+    """
+    Returns core indices, assuming available cores are [0, ..., cpu_count).
+    If this is not the case (e.g. SLURM) use these as indices in the array of actual available cores.
+    """
+
     worker_idx_modulo = worker_idx % cpu_count
 
     # trying to optimally assign workers to CPU cores to minimize context switching
@@ -260,10 +265,12 @@ def set_process_cpu_affinity(worker_idx, num_workers):
         return
 
     curr_process = psutil.Process()
-    cpu_count = psutil.cpu_count()
-    cores = cores_for_worker_process(worker_idx, num_workers, cpu_count)
-    if cores is not None:
-        curr_process.cpu_affinity(cores)
+    available_cores = curr_process.cpu_affinity()
+    cpu_count = len(available_cores)
+    core_indices = cores_for_worker_process(worker_idx, num_workers, cpu_count)
+    if core_indices is not None:
+        curr_process_cores = [available_cores[c] for c in core_indices]
+        curr_process.cpu_affinity(curr_process_cores)
 
     log.debug('Worker %d uses CPU cores %r', worker_idx, curr_process.cpu_affinity())
 

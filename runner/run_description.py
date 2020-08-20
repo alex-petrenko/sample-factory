@@ -133,11 +133,12 @@ class RunDescription:
         self.train_dir = train_dir
         self.run_name = run_name
         self.experiments = experiments
+        self.experiment_suffix = ''
 
     def generate_experiments(self):
         """Yields tuples (final cmd for experiment, experiment_name, root_dir)."""
         for experiment in self.experiments:
-            root_dir = join(self.run_name, experiment.base_name)
+            root_dir = join(self.run_name, f'{experiment.base_name}_{self.experiment_suffix}')
 
             experiment_cmds = experiment.generate_experiments()
             for experiment_cmd, experiment_name in experiment_cmds:
