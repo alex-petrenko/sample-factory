@@ -301,7 +301,7 @@ class PopulationBasedTraining:
 
             replacement_policy_candidate = random.choice(best_policies)
             reward_delta = target_objectives[replacement_policy_candidate] - target_objectives[policy_id]
-            reward_delta_relative = abs(reward_delta / (target_objectives[replacement_policy_candidate] + EPS))
+            reward_delta_relative = abs(reward_delta / (target_objectives[replacement_policy_candidate] + EPS))  # TODO: this might not work correctly with negative rewards
 
             if abs(reward_delta) > self.cfg.pbt_replace_reward_gap_absolute and reward_delta_relative > self.cfg.pbt_replace_reward_gap:
                 replacement_policy = replacement_policy_candidate
