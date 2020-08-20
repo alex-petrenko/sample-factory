@@ -119,7 +119,7 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--exploration_loss_coeff', default=0.003, type=float,
                        help='Coefficient for the exploration component of the loss function.')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
-        p.add_argument('--exploration_loss', default='entropy', type=str,
+        p.add_argument('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
                        help='Usually the exploration loss is based on maximizing the entropy of the probability'
                             ' distribution. Note that mathematically maximizing entropy of the categorical probability '
                             'distribution is exactly the same as minimizing the (regular) KL-divergence between'
@@ -135,7 +135,7 @@ class APPO(ReinforcementLearningAlgorithm):
                             'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
                             ' so it can prevent the pathological situations where the agent stops exploring. '
                             'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
-                       choices=['entropy', 'symmetric_kl'])
+                       )
 
         # APPO-specific
         p.add_argument(

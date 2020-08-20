@@ -2,16 +2,19 @@ import importlib
 import sys
 import argparse
 
+from runner.run_slurm import add_slurm_args
+
 
 def runner_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--run', default=None, type=str, help='Name of the python script that describes the run, e.g. doom_battle_hybrid')
     parser.add_argument('--runner', default='processes', choices=['processes', 'slurm'])
-    parser.add_argument('--workdir', default=None, type=str, help='Optional workdir. Used by slurm runner to store logfiles etc.')
     parser.add_argument('--pause_between', default=10, type=int, help='Pause in seconds between processes')
     parser.add_argument('--num_gpus', default=1, type=int, help='How many GPUs to use')
     parser.add_argument('--experiments_per_gpu', default=-1, type=int, help='How many experiments can we squeeze on a single GPU (-1 for not altering CUDA_VISIBLE_DEVICES at all)')
     parser.add_argument('--max_parallel', default=4, type=int, help='Maximum simultaneous experiments')
+
+    parser = add_slurm_args(parser)
 
     return parser
 
@@ -32,7 +35,7 @@ def main():
         run(run_description, args)
     elif args.runner == 'slurm':
         from runner.run_slurm import run_slurm
-        run_slurm(run_description, args.workdir, args.pause_between)
+        run_slurm(run_description, args)
 
 
 if __name__ == '__main__':
