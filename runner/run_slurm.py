@@ -60,7 +60,7 @@ def run_slurm(run_description, args):
     for sbatch_file in sbatch_files:
         idx += 1
         sbatch_fname = os.path.basename(sbatch_file)
-        num_cpus = args.slurm_cpus_per_gpu
+        num_cpus = args.slurm_cpus_per_gpu * args.slurm_gpus_per_job
         cmd = f'sbatch -p gpu --gres=gpu:{args.slurm_gpus_per_job} -c {num_cpus} --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}'
         log.info('Executing %s...', cmd)
 
