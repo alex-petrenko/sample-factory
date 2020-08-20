@@ -23,6 +23,7 @@ SBATCH_TEMPLATE = (
 
 def add_slurm_args(parser):
     parser.add_argument('--slurm_gpus_per_job', default=1, type=int, help='GPUs in a single SLURM process')
+    parser.add_argument('--slurm_cpus_per_gpu', default=14, type=int, help='Max allowed number of CPU cores per allocated GPU')
     parser.add_argument('--slurm_print_only', default=False, type=str2bool, help='Just print commands to the console without executing')
     parser.add_argument('--slurm_workdir', default=None, type=str, help='Optional workdir. Used by slurm runner to store logfiles etc.')
     return parser
@@ -59,7 +60,8 @@ def run_slurm(run_description, args):
     for sbatch_file in sbatch_files:
         idx += 1
         sbatch_fname = os.path.basename(sbatch_file)
-        cmd = f'sbatch -p gpu --gres=gpu:{args.slurm_gpus_per_job} -c 14 --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}'
+        num_cpus = args.slurm_cpus_per_gpu
+        cmd = f'sbatch -p gpu --gres=gpu:{args.slurm_gpus_per_job} -c {num_cpus} --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}'
         log.info('Executing %s...', cmd)
 
         if args.slurm_print_only:
