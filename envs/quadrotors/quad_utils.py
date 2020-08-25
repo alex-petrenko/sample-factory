@@ -1,5 +1,7 @@
 import copy
 
+import gym
+
 from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
 from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrapper
 from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrapper
@@ -83,10 +85,48 @@ def make_quadrotor_env_multi(cfg, **kwargs):
     return env
 
 
+class SingleQuadMulti(gym.Env):
+    def __init__(self, cfg, num_agents, **kwargs):
+        self.num_agents = num_agents
+        self.envs = []
+        for i in range(num_agents):
+            e = make_quadrotor_env_single(cfg, **kwargs)
+            self.envs.append(e)
+
+        self.action_space = self.envs[0].action_space
+        self.observation_space = self.envs[0].observation_space
+
+    def reset(self):
+        obs = []
+        for env in self.envs:
+            obs.append(env.reset())
+
+        return obs
+
+    def step(self, actions):
+        obs, rews, dones, infos = [], [], [], []
+        for i, env in enumerate(self.envs):
+            o, r, d, info = env.step(actions[i])
+            if d:
+                o = env.reset()
+            obs.append(o)
+            rews.append(r)
+            dones.append(d)
+            infos.append(info)
+        return obs, rews, dones, infos
+
+
+def make_quadrotor_env_single_multi(cfg, **kwargs):
+    num_agents = 4
+    return SingleQuadMulti(cfg, num_agents, **kwargs)
+
+
 def make_quadrotor_env(env_name, cfg=None, **kwargs):
     if env_name == 'quadrotor_single':
         return make_quadrotor_env_single(cfg, **kwargs)
     elif env_name == 'quadrotor_multi':
         return make_quadrotor_env_multi(cfg, **kwargs)
+    elif env_name == 'quadrotor_single_multi':  # TEST! TODO: remove
+        return make_quadrotor_env_single_multi(cfg, **kwargs)
     else:
         raise NotImplementedError()

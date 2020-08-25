@@ -30,6 +30,24 @@ class TestQuads(TestCase):
         log.debug('Time %s, FPS %.1f', timing, n_frames / timing.step)
 
     @unittest.skipUnless(quadrotors_available(), 'quadrotor env package is not installed')
+    def test_quad_env_single_multi(self):
+        env_name = 'quadrotor_single_multi'
+        cfg = default_cfg(env=env_name)
+        self.assertIsNotNone(create_env(env_name, cfg=cfg))
+
+        env = create_env(env_name, cfg=cfg)
+        obs = env.reset()
+
+        n_frames = 1000
+
+        timing = Timing()
+        with timing.timeit('step'):
+            for i in range(n_frames):
+                obs, r, d, info = env.step([env.action_space.sample() for _ in range(env.num_agents)])
+
+        log.debug('Time %s, FPS %.1f', timing, n_frames * env.num_agents / timing.step)
+
+    @unittest.skipUnless(quadrotors_available(), 'quadrotor env package is not installed')
     def test_quad_multi_env(self):
         env_name = 'quadrotor_multi'
         cfg = default_cfg(env=env_name)
