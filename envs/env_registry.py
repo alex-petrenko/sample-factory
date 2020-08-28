@@ -121,9 +121,8 @@ def register_default_envs(env_registry):
         return make_minigrid_env, None, minigrid_override_defaults
 
     def voxel_env_funcs():
-        from envs.voxel_env.voxel_env_utils import make_voxel_env
-        from envs.voxel_env.voxel_env_utils import voxel_env_override_defaults
-        return make_voxel_env, None, voxel_env_override_defaults
+        from envs.voxel_env.voxel_env_utils import make_voxel_env, add_voxel_env_args, voxel_env_override_defaults
+        return make_voxel_env, add_voxel_env_args, voxel_env_override_defaults
 
     default_envs = {
         'doom_': doom_funcs,

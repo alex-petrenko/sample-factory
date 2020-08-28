@@ -18,7 +18,7 @@ class TestQuads(TestCase):
         env = create_env(env_name, cfg=cfg)
         obs = env.reset()
 
-        n_frames = 10000
+        n_frames = 4000
 
         timing = Timing()
         with timing.timeit('step'):
@@ -37,12 +37,17 @@ class TestQuads(TestCase):
 
         env = create_env(env_name, cfg=cfg)
         env.reset()
+        for i in range(100):
+            obs, r, d, info = env.step([env.action_space.sample() for _ in range(env.num_agents)])
 
-        n_frames = 1000
+        n_frames = 5000
+        env = create_env(env_name, cfg=cfg)
+        env.reset()
 
         timing = Timing()
         with timing.timeit('step'):
             for i in range(n_frames):
                 obs, r, d, info = env.step([env.action_space.sample() for _ in range(env.num_agents)])
 
-        log.debug('Time %s, FPS %.1f', timing, n_frames / timing.step)
+        log.debug('Time %s, FPS %.1f', timing, n_frames * env.num_agents / timing.step)
+        env.close()

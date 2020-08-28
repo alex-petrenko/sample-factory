@@ -1,6 +1,5 @@
 import copy
 
-from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
 from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrapper
 from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrapper
 from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
