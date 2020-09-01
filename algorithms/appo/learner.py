@@ -760,9 +760,11 @@ class LearnerWorker:
                         )
                         force_summaries = True
 
+                # update the weights
                 with timing.add_time('update'):
-                    # update the weights
-                    self.optimizer.zero_grad()
+                    # following advice from https://youtu.be/9mS1fIYj1So set grad to None instead of optimizer.zero_grad()
+                    for p in self.actor_critic.parameters():
+                        p.grad = None
                     loss.backward()
 
                     if self.cfg.max_grad_norm > 0.0:
