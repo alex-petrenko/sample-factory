@@ -73,7 +73,7 @@ class ActorState:
         self.agent_idx = agent_idx
 
         self.policy_mgr = policy_mgr
-        self.curr_policy_id = self.policy_mgr.get_policy_for_agent(agent_idx)
+        self.curr_policy_id = self.policy_mgr.get_policy_for_agent(agent_idx, env_idx)
         self._env_set_curr_policy()
 
         self.traj_tensors = traj_tensors
@@ -112,7 +112,7 @@ class ActorState:
                 # tecnhically possible to add support for such spaces, but it's untested
                 # for now, look at Discretized instead.
                 raise Exception(
-                    'Mixed discrete & continuous action spaces are not fully supported (should be an easy fix)'
+                    'Mixed discrete & continuous action spaces are not supported (should be an easy fix)'
                 )
 
     def _env_set_curr_policy(self):
@@ -213,7 +213,7 @@ class ActorState:
         self.rollout_env_steps = 0
 
         if self.new_episode:
-            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx)
+            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
                 self._env_set_curr_policy()
@@ -295,7 +295,7 @@ class VectorEnvRunner:
 
         self.pbt_reward_shaping = pbt_reward_shaping
 
-        self.policy_mgr = PolicyManager(self.num_agents, self.cfg.num_policies)
+        self.policy_mgr = PolicyManager(self.cfg, self.num_agents)
 
     def init(self):
         """
