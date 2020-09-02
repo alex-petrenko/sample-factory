@@ -9,7 +9,7 @@ import torch
 from gym.spaces import Discrete, Tuple
 from torch.multiprocessing import Process as TorchProcess
 
-from algorithms.appo.appo_utils import TaskType, make_env_func, cuda_envvars_for_policy, set_gpus_for_process
+from algorithms.appo.appo_utils import TaskType, make_env_func, set_gpus_for_process
 from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.spaces.discretized import Discretized

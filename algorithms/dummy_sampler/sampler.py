@@ -19,7 +19,7 @@ import psutil
 from multiprocessing.sharedctypes import RawValue
 
 from algorithms.algorithm import AlgorithmBase
-from algorithms.appo.appo_utils import make_env_func
+from algorithms.appo.appo_utils import make_env_func, set_gpus_for_process
 from envs.create_env import create_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool
@@ -49,6 +49,9 @@ class DummySampler(AlgorithmBase):
                 'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
                 'that can use parallel CPU cores for level generation.'),
         )
+
+        p.add_argument('--sampler_worker_gpus', default=[], type=int, nargs='*',
+                       help='By default, workers only use CPUs. Changes this if e.g. you need GPU-based rendering on the actors')
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -80,6 +83,12 @@ class DummySampler(AlgorithmBase):
     def sample(self, proc_idx):
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        if self.cfg.sampler_worker_gpus:
+            set_gpus_for_process(
+                proc_idx,
+                num_gpus_per_process=1, process_type='sampler_proc', available_gpus=self.cfg.sampler_worker_gpus,
+            )
 
         timing = Timing()
 
