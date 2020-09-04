@@ -47,7 +47,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     env = make_env_func(AttrDict({'worker_index': 0, 'vector_index': 0}))
     # env.seed(0)
 
-    is_multiagent = hasattr(env, 'num_agents')
+    is_multiagent = hasattr(env, 'num_agents') and env.num_agents > 1
     if not is_multiagent:
         env = MultiAgentWrapper(env)
 
