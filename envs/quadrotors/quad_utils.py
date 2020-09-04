@@ -4,6 +4,7 @@ from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrappe
 from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrapper
 from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
 
+CUSTOM_ENCODER_INITIALIZED = False
 
 def make_quadrotor_env_single(cfg, **kwargs):
     from gym_art.quadrotor_single.quadrotor import QuadrotorEnv
@@ -48,6 +49,13 @@ def make_quadrotor_env_single(cfg, **kwargs):
 
 def make_quadrotor_env_multi(cfg, **kwargs):
     from gym_art.quadrotor_multi.quadrotor_multi import QuadrotorEnvMulti
+    global CUSTOM_ENCODER_INITIALIZED
+
+    # TODO: Make this less hacky
+    if cfg.encoder_custom is not None and not CUSTOM_ENCODER_INITIALIZED:
+        from envs.quadrotors.quad_multi_model import register_models
+        register_models()
+        CUSTOM_ENCODER_INITIALIZED = True
 
     quad = 'Crazyflie'
     dyn_randomize_every = dyn_randomization_ratio = None
@@ -66,12 +74,14 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
     dynamics_change = dict(noise=dict(thrust_noise_ratio=0.05), damp=dict(vel=0, omega_quadratic=0))
 
+    extended_obs = cfg.extend_obs
+
     env = QuadrotorEnvMulti(
         num_agents=cfg.quads_num_agents,
         dynamics_params=quad, raw_control=raw_control, raw_control_zero_middle=raw_control_zero_middle,
         dynamics_randomize_every=dyn_randomize_every, dynamics_change=dynamics_change, dyn_sampler_1=sampler_1,
         sense_noise=sense_noise, init_random_state=True, ep_time=episode_duration, rew_coeff=rew_coeff, quads_dist_between_goals=cfg.quads_dist_between_goals,
-        quads_mode=cfg.quads_mode
+        quads_mode=cfg.quads_mode, multi_agent=extended_obs
     )
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
