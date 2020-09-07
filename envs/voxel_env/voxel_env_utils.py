@@ -1,8 +1,10 @@
 from voxel_env.voxel_env_gym import VoxelEnv
 
+from utils.utils import str2bool
+
 
 def make_voxel_env(env_name, cfg=None, **kwargs):
-    env = VoxelEnv(num_agents=cfg.num_agents, vertical_look_limit_rad=cfg.vertical_look_limit)
+    env = VoxelEnv(num_agents=cfg.num_agents, vertical_look_limit_rad=cfg.vertical_look_limit, use_vulkan=cfg.use_vulkan)
     return env
 
 
@@ -22,3 +24,4 @@ def add_voxel_env_args(env, parser):
     p = parser
     p.add_argument('--num_agents', default=2, type=int, help='Num agents in the env')
     p.add_argument('--vertical_look_limit', default=0.1, type=float, help='Max vertical look in radians')
+    p.add_argument('--use_vulkan', default=False, type=str2bool, help='Whether to use Vulkan renderer')
