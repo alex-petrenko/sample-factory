@@ -37,7 +37,7 @@ def main():
                 train_dirs.append(match)
                 print('Monitoring', match, '...')
 
-    train_dirs = ','.join([f'{os.path.basename(s)}:{s}' for s in train_dirs])
+    train_dirs = ','.join([s for s in train_dirs])
     cmd = (
         f'tensorboard '
         f'--port={args.port} '
