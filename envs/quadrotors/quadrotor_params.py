@@ -20,3 +20,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_effort_reward', default=None, type=float, help='Override default value for effort reward')
     p.add_argument('--quads_episode_duration', default=7.0, type=float, help='Override default value for episode duration')
     p.add_argument('--quads_num_agents', default=4, type=int, help='Override default value for the number of quadrotors')
+    p.add_argument('--quads_collision_reward', default=None, type=float, help='Override default value for quadcol_bin reward')
+    p.add_argument('--quads_settle_reward', default=None, type=float, help='Override default value for quadsettle reward')
+    p.add_argument('--quads_dist_between_goals', default=0.3, type=float, help='Under circular configuration scenarios, it should be the radius of the circle of goals')
+    p.add_argument('--quads_mode', default='circular_config', type=str, choices=['circular_config', 'same_goal'], help='Choose which scanerio to run')
