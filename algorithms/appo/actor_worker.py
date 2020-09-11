@@ -284,8 +284,11 @@ class VectorEnvRunner:
 
         self.num_agents = num_agents  # queried from env
 
+        # this is for performance optimization, indexing in numpy arrays is faster than in PyTorch tensors
+        tensors_individual_transitions = shared_buffers.tensor_dict_to_numpy(len(shared_buffers.tensor_dimensions()))
+
         index = (worker_idx, split_idx)
-        self.traj_tensors = shared_buffers.tensors_individual_transitions.index(index)
+        self.traj_tensors = tensors_individual_transitions.index(index)
         self.traj_tensors_available = shared_buffers.is_traj_tensor_available[index]
         self.num_traj_buffers = shared_buffers.num_traj_buffers
         self.policy_outputs = shared_buffers.policy_outputs
@@ -320,12 +323,14 @@ class VectorEnvRunner:
             self.envs.append(env)
 
             actor_states_env, episode_rewards_env = [], []
+
             for agent_idx in range(self.num_agents):
-                agent_traj_tensors = self.traj_tensors.index((env_i, agent_idx))
+                env_agent_idx = env_i * self.num_agents + agent_idx
+                agent_traj_tensors = self.traj_tensors.index((env_agent_idx, ))
                 actor_state = ActorState(
                     self.cfg, env, self.worker_idx, self.split_idx, env_i, agent_idx,
                     agent_traj_tensors, self.num_traj_buffers,
-                    self.policy_outputs, self.policy_output_tensors[env_i, agent_idx],
+                    self.policy_outputs, self.policy_output_tensors[env_agent_idx],
                     self.pbt_reward_shaping, self.policy_mgr,
                 )
                 actor_states_env.append(actor_state)
@@ -460,18 +465,38 @@ class VectorEnvRunner:
 
         policy_request = dict()
 
+        range_start = range_end = 0
+        curr_policy = self.actor_states[0][0].curr_policy_id
+
+        def add_request():
+            data = (range_start, range_end, self.traj_buffer_idx, self.rollout_step)
+            if curr_policy not in policy_request:
+                policy_request[curr_policy] = []
+            policy_request[curr_policy].append(data)
+
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
                 policy_id = actor_state.curr_policy_id
 
-                # where policy worker should look for the policy inputs for the next step
-                data = (env_i, agent_i, self.traj_buffer_idx, self.rollout_step)
+                # One "request" is the range of consecutive indices in the shared buffer that are associated with
+                # the same policy. This is a performance optimization.
+                # Designed to minimize the number of requests, and thus minimize the number of memory copies
+                # that we need to do on the policy worker before stacking these tensors together for inference.
+                # This is especially effective when training a single policy, since all requests from the actor worker
+                # will be represented as a single range.
+                if policy_id != curr_policy:
+                    # where policy worker should look for the policy inputs for the next step
+                    add_request()
 
-                if policy_id not in policy_request:
-                    policy_request[policy_id] = []
-                policy_request[policy_id].append(data)
+                    range_start = range_end
+                    curr_policy = policy_id
 
+                range_end += 1
+
+        add_request()
+
+        assert range_end == self.num_envs * self.num_agents
         return policy_request
 
     def _prepare_next_step(self):
@@ -565,7 +590,7 @@ class VectorEnvRunner:
             # Wait for the next set of buffers to be released, if it's not ready yet.
             # This should be a no-op, unless we are collecting experience faster than we can learn from it, in which
             # case this will act as a speed adjusting mechanism.
-            if self.traj_tensors_available[:, :, self.traj_buffer_idx].min() == 0:
+            if self.traj_tensors_available[:, self.traj_buffer_idx].min() == 0:
                 with timing.add_time('wait_buffers'):
                     self.wait_for_traj_buffers()
 
@@ -583,7 +608,7 @@ class VectorEnvRunner:
         """
 
         print_warning = True
-        while self.traj_tensors_available[:, :, self.traj_buffer_idx].min() == 0:
+        while self.traj_tensors_available[:, self.traj_buffer_idx].min() == 0:
             if print_warning:
                 log.warning(
                     'Waiting for trajectory buffer %d on actor %d-%d',
@@ -717,7 +742,7 @@ class ActorWorker:
         # mark the trajectory buffer that we're sending to the learner as unavailable until the learner
         # finishes processing
         env_runner = self.env_runners[split_idx]
-        env_runner.traj_tensors_available[:, :, traj_buffer_idx] = 0
+        env_runner.traj_tensors_available[:, traj_buffer_idx] = 0
 
         rollouts_per_policy = dict()
         for rollout in rollouts:

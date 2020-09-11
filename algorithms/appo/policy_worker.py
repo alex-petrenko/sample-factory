@@ -15,14 +15,6 @@ from utils.timing import Timing
 from utils.utils import AttrDict, log, join_or_kill
 
 
-def dict_of_lists_append(dict_of_lists, new_data, index):
-    for key, x in new_data.items():
-        if key in dict_of_lists:
-            dict_of_lists[key].append(x[index])
-        else:
-            dict_of_lists[key] = [x[index]]
-
-
 class PolicyWorker:
     def __init__(
         self, worker_idx, policy_id, cfg, obs_space, action_space, shared_buffers, policy_queue, actor_queues,
@@ -56,9 +48,12 @@ class PolicyWorker:
         self.initialized_event.clear()
 
         self.shared_buffers = shared_buffers
-        self.tensors_individual_transitions = self.shared_buffers.tensors_individual_transitions
         self.policy_versions = shared_buffers.policy_versions
         self.stop_experience_collection = shared_buffers.stop_experience_collection
+
+        # this is for performance optimization, indexing in numpy arrays is faster than in PyTorch tensors
+        # use numpy only for the first two dimensions here
+        self.tensors_individual_transitions = shared_buffers.tensor_dict_to_numpy(2)
 
         self.latest_policy_version = -1
         self.num_policy_updates = 0
@@ -83,24 +78,31 @@ class PolicyWorker:
                 observations = AttrDict()
                 rnn_states = []
 
-                traj_tensors = self.shared_buffers.tensors_individual_transitions
+                traj_tensors = self.tensors_individual_transitions
+
                 for request in self.requests:
                     actor_idx, split_idx, request_data = request
+                    traj_tensors_obs = traj_tensors['obs']
 
-                    for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
-                        index = actor_idx, split_idx, env_idx, agent_idx, traj_buffer_idx, rollout_step
-                        dict_of_lists_append(observations, traj_tensors['obs'], index)
-                        rnn_states.append(traj_tensors['rnn_states'][index])
+                    for range_start, range_end, traj_buffer_idx, rollout_step in request_data:
+                        for obs_name, obs_tensor in traj_tensors_obs.items():
+                            obs_range = obs_tensor[actor_idx, split_idx][range_start:range_end, traj_buffer_idx, rollout_step]
+                            if obs_name in observations:
+                                observations[obs_name].append(obs_range)
+                            else:
+                                observations[obs_name] = [obs_range]
+
+                        rnn_states.append(traj_tensors['rnn_states'][actor_idx, split_idx][range_start:range_end, traj_buffer_idx, rollout_step])
                         self.total_num_samples += 1
 
             with timing.add_time('stack'):
                 for key, x in observations.items():
-                    x_stacked = torch.stack(x)
+                    x_stacked = torch.cat(x)
                     with timing.add_time('obs_to_device'):
                         device, dtype = self.actor_critic.device_and_type_for_input_tensor(key)
                         observations[key] = x_stacked.to(device).type(dtype)
 
-                rnn_states = torch.stack(rnn_states).to(self.device).float()
+                rnn_states = torch.cat(rnn_states).to(self.device).float()
                 num_samples = rnn_states.shape[0]
 
             with timing.add_time('forward'):
@@ -138,9 +140,11 @@ class PolicyWorker:
         for request in requests:
             actor_idx, split_idx, request_data = request
             worker_outputs = policy_outputs[actor_idx, split_idx]
-            for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
-                worker_outputs[env_idx, agent_idx].copy_(output_tensors[output_idx])
-                output_idx += 1
+            for range_start, range_end, traj_buffer_idx, rollout_step in request_data:
+                num_outputs = range_end - range_start
+                worker_outputs[range_start:range_end].copy_(output_tensors[output_idx:output_idx + num_outputs])
+                output_idx += num_outputs
+
             outputs_ready.add((actor_idx, split_idx))
 
         for actor_idx, split_idx in outputs_ready:

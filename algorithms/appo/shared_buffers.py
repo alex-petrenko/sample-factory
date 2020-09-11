@@ -92,18 +92,12 @@ class SharedBuffers:
 
         ensure_memory_shared(self.tensors)
 
-        # this is for performance optimization
-        # indexing in numpy arrays is faster than in PyTorch tensors
-        self.tensors_individual_transitions = self.tensor_dict_to_numpy(len(self.tensor_dimensions()))
-        self.tensor_trajectories = self.tensor_dict_to_numpy(len(self.tensor_dimensions()) - 1)
-
         # create a shared tensor to indicate when the learner is done with the trajectory buffer and
         # it can be used to store the next trajectory
         traj_buffer_available_shape = [
             self.cfg.num_workers,
             self.cfg.worker_num_splits,
-            self.envs_per_split,
-            self.num_agents,
+            self.envs_per_split * self.num_agents,
             self.num_traj_buffers,
         ]
         self.is_traj_tensor_available = torch.ones(traj_buffer_available_shape, dtype=torch.uint8)
@@ -118,15 +112,14 @@ class SharedBuffers:
         policy_outputs_shape = [
             self.cfg.num_workers,
             self.cfg.worker_num_splits,
-            self.envs_per_split,
-            self.num_agents,
+            self.envs_per_split * self.num_agents,
             policy_outputs_combined_size,
         ]
 
         self.policy_outputs = policy_outputs
         self.policy_output_tensors = torch.zeros(policy_outputs_shape, dtype=torch.float32)
         self.policy_output_tensors.share_memory_()
-        self.policy_output_tensors = to_numpy(self.policy_output_tensors, 4)
+        self.policy_output_tensors = to_numpy(self.policy_output_tensors, len(policy_outputs_shape) - 2)
 
         self.policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
         self.policy_versions.share_memory_()
@@ -167,8 +160,7 @@ class SharedBuffers:
         dimensions = [
             self.cfg.num_workers,
             self.cfg.worker_num_splits,
-            self.envs_per_split,
-            self.num_agents,
+            self.envs_per_split * self.num_agents,
             self.num_traj_buffers,
             self.cfg.rollout,
         ]

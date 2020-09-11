@@ -203,8 +203,9 @@ class LearnerWorker:
 
         self.obs_space = obs_space
         self.action_space = action_space
+        self.num_agents = shared_buffers.num_agents
 
-        self.rollout_tensors = shared_buffers.tensor_trajectories
+        self.rollout_tensors = shared_buffers.tensor_dict_to_numpy(len(shared_buffers.tensor_dimensions()) - 1)
         self.traj_tensors_available = shared_buffers.is_traj_tensor_available
         self.policy_versions = shared_buffers.policy_versions
         self.stop_experience_collection = shared_buffers.stop_experience_collection
@@ -331,7 +332,8 @@ class LearnerWorker:
 
     def _mark_rollout_buffer_free(self, rollout):
         r = rollout
-        self.traj_tensors_available[r.worker_idx, r.split_idx][r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
+        env_agent_idx = r.env_idx * self.num_agents + r.agent_idx
+        self.traj_tensors_available[r.worker_idx, r.split_idx][env_agent_idx, r.traj_buffer_idx] = 1
 
     def _prepare_train_buffer(self, rollouts, macro_batch_size, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
@@ -1081,7 +1083,8 @@ class LearnerWorker:
         rollouts = []
         for rollout_data in data.rollouts:
             env_idx, agent_idx = rollout_data['env_idx'], rollout_data['agent_idx']
-            tensors = self.rollout_tensors.index((worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx))
+            env_agent_idx = env_idx * self.num_agents + agent_idx
+            tensors = self.rollout_tensors.index((worker_idx, split_idx, env_agent_idx, traj_buffer_idx))
 
             rollout_data['t'] = tensors
             rollout_data['worker_idx'] = worker_idx
