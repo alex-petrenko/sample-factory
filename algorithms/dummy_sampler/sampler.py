@@ -40,7 +40,7 @@ class DummySampler(AlgorithmBase):
         p.add_argument('--num_envs_per_worker', default=1, type=int, help='Number of envs on a single CPU sampled sequentially.')
 
         p.add_argument('--sample_env_frames', default=int(2e6), type=int, help='Stop after sampling this many env frames (this takes frameskip into account)')
-        p.add_argument('--sample_env_frames_per_worker', default=int(1e5), type=int, help='Stop after sampling this many env frames per worker (this takes frameskip into account)')
+        p.add_argument('--sample_env_frames_per_worker', default=int(1e6), type=int, help='Stop after sampling this many env frames per worker (this takes frameskip into account)')
 
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,

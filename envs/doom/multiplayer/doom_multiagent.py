@@ -6,9 +6,9 @@ from utils.network import is_udp_port_available
 from utils.utils import log
 
 DEFAULT_UDP_PORT = int(os.environ.get('DOOM_DEFAULT_UDP_PORT', 40300))
-log.info('Default UDP port is %r', DEFAULT_UDP_PORT)
+# log.info('Default UDP port is %r', DEFAULT_UDP_PORT)
 
-# This try except block is increase the env timeout connection flag in travis
+# This try except block is to increase the env timeout connection flag in travis
 try:
     vizdoom_env_timeout = int(os.environ['TRAVIS_VIZDOOM_ENV_TIMEOUT'])
 except KeyError:

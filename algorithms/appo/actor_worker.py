@@ -477,10 +477,10 @@ class VectorEnvRunner:
     def _prepare_next_step(self):
         """
         Write environment outputs to shared memory so policy workers can calculate actions for the next step.
-        Note how we temporary hold obs and rnn_states in local variables before writing them into shared memory.
+        Note how we temporarily hold obs and rnn_states in local variables before writing them into shared memory.
         We could not do the memory write right away because for that we need the memory location of the NEXT step.
         If this is the first step in the new rollout, we need to switch to a new trajectory buffer before we do that
-        (because the previous trajectory buffer is now used by the learner and we can't used until the learner is
+        (because the previous trajectory buffer is now used by the learner and we can't use it until the learner is
         done).
         """
 
@@ -569,7 +569,9 @@ class VectorEnvRunner:
                 with timing.add_time('wait_buffers'):
                     self.wait_for_traj_buffers()
 
-        self._prepare_next_step()
+        with timing.add_time('prepare_next_step'):
+            self._prepare_next_step()
+
         policy_request = self._format_policy_request()
 
         return policy_request, complete_rollouts, episodic_stats
