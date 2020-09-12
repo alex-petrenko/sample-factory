@@ -1,15 +1,20 @@
 import random
+import time
 from unittest import TestCase
 
 import gym
 import numpy as np
 import torch
+from torch.distributions import Categorical
 
-from algorithms.utils.action_distributions import get_action_distribution, calc_num_logits
+from algorithms.utils.action_distributions import get_action_distribution, calc_num_logits, \
+    CategoricalActionDistribution, sample_actions_log_probs
+from utils.timing import Timing
+from utils.utils import log
 
 
 class TestActionDistributions(TestCase):
-    batch_size = 42  # whatever
+    batch_size = 128  # whatever
 
     def test_simple_distribution(self):
         simple_action_space = gym.spaces.Discrete(3)
@@ -22,6 +27,59 @@ class TestActionDistributions(TestCase):
         simple_actions = simple_action_distribution.sample()
         self.assertEqual(list(simple_actions.shape), [self.batch_size])
         self.assertTrue(all(0 <= a < simple_action_space.n for a in simple_actions))
+
+    def test_gumbel_trick(self):
+        """
+        We use a Gumbel noise which seems to be faster compared to using pytorch multinomial.
+        Here we test that those are actually equivalent.
+        """
+
+        timing = Timing()
+
+        torch.backends.cudnn.enabled = True
+        torch.backends.cudnn.benchmark = True
+
+        with torch.no_grad():
+            action_space = gym.spaces.Discrete(8)
+            num_logits = calc_num_logits(action_space)
+            device_type = 'cpu'
+            device = torch.device(device_type)
+            logits = torch.rand(self.batch_size, num_logits, device=device) * 10.0 - 5.0
+
+            if device_type == 'cuda':
+                torch.cuda.synchronize(device)
+
+            count_gumbel, count_multinomial = np.zeros([action_space.n]), np.zeros([action_space.n])
+
+            # estimate probability mass by actually sampling both ways
+            num_samples = 20000
+
+            action_distribution = get_action_distribution(action_space, logits)
+            sample_actions_log_probs(action_distribution)
+            action_distribution.sample_gumbel()
+
+            with timing.add_time('gumbel'):
+                for i in range(num_samples):
+                    action_distribution = get_action_distribution(action_space, logits)
+                    samples_gumbel = action_distribution.sample_gumbel()
+                    count_gumbel[samples_gumbel[0]] += 1
+
+            action_distribution = get_action_distribution(action_space, logits)
+            action_distribution.sample()
+
+            with timing.add_time('multinomial'):
+                for i in range(num_samples):
+                    action_distribution = get_action_distribution(action_space, logits)
+                    samples_multinomial = action_distribution.sample()
+                    count_multinomial[samples_multinomial[0]] += 1
+
+            estimated_probs_gumbel = count_gumbel / float(num_samples)
+            estimated_probs_multinomial = count_multinomial / float(num_samples)
+
+            log.debug('Gumbel estimated probs: %r', estimated_probs_gumbel)
+            log.debug('Multinomial estimated probs: %r', estimated_probs_multinomial)
+            log.debug('Sampling timing: %s', timing)
+            time.sleep(0.1)  # to finish logging
 
     def test_tuple_distribution(self):
         num_spaces = random.randint(1, 4)
@@ -69,8 +127,15 @@ class TestActionDistributions(TestCase):
         raw_logits = torch.tensor([[0.0, 1.0, 2.0]])
         action_space = gym.spaces.Discrete(3)
         categorical = get_action_distribution(action_space, raw_logits)
+        torch_categorical = Categorical(logits=raw_logits)
 
-        log_probs = categorical.log_prob(torch.tensor([0, 1, 2]))
+        torch_categorical_log_probs = torch_categorical.log_prob(torch.tensor([0, 1, 2]))
+
+        log_probs = [categorical.log_prob(torch.tensor([action])) for action in [0, 1, 2]]
+        log_probs = torch.cat(log_probs)
+
+        self.assertTrue(np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy()))
+
         probs = torch.exp(log_probs)
 
         expected_probs = np.array([0.09003057317038046, 0.24472847105479764, 0.6652409557748219])

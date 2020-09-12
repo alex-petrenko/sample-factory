@@ -335,3 +335,12 @@ Version V105 (KL-divergence exploration)
 [2020-08-14 01:03:19,851][28148] Train loop timing: init: 1.4439, train_wait: 0.3581, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.3226, bptt_initial: 2.6679, bptt_forward_core: 0.3080, bptt: 0.3193, tail: 0.2493, vtrace: 0.8909, losses: 0.2339, clip: 6.4879, update: 8.2991, after_optimizer: 0.0837, train: 13.3566
 [2020-08-14 01:03:20,017][28113] Collected {0: 2015232}, FPS: 45756.6
 [2020-08-14 01:03:20,017][28113] Timing: experience: 43.8634
+
+Version V107 (faster categorical distributions)
+[2020-09-11 19:10:38,111][01603] Env runner 0, CPU aff. [0], rollouts 780: timing wait_actor: 0.0000, waiting: 0.9135, reset: 14.1597, save_policy_outputs: 0.9308, env_step: 36.0150, overhead: 3.6331, prepare_next_step: 1.3416, complete_rollouts: 0.0140, enqueue_policy_requests: 0.2695, one_step: 0.0153, work: 42.8347
+[2020-09-11 19:10:38,112][01604] Env runner 1, CPU aff. [1], rollouts 780: timing wait_actor: 0.0000, waiting: 0.8913, reset: 14.5501, save_policy_outputs: 0.9838, env_step: 35.9917, overhead: 3.6282, prepare_next_step: 1.4316, complete_rollouts: 0.0131, enqueue_policy_requests: 0.2362, one_step: 0.0151, work: 42.8679
+[2020-09-11 19:10:38,387][01602] Policy worker avg. requests 6.68, timing: init: 1.8235, wait_policy_total: 14.9073, wait_policy: 0.0051, handle_policy_step: 32.2519, one_step: 0.0000, deserialize: 1.2188, obs_to_device: 4.3302, stack: 11.4334, forward: 10.4606, to_cpu: 3.0993, format_outputs: 1.1230, postprocess: 3.9854, weight_update: 0.0006
+[2020-09-11 19:10:38,475][01588] GPU learner timing: extract: 0.1846, buffers: 0.0656, batching: 4.6244, buff_ready: 0.2338, tensors_gpu_float: 1.6586, squeeze: 0.0055, prepare: 6.6505, batcher_mem: 4.5485
+[2020-09-11 19:10:38,781][01588] Train loop timing: init: 1.4011, train_wait: 0.4821, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.3063, bptt_initial: 2.6546, bptt_forward_core: 0.3205, bptt: 0.3322, tail: 0.1785, vtrace: 0.8624, losses: 0.2237, clip: 6.5730, update: 8.3336, after_optimizer: 0.0781, train: 13.3056
+[2020-09-11 19:10:38,922][01534] Collected {0: 2015232}, FPS: 46145.4
+[2020-09-11 19:10:38,922][01534] Timing: experience: 43.4938

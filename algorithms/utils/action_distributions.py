@@ -3,12 +3,10 @@ import math
 import gym
 import numpy as np
 import torch
-from torch.distributions import Categorical, Normal, Independent
-from torch.nn import functional
+from torch.distributions import Normal, Independent
+import torch.nn.functional as F
 
-from algorithms.utils.algo_utils import EPS
 from utils.utils import log
-import math
 
 
 def calc_num_actions(action_space):
@@ -71,22 +69,39 @@ def sample_actions_log_probs(distribution):
 
 
 # noinspection PyAbstractClass
-class CategoricalActionDistribution(Categorical):
-    """
-    A thin wrapper on top of standard PyTorch categorical, with some functionality added.
-
-    """
-
+class CategoricalActionDistribution:
     def __init__(self, raw_logits):
         """
         Ctor.
         :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
         """
-        super().__init__(logits=raw_logits)
 
-        num_categories = raw_logits.shape[-1]
-        self.uniform_prob = 1 / num_categories
-        self.log_uniform_prob = math.log(self.uniform_prob)
+        self.logits = raw_logits
+        self.p = None
+
+    @property
+    def probs(self):
+        if self.p is None:
+            self.p = F.softmax(self.logits, dim=-1)
+        return self.p
+
+    def sample_gumbel(self):
+        sample = torch.argmax(self.logits - torch.empty_like(self.logits).exponential_().log_(), -1)
+        return sample
+
+    def sample(self):
+        samples = torch.multinomial(self.probs, 1, True).squeeze(dim=-1)
+        return samples
+
+    def log_prob(self, value):
+        value = value.long().unsqueeze(-1)
+        log_probs = F.log_softmax(self.logits, dim=-1)
+        log_probs = torch.gather(log_probs, -1, value).view(-1)
+        return log_probs
+
+    def entropy(self):
+        p_log_p = self.logits * self.probs
+        return -p_log_p.sum(-1)
 
     def _kl(self, other_log_probs):
         probs, log_probs = self.probs, self.logits
@@ -105,8 +120,12 @@ class CategoricalActionDistribution(Categorical):
 
     def symmetric_kl_with_uniform_prior(self):
         probs, log_probs = self.probs, self.logits
-        return 0.5 * ((probs * (log_probs - self.log_uniform_prob)).sum(dim=-1)
-                      + (self.uniform_prob * (self.log_uniform_prob - log_probs)).sum(dim=-1))
+        num_categories = self.logits.shape[-1]
+        uniform_prob = 1 / num_categories
+        log_uniform_prob = math.log(uniform_prob)
+
+        return 0.5 * ((probs * (log_probs - log_uniform_prob)).sum(dim=-1)
+                      + (uniform_prob * (log_uniform_prob - log_probs)).sum(dim=-1))
 
     def kl_divergence(self, other):
         return self._kl(other.logits)
