@@ -26,4 +26,6 @@ def doom_override_defaults(env, parser):
         obs_scale=255.0,
         env_frameskip=4,
         fps=35,
+        exploration_loss='symmetric_kl',
+        exploration_loss_coeff=0.001,
     )
