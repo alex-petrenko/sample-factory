@@ -76,17 +76,23 @@ class CategoricalActionDistribution:
         :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
         """
 
-        self.logits = raw_logits
-        self.p = None
+        self.raw_logits = raw_logits
+        self.log_p = self.p = None
 
     @property
     def probs(self):
         if self.p is None:
-            self.p = F.softmax(self.logits, dim=-1)
+            self.p = F.softmax(self.raw_logits, dim=-1)
         return self.p
 
+    @property
+    def log_probs(self):
+        if self.log_p is None:
+            self.log_p = F.log_softmax(self.raw_logits, dim=-1)
+        return self.log_p
+
     def sample_gumbel(self):
-        sample = torch.argmax(self.logits - torch.empty_like(self.logits).exponential_().log_(), -1)
+        sample = torch.argmax(self.raw_logits - torch.empty_like(self.raw_logits).exponential_().log_(), -1)
         return sample
 
     def sample(self):
@@ -95,22 +101,21 @@ class CategoricalActionDistribution:
 
     def log_prob(self, value):
         value = value.long().unsqueeze(-1)
-        log_probs = F.log_softmax(self.logits, dim=-1)
-        log_probs = torch.gather(log_probs, -1, value).view(-1)
+        log_probs = torch.gather(self.log_probs, -1, value).view(-1)
         return log_probs
 
     def entropy(self):
-        p_log_p = self.logits * self.probs
+        p_log_p = self.log_probs * self.probs
         return -p_log_p.sum(-1)
 
     def _kl(self, other_log_probs):
-        probs, log_probs = self.probs, self.logits
+        probs, log_probs = self.probs, self.log_probs
         kl = probs * (log_probs - other_log_probs)
         kl = kl.sum(dim=-1)
         return kl
 
     def _kl_inverse(self, other_log_probs):
-        probs, log_probs = self.probs, self.logits
+        probs, log_probs = self.probs, self.log_probs
         kl = torch.exp(other_log_probs) * (other_log_probs - log_probs)
         kl = kl.sum(dim=-1)
         return kl
@@ -119,8 +124,8 @@ class CategoricalActionDistribution:
         return 0.5 * (self._kl(other_log_probs) + self._kl_inverse(other_log_probs))
 
     def symmetric_kl_with_uniform_prior(self):
-        probs, log_probs = self.probs, self.logits
-        num_categories = self.logits.shape[-1]
+        probs, log_probs = self.probs, self.log_probs
+        num_categories = log_probs.shape[-1]
         uniform_prob = 1 / num_categories
         log_uniform_prob = math.log(uniform_prob)
 
@@ -128,13 +133,13 @@ class CategoricalActionDistribution:
                       + (uniform_prob * (log_uniform_prob - log_probs)).sum(dim=-1))
 
     def kl_divergence(self, other):
-        return self._kl(other.logits)
+        return self._kl(other.log_probs)
 
     def dbg_print(self):
         dbg_info = dict(
             entropy=self.entropy().mean(),
-            min_logit=self.logits.min(),
-            max_logit=self.logits.max(),
+            min_logit=self.raw_logits.min(),
+            max_logit=self.raw_logits.max(),
             min_prob=self.probs.min(),
             max_prob=self.probs.max(),
         )

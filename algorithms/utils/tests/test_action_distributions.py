@@ -127,9 +127,13 @@ class TestActionDistributions(TestCase):
         raw_logits = torch.tensor([[0.0, 1.0, 2.0]])
         action_space = gym.spaces.Discrete(3)
         categorical = get_action_distribution(action_space, raw_logits)
-        torch_categorical = Categorical(logits=raw_logits)
 
+        torch_categorical = Categorical(logits=raw_logits)
         torch_categorical_log_probs = torch_categorical.log_prob(torch.tensor([0, 1, 2]))
+
+        entropy = categorical.entropy()
+        torch_entropy = torch_categorical.entropy()
+        self.assertTrue(np.allclose(entropy.numpy(), torch_entropy))
 
         log_probs = [categorical.log_prob(torch.tensor([action])) for action in [0, 1, 2]]
         log_probs = torch.cat(log_probs)
@@ -152,5 +156,3 @@ class TestActionDistributions(TestCase):
                 log_prob = tuple_distr.log_prob(action)
                 probability = torch.exp(log_prob)[0].item()
                 self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2], delta=1e-6)
-
-
