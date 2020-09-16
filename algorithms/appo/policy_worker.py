@@ -95,13 +95,15 @@ class PolicyWorker:
 
             with timing.add_time('stack'):
                 for key, x in observations.items():
-                    x_stacked = torch.stack(x)
-                    with timing.add_time('obs_to_device'):
-                        device, dtype = self.actor_critic.device_and_type_for_input_tensor(key)
-                        observations[key] = x_stacked.to(device).type(dtype)
-
-                rnn_states = torch.stack(rnn_states).to(self.device).float()
+                    observations[key] = torch.stack(x)
+                rnn_states = torch.stack(rnn_states)
                 num_samples = rnn_states.shape[0]
+
+            with timing.add_time('obs_to_device'):
+                for key, x in observations.items():
+                    device, dtype = self.actor_critic.device_and_type_for_input_tensor(key)
+                    observations[key] = x.to(device).type(dtype)
+                rnn_states = rnn_states.to(self.device).float()
 
             with timing.add_time('forward'):
                 policy_outputs = self.actor_critic(observations, rnn_states)

@@ -354,3 +354,13 @@ python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_fram
 [2020-09-13 00:48:54,924][25298] Train loop timing: init: 1.4083, train_wait: 0.5370, epoch_init: 0.0012, minibatch_init: 0.0005, forward_head: 0.3111, bptt_initial: 2.6444, bptt_forward_core: 0.3150, bptt: 0.3247, tail: 0.1675, vtrace: 0.9004, losses: 0.3488, clip: 6.5036, update: 8.3128, after_optimizer: 0.0848, train: 13.4505
 [2020-09-13 00:48:55,081][25263] Collected {0: 2015232}, FPS: 46279.0
 [2020-09-13 00:48:55,081][25263] Timing: experience: 43.3682
+
+Version V109 (Pytorch 1.6.0 is the default environment)
+[2020-09-16 01:15:07,453][13302] Env runner 0, CPU aff. [0], rollouts 800: timing wait_actor: 0.0000, waiting: 1.1626, reset: 12.3288, save_policy_outputs: 0.9347, env_step: 34.4003, overhead: 3.1593, prepare_next_step: 1.3322, complete_rollouts: 0.0123, enqueue_policy_requests: 0.1939, one_step: 0.0128, work: 40.6330
+[2020-09-16 01:15:07,474][13303] Env runner 1, CPU aff. [1], rollouts 800: timing wait_actor: 0.0000, waiting: 1.1050, reset: 16.1093, save_policy_outputs: 0.9673, env_step: 34.5213, overhead: 3.1302, prepare_next_step: 1.3112, complete_rollouts: 0.0143, enqueue_policy_requests: 0.1764, one_step: 0.0170, work: 40.6930
+[2020-09-16 01:15:07,707][13301] Policy worker avg. requests 7.26, timing: init: 1.8608, wait_policy_total: 12.0739, wait_policy: 0.0051, handle_policy_step: 33.7882, one_step: 0.0054, deserialize: 1.1357, stack: 6.4923, obs_to_device: 6.8896, forward: 10.3463, to_cpu: 2.7757, format_outputs: 0.9618, postprocess: 4.1559, weight_update: 0.0006
+[2020-09-16 01:15:07,814][13285] GPU learner timing: extract: 0.1725, buffers: 0.0586, batching: 4.7156, buff_ready: 0.2059, tensors_gpu_float: 1.7596, squeeze: 0.0059, prepare: 6.8247, batcher_mem: 4.6170
+[2020-09-16 01:15:08,120][13285] Train loop timing: init: 1.5387, train_wait: 0.2935, epoch_init: 0.0011, minibatch_init: 0.0005, forward_head: 0.2723, bptt_initial: 2.6277, bptt_forward_core: 0.3213, bptt: 0.3298, tail: 0.1691, vtrace: 0.8107, losses: 0.3124, clip: 5.3533, update: 7.1089, after_optimizer: 0.1429, train: 12.1383
+[2020-09-16 01:15:08,275][13253] Workers joined!
+[2020-09-16 01:15:08,284][13253] Collected {0: 2015232}, FPS: 48412.1
+[2020-09-16 01:15:08,284][13253] Timing: experience: 41.4574
