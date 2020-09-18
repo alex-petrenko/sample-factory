@@ -16,7 +16,7 @@ from algorithms.appo.model_utils import get_hidden_size
 from algorithms.utils.action_distributions import ContinuousActionDistribution
 from algorithms.utils.algo_utils import ExperimentStatus
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
-from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
+from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from envs.create_env import create_env
 from utils.utils import log, AttrDict
 
@@ -47,7 +47,7 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
     env = make_env_func(AttrDict({'worker_index': 0, 'vector_index': 0}))
     # env.seed(0)
 
-    is_multiagent = hasattr(env, 'num_agents') and env.num_agents > 1
+    is_multiagent = is_multiagent_env(env)
     if not is_multiagent:
         env = MultiAgentWrapper(env)
 

@@ -10,7 +10,7 @@ import torch
 from algorithms.appo.learner import LearnerWorker
 from algorithms.appo.model import create_actor_critic
 from algorithms.utils.arguments import parse_args, load_from_checkpoint
-from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
+from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from envs.create_env import create_env
 from utils.utils import log, AttrDict
 
@@ -65,7 +65,7 @@ def multi_agent_match(policy_indices, max_num_episodes=int(1e9), max_num_frames=
     env = make_env_func(AttrDict({'worker_index': 0, 'vector_index': 0}))
     env.seed(0)
 
-    is_multiagent = hasattr(env, 'num_agents') and env.num_agents > 1
+    is_multiagent = is_multiagent_env(env)
     if not is_multiagent:
         env = MultiAgentWrapper(env)
     else:

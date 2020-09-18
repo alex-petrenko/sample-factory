@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from gym import spaces, Wrapper
 
-from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper
+from algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from envs.create_env import create_env
 from utils.get_available_gpus import get_available_gpus_without_triggering_pytorch_cuda_initialization
 from utils.utils import log, memory_consumption_mb
@@ -36,7 +36,7 @@ class DictObservationsWrapper(Wrapper):
 
 def make_env_func(cfg, env_config):
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
-    if not hasattr(env, 'num_agents') or env.num_agents <= 1:
+    if not is_multiagent_env(env):
         env = MultiAgentWrapper(env)
     if not isinstance(env.observation_space, spaces.Dict):
         env = DictObservationsWrapper(env)
