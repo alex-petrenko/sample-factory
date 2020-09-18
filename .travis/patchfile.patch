@@ -1,31 +1,16 @@
-7a8
->   - astroid=2.4.0=py37_0
-13c14
-<   - cudatoolkit=10.1.243=h6bb024c_0
+10c10
+<   - ca-certificates=2020.6.24=0
+---
+>   - ca-certificates=2020.7.22=0
+13c13
+<   - cudatoolkit=10.2.89=hfd86e86_1
 ---
 >   - cpuonly=1.0=0
-30a32
->   - isort=4.3.21=py37_0
-33a36
->   - lazy-object-proxy=1.4.3=py37h7b6447c_0
-50a54
->   - mccabe=0.6.1=py37_1
-68a73
->   - pylint=2.5.0=py37_1
-71c76
-<   - pytorch=1.4.0=py3.7_cuda10.1.243_cudnn7.6.3_0
+79c79
+<   - pytorch=1.6.0=py3.8_cuda10.2.89_cudnn7.6.5_0
 ---
->   - pytorch=1.5.0=py3.7_cpu_0
-78c83,85
-<   - torchvision=0.5.0=py37_cu101
+>   - pytorch=1.6.0=py3.8_cpu_0
+86c86
+<   - torchvision=0.7.0=py38_cu102
 ---
->   - toml=0.10.0=py37h28b3542_0
->   - torchvision=0.6.0=py37_cpu
->   - typed-ast=1.4.1=py37h7b6447c_0
-109a117
->     - gym-minigrid==1.0.1
-125a134,135
->     - tensorflow-cpu==1.15.0
->     - tensorflow-estimator==1.15.1
-129a140
->     - git+https://github.com/alex-petrenko/ViZDoom@doom_bot_project#egg=vizdoom
+>   - torchvision=0.7.0=py38_cpu
