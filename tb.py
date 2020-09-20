@@ -5,17 +5,29 @@ Little handy script to launch tensorboard using a wildcard mask.
 Inspired by code originally written by Shao-Hua Sun https://github.com/shaohua0116
 """
 
-import sys
-import glob
-import time
-import psutil
-import os.path
 import argparse
+import glob
+import os.path
 import subprocess
-
+import sys
+import time
 from os.path import join
 
 from utils.utils import kill
+
+
+def tb_version():
+    tb_version_proc = subprocess.Popen(['tensorboard', '--version'], stdout=subprocess.PIPE)
+    proc_output = tb_version_proc.communicate()
+    version_str = None
+    for line in proc_output:
+        if line is not None:
+            line = str(line.decode('utf-8')).rstrip().lstrip()
+            if '.' in line:
+                version_str = line
+
+    major, minor, *rest = version_str.split('.')
+    return int(major), int(minor)
 
 
 def main():
@@ -29,6 +41,13 @@ def main():
     parser.add_argument('filters', nargs='+', type=str, help='directories in train_dir to monitor')
     args = parser.parse_args()
 
+    tb_version_major, tb_version_minor = tb_version()
+    print('Tb version:', '.'.join([str(tb_version_major), str(tb_version_minor)]))
+    if tb_version_major >= 2:
+        logdir_arg = '--logdir_spec'
+    else:
+        logdir_arg = '--logdir'
+
     train_dirs = []
     for f in args.filters:
         matches = glob.glob(join(os.path.expanduser(args.dir), f))
@@ -37,11 +56,12 @@ def main():
                 train_dirs.append(match)
                 print('Monitoring', match, '...')
 
-    train_dirs = ','.join([s for s in train_dirs])
+    train_dirs = ','.join([f'{os.path.basename(s)}:{s}' for s in train_dirs])
+
     cmd = (
         f'tensorboard '
         f'--port={args.port} '
-        f'--logdir={train_dirs} '
+        f'{logdir_arg}={train_dirs} '
         f'--reload_interval={args.reload_interval} '
         f'--max_reload_threads=8 '
         f'--samples_per_plugin="scalars=200"'
