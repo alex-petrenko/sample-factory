@@ -355,7 +355,7 @@ class PolicyCoreRNN(PolicyCoreBase):
         rnn_states = rnn_states.unsqueeze(0)
 
         if self.is_gru:
-            x, new_rnn_states = self.core(head_output, rnn_states)
+            x, new_rnn_states = self.core(head_output, rnn_states.contiguous())
         else:
             h, c = torch.split(rnn_states, self.cfg.hidden_size, dim=2)
             x, (h, c) = self.core(head_output, (h.contiguous(), c.contiguous()))

@@ -1,3 +1,4 @@
+import random
 import signal
 import time
 from collections import OrderedDict
@@ -507,7 +508,9 @@ class VectorEnvRunner:
             observations = e.reset()
 
             if self.cfg.decorrelate_envs_on_one_worker:
-                decorrelate_steps = self.cfg.rollout * env_i + 1
+                env_i_split = self.num_envs * self.split_idx + env_i
+                decorrelate_steps = self.cfg.rollout * env_i_split + self.cfg.rollout * random.randint(0, 4)
+
                 log.info('Decorrelating experience for %d frames...', decorrelate_steps)
                 for decorrelate_step in range(decorrelate_steps):
                     actions = [e.action_space.sample() for _ in range(self.num_agents)]
