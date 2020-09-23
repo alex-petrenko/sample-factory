@@ -23,4 +23,4 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_collision_reward', default=None, type=float, help='Override default value for quadcol_bin reward')
     p.add_argument('--quads_settle_reward', default=None, type=float, help='Override default value for quadsettle reward')
     p.add_argument('--quads_dist_between_goals', default=0.3, type=float, help='Under circular configuration scenarios, it should be the radius of the circle of goals')
-    p.add_argument('--quads_mode', default='circular_config', type=str, choices=['circular_config', 'same_goal'], help='Choose which scanerio to run')
+    p.add_argument('--quads_mode', default='circular_config', type=str, choices=['circular_config', 'same_goal', 'sanity_check'], help='Choose which scanerio to run')
