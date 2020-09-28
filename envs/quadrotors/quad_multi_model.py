@@ -39,11 +39,9 @@ class QuadMultiMeanEncoder(EncoderBase):
 
     def forward(self, obs_dict):
         obs = obs_dict['obs']
-        batch_size = obs.shape[0]
-        # TODO: Don't hardcode obs_self and obs_neighbors (pass a labeled dict??)
         obs_self, obs_neighbors = obs[:, :self.self_obs_dim], obs[:, self.self_obs_dim:]
         self_embed = self.self_encoder(obs_self)
-        obs_neighbors = torch.stack(torch.split(obs_neighbors, 6, dim=1))
+        obs_neighbors = torch.stack(torch.split(obs_neighbors, self.neighbor_obs_dim, dim=1))
         neighbor_embeds = self.neighbor_encoder(obs_neighbors)
         mean_embed = torch.mean(neighbor_embeds, 0)
         embeddings = torch.cat((self_embed, mean_embed), dim=1)
