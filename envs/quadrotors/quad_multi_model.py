@@ -35,19 +35,19 @@ class QuadMultiMeanEncoder(EncoderBase):
 
         self.init_fc_blocks(cfg.hidden_size)
 
-
-
     def forward(self, obs_dict):
         obs = obs_dict['obs']
         obs_self, obs_neighbors = obs[:, :self.self_obs_dim], obs[:, self.self_obs_dim:]
         self_embed = self.self_encoder(obs_self)
-        obs_neighbors = torch.stack(torch.split(obs_neighbors, self.neighbor_obs_dim, dim=1))
+        # relative xyz and vxyz for the entire minibatch (batch dimension is batch_size * num_neighbors)
+        obs_neighbors = obs_neighbors.reshape(-1, self.neighbor_obs_dim)
         neighbor_embeds = self.neighbor_encoder(obs_neighbors)
-        mean_embed = torch.mean(neighbor_embeds, 0)
+        batch_size = obs_self.shape[0]
+        neighbor_embeds = neighbor_embeds.reshape(batch_size, -1, self.neighbor_hidden_size)
+        mean_embed = torch.mean(neighbor_embeds, dim=1)
         embeddings = torch.cat((self_embed, mean_embed), dim=1)
         out = self.feed_forward(embeddings)
         return out
-
 
 def register_models():
     register_custom_encoder('quad_multi_encoder', QuadMultiMeanEncoder)
