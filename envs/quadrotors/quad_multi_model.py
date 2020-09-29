@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from algorithms.appo.model_utils import get_obs_shape, nonlinearity, create_standard_encoder, EncoderBase, \
+from algorithms.appo.model_utils import nonlinearity, EncoderBase, \
     register_custom_encoder
 from algorithms.utils.pytorch_utils import calc_num_elements
 

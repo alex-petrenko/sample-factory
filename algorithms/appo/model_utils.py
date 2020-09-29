@@ -297,7 +297,7 @@ class MlpEncoder(EncoderBase):
 
 
 def create_encoder(cfg, obs_space, timing):
-    if cfg.encoder_custom:
+    if cfg.encoder_custom and cfg.encoder_custom != 'None':
         encoder_cls = ENCODER_REGISTRY[cfg.encoder_custom]
         encoder = encoder_cls(cfg, obs_space, timing)
     else:
