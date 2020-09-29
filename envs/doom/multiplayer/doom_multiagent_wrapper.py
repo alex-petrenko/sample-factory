@@ -13,6 +13,7 @@ from filelock import FileLock
 from envs.doom.doom_gym import doom_lock_file
 from envs.doom.doom_render import concat_grid, cvt_doom_obs
 from envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
+from envs.env_utils import RewardShapingInterface, get_default_reward_shaping
 from utils.utils import log
 from functools import wraps
 from time import sleep
@@ -170,8 +171,11 @@ class MultiAgentEnvWorker:
             self.result_queue.put(results)
 
 
-class MultiAgentEnv(gym.Env):
+class MultiAgentEnv(gym.Env, RewardShapingInterface):
     def __init__(self, num_agents, make_env_func, env_config, skip_frames):
+        gym.Env.__init__(self)
+        RewardShapingInterface.__init__(self)
+
         self.num_agents = num_agents
         log.debug('Multi agent env, num agents: %d', self.num_agents)
         self.skip_frames = skip_frames  # number of frames to skip (1 = no skip)
@@ -180,13 +184,10 @@ class MultiAgentEnv(gym.Env):
         self.action_space = env.action_space
         self.observation_space = env.observation_space
 
-        # we can probably do this in a more generic way, but good enough for now
-        self.default_reward_shaping = None
-        if hasattr(env.unwrapped, '_reward_shaping_wrapper'):
-            # noinspection PyProtectedMember
-            self.default_reward_shaping = env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme
-
+        self.default_reward_shaping = get_default_reward_shaping(env)
         env.close()
+
+        self.current_reward_shaping = [self.default_reward_shaping for _ in self.num_agents]
 
         self.make_env_func = make_env_func
 
@@ -208,6 +209,18 @@ class MultiAgentEnv(gym.Env):
         self.reset_on_init = True
 
         self.initialized = False
+
+    def get_default_reward_shaping(self):
+        return self.default_reward_shaping
+
+    def get_current_reward_shaping(self, agent_idx: int):
+        return self.current_reward_shaping[agent_idx]
+
+    def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
+        self.current_reward_shaping[agent_idx] = reward_shaping
+        self.set_env_attr(
+            agent_idx, 'unwrapped.reward_shaping_interface.reward_shaping_scheme', reward_shaping,
+        )
 
     def await_tasks(self, data, task_type, timeout=None):
         """

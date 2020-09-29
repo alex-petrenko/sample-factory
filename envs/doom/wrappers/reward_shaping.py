@@ -5,6 +5,7 @@ from collections import deque
 import gym
 
 from algorithms.utils.algo_utils import EPS
+from envs.env_utils import RewardShapingInterface
 from utils.utils import log
 
 NUM_WEAPONS = 8
@@ -82,11 +83,12 @@ def true_reward_frags(info):
     return info['FRAGCOUNT']
 
 
-class DoomRewardShapingWrapper(gym.Wrapper):
+class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
     """Convert game info variables into scalar reward using a reward shaping scheme."""
 
     def __init__(self, env, reward_shaping_scheme=None, true_reward_func=None):
-        super().__init__(env)
+        gym.Wrapper.__init__(self, env)
+        RewardShapingInterface.__init__(self)
 
         self.reward_shaping_scheme = reward_shaping_scheme
         self.true_reward_func = true_reward_func
@@ -107,7 +109,16 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         self.print_once = False
 
         # save a reference to this wrapper in the actual env class, for other wrappers
-        self.env.unwrapped._reward_shaping_wrapper = self
+        self.env.unwrapped.reward_shaping_interface = self
+
+    def get_default_reward_shaping(self):
+        return self.reward_shaping_scheme
+
+    def get_current_reward_shaping(self, agent_idx: int):
+        return self.reward_shaping_scheme
+
+    def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
+        self.reward_shaping_scheme = reward_shaping
 
     def _delta_rewards(self, info):
         reward = 0.0
@@ -241,5 +252,5 @@ class DoomRewardShapingWrapper(gym.Wrapper):
         return obs, rew, done, info
 
     def close(self):
-        self.env.unwrapped._reward_shaping_wrapper = None
+        self.env.unwrapped.reward_shaping_interface = None
         return self.env.close()

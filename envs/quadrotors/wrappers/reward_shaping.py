@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 
+from envs.env_utils import RewardShapingInterface
 
 DEFAULT_QUAD_REWARD_SHAPING = dict(
     quad_rewards=dict(
@@ -9,9 +10,10 @@ DEFAULT_QUAD_REWARD_SHAPING = dict(
 )
 
 
-class QuadsRewardShapingWrapper(gym.Wrapper):
+class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
     def __init__(self, env, reward_shaping_scheme=None):
-        super().__init__(env)
+        gym.Wrapper.__init__(self, env)
+        RewardShapingInterface.__init__(self)
 
         self.reward_shaping_scheme = reward_shaping_scheme
         self.cumulative_rewards = None
@@ -19,8 +21,17 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
 
         self.num_agents = env.num_agents if hasattr(env, 'num_agents') else 1
 
-        # save a reference to this wrapper in the actual env class, for other wrappers
-        self.env.unwrapped._reward_shaping_wrapper = self
+        # save a reference to this wrapper in the actual env class, for other wrappers and for outside access
+        self.env.unwrapped.reward_shaping_interface = self
+
+    def get_default_reward_shaping(self):
+        return self.reward_shaping_scheme
+
+    def get_current_reward_shaping(self, agent_idx: int):
+        return self.reward_shaping_scheme
+
+    def set_reward_shaping(self, reward_shaping, unused_agent_idx):
+        self.reward_shaping_scheme = reward_shaping
 
     def reset(self):
         obs = self.env.reset()
@@ -72,5 +83,6 @@ class QuadsRewardShapingWrapper(gym.Wrapper):
         return obs, rewards, dones, infos
 
     def close(self):
-        self.env.unwrapped._reward_shaping_wrapper = None
+        # remove the reference to avoid dependency cycles
+        self.env.unwrapped.reward_shaping_interface = None
         return self.env.close()

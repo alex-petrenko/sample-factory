@@ -34,6 +34,7 @@ from algorithms.appo.population_based_training import PopulationBasedTraining
 from algorithms.appo.shared_buffers import SharedBuffers
 from algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIES, EXTRA_EPISODIC_STATS_PROCESSING, \
     ExperimentStatus
+from envs.env_utils import get_default_reward_shaping
 from utils.timing import Timing
 from utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename, save_git_diff
@@ -237,16 +238,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         self.reward_shaping_scheme = None
         if self.cfg.with_pbt:
-            if hasattr(tmp_env.unwrapped, '_reward_shaping_wrapper'):
-                # noinspection PyProtectedMember
-                self.reward_shaping_scheme = tmp_env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme
-            else:
-                try:
-                    from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
-                    if isinstance(tmp_env.unwrapped, MultiAgentEnv):
-                        self.reward_shaping_scheme = tmp_env.unwrapped.default_reward_shaping
-                except ImportError:
-                    pass
+            self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
 
         tmp_env.close()
 

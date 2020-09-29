@@ -1,8 +1,5 @@
-import numpy as np
-
 import gym
-
-from utils.utils import log
+import numpy as np
 
 
 class QuadsAdditionalInputWrapper(gym.Wrapper):
@@ -48,5 +45,4 @@ class QuadsAdditionalInputWrapper(gym.Wrapper):
         return obs, rew, done, info
 
     def close(self):
-        self.env.unwrapped._reward_shaping_wrapper = None
         return self.env.close()

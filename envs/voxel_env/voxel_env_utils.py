@@ -1,6 +1,34 @@
+import gym
 from voxel_env.voxel_env_gym import VoxelEnv
 
+from envs.env_utils import RewardShapingInterface
 from utils.utils import str2bool
+
+
+class RewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
+    def __init__(self, env):
+        gym.Wrapper.__init__(self, env)
+        RewardShapingInterface.__init__(self)
+
+        self.num_agents = env.num_agents
+        self.is_multiagent = env.is_multiagent
+
+        # save a reference to this wrapper in the actual env class, for other wrappers and for outside access
+        self.env.unwrapped.reward_shaping_interface = self
+
+    def get_default_reward_shaping(self):
+        return self.env.get_default_reward_shaping()
+
+    def get_current_reward_shaping(self, agent_idx: int):
+        return self.env.get_current_reward_shaping(agent_idx)
+
+    def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
+        return self.env.set_reward_shaping(reward_shaping, agent_idx)
+
+    def close(self):
+        # remove the reference to avoid dependency cycles
+        self.env.unwrapped.reward_shaping_interface = None
+        return self.env.close()
 
 
 def make_voxel_env(env_name, cfg=None, **kwargs):
@@ -11,6 +39,8 @@ def make_voxel_env(env_name, cfg=None, **kwargs):
         vertical_look_limit_rad=cfg.voxel_vertical_look_limit,
         use_vulkan=cfg.voxel_use_vulkan,
     )
+
+    env = RewardShapingWrapper(env)
     return env
 
 
