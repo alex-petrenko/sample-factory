@@ -14,6 +14,7 @@ from algorithms.appo.appo_utils import TaskType, make_env_func, set_gpus_for_pro
 from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.spaces.discretized import Discretized
+from envs.env_utils import set_reward_shaping
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
 
@@ -33,25 +34,6 @@ def transform_dict_observations(observations):
         obs_dict[key] = np.stack(x)
 
     return obs_dict
-
-
-# noinspection PyProtectedMember
-def update_reward_shaping_scheme(env, agent_idx, reward_shaping):
-    """
-    Sending the updated reward shaping scheme to the environment, whether it's a single-agent env or a multi-agent env.
-    """
-
-    if hasattr(env.unwrapped, '_reward_shaping_wrapper'):
-        env.unwrapped._reward_shaping_wrapper.reward_shaping_scheme = reward_shaping
-    else:
-        try:
-            from envs.doom.multiplayer.doom_multiagent_wrapper import MultiAgentEnv
-            if isinstance(env.unwrapped, MultiAgentEnv):
-                env.unwrapped.set_env_attr(
-                    agent_idx, 'unwrapped._reward_shaping_wrapper.reward_shaping_scheme', reward_shaping,
-                )
-        except ImportError:
-            pass
 
 
 class ActorState:
@@ -130,7 +112,7 @@ class ActorState:
         self._reset_rnn_state()
 
         if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
-            update_reward_shaping_scheme(self.env, self.agent_idx, self.pbt_reward_shaping[self.curr_policy_id])
+            set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
 
     def set_trajectory_data(self, data, traj_buffer_idx, rollout_step):
         """

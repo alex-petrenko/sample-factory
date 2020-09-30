@@ -56,6 +56,12 @@ HYPERPARAMS_TO_TUNE = {
     'learning_rate', 'exploration_loss_coeff', 'value_loss_coeff', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value',
 }
 
+# if not specified then tune all rewards
+REWARD_CATEGORIES_TO_TUNE = {
+    'doom_': ['delta', 'selected_weapon'],
+    'quadrotor_': ['quad_rewards'],
+}
+
 # HYPERPARAMS_TO_TUNE_EXTENDED = {
 #     'learning_rate', 'exploration_loss_coeff', 'value_loss_coeff', 'adam_beta1', 'max_grad_norm',
 #     'ppo_clip_ratio', 'ppo_clip_value', 'vtrace_rho', 'vtrace_c',
@@ -98,10 +104,9 @@ class PopulationBasedTraining:
         self.learner_workers = self.actor_workers = None
 
         self.reward_categories_to_tune = []
-        if cfg.env.startswith('doom_'):
-            self.reward_categories_to_tune = ['delta', 'selected_weapon']
-        elif cfg.env.startswith('quadrotor_'):
-            self.reward_categories_to_tune = ['quad_rewards']
+        for env_prefix, categories in REWARD_CATEGORIES_TO_TUNE.items():
+            if cfg.env.startswith(env_prefix):
+                self.reward_categories_to_tune = categories
 
     def init(self, learner_workers, actor_workers):
         self.learner_workers = learner_workers
@@ -208,11 +213,16 @@ class PopulationBasedTraining:
             return None
 
         replacement_shaping = copy.deepcopy(original_reward_shaping)
-        for category in self.reward_categories_to_tune:
-            if category in replacement_shaping:
-                replacement_shaping[category] = self._perturb(
-                    replacement_shaping[category], default_params=self.default_reward_shaping[category],
-                )
+
+        if len(self.reward_categories_to_tune) > 0:
+            for category in self.reward_categories_to_tune:
+                if category in replacement_shaping:
+                    replacement_shaping[category] = self._perturb(
+                        replacement_shaping[category], default_params=self.default_reward_shaping[category],
+                    )
+        else:
+            replacement_shaping = self._perturb(replacement_shaping, default_params=self.default_reward_shaping)
+
         return replacement_shaping
 
     def _force_learner_to_save_model(self, policy_id):

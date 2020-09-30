@@ -19,7 +19,7 @@ class PolicyManager:
         self.num_policies = cfg.num_policies
         self.mix_policies_in_one_env = cfg.pbt_mix_policies_in_one_env
 
-        self.resample_env_policy_every = 20  # episodes
+        self.resample_env_policy_every = 10  # episodes
         self.env_policies = dict()
         self.env_policy_requests = dict()
 
