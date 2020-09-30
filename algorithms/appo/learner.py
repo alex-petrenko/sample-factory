@@ -963,6 +963,7 @@ class LearnerWorker:
                 self.device = torch.device('cuda', index=0)
             else:
                 self.device = torch.device('cpu')
+
             self.init_model(timing)
 
             self.optimizer = torch.optim.Adam(
