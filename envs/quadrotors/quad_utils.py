@@ -5,7 +5,6 @@ from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrappe
 from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrapper
 from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
 
-CUSTOM_ENCODER_INITIALIZED = False
 
 def make_quadrotor_env_single(cfg, **kwargs):
     from gym_art.quadrotor_single.quadrotor import QuadrotorEnv
@@ -99,10 +98,7 @@ def make_quadrotor_env(env_name, cfg=None, **kwargs):
     else:
         raise NotImplementedError()
 
+
 def ensure_initialized():
-    global CUSTOM_ENCODER_INITIALIZED
-    if CUSTOM_ENCODER_INITIALIZED:
-        return
     register_models()
-    CUSTOM_ENCODER_INITIALIZED = True
 
