@@ -25,3 +25,4 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_dist_between_goals', default=0.3, type=float, help='Under circular configuration scenarios, it should be the radius of the circle of goals')
     p.add_argument('--quads_mode', default='sanity_check', type=str, choices=['circular_config', 'same_goal', 'sanity_check'], help='Choose which scanerio to run')
     p.add_argument('--extend_obs', default=False, type=str2bool, help='Drones receive relative pos and relative vel info from all other drones')
+    p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
