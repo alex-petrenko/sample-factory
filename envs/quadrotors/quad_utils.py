@@ -66,14 +66,14 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
     dynamics_change = dict(noise=dict(thrust_noise_ratio=0.05), damp=dict(vel=0, omega_quadratic=0))
 
-    extended_obs = cfg.extend_obs
+    quads_obs_space_type = cfg.quads_obs_space_type
 
     env = QuadrotorEnvMulti(
         num_agents=cfg.quads_num_agents,
         dynamics_params=quad, raw_control=raw_control, raw_control_zero_middle=raw_control_zero_middle,
         dynamics_randomize_every=dyn_randomize_every, dynamics_change=dynamics_change, dyn_sampler_1=sampler_1,
         sense_noise=sense_noise, init_random_state=True, ep_time=episode_duration, rew_coeff=rew_coeff, quads_dist_between_goals=cfg.quads_dist_between_goals,
-        quads_mode=cfg.quads_mode, swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba
+        quads_mode=cfg.quads_mode, swarm_obs=quads_obs_space_type, quads_use_numba=cfg.quads_use_numba
     )
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
@@ -90,7 +90,9 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
 
 def make_quadrotor_env(env_name, cfg=None, **kwargs):
-    ensure_initialized()
+    if cfg.encoder_custom is not None:
+        ensure_initialized(cfg.encoder_custom)
+
     if env_name == 'quadrotor_single':
         return make_quadrotor_env_single(cfg, **kwargs)
     elif env_name == 'quadrotor_multi':
@@ -99,6 +101,6 @@ def make_quadrotor_env(env_name, cfg=None, **kwargs):
         raise NotImplementedError()
 
 
-def ensure_initialized():
-    register_models()
+def ensure_initialized(encoder_custom='quad_multi_encoder_deepset'):
+    register_models(encoder_custom)
 

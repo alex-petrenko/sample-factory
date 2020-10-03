@@ -52,7 +52,49 @@ class QuadMultiMeanEncoder(EncoderBase):
         return out
 
 
-def register_models():
-    quad_custom_encoder_name = 'quad_multi_encoder_deepset'
+class QuadMultiHistogramEncoder(EncoderBase):
+    """Histogram encoder based on the DeepRL for Swarms Paper and Local Communication Protocols for Learning"""
+    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, histogram_bins=64, histogram_hidden_size=64):
+        super().__init__(cfg, timing)
+        self.self_obs_dim = self_obs_dim
+        self.histogram_bins = histogram_bins
+        self.histogram_hidden_size = histogram_hidden_size
+
+        fc_encoder_layer = cfg.hidden_size
+        self.self_encoder = nn.Sequential(
+            nn.Linear(self.self_obs_dim, fc_encoder_layer),
+            nonlinearity(cfg),
+            nn.Linear(fc_encoder_layer, fc_encoder_layer),
+            nonlinearity(cfg)
+        )
+
+        self.histogram_encoder = nn.Sequential(
+            nn.Linear(self.histogram_bins, self.histogram_hidden_size),
+            nonlinearity(cfg),
+        )
+        self.self_encoder_out_size = calc_num_elements(self.self_encoder, (self.self_obs_dim,))
+        self.histogram_encoder_out_size = calc_num_elements(self.histogram_encoder, (self.histogram_bins,))
+
+        # Feed forward self obs and neighbor obs after concatenation
+        self.feed_forward = nn.Linear(self.self_encoder_out_size + self.histogram_encoder_out_size, cfg.hidden_size)
+
+        self.encoder_out_size = cfg.hidden_size
+
+    def forward(self, obs_dict):
+        obs = obs_dict['obs']
+        obs_self, obs_histogram = obs[:, :self.self_obs_dim], obs[:, self.self_obs_dim:]
+        self_embed = self.self_encoder(obs_self)
+        histogram_embeds = self.histogram_encoder(obs_histogram)
+        embeddings = torch.cat((self_embed, histogram_embeds), dim=1)
+        out = self.feed_forward(embeddings)
+        return out
+
+
+def register_models(quad_custom_encoder_name='quad_multi_encoder_deepset'):
     if quad_custom_encoder_name not in ENCODER_REGISTRY:
-        register_custom_encoder(quad_custom_encoder_name, QuadMultiMeanEncoder)
+        if quad_custom_encoder_name == 'quad_multi_encoder_deepset':
+            register_custom_encoder(quad_custom_encoder_name, QuadMultiMeanEncoder)
+        elif quad_custom_encoder_name == 'quad_multi_encoder_histogram':
+            register_custom_encoder(quad_custom_encoder_name, QuadMultiHistogramEncoder)
+        else:
+            raise NotImplementedError(f'encoder {quad_custom_encoder_name} not supported!')
