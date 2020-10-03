@@ -84,7 +84,7 @@ def make_quadrotor_env_multi(cfg, **kwargs):
     if cfg.quads_settle_reward is not None:
         reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
 
-    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping, is_multiagent=True)
+    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
 
     return env
 
