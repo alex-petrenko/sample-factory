@@ -115,6 +115,8 @@ class APPO(ReinforcementLearningAlgorithm):
         )
 
         p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
+        #TODO: Right now this only applies to custom encoders. Make sure generic policies also factor in this arg
+        p.add_argument('--use_spectral_norm', default=False, type=str2bool, help='Use spectral normalization to smoothen the gradients and stabilize training')
 
         # components of the loss function
         p.add_argument('--exploration_loss_coeff', default=0.003, type=float,
