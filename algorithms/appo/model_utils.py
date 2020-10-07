@@ -2,6 +2,7 @@ import math
 
 import torch
 from torch import nn
+from torch.nn.utils import spectral_norm
 
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
 from algorithms.utils.algo_utils import EPS
@@ -270,12 +271,20 @@ class MlpEncoder(EncoderBase):
 
         if cfg.encoder_subtype == 'mlp_quads':
             fc_encoder_layer = cfg.hidden_size
-            encoder_layers = [
-                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
-                nonlinearity(cfg),
-                nn.Linear(fc_encoder_layer, fc_encoder_layer),
-                nonlinearity(cfg),
-            ]
+            if cfg.use_spectral_norm:
+                encoder_layers = [
+                    spectral_norm(nn.Linear(obs_shape.obs[0], fc_encoder_layer)),
+                    nonlinearity(cfg),
+                    spectral_norm(nn.Linear(fc_encoder_layer, fc_encoder_layer)),
+                    nonlinearity(cfg),
+                ]
+            else:
+                encoder_layers = [
+                    nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                    nonlinearity(cfg),
+                    nn.Linear(fc_encoder_layer, fc_encoder_layer),
+                    nonlinearity(cfg),
+                ]
         elif cfg.encoder_subtype == 'mlp_mujoco':
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
