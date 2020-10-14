@@ -9,6 +9,8 @@ Codebase for high throughput asynchronous reinforcement learning.
 
 **Paper:** https://arxiv.org/abs/2006.11751
 
+**Talk:** https://youtu.be/lLG17LKKSZc
+
 **Website:** https://sites.google.com/view/sample-factory
 
 VizDoom agents trained with Sample Factory playing in real time:
