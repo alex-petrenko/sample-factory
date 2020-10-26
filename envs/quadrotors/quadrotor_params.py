@@ -28,3 +28,4 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_goal_dimension', default='2D', type=str, choices=['2D', '3D'], help='Choose which dimension of goal to use')
     p.add_argument('--quads_obstacle_mode', default='None', type=str, choices=['None', 'static', 'dynamic'], help='Choose which obstacle mode to run')
+    p.add_argument('--quads_view_mode', default='local', type=str, choices=['local', 'global'], help='Choose which kind of view/camera to use')
