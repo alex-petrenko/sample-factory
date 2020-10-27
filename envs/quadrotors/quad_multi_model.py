@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn.utils import spectral_norm
 
 from algorithms.appo.model_utils import nonlinearity, EncoderBase, \
-    register_custom_encoder, ENCODER_REGISTRY
+    register_custom_encoder, ENCODER_REGISTRY, fc_layer
 from algorithms.utils.pytorch_utils import calc_num_elements
 
 
@@ -18,38 +18,26 @@ class QuadMultiMeanEncoder(EncoderBase):
 
         fc_encoder_layer = cfg.hidden_size
         # encode the current drone's observations
-        if self.use_spectral_norm:
-            self.self_encoder = nn.Sequential(
-                spectral_norm(nn.Linear(self.self_obs_dim, fc_encoder_layer)),
-                nonlinearity(cfg),
-                spectral_norm(nn.Linear(fc_encoder_layer, fc_encoder_layer)),
-                nonlinearity(cfg)
-            )
-        else:
-            self.self_encoder = nn.Sequential(
-                nn.Linear(self.self_obs_dim, fc_encoder_layer),
-                nonlinearity(cfg),
-                nn.Linear(fc_encoder_layer, fc_encoder_layer),
-                nonlinearity(cfg)
-            )
+        self.self_encoder = nn.Sequential(
+            fc_layer(self.self_obs_dim, fc_encoder_layer, spec_norm=self.use_spectral_norm),
+            nonlinearity(cfg),
+            fc_layer(fc_encoder_layer, fc_encoder_layer, spec_norm=self.use_spectral_norm),
+            nonlinearity(cfg)
+        )
+
         # encode the neighboring drone's observations
-        if self.use_spectral_norm:
-            self.neighbor_encoder = nn.Sequential(
-                spectral_norm(nn.Linear(self.neighbor_obs_dim, self.neighbor_hidden_size)),
-                nonlinearity(cfg),
-            )
-        else:
-            self.neighbor_encoder = nn.Sequential(
-                nn.Linear(self.neighbor_obs_dim, self.neighbor_hidden_size),
-                nonlinearity(cfg)
-            )
+        self.neighbor_encoder = nn.Sequential(
+            fc_layer(self.neighbor_obs_dim, self.neighbor_hidden_size, spec_norm=self.use_spectral_norm),
+            nonlinearity(cfg),
+            fc_layer(self.neighbor_hidden_size, self.neighbor_hidden_size, spec_norm=self.use_spectral_norm),
+            nonlinearity(cfg)
+        )
 
         self.self_encoder_out_size = calc_num_elements(self.self_encoder, (self.self_obs_dim,))
         self.neighbor_encoder_out_size = calc_num_elements(self.neighbor_encoder, (self.neighbor_obs_dim,))
 
         # Feed forward self obs and neighbor obs after concatenation
-        self.feed_forward = spectral_norm(nn.Linear(self.self_encoder_out_size + self.neighbor_encoder_out_size, cfg.hidden_size)) \
-            if self.use_spectral_norm else nn.Linear(self.self_encoder_out_size + self.neighbor_encoder_out_size, cfg.hidden_size)
+        self.feed_forward = fc_layer(self.encoder_out_size + self.neighbor_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm)
 
         self.init_fc_blocks(cfg.hidden_size)
 

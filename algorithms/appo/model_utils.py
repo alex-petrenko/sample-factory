@@ -271,20 +271,13 @@ class MlpEncoder(EncoderBase):
 
         if cfg.encoder_subtype == 'mlp_quads':
             fc_encoder_layer = cfg.hidden_size
-            if cfg.use_spectral_norm:
-                encoder_layers = [
-                    spectral_norm(nn.Linear(obs_shape.obs[0], fc_encoder_layer)),
-                    nonlinearity(cfg),
-                    spectral_norm(nn.Linear(fc_encoder_layer, fc_encoder_layer)),
-                    nonlinearity(cfg),
-                ]
-            else:
-                encoder_layers = [
-                    nn.Linear(obs_shape.obs[0], fc_encoder_layer),
-                    nonlinearity(cfg),
-                    nn.Linear(fc_encoder_layer, fc_encoder_layer),
-                    nonlinearity(cfg),
-                ]
+            encoder_layers = [
+                fc_layer(obs_shape.obs[0], fc_encoder_layer, spec_norm=cfg.use_spectral_norm),
+                nonlinearity(cfg),
+                fc_layer(fc_encoder_layer, fc_encoder_layer, spec_norm=cfg.use_spectral_norm),
+                nonlinearity(cfg)
+            ]
+
         elif cfg.encoder_subtype == 'mlp_mujoco':
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
@@ -304,6 +297,10 @@ class MlpEncoder(EncoderBase):
         x = self.forward_fc_blocks(x)
         return x
 
+def fc_layer(in_features, out_features, bias=True, spec_norm=False):
+    if spec_norm:
+        return spectral_norm(nn.Linear(in_features, out_features, bias))
+    return nn.Linear(in_features, out_features, bias)
 
 def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:
