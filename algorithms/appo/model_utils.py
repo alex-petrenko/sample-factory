@@ -2,6 +2,7 @@ import math
 
 import torch
 from torch import nn
+from torch.nn.utils import spectral_norm
 
 from algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
 from algorithms.utils.algo_utils import EPS
@@ -271,11 +272,12 @@ class MlpEncoder(EncoderBase):
         if cfg.encoder_subtype == 'mlp_quads':
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
-                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                fc_layer(obs_shape.obs[0], fc_encoder_layer, spec_norm=cfg.use_spectral_norm),
                 nonlinearity(cfg),
-                nn.Linear(fc_encoder_layer, fc_encoder_layer),
-                nonlinearity(cfg),
+                fc_layer(fc_encoder_layer, fc_encoder_layer, spec_norm=cfg.use_spectral_norm),
+                nonlinearity(cfg)
             ]
+
         elif cfg.encoder_subtype == 'mlp_mujoco':
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
@@ -295,6 +297,10 @@ class MlpEncoder(EncoderBase):
         x = self.forward_fc_blocks(x)
         return x
 
+def fc_layer(in_features, out_features, bias=True, spec_norm=False):
+    if spec_norm:
+        return spectral_norm(nn.Linear(in_features, out_features, bias))
+    return nn.Linear(in_features, out_features, bias)
 
 def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:
