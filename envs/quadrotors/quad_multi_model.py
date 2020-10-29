@@ -37,7 +37,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         self.neighbor_encoder_out_size = calc_num_elements(self.neighbor_encoder, (self.neighbor_obs_dim,))
 
         # Feed forward self obs and neighbor obs after concatenation
-        self.feed_forward = fc_layer(self.encoder_out_size + self.neighbor_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm)
+        self.feed_forward = fc_layer(self.self_encoder_out_size + self.neighbor_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm)
 
         self.init_fc_blocks(cfg.hidden_size)
 

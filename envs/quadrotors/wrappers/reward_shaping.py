@@ -11,7 +11,7 @@ DEFAULT_QUAD_REWARD_SHAPING = dict(
 
 
 class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
-    def __init__(self, env, reward_shaping_scheme=None, is_multiagent=False):
+    def __init__(self, env, reward_shaping_scheme=None):
         gym.Wrapper.__init__(self, env)
         RewardShapingInterface.__init__(self)
 
@@ -20,7 +20,6 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         self.episode_actions = None
 
         self.num_agents = env.num_agents if hasattr(env, 'num_agents') else 1
-        self.is_multiagent = is_multiagent
 
         # save a reference to this wrapper in the actual env class, for other wrappers and for outside access
         self.env.unwrapped.reward_shaping_interface = self
@@ -49,7 +48,7 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
             env_reward_shaping[key] = weight
 
         obs, rewards, dones, infos = self.env.step(action)
-        if self.is_multiagent:
+        if hasattr(self.env, 'is_multiagent') and self.env.is_multiagent is True:
             infos_multi, dones_multi = infos, dones
         else:
             infos_multi, dones_multi = [infos], [dones]
