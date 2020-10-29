@@ -73,7 +73,8 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         dynamics_params=quad, raw_control=raw_control, raw_control_zero_middle=raw_control_zero_middle,
         dynamics_randomize_every=dyn_randomize_every, dynamics_change=dynamics_change, dyn_sampler_1=sampler_1,
         sense_noise=sense_noise, init_random_state=True, ep_time=episode_duration, rew_coeff=rew_coeff, quads_dist_between_goals=cfg.quads_dist_between_goals,
-        quads_mode=cfg.quads_mode, swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_goal_dimension=cfg.quads_goal_dimension, quads_obstacle_mode=cfg.quads_obstacle_mode,
+        quads_mode=cfg.quads_mode, swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_settle=cfg.quads_settle, quads_settle_range_coeff=cfg.quads_settle_range_coeff,
+        quads_vel_reward_out_range=cfg.quads_vel_reward_out_range, quads_goal_dimension=cfg.quads_goal_dimension, quads_obstacle_mode=cfg.quads_obstacle_mode,
         quads_view_mode=cfg.quads_view_mode
     )
 
@@ -85,7 +86,7 @@ def make_quadrotor_env_multi(cfg, **kwargs):
     if cfg.quads_settle_reward is not None:
         reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
 
-    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping, is_multiagent=True)
+    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
 
     return env
 
