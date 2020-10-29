@@ -73,7 +73,8 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         dynamics_params=quad, raw_control=raw_control, raw_control_zero_middle=raw_control_zero_middle,
         dynamics_randomize_every=dyn_randomize_every, dynamics_change=dynamics_change, dyn_sampler_1=sampler_1,
         sense_noise=sense_noise, init_random_state=True, ep_time=episode_duration, rew_coeff=rew_coeff, quads_dist_between_goals=cfg.quads_dist_between_goals,
-        quads_mode=cfg.quads_mode, swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_settle=cfg.quads_settle
+        quads_mode=cfg.quads_mode, swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_settle=cfg.quads_settle, quads_settle_range_coeff=cfg.quads_settle_range_coeff,
+        quads_vel_reward_out_range=cfg.quads_vel_reward_out_range
     )
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
