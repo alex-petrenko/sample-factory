@@ -48,7 +48,7 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
             env_reward_shaping[key] = weight
 
         obs, rewards, dones, infos = self.env.step(action)
-        if hasattr(self.env, 'is_multiagent') and self.env.is_multiagent is True:
+        if self.env.is_multiagent:
             infos_multi, dones_multi = infos, dones
         else:
             infos_multi, dones_multi = [infos], [dones]
