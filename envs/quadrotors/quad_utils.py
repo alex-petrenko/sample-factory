@@ -75,7 +75,7 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         sense_noise=sense_noise, init_random_state=True, ep_time=episode_duration, rew_coeff=rew_coeff, quads_dist_between_goals=cfg.quads_dist_between_goals,
         quads_mode=cfg.quads_mode, swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_settle=cfg.quads_settle, quads_settle_range_coeff=cfg.quads_settle_range_coeff,
         quads_vel_reward_out_range=cfg.quads_vel_reward_out_range, quads_goal_dimension=cfg.quads_goal_dimension, quads_obstacle_mode=cfg.quads_obstacle_mode,
-        quads_view_mode=cfg.quads_view_mode
+        quads_view_mode=cfg.quads_view_mode, quads_obstacle_num=cfg.quads_obstacle_num, quads_obstacle_type=cfg.quads_obstacle_type, quads_obstacle_size=cfg.quads_obstacle_size
     )
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
@@ -85,6 +85,8 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         reward_shaping['quad_rewards']['quadcol_bin'] = cfg.quads_collision_reward
     if cfg.quads_settle_reward is not None:
         reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
+    if cfg.quads_collision_obstacle_reward is not None:
+        reward_shaping['quad_rewards']['quadcol_bin_obst'] = cfg.quads_collision_obstacle_reward
 
     env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
 
