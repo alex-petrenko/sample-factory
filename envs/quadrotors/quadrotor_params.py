@@ -31,7 +31,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_settle_range_coeff', default=10, type=float, help='The coefficient of the range that we hope a quadrotor settled in, range = quads_settle_range_coeff * the arm length of drone')
     p.add_argument('--quads_vel_reward_out_range', default=0.8, type=float, help='We only use this parameter when quads_settle=True, the meaning of this parameter is that we would punish the quadrotor if it flies out of the range that we defined')
     p.add_argument('--quads_goal_dimension', default='2D', type=str, choices=['2D', '3D'], help='Choose which dimension of goal to use')
-    p.add_argument('--quads_obstacle_mode', default='None', type=str, choices=['None', 'static', 'dynamic'], help='Choose which obstacle mode to run')
+    p.add_argument('--quads_obstacle_mode', default='no_obstacles', type=str, choices=['no_obstacles', 'static', 'dynamic'], help='Choose which obstacle mode to run')
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')
     p.add_argument('--quads_obstacle_type', default='sphere', type=str, choices=['sphere', 'cube'], help='Choose the type of obstacle(s)')
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
