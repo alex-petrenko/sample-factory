@@ -57,7 +57,7 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
             rew_dict = info['rewards']
 
             for key, value in rew_dict.items():
-                if key.startswith('rewraw'):
+                if key.startswith('rew'):
                     if key not in self.cumulative_rewards[i]:
                         self.cumulative_rewards[i][key] = 0
                     self.cumulative_rewards[i][key] += value
