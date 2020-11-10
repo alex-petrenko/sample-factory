@@ -81,12 +81,10 @@ def make_quadrotor_env_multi(cfg, **kwargs):
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
     if cfg.quads_effort_reward is not None:
         reward_shaping['quad_rewards']['effort'] = cfg.quads_effort_reward
-    if cfg.quads_collision_reward is not None:
-        reward_shaping['quad_rewards']['quadcol_bin'] = cfg.quads_collision_reward
-    if cfg.quads_settle_reward is not None:
-        reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
-    if cfg.quads_collision_obstacle_reward is not None:
-        reward_shaping['quad_rewards']['quadcol_bin_obst'] = cfg.quads_collision_obstacle_reward
+
+    reward_shaping['quad_rewards']['quadcol_bin'] = cfg.quads_collision_reward
+    reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
+    reward_shaping['quad_rewards']['quadcol_bin_obst'] = cfg.quads_collision_obstacle_reward
 
     env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
 
