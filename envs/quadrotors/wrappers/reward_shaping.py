@@ -5,7 +5,8 @@ from envs.env_utils import RewardShapingInterface
 
 DEFAULT_QUAD_REWARD_SHAPING = dict(
     quad_rewards=dict(
-        pos=1.0, effort=0.05, spin=0.1, vel=0.0, crash=1.0, orient=1.0, yaw=0.0
+        pos=1.0, effort=0.05, spin=0.1, vel=0.0, crash=1.0, orient=1.0, yaw=0.0,
+        quadcol_bin=0.0, quadsettle=0.0, quadcol_bin_obst=0.0,
     ),
 )
 
@@ -64,8 +65,15 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
 
             if dones_multi[i]:
                 true_reward = self.cumulative_rewards[i]['rewraw_main']
+                true_reward_consider_collisions = True
+                if true_reward_consider_collisions:
+                    # we ideally want zero collisions, so collisions between quads are given very high weight
+                    true_reward += 10000 * self.cumulative_rewards[i]['rewraw_quadcol']
+
                 info['true_reward'] = true_reward
-                info['episode_extra_stats'] = self.cumulative_rewards[i]
+                if 'episode_extra_stats' not in info:
+                    info['episode_extra_stats'] = dict()
+                info['episode_extra_stats'].update(self.cumulative_rewards[i])
 
                 episode_actions = np.array(self.episode_actions)
                 episode_actions = episode_actions.transpose()

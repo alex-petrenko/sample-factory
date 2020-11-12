@@ -20,6 +20,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_effort_reward', default=None, type=float, help='Override default value for effort reward')
     p.add_argument('--quads_episode_duration', default=7.0, type=float, help='Override default value for episode duration')
     p.add_argument('--quads_num_agents', default=4, type=int, help='Override default value for the number of quadrotors')
+    # TODO: better default values for collision rewards
     p.add_argument('--quads_collision_reward', default=0.0, type=float, help='Override default value for quadcol_bin reward, which means collisions between quadrotors')
     p.add_argument('--quads_collision_obstacle_reward', default=0.0, type=float, help='Override default value for quadcol_bin_obst reward, which means collisions between quadrotor and obstacle')
     p.add_argument('--quads_settle_reward', default=0.0, type=float, help='Override default value for quadsettle reward')
