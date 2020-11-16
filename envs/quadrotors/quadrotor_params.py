@@ -36,3 +36,4 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_obstacle_type', default='sphere', type=str, choices=['sphere', 'cube'], help='Choose the type of obstacle(s)')
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
     p.add_argument('--quads_view_mode', default='local', type=str, choices=['local', 'global'], help='Choose which kind of view/camera to use')
+    p.add_argument('--quads_adaptive_env', default=False, type=str2bool, help='Iteratively shrink the environment into a tunnel to increase obstacle density based on statistics')
