@@ -24,7 +24,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_collision_obstacle_reward', default=0.0, type=float, help='Override default value for quadcol_bin_obst reward, which means collisions between quadrotor and obstacle')
     p.add_argument('--quads_settle_reward', default=0.0, type=float, help='Override default value for quadsettle reward')
     p.add_argument('--quads_dist_between_goals', default=0.0, type=float, help='Under circular configuration scenarios, it should be the radius of the circle of goals')
-    p.add_argument('--quads_mode', default='static_goal', type=str, choices=['static_goal', 'dynamic_goal', 'circular_config', 'lissajous3D'], help='Choose which scenario to run')
+    p.add_argument('--quads_mode', default='static_goal', type=str, choices=['static_goal', 'dynamic_goal', 'circular_config', 'ep_lissajous3D', 'ep_rand_bezier'], help='Choose which scenario to run. Ep = evader pursuit')
     p.add_argument('--extend_obs', default=False, type=str2bool, help='Drones receive relative pos and relative vel info from all other drones')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_settle', default=False, type=str2bool, help='Use velocity penalty and equal distance rewards when drones are within a certain radius of the goal')
