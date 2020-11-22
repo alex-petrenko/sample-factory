@@ -29,7 +29,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_vel_reward_out_range', default=0.8, type=float, help='We only use this parameter when quads_settle=True, the meaning of this parameter is that we would punish the quadrotor if it flies out of the range that we defined')
 
     p.add_argument('--quads_dist_between_goals', default=0.0, type=float, help='Under circular configuration scenarios, it should be the radius of the circle of goals')
-    p.add_argument('--quads_mode', default='static_goal', type=str, choices=['static_goal', 'dynamic_goal', 'circular_config', 'lissajous3D'], help='Choose which scenario to run')
+    p.add_argument('--quads_mode', default='static_goal', type=str, choices=['static_goal', 'dynamic_goal', 'circular_config', 'ep_lissajous3D', 'ep_rand_bezier'], help='Choose which scenario to run. Ep = evader pursuit')
     p.add_argument('--extend_obs', default=False, type=str2bool, help='Drones receive relative pos and relative vel info from all other drones')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_settle_range_coeff', default=10, type=float, help='The coefficient of the range that we hope a quadrotor settled in, range = quads_settle_range_coeff * the arm length of drone')
@@ -39,3 +39,4 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_obstacle_type', default='sphere', type=str, choices=['sphere', 'cube'], help='Choose the type of obstacle(s)')
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
     p.add_argument('--quads_view_mode', default='local', type=str, choices=['local', 'global'], help='Choose which kind of view/camera to use')
+    p.add_argument('--quads_adaptive_env', default=False, type=str2bool, help='Iteratively shrink the environment into a tunnel to increase obstacle density based on statistics')
