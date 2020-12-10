@@ -2,7 +2,7 @@ import gym
 from voxel_env.voxel_env_gym import VoxelEnv
 
 from envs.env_utils import RewardShapingInterface
-from utils.utils import str2bool
+from utils.utils import str2bool, log
 
 
 class RewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
@@ -32,11 +32,14 @@ class RewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
 
 
 def make_voxel_env(env_name, cfg=None, **kwargs):
+    scenario_name = env_name.split('voxel_env_')[-1]
+    log.debug('Using scenario %s', scenario_name)
+
     env = VoxelEnv(
+        scenario_name=scenario_name,
         num_envs=cfg.voxel_num_envs_per_instance,
         num_agents_per_env=cfg.voxel_num_agents_per_env,
         num_simulation_threads=cfg.voxel_num_simulation_threads,
-        vertical_look_limit_rad=cfg.voxel_vertical_look_limit,
         use_vulkan=cfg.voxel_use_vulkan,
     )
 
@@ -63,5 +66,4 @@ def add_voxel_env_args(env, parser):
     p.add_argument('--voxel_num_envs_per_instance', default=1, type=int, help='Num simulated envs per instance of VoxelEnv')
     p.add_argument('--voxel_num_agents_per_env', default=4, type=int, help='Number of agents in a single env withing a VoxelEnv instance. Total number of agents in one VoxelEnv = num_envs_per_instance * num_agents_per_env')
     p.add_argument('--voxel_num_simulation_threads', default=1, type=int, help='Number of CPU threads to use per instance of VoxelEnv')
-    p.add_argument('--voxel_vertical_look_limit', default=0.1, type=float, help='Max vertical look in radians')
-    p.add_argument('--voxel_use_vulkan', default=False, type=str2bool, help='Whether to use Vulkan renderer')
+    p.add_argument('--voxel_use_vulkan', default=True, type=str2bool, help='Whether to use Vulkan renderer')

@@ -120,6 +120,11 @@ class DummySampler(AlgorithmBase):
                 episode_length = [0 for _ in envs]
                 episode_lengths = [deque([], maxlen=20) for _ in envs]
 
+            # sample a lot of random actions once, otherwise it is pretty slow in Python
+            total_random_actions = 500
+            actions = [[env.action_space.sample() for _ in range(env.num_agents)] for _ in range(total_random_actions)]
+            action_i = 0
+
             try:
                 with timing.timeit('first_reset'):
                     for env_idx, env in enumerate(envs):
@@ -134,9 +139,9 @@ class DummySampler(AlgorithmBase):
                     last_report = last_report_frames = total_env_frames = 0
                     while not self.terminate.value and total_env_frames < self.cfg.sample_env_frames_per_worker:
                         for env_idx, env in enumerate(envs):
-                            actions = [env.action_space.sample() for _ in range(env.num_agents)]
                             with timing.add_time(f'{env_key[env_idx]}.step'):
-                                obs, rewards, dones, infos = env.step(actions)
+                                obs, rewards, dones, infos = env.step(actions[action_i])
+                                action_i = (action_i + 1) % total_random_actions
 
                             num_frames = sum([info.get('num_frames', 1) for info in infos])
                             total_env_frames += num_frames
