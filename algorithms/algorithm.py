@@ -55,7 +55,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')
         p.add_argument(
             '--reward_scale', default=1.0, type=float,
-            help=('Multiply all rewards but this factor before feeding into RL algorithm.'
+            help=('Multiply all rewards by this factor before feeding into RL algorithm.'
                   'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
                   'Loss values become too high which requires a smaller learning rate, etc.'),
         )
