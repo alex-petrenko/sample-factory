@@ -127,10 +127,20 @@ episode duration).
 It is expected that a multi-agent env exposes a property or a field `num_agents` that the algorithm uses
 to allocate the right amount of memory during startup.
 
-Multi-agent environments require auto-reset. I.e. they reset themselves when the done flag is True and return
+_Multi-agent environments require auto-reset._ I.e. they reset themselves when the done flag is True and return
 the first observation of the next episode (because we have no use for the last observation of the previous
 episode, we do not act based on it). See `multi_agent_wrapper.py` for example. For simplicity we actually treat all
-environments as multi-agent environments with 1 agent.
+environments as multi-agent, i.e. single-agent environments are treated as multi-agent environments with 1 agent.
+
+Sample Factory uses this function to check if the environment is multi-agent (i.e. vectorized):
+
+```python
+def is_multiagent_env(env):
+    is_multiagent = hasattr(env, 'num_agents') and env.num_agents > 1
+    if hasattr(env, 'is_multiagent'):
+        is_multiagent = env.is_multiagent
+    return is_multiagent
+```
  
 ## Using Sample Factory
  

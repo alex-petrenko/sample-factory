@@ -10,7 +10,7 @@ from utils.utils import log
 class TestVoxelEnv(TestCase):
     @unittest.skipUnless(voxel_env_available(), 'VoxelEnv not installed')
     def test_voxel_env(self):
-        env_name = 'voxel_env_v1'
+        env_name = 'voxel_env_Sokoban'
         env = create_env(env_name, cfg=default_cfg(env=env_name))
         log.info('Env action space: %r', env.action_space)
         log.info('Env obs space: %r', env.observation_space)
