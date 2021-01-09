@@ -87,7 +87,7 @@ class APPO(ReinforcementLearningAlgorithm):
         )
 
         p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
-        p.add_argument('--rnn_type', default='gru', choices=['gru', 'lstm'], type=str, help='Type of RNN cell to use is use_rnn is True')
+        p.add_argument('--rnn_type', default='gru', choices=['gru', 'lstm'], type=str, help='Type of RNN cell to use if use_rnn is True')
 
         p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
         p.add_argument('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
@@ -105,7 +105,7 @@ class APPO(ReinforcementLearningAlgorithm):
             help='This parameter governs the maximum number of minibatches the learner can accumulate before further experience collection is stopped.'
                  'The default value (-1) will set this to 2 * num_batches_per_iteration, so if the experience collection is faster than the training,'
                  'the learner will accumulate enough minibatches for 2 iterations of training (but no more). This is a good balance between policy-lag and throughput.'
-                 'When the limit is reached, the learner will notify the policy workers that they ought to stop the experience collection until accumulated minibatches'
+                 'When the limit is reached, the learner will notify the actor workers that they ought to stop the experience collection until accumulated minibatches'
                  'are processed. Set this parameter to 1 * num_batches_per_iteration to further reduce policy-lag.' 
                  'If the experience collection is very non-uniform, increasing this parameter can increase overall throughput, at the cost of increased policy-lag.'
                  'A value of 0 is treated specially. This means the experience accumulation is turned off, and all experience collection will be halted during training.'

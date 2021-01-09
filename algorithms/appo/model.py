@@ -37,7 +37,7 @@ class _ActorCriticBase(nn.Module):
 
     def initialize_weights(self, layer):
         # gain = nn.init.calculate_gain(self.cfg.nonlinearity)
-        gain = 1.0
+        gain = self.cfg.policy_init_gain
 
         if self.cfg.policy_initialization == 'orthogonal':
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:

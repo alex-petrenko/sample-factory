@@ -55,7 +55,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')
         p.add_argument(
             '--reward_scale', default=1.0, type=float,
-            help=('Multiply all rewards but this factor before feeding into RL algorithm.'
+            help=('Multiply all rewards by this factor before feeding into RL algorithm.'
                   'Sometimes the overall scale of rewards is too high which makes value estimation a harder regression task.'
                   'Loss values become too high which requires a smaller learning rate, etc.'),
         )
@@ -69,6 +69,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
         p.add_argument('--nonlinearity', default='elu', choices=['elu', 'relu', 'tanh'], type=str, help='Type of nonlinearity to use')
         p.add_argument('--policy_initialization', default='orthogonal', choices=['orthogonal', 'xavier_uniform'], type=str, help='NN weight initialization')
+        p.add_argument('--policy_init_gain', default=1.0, type=float, help='Gain parameter of PyTorch initialization schemas (i.e. Xavier)')
         p.add_argument('--actor_critic_share_weights', default=True, type=str2bool, help='Whether to share the weights between policy and value function')
 
         # TODO: Right now this only applies to custom encoders. Make sure generic policies also factor in this arg
