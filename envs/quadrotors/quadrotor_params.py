@@ -41,3 +41,4 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_mode', default='static_goal', type=str, choices=['static_goal', 'dynamic_goal', 'circular_config', 'ep_lissajous3D', 'ep_rand_bezier', 'swarm_vs_swarm'], help='Choose which scenario to run. Ep = evader pursuit')
     p.add_argument('--quads_formation', default='default', type=str, choices=['default', 'grid_horizontal', 'grid_vertical', 'circle', 'sphere'], help='Choose the swarm formation at the goal')
     p.add_argument('--quads_formation_size', default=-1.0, type=float, help='The size of the formation, interpreted differently depending on the formation type. Default (-1) means it is determined by the mode')
+    p.add_argument('--room_dims', nargs='+', default=[10, 10, 10], type=float, help='Length, width, and height dimensions respectively of the quadrotor env')
