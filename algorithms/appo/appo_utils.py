@@ -125,9 +125,11 @@ def get_available_gpus():
     return available_gpus
 
 
-def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, available_gpus=None):
-    if available_gpus is None:
-        available_gpus = get_available_gpus()
+def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_mask=None):
+    available_gpus = get_available_gpus()
+    if gpu_mask is not None:
+        assert len(available_gpus) >= len(available_gpus)
+        available_gpus = [available_gpus[g] for g in gpu_mask]
     num_gpus = len(available_gpus)
     gpus_to_use = []
 
