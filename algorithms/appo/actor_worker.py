@@ -797,7 +797,7 @@ class ActorWorker:
         if self.cfg.actor_worker_gpus:
             set_gpus_for_process(
                 self.worker_idx,
-                num_gpus_per_process=1, process_type='actor', available_gpus=self.cfg.actor_worker_gpus,
+                num_gpus_per_process=1, process_type='actor', gpu_mask=self.cfg.actor_worker_gpus,
             )
 
         torch.multiprocessing.set_sharing_strategy('file_system')

@@ -87,7 +87,7 @@ class DummySampler(AlgorithmBase):
         if self.cfg.sampler_worker_gpus:
             set_gpus_for_process(
                 proc_idx,
-                num_gpus_per_process=1, process_type='sampler_proc', available_gpus=self.cfg.sampler_worker_gpus,
+                num_gpus_per_process=1, process_type='sampler_proc', gpu_mask=self.cfg.sampler_worker_gpus,
             )
 
         timing = Timing()
