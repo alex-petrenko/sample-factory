@@ -51,9 +51,14 @@ class QuadMultiMeanEncoder(EncoderBase):
         self.neighbor_encoder_out_size = calc_num_elements(self.neighbor_encoder, (self.neighbor_obs_dim,))
 
         self.total_encoder_out_size = self.self_encoder_out_size + self.neighbor_encoder_out_size + self.obstacle_encoder_out_size
-        self.feed_forward = fc_layer(self.total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm)
 
-        self.init_fc_blocks(cfg.hidden_size)
+        # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
+        self.feed_forward = nn.Sequential(
+            fc_layer(self.total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
+            nonlinearity(cfg),
+        )
+
+        self.encoder_out_size = cfg.hidden_size
 
     def forward(self, obs_dict):
         obs = obs_dict['obs']
