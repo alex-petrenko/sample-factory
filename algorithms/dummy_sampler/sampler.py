@@ -19,7 +19,7 @@ import psutil
 from multiprocessing.sharedctypes import RawValue
 
 from algorithms.algorithm import AlgorithmBase
-from algorithms.appo.appo_utils import make_env_func, set_gpus_for_process
+from algorithms.appo.appo_utils import make_env_func, set_gpus_for_process, set_global_cuda_envvars
 from envs.create_env import create_env
 from utils.timing import Timing
 from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool, memory_consumption_mb
@@ -55,6 +55,8 @@ class DummySampler(AlgorithmBase):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+
+        set_global_cuda_envvars(self.cfg)
 
         self.processes = []
         self.terminate = RawValue(ctypes.c_bool, False)
