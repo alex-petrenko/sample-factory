@@ -19,10 +19,10 @@ import psutil
 from multiprocessing.sharedctypes import RawValue
 
 from algorithms.algorithm import AlgorithmBase
-from algorithms.appo.appo_utils import make_env_func, set_gpus_for_process
+from algorithms.appo.appo_utils import make_env_func, set_gpus_for_process, set_global_cuda_envvars
 from envs.create_env import create_env
 from utils.timing import Timing
-from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool
+from utils.utils import log, AttrDict, set_process_cpu_affinity, str2bool, memory_consumption_mb
 
 if os.name == 'nt':
     from utils.faster_fifo_stub import Queue as MpQueue
@@ -55,6 +55,8 @@ class DummySampler(AlgorithmBase):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+
+        set_global_cuda_envvars(self.cfg)
 
         self.processes = []
         self.terminate = RawValue(ctypes.c_bool, False)
@@ -158,6 +160,9 @@ class DummySampler(AlgorithmBase):
                                 frames_since_last_report = total_env_frames - last_report_frames
                                 last_report_frames = total_env_frames
                                 self.report_queue.put(dict(proc_idx=proc_idx, env_frames=frames_since_last_report))
+
+                                if proc_idx == 0:
+                                    log.debug('Memory usage: %.4f Mb', memory_consumption_mb())
 
                 # Extra check to make sure cpu affinity is preserved throughout the execution.
                 # I observed weird effect when some environments tried to alter affinity of the current process, leading
