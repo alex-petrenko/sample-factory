@@ -55,7 +55,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
             fc_layer(self.total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
-            nonlinearity(cfg),
+            nn.Tanh(),
         )
 
         self.encoder_out_size = cfg.hidden_size
