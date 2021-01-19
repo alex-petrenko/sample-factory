@@ -150,7 +150,7 @@ class DummySampler(AlgorithmBase):
                             episode_length[env_idx] += num_frames
 
                             if all(dones):
-                                episode_lengths[env_idx].append(episode_length[env_idx])
+                                episode_lengths[env_idx].append(episode_length[env_idx] / env.num_agents)
                                 episode_length[env_idx] = 0
 
                         with timing.add_time('report'):
