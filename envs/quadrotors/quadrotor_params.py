@@ -36,6 +36,10 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')
     p.add_argument('--quads_obstacle_type', default='sphere', type=str, choices=['sphere', 'cube'], help='Choose the type of obstacle(s)')
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
+    p.add_argument('--quads_obstacle_traj', default='gravity', type=str, choices=['gravity', 'electron'],  help='Choose the type of force to use')
+    p.add_argument('--quads_neighbor_info_mode', default='local', type=str, choices=['local', 'global'], help='Choose the type of neighbor information to use')
+    p.add_argument('--quads_ratio_use_neighbor_obs', default=0.0, type=float, help='0: Not use the info of other drones, 1: Use info of all of other drones, n in (0, 1): Use the info of n * (num_agents-1) closest drones')
+
     p.add_argument('--quads_view_mode', default='local', type=str, choices=['local', 'global'], help='Choose which kind of view/camera to use')
     p.add_argument('--quads_adaptive_env', default=False, type=str2bool, help='Iteratively shrink the environment into a tunnel to increase obstacle density based on statistics')
 
