@@ -11,4 +11,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('voxel_env_pbt_v112_env_v46', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('voxel_env_v112_env_v46', experiments=[_experiment])
