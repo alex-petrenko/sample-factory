@@ -66,7 +66,7 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
     dynamics_change = dict(noise=dict(thrust_noise_ratio=0.05), damp=dict(vel=0, omega_quadratic=0))
 
-    extended_obs = cfg.obs_space
+    extended_obs = cfg.neighbor_obs_type
 
     env = QuadrotorEnvMulti(
         num_agents=cfg.quads_num_agents,

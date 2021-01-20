@@ -11,8 +11,7 @@ class QuadMultiMeanEncoder(EncoderBase):
     def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=32, obstacle_obs_dim=6, obstacle_hidden_size=32):
         super().__init__(cfg, timing)
         self.self_obs_dim = self_obs_dim
-        if cfg.obs_space == 'extend+': self.neighbor_obs_dim = 9  # include goal pos info
-        else: self.neighbor_obs_dim = neighbor_obs_dim
+        self.neighbor_obs_type = cfg.neighbor_obs_type
         self.neighbor_hidden_size = neighbor_hidden_size
         self.use_spectral_norm = cfg.use_spectral_norm
         self.obstacle_mode = cfg.quads_obstacle_mode
@@ -20,6 +19,15 @@ class QuadMultiMeanEncoder(EncoderBase):
             self.num_use_neighbor_obs = cfg.quads_num_agents - 1
         else:
             self.num_use_neighbor_obs = cfg.quads_local_obs
+
+        if self.neighbor_obs_type == 'pos_vel_goals':
+            self.neighbor_obs_dim = 9  # include goal pos info
+        elif self.neighbor_obs_type == 'pos_vel':
+            self.neighbor_obs_dim = neighbor_obs_dim
+        else:
+            # else obs_type = 'None' and we override these params so that neighbor encoder is a no-op during inference
+            self.neighbor_obs_dim = 0
+            self.num_use_neighbor_obs = 0
 
         fc_encoder_layer = cfg.hidden_size
         # encode the current drone's observations
