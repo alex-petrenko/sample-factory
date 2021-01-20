@@ -25,7 +25,7 @@ def register_custom_encoder(custom_encoder_name, encoder_cls):
 
 def get_hidden_size(cfg):
     if cfg.use_rnn:
-        size = cfg.hidden_size
+        size = cfg.hidden_size * cfg.rnn_num_layers
     else:
         size = 1
 
@@ -344,21 +344,26 @@ class PolicyCoreRNN(PolicyCoreBase):
         self.is_gru = False
 
         if cfg.rnn_type == 'gru':
-            self.core = nn.GRU(input_size, cfg.hidden_size)
+            self.core = nn.GRU(input_size, cfg.hidden_size, cfg.rnn_num_layers)
             self.is_gru = True
         elif cfg.rnn_type == 'lstm':
-            self.core = nn.LSTM(input_size, cfg.hidden_size)
+            self.core = nn.LSTM(input_size, cfg.hidden_size, cfg.rnn_num_layers)
         else:
             raise RuntimeError(f'Unknown RNN type {cfg.rnn_type}')
 
         self.core_output_size = cfg.hidden_size
+        self.rnn_num_layers = cfg.rnn_num_layers
 
     def forward(self, head_output, rnn_states):
         is_seq = not torch.is_tensor(head_output)
         if not is_seq:
             head_output = head_output.unsqueeze(0)
 
-        rnn_states = rnn_states.unsqueeze(0)
+        if self.rnn_num_layers > 1:
+            rnn_states = rnn_states.view(rnn_states.size(0), self.cfg.rnn_num_layers, -1)
+            rnn_states = rnn_states.permute(1, 0, 2)
+        else:
+            rnn_states = rnn_states.unsqueeze(0)
 
         if self.is_gru:
             x, new_rnn_states = self.core(head_output, rnn_states.contiguous())
@@ -370,7 +375,11 @@ class PolicyCoreRNN(PolicyCoreBase):
         if not is_seq:
             x = x.squeeze(0)
 
-        new_rnn_states = new_rnn_states.squeeze(0)
+        if self.rnn_num_layers > 1:
+            new_rnn_states = new_rnn_states.permute(1, 0, 2)
+            new_rnn_states = new_rnn_states.reshape(new_rnn_states.size(0), -1)
+        else:
+            new_rnn_states = new_rnn_states.squeeze(0)
 
         return x, new_rnn_states
 
