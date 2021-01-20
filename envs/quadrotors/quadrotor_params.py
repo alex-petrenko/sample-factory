@@ -30,15 +30,14 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_settle_range_meters', default=1.0, type=float, help='Radius of the sphere around the goal with velocity penalty to help quadrotors stop and settle at the goal')
     p.add_argument('--quads_spacing_coeff', default=0.0, type=float, help='Override default coefficient for spacing penalty between drones ')
 
-    p.add_argument('--extend_obs', default=False, type=str2bool, help='Drones receive relative pos and relative vel info from all other drones')
+    p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals'], help='Choose what kind of obs to send to encoder.')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_obstacle_mode', default='no_obstacles', type=str, choices=['no_obstacles', 'static', 'dynamic'], help='Choose which obstacle mode to run')
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')
     p.add_argument('--quads_obstacle_type', default='sphere', type=str, choices=['sphere', 'cube'], help='Choose the type of obstacle(s)')
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
     p.add_argument('--quads_obstacle_traj', default='gravity', type=str, choices=['gravity', 'electron'],  help='Choose the type of force to use')
-    p.add_argument('--quads_neighbor_info_mode', default='local', type=str, choices=['local', 'global'], help='Choose the type of neighbor information to use')
-    p.add_argument('--quads_ratio_use_neighbor_obs', default=0.0, type=float, help='0: Not use the info of other drones, 1: Use info of all of other drones, n in (0, 1): Use the info of n * (num_agents-1) closest drones')
+    p.add_argument('--quads_local_obs', default=-1, type=int, help='Number of neighbors to consider. -1=all neighbors. 0=blind agents, 0<n<num_agents-1 = nonzero number of agents')
 
     p.add_argument('--quads_view_mode', default='local', type=str, choices=['local', 'global'], help='Choose which kind of view/camera to use')
     p.add_argument('--quads_adaptive_env', default=False, type=str2bool, help='Iteratively shrink the environment into a tunnel to increase obstacle density based on statistics')

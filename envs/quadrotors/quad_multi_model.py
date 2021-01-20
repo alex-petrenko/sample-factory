@@ -11,11 +11,23 @@ class QuadMultiMeanEncoder(EncoderBase):
     def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=32, obstacle_obs_dim=6, obstacle_hidden_size=32):
         super().__init__(cfg, timing)
         self.self_obs_dim = self_obs_dim
-        self.neighbor_obs_dim = neighbor_obs_dim
+        self.neighbor_obs_type = cfg.neighbor_obs_type
         self.neighbor_hidden_size = neighbor_hidden_size
         self.use_spectral_norm = cfg.use_spectral_norm
         self.obstacle_mode = cfg.quads_obstacle_mode
-        self.num_use_neighbor_obs = int(cfg.quads_ratio_use_neighbor_obs * (cfg.quads_num_agents - 1))
+        if cfg.quads_local_obs == -1:
+            self.num_use_neighbor_obs = cfg.quads_num_agents - 1
+        else:
+            self.num_use_neighbor_obs = cfg.quads_local_obs
+
+        if self.neighbor_obs_type == 'pos_vel_goals':
+            self.neighbor_obs_dim = 9  # include goal pos info
+        elif self.neighbor_obs_type == 'pos_vel':
+            self.neighbor_obs_dim = neighbor_obs_dim
+        else:
+            # else obs_type = 'None' and we override these params so that neighbor encoder is a no-op during inference
+            self.neighbor_obs_dim = 0
+            self.num_use_neighbor_obs = 0
 
         fc_encoder_layer = cfg.hidden_size
         # encode the current drone's observations
@@ -56,7 +68,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
             fc_layer(total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
-            nonlinearity(cfg),
+            nn.Tanh(),
         )
 
         self.encoder_out_size = cfg.hidden_size
