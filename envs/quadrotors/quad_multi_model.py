@@ -24,10 +24,12 @@ class QuadMultiMeanEncoder(EncoderBase):
             self.neighbor_obs_dim = 9  # include goal pos info
         elif self.neighbor_obs_type == 'pos_vel':
             self.neighbor_obs_dim = neighbor_obs_dim
-        else:
-            # else obs_type = 'None' and we override these params so that neighbor encoder is a no-op during inference
+        elif cfg.neighbor_obs_type == 'none':
+            # override these params so that neighbor encoder is a no-op during inference
             self.neighbor_obs_dim = 0
             self.num_use_neighbor_obs = 0
+        else:
+            raise NotImplementedError(f'Unknown value {cfg.neighbor_obs_type} passed to --neighbor_obs_type')
 
         fc_encoder_layer = cfg.hidden_size
         # encode the current drone's observations
