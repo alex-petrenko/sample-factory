@@ -126,6 +126,11 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                         rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
 
+                # if episode terminated synchronously for all agents, pause a bit before starting a new one
+                if all(done):
+                    env.render()
+                    time.sleep(0.05)
+
                 if all(finished_episode):
                     finished_episode = [False] * env.num_agents
                     avg_episode_rewards_str, avg_true_reward_str = '', ''
@@ -149,9 +154,6 @@ def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
                 #     key = f'PLAYER{player}_FRAGCOUNT'
                 #     if key in infos[0]:
                 #         log.debug('Score for player %d: %r', player, infos[0][key])
-
-            if not cfg.no_render:
-                env.render()
 
     env.close()
 
