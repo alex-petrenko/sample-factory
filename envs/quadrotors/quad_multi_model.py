@@ -43,6 +43,7 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
 
         self.self_obs_dim = self_obs_dim
 
+        # outputs e_i from the paper
         self.embedding_mlp = nn.Sequential(
             fc_layer(self_obs_dim + neighbor_obs_dim, neighbor_hidden_size, spec_norm=use_spectral_norm),
             nonlinearity(cfg),
@@ -50,6 +51,7 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
             nonlinearity(cfg)
         )
 
+        #  outputs h_i from the paper
         self.neighbor_value_mlp = nn.Sequential(
             fc_layer(neighbor_hidden_size, neighbor_hidden_size, spec_norm=use_spectral_norm),
             nonlinearity(cfg),
@@ -57,11 +59,13 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
             nonlinearity(cfg),
         )
 
+        # outputs scalar score alpha_i for each neighbor i
         self.attention_mlp = nn.Sequential(
             fc_layer(neighbor_hidden_size * 2, neighbor_hidden_size, spec_norm=use_spectral_norm),  # neighbor_hidden_size * 2 because we concat e_i and e_m
             nonlinearity(cfg),
             fc_layer(neighbor_hidden_size, neighbor_hidden_size, spec_norm=use_spectral_norm),
             nonlinearity(cfg),
+            fc_layer(neighbor_hidden_size, 1),
         )
 
     def forward(self, self_obs, obs, all_neighbor_obs_size, batch_size):
@@ -81,11 +85,13 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
         neighbor_embeddings_mean_repeat = neighbor_embeddings_mean.repeat(self.num_use_neighbor_obs, 1)
 
         attention_mlp_input = torch.cat((neighbor_embeddings, neighbor_embeddings_mean_repeat), dim=1)
-        attention_weights = self.attention_mlp(attention_mlp_input)  # alpha_i in the paper
-
+        attention_weights = self.attention_mlp(attention_mlp_input).view(batch_size, -1)  # alpha_i in the paper
         attention_weights_softmax = torch.nn.functional.softmax(attention_weights, dim=1)
+        attention_weights_softmax = attention_weights_softmax.view(-1, 1)
+
 
         final_neighborhood_embedding = attention_weights_softmax * neighbor_values
+        final_neighborhood_embedding = final_neighborhood_embedding.view(batch_size, -1, self.neighbor_hidden_size)
         final_neighborhood_embedding = torch.sum(final_neighborhood_embedding, dim=1)
 
         return final_neighborhood_embedding
