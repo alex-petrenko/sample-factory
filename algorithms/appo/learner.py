@@ -23,7 +23,7 @@ else:
 
 from algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars_for_policy, \
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
-from algorithms.appo.model import create_actor_critic
+from algorithms.appo.model import CPCA, create_actor_critic
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from algorithms.utils.algo_utils import calculate_gae, EPS
@@ -213,6 +213,7 @@ class LearnerWorker:
 
         self.device = None
         self.actor_critic = None
+        self.aux_loss_modue = None
         self.optimizer = None
         self.policy_lock = policy_lock
         self.resume_experience_collection_cv = resume_experience_collection_cv
@@ -523,6 +524,9 @@ class LearnerWorker:
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         }
+        if self.aux_loss_modue is not None:
+            checkpoint['aux_loss_modue'] = self.aux_loss_modue.state_dict()
+
         return checkpoint
 
     def _save(self):
@@ -677,6 +681,15 @@ class LearnerWorker:
                     else:
                         core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
 
+                num_trajectories = head_outputs.size(0) // recurrence
+                if self.aux_loss_modue is not None:
+                    with timing.add_time('aux_loss'):
+                        aux_loss = self.aux_loss_modue(mb.actions.view(num_trajectories, recurrence, 1),
+                                                       (1.0 - mb.dones).view(num_trajectories, recurrence, 1),
+                                                       head_outputs.view(num_trajectories, recurrence, -1),
+                                                       core_outputs.view(num_trajectories, recurrence, -1)
+                                                       )
+
                 with timing.add_time('tail'):
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
@@ -692,7 +705,6 @@ class LearnerWorker:
 
                     values = result.values.squeeze()
 
-                num_trajectories = head_outputs.size(0) // recurrence
                 with torch.no_grad():  # these computations are not the part of the computation graph
                     if self.cfg.with_vtrace:
                         ratios_cpu = ratio.cpu()
@@ -760,6 +772,9 @@ class LearnerWorker:
                         )
                         force_summaries = True
 
+                    if self.aux_loss_modue is not None:
+                        loss = loss + aux_loss
+
                 # update the weights
                 with timing.add_time('update'):
                     # following advice from https://youtu.be/9mS1fIYj1So set grad to None instead of optimizer.zero_grad()
@@ -770,6 +785,8 @@ class LearnerWorker:
                     if self.cfg.max_grad_norm > 0.0:
                         with timing.add_time('clip'):
                             torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
+                            if self.aux_loss_modue is not None:
+                                torch.nn.utils.clip_grad_norm_(self.aux_loss_modue.parameters(), self.cfg.max_grad_norm)
 
                     curr_policy_version = self.train_step  # policy version before the weight update
                     with self.policy_lock:
@@ -825,6 +842,8 @@ class LearnerWorker:
         stats.policy_loss = var.policy_loss
         stats.value_loss = var.value_loss
         stats.exploration_loss = var.exploration_loss
+        if self.aux_loss_modue is not None:
+            stats.aux_loss = var.aux_loss
         stats.adv_min = var.adv.min()
         stats.adv_max = var.adv.max()
         stats.adv_std = var.adv_std
@@ -929,6 +948,12 @@ class LearnerWorker:
         self.actor_critic.model_to_device(self.device)
         self.actor_critic.share_memory()
 
+        if self.cfg.use_cpc:
+            self.aux_loss_modue = CPCA(self.cfg, self.action_space)
+
+        if self.aux_loss_modue is not None:
+            self.aux_loss_modue.to(device=self.device)
+
     def load_from_checkpoint(self, policy_id):
         checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id))
         checkpoint_dict = self.load_checkpoint(checkpoints, self.device)
@@ -965,9 +990,13 @@ class LearnerWorker:
                 self.device = torch.device('cpu')
 
             self.init_model(timing)
+            params = list(self.actor_critic.parameters())
+
+            if self.aux_loss_modue is not None:
+                params += list(self.aux_loss_modue.parameters())
 
             self.optimizer = torch.optim.Adam(
-                self.actor_critic.parameters(),
+                params,
                 self.cfg.learning_rate,
                 betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
                 eps=self.cfg.adam_eps,
