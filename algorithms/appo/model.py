@@ -72,10 +72,8 @@ class CPCA(nn.Module):
         )
 
         max_k = forward_mask.flatten(1).any(-1).nonzero().max().item() + 1
-        if max_k < self.forward_subsample:
-            unroll_subsample = torch.arange(0, max_k, dtype=torch.long)
-        else:
-            unroll_subsample = torch.randperm(max_k, dtype=torch.long)[0:self.forward_subsample]
+
+        unroll_subsample = torch.randperm(max_k, dtype=torch.long)[0:self.forward_subsample]
 
         max_k = unroll_subsample.max().item() + 1
 
@@ -91,7 +89,7 @@ class CPCA(nn.Module):
         mask_res = self._build_mask_and_subsample(not_dones)
         (forward_mask, unroll_subsample, time_subsample, max_k,) = mask_res
 
-        actions = self.embed_actions(actions)
+        actions = self.embed_actions(actions.long())
         actions_unfolded = self._build_unfolded(actions[:, :-1], max_k).index_select(
             2, time_subsample
         )
@@ -111,12 +109,12 @@ class CPCA(nn.Module):
 
         positives = self.predictor(torch.cat((forward_preds, forward_targets), dim=-1))
         positive_loss = F.binary_cross_entropy_with_logits(
-            positives, torch.broadcast_tensors(positives, positives.new_ones(())), reduction="none"
+            positives, torch.broadcast_tensors(positives, positives.new_ones(()))[1], reduction="none"
         )
         positive_loss = torch.masked_select(positive_loss, forward_mask).mean()
 
         forward_negatives = torch.randint(
-            0, n * t, size=(self.forward_subsample * self.time_subsample * 20,), dtype=torch.long, device=actions.device
+            0, n * t, size=(self.forward_subsample * self.time_subsample * n * 20,), dtype=torch.long, device=actions.device
         )
         forward_negatives = (
             rnn_inputs.flatten(0, 1)
@@ -126,14 +124,15 @@ class CPCA(nn.Module):
         negatives = self.predictor(
             torch.cat(
                 (
-                    forward_preds.view(self.forward_subsample, self.time_subsample * n, 1, -1).expand(-1, -1, 20, -1),
+                    forward_preds.view(self.forward_subsample, self.time_subsample * n, 1, -1)
+                        .expand(-1, -1, 20, -1),
                     forward_negatives,
                 ),
                 dim=-1,
             )
         )
         negative_loss = F.binary_cross_entropy_with_logits(
-            negatives, torch.broadcast_tensors(negatives, negatives.new_zeros(())), reduction="none"
+            negatives, torch.broadcast_tensors(negatives, negatives.new_zeros(()))[1], reduction="none"
         )
         negative_loss = torch.masked_select(
             negative_loss, forward_mask.unsqueeze(2)
