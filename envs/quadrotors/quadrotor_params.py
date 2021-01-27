@@ -30,7 +30,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_settle_range_meters', default=1.0, type=float, help='Radius of the sphere around the goal with velocity penalty to help quadrotors stop and settle at the goal')
     p.add_argument('--quads_spacing_coeff', default=0.0, type=float, help='Override default coefficient for spacing penalty between drones ')
 
-    p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals'], help='Choose what kind of obs to send to encoder.')
+    p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals', 'attn'], help='Choose what kind of obs to send to encoder.')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_obstacle_mode', default='no_obstacles', type=str, choices=['no_obstacles', 'static', 'dynamic'], help='Choose which obstacle mode to run')
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')

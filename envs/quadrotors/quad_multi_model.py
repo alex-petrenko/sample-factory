@@ -36,7 +36,6 @@ class QuadNeighborhoodEncoderDeepsets(QuadNeighborhoodEncoder):
         return mean_embed
 
 
-
 class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
     def __init__(self, cfg, neighbor_obs_dim, neighbor_hidden_size, use_spectral_norm, self_obs_dim, num_use_neighbor_obs):
         super().__init__(cfg, self_obs_dim, neighbor_obs_dim, neighbor_hidden_size, num_use_neighbor_obs)
@@ -99,7 +98,7 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
 
 class QuadMultiMeanEncoder(EncoderBase):
     # Mean embedding encoder based on the DeepRL for Swarms Paper
-    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=32, obstacle_obs_dim=6, obstacle_hidden_size=32):
+    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=128, obstacle_obs_dim=6, obstacle_hidden_size=32):
         super().__init__(cfg, timing)
         self.neighbor_encoder_type = 'attention'  # TODO: config
 
@@ -117,6 +116,8 @@ class QuadMultiMeanEncoder(EncoderBase):
             self.neighbor_obs_dim = 9  # include goal pos info
         elif self.neighbor_obs_type == 'pos_vel':
             self.neighbor_obs_dim = neighbor_obs_dim
+        elif self.neighbor_obs_type == 'attn':
+            self.neighbor_obs_dim = 8
         elif cfg.neighbor_obs_type == 'none':
             # override these params so that neighbor encoder is a no-op during inference
             self.neighbor_obs_dim = 0
@@ -159,7 +160,7 @@ class QuadMultiMeanEncoder(EncoderBase):
             )
             obstacle_encoder_out_size = calc_num_elements(self.obstacle_encoder, (self.obstacle_obs_dim,))
 
-        total_encoder_out_size = self_encoder_out_size + neighbor_encoder_out_size + obstacle_encoder_out_size
+        total_encoder_out_size = neighbor_encoder_out_size + obstacle_encoder_out_size
 
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
@@ -172,14 +173,17 @@ class QuadMultiMeanEncoder(EncoderBase):
     def forward(self, obs_dict):
         obs = obs_dict['obs']
         obs_self = obs[:, :self.self_obs_dim]
-        self_embed = self.self_encoder(obs_self)
-        embeddings = self_embed
+        # self_embed = self.self_encoder(obs_self)
+        # embeddings = self_embed
         batch_size = obs_self.shape[0]
         # relative xyz and vxyz for the entire minibatch (batch dimension is batch_size * num_neighbors)
         all_neighbor_obs_size = self.neighbor_obs_dim * self.num_use_neighbor_obs
         if self.num_use_neighbor_obs > 0:
-            neighborhood_embedding = self.neighbor_encoder(obs_self, obs, all_neighbor_obs_size, batch_size)
-            embeddings = torch.cat((embeddings, neighborhood_embedding), dim=1)
+            embeddings = self.neighbor_encoder(obs_self, obs, all_neighbor_obs_size, batch_size)
+            # embeddings = torch.cat((embeddings, neighborhood_embedding), dim=1)
+        else:
+            embeddings = None
+            raise NotImplementedError
 
         if self.obstacle_mode != 'no_obstacles':
             obs_obstacles = obs[:, self.self_obs_dim + all_neighbor_obs_size:]
@@ -189,8 +193,8 @@ class QuadMultiMeanEncoder(EncoderBase):
             obstacle_mean_embed = torch.mean(obstacle_embeds, dim=1)
             embeddings = torch.cat((embeddings, obstacle_mean_embed), dim=1)
 
-        out = self.feed_forward(embeddings)
-        return out
+        # out = self.feed_forward(embeddings)
+        return embeddings
 
 
 def register_models():
