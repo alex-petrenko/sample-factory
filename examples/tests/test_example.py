@@ -47,7 +47,7 @@ class TestExample(TestCase):
             evaluation=True,
         )
         cfg.device = 'cpu'
-        status, avg_reward = enjoy(cfg, max_num_episodes=5)
+        status, avg_reward = enjoy(cfg, max_num_frames=1000)
 
         directory = experiment_dir(cfg=cfg)
         self.assertTrue(isdir(directory))
