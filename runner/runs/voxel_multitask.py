@@ -12,4 +12,4 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('voxel_env_v114_multitask_v55', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('voxel_env_v115_multitask_v55', experiments=[_experiment])
