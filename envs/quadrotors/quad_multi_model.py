@@ -160,11 +160,13 @@ class QuadMultiMeanEncoder(EncoderBase):
             )
             obstacle_encoder_out_size = calc_num_elements(self.obstacle_encoder, (self.obstacle_obs_dim,))
 
-        total_encoder_out_size = neighbor_encoder_out_size + obstacle_encoder_out_size
+        total_encoder_out_size = self.self_obs_dim + neighbor_encoder_out_size + obstacle_encoder_out_size
 
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
             fc_layer(total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
+            nonlinearity(cfg),
+            fc_layer(cfg.hidden_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
             nn.Tanh(),
         )
 
@@ -175,15 +177,13 @@ class QuadMultiMeanEncoder(EncoderBase):
         obs_self = obs[:, :self.self_obs_dim]
         # self_embed = self.self_encoder(obs_self)
         # embeddings = self_embed
+        embeddings = obs_self
         batch_size = obs_self.shape[0]
         # relative xyz and vxyz for the entire minibatch (batch dimension is batch_size * num_neighbors)
         all_neighbor_obs_size = self.neighbor_obs_dim * self.num_use_neighbor_obs
         if self.num_use_neighbor_obs > 0:
-            embeddings = self.neighbor_encoder(obs_self, obs, all_neighbor_obs_size, batch_size)
-            # embeddings = torch.cat((embeddings, neighborhood_embedding), dim=1)
-        else:
-            embeddings = None
-            raise NotImplementedError
+            neighborhood_embedding = self.neighbor_encoder(obs_self, obs, all_neighbor_obs_size, batch_size)
+            embeddings = torch.cat((embeddings, neighborhood_embedding), dim=1)
 
         if self.obstacle_mode != 'no_obstacles':
             obs_obstacles = obs[:, self.self_obs_dim + all_neighbor_obs_size:]
@@ -193,8 +193,8 @@ class QuadMultiMeanEncoder(EncoderBase):
             obstacle_mean_embed = torch.mean(obstacle_embeds, dim=1)
             embeddings = torch.cat((embeddings, obstacle_mean_embed), dim=1)
 
-        # out = self.feed_forward(embeddings)
-        return embeddings
+        out = self.feed_forward(embeddings)
+        return out
 
 
 def register_models():
