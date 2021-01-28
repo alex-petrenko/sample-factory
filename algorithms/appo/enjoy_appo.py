@@ -21,7 +21,7 @@ from envs.create_env import create_env
 from utils.utils import log, AttrDict
 
 
-def enjoy(cfg, max_num_episodes=1000000, max_num_frames=1e9):
+def enjoy(cfg, max_num_frames=1e9):
     cfg = load_from_checkpoint(cfg)
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip

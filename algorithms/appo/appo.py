@@ -222,6 +222,12 @@ class APPO(ReinforcementLearningAlgorithm):
                  'For DMlab-30 use value "dmlab_target_objective" (which is capped human normalized score)',
         )
 
+        # CPC|A options
+        p.add_argument('--use_cpc', default=False, type=str2bool, help="Use CPC|A as an auxiliary loss durning learning")
+        p.add_argument('--cpc_forward_steps', default=8, type=int, help="Number of forward prediction steps for CPC")
+        p.add_argument('--cpc_time_subsample', default=6, type=int, help="Number of timesteps to sample from each batch.  This should be less than recurrence to decorrelate experience.")
+        p.add_argument('--cpc_forward_subsample', default=2, type=int, help="Number of forward steps to sample for loss computation.  This should be less than cpc_forward_steps to decorrelate gradients.")
+
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
         p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
