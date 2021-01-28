@@ -780,6 +780,9 @@ class LearnerWorker:
                     # following advice from https://youtu.be/9mS1fIYj1So set grad to None instead of optimizer.zero_grad()
                     for p in self.actor_critic.parameters():
                         p.grad = None
+                    if self.aux_loss_module is not None:
+                        for p in self.aux_loss_module.parameters():
+                            p.grad = None
                     loss.backward()
 
                     if self.cfg.max_grad_norm > 0.0:
