@@ -117,7 +117,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         elif self.neighbor_obs_type == 'pos_vel':
             self.neighbor_obs_dim = neighbor_obs_dim
         elif self.neighbor_obs_type == 'attn':
-            self.neighbor_obs_dim = 8
+            self.neighbor_obs_dim = 11
         elif cfg.neighbor_obs_type == 'none':
             # override these params so that neighbor encoder is a no-op during inference
             self.neighbor_obs_dim = 0
@@ -160,24 +160,22 @@ class QuadMultiMeanEncoder(EncoderBase):
             )
             obstacle_encoder_out_size = calc_num_elements(self.obstacle_encoder, (self.obstacle_obs_dim,))
 
-        total_encoder_out_size = self.self_obs_dim + neighbor_encoder_out_size + obstacle_encoder_out_size
+        total_encoder_out_size = self_encoder_out_size + neighbor_encoder_out_size + obstacle_encoder_out_size
 
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
-            fc_layer(total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
-            nonlinearity(cfg),
-            fc_layer(cfg.hidden_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
+            fc_layer(total_encoder_out_size, 2 * cfg.hidden_size, spec_norm=self.use_spectral_norm),
             nn.Tanh(),
         )
 
-        self.encoder_out_size = cfg.hidden_size
+        self.encoder_out_size = 2 * cfg.hidden_size
 
     def forward(self, obs_dict):
         obs = obs_dict['obs']
         obs_self = obs[:, :self.self_obs_dim]
-        # self_embed = self.self_encoder(obs_self)
-        # embeddings = self_embed
-        embeddings = obs_self
+        self_embed = self.self_encoder(obs_self)
+        embeddings = self_embed
+        # embeddings = obs_self
         batch_size = obs_self.shape[0]
         # relative xyz and vxyz for the entire minibatch (batch dimension is batch_size * num_neighbors)
         all_neighbor_obs_size = self.neighbor_obs_dim * self.num_use_neighbor_obs
