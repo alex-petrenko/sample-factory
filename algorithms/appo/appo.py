@@ -45,7 +45,7 @@ else:
     from faster_fifo import Queue as MpQueue
 
 
-#  torch.multiprocessing.set_sharing_strategy('file_system')
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 class APPO(ReinforcementLearningAlgorithm):

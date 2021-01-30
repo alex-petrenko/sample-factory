@@ -180,7 +180,7 @@ class PolicyWorker:
         psutil.Process().nice(min(self.cfg.default_niceness + 2, 20))
 
         cuda_envvars_for_policy(self.policy_id, 'inference')
-        #  torch.multiprocessing.set_sharing_strategy('file_system')
+        torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()
 

@@ -816,7 +816,7 @@ class ActorWorker:
                 num_gpus_per_process=1, process_type='actor', gpu_mask=self.cfg.actor_worker_gpus,
             )
 
-        #  torch.multiprocessing.set_sharing_strategy('file_system')
+        torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()
 
