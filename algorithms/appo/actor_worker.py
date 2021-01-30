@@ -67,6 +67,7 @@ class ActorState:
         self.policy_output_tensors = policy_output_tensors
 
         self.last_actions = None
+        self.last_policy_steps = None
         self.last_rnn_state = None
 
         self.ready = False
@@ -168,6 +169,13 @@ class ActorState:
             self.new_episode = True
             self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
             self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
+
+    def process_policy_steps(self, policy_steps):
+        if self.cfg.increase_team_spirit and self.last_policy_steps != policy_steps:
+            self.last_policy_steps = float(policy_steps)
+            rew_shaping = self.env.get_current_reward_shaping(self.env_idx)
+            rew_shaping['teamSpirit'] = min(self.last_policy_steps / self.cfg.max_team_spirit_steps, 1.0)
+            self.env.set_reward_shaping(rew_shaping, self.env_idx)
 
     def finalize_trajectory(self, rollout_step):
         """
@@ -316,6 +324,14 @@ class VectorEnvRunner:
 
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
+
+    def update_env_steps(self, env_steps):
+        for env_i in range(len(self.envs)):
+            for agent_i in range(self.num_agents):
+                actor_state = self.actor_states[env_i][agent_i]
+                actor_policy = actor_state.curr_policy_id
+
+                actor_state.process_policy_steps(env_steps.get(actor_policy, 0))
 
     def _process_policy_outputs(self, policy_id):
         """
@@ -800,7 +816,7 @@ class ActorWorker:
                 num_gpus_per_process=1, process_type='actor', gpu_mask=self.cfg.actor_worker_gpus,
             )
 
-        torch.multiprocessing.set_sharing_strategy('file_system')
+        #  torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()
 
@@ -824,6 +840,12 @@ class ActorWorker:
                         if task_type == TaskType.TERMINATE:
                             self._terminate()
                             break
+
+                        if task_type == TaskType.UPDATE_ENV_STEPS:
+                            for env in self.env_runners:
+                                env.update_env_steps(data)
+
+                            continue
 
                         # handling actual workload
                         if task_type == TaskType.ROLLOUT_STEP:
@@ -875,6 +897,9 @@ class ActorWorker:
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
+
+    def update_env_steps(self, env_steps):
+        self.task_queue.put((TaskType.UPDATE_ENV_STEPS, env_steps))
 
     def join(self):
         join_or_kill(self.process)

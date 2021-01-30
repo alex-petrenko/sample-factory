@@ -44,7 +44,7 @@ class Wrapper(gym.Wrapper, RewardShapingInterface):
                     info['episode_extra_stats'] = dict()
                 info['episode_extra_stats'][f'z_{self.env.unwrapped.scenario_name.casefold()}_true_reward'] = info['true_reward']
                 info['episode_extra_stats'][f'z_{self.env.unwrapped.scenario_name.casefold()}_reward'] = self.episode_rewards[i]
-                self.episode_rewards = [0] * self.num_agents
+                self.episode_rewards[i] = 0
 
         return obs, rewards, dones, infos
 

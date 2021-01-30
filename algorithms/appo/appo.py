@@ -45,7 +45,7 @@ else:
     from faster_fifo import Queue as MpQueue
 
 
-torch.multiprocessing.set_sharing_strategy('file_system')
+#  torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 class APPO(ReinforcementLearningAlgorithm):
@@ -227,6 +227,10 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--cpc_forward_steps', default=8, type=int, help="Number of forward prediction steps for CPC")
         p.add_argument('--cpc_time_subsample', default=6, type=int, help="Number of timesteps to sample from each batch.  This should be less than recurrence to decorrelate experience.")
         p.add_argument('--cpc_forward_subsample', default=2, type=int, help="Number of forward steps to sample for loss computation.  This should be less than cpc_forward_steps to decorrelate gradients.")
+
+        # Team Spirit options
+        p.add_argument('--increase_team_spirit', default=False, type=str2bool, help="Increase team spirit from 0 to 1 over max_team_spirit_steps during training. At 1, the reward will be completely selfless.")
+        p.add_argument('--max_team_spirit_steps', default=1e9, type=float, help="Number of training steps when team spirit will hit 1.")
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
@@ -478,6 +482,11 @@ class APPO(ReinforcementLearningAlgorithm):
                 w.init()
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
 
+
+    def update_env_steps_actor(self):
+        for w in self.actor_workers:
+            w.update_env_steps(self.env_steps)
+
     def process_report(self, report):
         """Process stats from various types of workers."""
 
@@ -663,6 +672,8 @@ class APPO(ReinforcementLearningAlgorithm):
                         now = time.time()
                         self.total_train_seconds += now - self.last_report
                         self.last_report = now
+
+                        self.update_env_steps_actor()
 
                     self.pbt.update(self.env_steps, self.policy_avg_stats)
 

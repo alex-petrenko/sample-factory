@@ -783,6 +783,7 @@ class LearnerWorker:
                     if self.aux_loss_module is not None:
                         for p in self.aux_loss_module.parameters():
                             p.grad = None
+
                     loss.backward()
 
                     if self.cfg.max_grad_norm > 0.0:
@@ -1179,7 +1180,7 @@ class LearnerWorker:
         if self.cfg.device == 'gpu':
             cuda_envvars_for_policy(self.policy_id, 'learner')
 
-        torch.multiprocessing.set_sharing_strategy('file_system')
+        #  torch.multiprocessing.set_sharing_strategy('file_system')
         torch.set_num_threads(self.cfg.learner_main_loop_num_cores)
 
         timing = Timing()
