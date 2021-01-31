@@ -2,7 +2,7 @@ import random
 import signal
 import time
 from collections import OrderedDict
-from queue import Empty
+from queue import Empty, Full
 
 import numpy as np
 import psutil
@@ -899,7 +899,10 @@ class ActorWorker:
         self.task_queue.put((TaskType.TERMINATE, None))
 
     def update_env_steps(self, env_steps):
-        self.task_queue.put((TaskType.UPDATE_ENV_STEPS, env_steps))
+        try:
+            self.task_queue.put_nowait((TaskType.UPDATE_ENV_STEPS, env_steps))
+        except Full:
+            pass
 
     def join(self):
         join_or_kill(self.process)

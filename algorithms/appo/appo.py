@@ -414,7 +414,7 @@ class APPO(ReinforcementLearningAlgorithm):
         Initialize all types of workers and start their worker processes.
         """
 
-        actor_queues = [MpQueue() for _ in range(self.cfg.num_workers)]
+        actor_queues = [MpQueue(2 * 1000 * 1000) for _ in range(self.cfg.num_workers)]
 
         policy_worker_queues = dict()
         for policy_id in range(self.cfg.num_policies):
