@@ -8,11 +8,11 @@ from algorithms.utils.pytorch_utils import calc_num_elements
 
 class QuadMultiMeanEncoder(EncoderBase):
     # Mean embedding encoder based on the DeepRL for Swarms Paper
-    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=32, obstacle_obs_dim=6, obstacle_hidden_size=32):
+    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, obstacle_obs_dim=6, obstacle_hidden_size=32):
         super().__init__(cfg, timing)
         self.self_obs_dim = self_obs_dim
         self.neighbor_obs_type = cfg.neighbor_obs_type
-        self.neighbor_hidden_size = neighbor_hidden_size
+        self.neighbor_hidden_size = cfg.quads_neighbor_hidden_size if cfg.quads_neighbor_hidden_size != -1 else cfg.hidden_size
         self.use_spectral_norm = cfg.use_spectral_norm
         self.obstacle_mode = cfg.quads_obstacle_mode
         if cfg.quads_local_obs == -1:
@@ -23,7 +23,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         if self.neighbor_obs_type == 'pos_vel_goals':
             self.neighbor_obs_dim = 9  # include goal pos info
         elif self.neighbor_obs_type == 'pos_vel':
-            self.neighbor_obs_dim = neighbor_obs_dim
+            self.neighbor_obs_dim = 6
         elif cfg.neighbor_obs_type == 'none':
             # override these params so that neighbor encoder is a no-op during inference
             self.neighbor_obs_dim = 0
