@@ -84,3 +84,7 @@ def set_reward_shaping(env, reward_shaping: dict, agent_idx: int):
     if hasattr(env.unwrapped, 'reward_shaping_interface'):
         if isinstance(env.unwrapped.reward_shaping_interface, RewardShapingInterface):
             env.unwrapped.reward_shaping_interface.set_reward_shaping(reward_shaping, agent_idx)
+
+
+def set_env_steps(env, approx_total_training_steps: int):
+    setattr(env.unwrapped, 'approx_total_training_steps', approx_total_training_steps)
