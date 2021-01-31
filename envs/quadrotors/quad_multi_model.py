@@ -36,13 +36,13 @@ class QuadNeighborhoodEncoderDeepsets(QuadNeighborhoodEncoder):
         return mean_embed
 
 
-
 class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
     def __init__(self, cfg, neighbor_obs_dim, neighbor_hidden_size, use_spectral_norm, self_obs_dim, num_use_neighbor_obs):
         super().__init__(cfg, self_obs_dim, neighbor_obs_dim, neighbor_hidden_size, num_use_neighbor_obs)
 
         self.self_obs_dim = self_obs_dim
 
+        # outputs e_i from the paper
         self.embedding_mlp = nn.Sequential(
             fc_layer(self_obs_dim + neighbor_obs_dim, neighbor_hidden_size, spec_norm=use_spectral_norm),
             nonlinearity(cfg),
@@ -50,6 +50,7 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
             nonlinearity(cfg)
         )
 
+        #  outputs h_i from the paper
         self.neighbor_value_mlp = nn.Sequential(
             fc_layer(neighbor_hidden_size, neighbor_hidden_size, spec_norm=use_spectral_norm),
             nonlinearity(cfg),
@@ -57,11 +58,13 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
             nonlinearity(cfg),
         )
 
+        # outputs scalar score alpha_i for each neighbor i
         self.attention_mlp = nn.Sequential(
             fc_layer(neighbor_hidden_size * 2, neighbor_hidden_size, spec_norm=use_spectral_norm),  # neighbor_hidden_size * 2 because we concat e_i and e_m
             nonlinearity(cfg),
             fc_layer(neighbor_hidden_size, neighbor_hidden_size, spec_norm=use_spectral_norm),
             nonlinearity(cfg),
+            fc_layer(neighbor_hidden_size, 1),
         )
 
     def forward(self, self_obs, obs, all_neighbor_obs_size, batch_size):
@@ -81,11 +84,13 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
         neighbor_embeddings_mean_repeat = neighbor_embeddings_mean.repeat(self.num_use_neighbor_obs, 1)
 
         attention_mlp_input = torch.cat((neighbor_embeddings, neighbor_embeddings_mean_repeat), dim=1)
-        attention_weights = self.attention_mlp(attention_mlp_input)  # alpha_i in the paper
-
+        attention_weights = self.attention_mlp(attention_mlp_input).view(batch_size, -1)  # alpha_i in the paper
         attention_weights_softmax = torch.nn.functional.softmax(attention_weights, dim=1)
+        attention_weights_softmax = attention_weights_softmax.view(-1, 1)
+
 
         final_neighborhood_embedding = attention_weights_softmax * neighbor_values
+        final_neighborhood_embedding = final_neighborhood_embedding.view(batch_size, -1, self.neighbor_hidden_size)
         final_neighborhood_embedding = torch.sum(final_neighborhood_embedding, dim=1)
 
         return final_neighborhood_embedding
@@ -93,7 +98,7 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
 
 class QuadMultiMeanEncoder(EncoderBase):
     # Mean embedding encoder based on the DeepRL for Swarms Paper
-    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=32, obstacle_obs_dim=6, obstacle_hidden_size=32):
+    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=128, obstacle_obs_dim=6, obstacle_hidden_size=32):
         super().__init__(cfg, timing)
         self.neighbor_encoder_type = 'attention'  # TODO: config
 
@@ -111,6 +116,8 @@ class QuadMultiMeanEncoder(EncoderBase):
             self.neighbor_obs_dim = 9  # include goal pos info
         elif self.neighbor_obs_type == 'pos_vel':
             self.neighbor_obs_dim = neighbor_obs_dim
+        elif self.neighbor_obs_type == 'attn':
+            self.neighbor_obs_dim = 11
         elif cfg.neighbor_obs_type == 'none':
             # override these params so that neighbor encoder is a no-op during inference
             self.neighbor_obs_dim = 0
@@ -157,17 +164,18 @@ class QuadMultiMeanEncoder(EncoderBase):
 
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
-            fc_layer(total_encoder_out_size, cfg.hidden_size, spec_norm=self.use_spectral_norm),
+            fc_layer(total_encoder_out_size, 2 * cfg.hidden_size, spec_norm=self.use_spectral_norm),
             nn.Tanh(),
         )
 
-        self.encoder_out_size = cfg.hidden_size
+        self.encoder_out_size = 2 * cfg.hidden_size
 
     def forward(self, obs_dict):
         obs = obs_dict['obs']
         obs_self = obs[:, :self.self_obs_dim]
         self_embed = self.self_encoder(obs_self)
         embeddings = self_embed
+        # embeddings = obs_self
         batch_size = obs_self.shape[0]
         # relative xyz and vxyz for the entire minibatch (batch dimension is batch_size * num_neighbors)
         all_neighbor_obs_size = self.neighbor_obs_dim * self.num_use_neighbor_obs
