@@ -49,7 +49,7 @@ class Wrapper(gym.Wrapper, RewardShapingInterface):
                 extra_stats = info['episode_extra_stats']
                 extra_stats[f'z_{self.env.unwrapped.scenario_name.casefold()}_true_reward'] = info['true_reward']
                 extra_stats[f'z_{self.env.unwrapped.scenario_name.casefold()}_reward'] = self.episode_rewards[i]
-                extra_stats[f'z_approx_total_training_steps'] = self.unwrapped.approx_total_training_steps
+                extra_stats['z_approx_total_training_steps'] = self.unwrapped.approx_total_training_steps
 
                 self.episode_rewards[i] = 0
 
@@ -57,7 +57,7 @@ class Wrapper(gym.Wrapper, RewardShapingInterface):
                     rew_shaping = self.get_current_reward_shaping(i)
                     rew_shaping['teamSpirit'] = min(self.unwrapped.approx_total_training_steps / self.max_team_spirit_steps, 1.0)
                     self.set_reward_shaping(rew_shaping, i)
-                    extra_stats[f'teamSpirit'] = rew_shaping['teamSpirit']
+                    extra_stats['teamSpirit'] = rew_shaping['teamSpirit']
 
         return obs, rewards, dones, infos
 
@@ -68,17 +68,18 @@ class Wrapper(gym.Wrapper, RewardShapingInterface):
 
 
 def make_voxel_env(env_name, cfg=None, env_config=None, **kwargs):
-    scenario_name = env_name.split('voxel_env_')[-1]
+    scenario_name = env_name.split('voxel_env_')[-1].casefold()
     log.debug('Using scenario %s', scenario_name)
 
-    if scenario_name.casefold() == 'multitask':
+    if 'multitask' in scenario_name:
         if env_config is not None and 'worker_index' in env_config:
             task_idx = env_config['worker_index']
         else:
-            log.error('Could not find information about task id. Use task_id=0')
+            log.warning('Could not find information about task id. Use task_id=0. (It is okay if this message appears once)')
             task_idx = 0
 
         env = make_env_multitask(
+            scenario_name,
             task_idx,
             num_envs=cfg.voxel_num_envs_per_instance,
             num_agents_per_env=cfg.voxel_num_agents_per_env,
