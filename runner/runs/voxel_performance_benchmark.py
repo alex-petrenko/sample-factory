@@ -1,8 +1,8 @@
 from runner.run_description import RunDescription, Experiment, ParamGrid
 
-NUM_WORKERS = 20
-NUM_WORKERS_VOXEL_ENV = 10
-TIMEOUT_SECONDS = 20
+NUM_WORKERS = 20  # typically num logical cores
+NUM_WORKERS_VOXEL_ENV = 10  # typically num logical cores / 2, limited by the num of available Vulkan contexts
+TIMEOUT_SECONDS = 120
 SAMPLER_GPUS = '0'  # replace with '0 1 2 3 4 5 6 7' for 8-GPU server
 
 _basic_cli = f'python -m run_algorithm --algo=DUMMY_SAMPLER --num_workers={NUM_WORKERS} --num_envs_per_worker=1 --experiment=benchmark --timeout_seconds={TIMEOUT_SECONDS}'
