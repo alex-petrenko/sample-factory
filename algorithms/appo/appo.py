@@ -223,10 +223,10 @@ class APPO(ReinforcementLearningAlgorithm):
         )
 
         # CPC|A options
-        p.add_argument('--use_cpc', default=False, type=str2bool, help="Use CPC|A as an auxiliary loss durning learning")
-        p.add_argument('--cpc_forward_steps', default=8, type=int, help="Number of forward prediction steps for CPC")
-        p.add_argument('--cpc_time_subsample', default=6, type=int, help="Number of timesteps to sample from each batch.  This should be less than recurrence to decorrelate experience.")
-        p.add_argument('--cpc_forward_subsample', default=2, type=int, help="Number of forward steps to sample for loss computation.  This should be less than cpc_forward_steps to decorrelate gradients.")
+        p.add_argument('--use_cpc', default=False, type=str2bool, help='Use CPC|A as an auxiliary loss durning learning')
+        p.add_argument('--cpc_forward_steps', default=8, type=int, help='Number of forward prediction steps for CPC')
+        p.add_argument('--cpc_time_subsample', default=6, type=int, help='Number of timesteps to sample from each batch.  This should be less than recurrence to decorrelate experience.')
+        p.add_argument('--cpc_forward_subsample', default=2, type=int, help='Number of forward steps to sample for loss computation.  This should be less than cpc_forward_steps to decorrelate gradients.')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
@@ -410,7 +410,7 @@ class APPO(ReinforcementLearningAlgorithm):
         Initialize all types of workers and start their worker processes.
         """
 
-        actor_queues = [MpQueue() for _ in range(self.cfg.num_workers)]
+        actor_queues = [MpQueue(2 * 1000 * 1000) for _ in range(self.cfg.num_workers)]
 
         policy_worker_queues = dict()
         for policy_id in range(self.cfg.num_policies):
@@ -477,6 +477,10 @@ class APPO(ReinforcementLearningAlgorithm):
                 log.debug('Waiting for policy worker %d-%d to finish initialization...', policy_id, w.worker_idx)
                 w.init()
                 log.debug('Policy worker %d-%d initialized!', policy_id, w.worker_idx)
+
+    def update_env_steps_actor(self):
+        for w in self.actor_workers:
+            w.update_env_steps(self.env_steps)
 
     def process_report(self, report):
         """Process stats from various types of workers."""
@@ -663,6 +667,8 @@ class APPO(ReinforcementLearningAlgorithm):
                         now = time.time()
                         self.total_train_seconds += now - self.last_report
                         self.last_report = now
+
+                        self.update_env_steps_actor()
 
                     self.pbt.update(self.env_steps, self.policy_avg_stats)
 

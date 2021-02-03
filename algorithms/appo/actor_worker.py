@@ -2,7 +2,7 @@ import random
 import signal
 import time
 from collections import OrderedDict
-from queue import Empty
+from queue import Empty, Full
 
 import numpy as np
 import psutil
@@ -14,7 +14,7 @@ from algorithms.appo.appo_utils import TaskType, make_env_func, set_gpus_for_pro
 from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.spaces.discretized import Discretized
-from envs.env_utils import set_reward_shaping
+from envs.env_utils import set_reward_shaping, set_env_steps
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
 
@@ -67,6 +67,7 @@ class ActorState:
         self.policy_output_tensors = policy_output_tensors
 
         self.last_actions = None
+        self.last_policy_steps = None
         self.last_rnn_state = None
 
         self.ready = False
@@ -81,6 +82,10 @@ class ActorState:
 
         # whether the new episode was started during the current rollout
         self.new_episode = False
+
+        # dictionary with current training progress per policy
+        # values are approximate because we get updates from the master process once every few seconds
+        self.approx_env_steps = {}
 
         self.pbt_reward_shaping = pbt_reward_shaping
 
@@ -113,6 +118,7 @@ class ActorState:
 
         if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
             set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
+            set_env_steps(self.env, self.approx_env_steps.get(self.curr_policy_id, 0))
 
     def set_trajectory_data(self, data, traj_buffer_idx, rollout_step):
         """
@@ -168,6 +174,8 @@ class ActorState:
             self.new_episode = True
             self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
             self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
+
+            set_env_steps(self.env, self.approx_env_steps.get(self.curr_policy_id, 0))
 
     def finalize_trajectory(self, rollout_step):
         """
@@ -316,6 +324,11 @@ class VectorEnvRunner:
 
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
+
+    def update_env_steps(self, env_steps):
+        for env_i in range(len(self.envs)):
+            for agent_i in range(self.num_agents):
+                self.actor_states[env_i][agent_i].approx_env_steps = env_steps
 
     def _process_policy_outputs(self, policy_id):
         """
@@ -837,6 +850,9 @@ class ActorWorker:
                                 self._handle_reset()
                         elif task_type == TaskType.PBT:
                             self._process_pbt_task(data)
+                        elif task_type == TaskType.UPDATE_ENV_STEPS:
+                            for env in self.env_runners:
+                                env.update_env_steps(data)
 
                     if time.time() - last_report > 5.0 and 'one_step' in timing:
                         timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
@@ -875,6 +891,12 @@ class ActorWorker:
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
+
+    def update_env_steps(self, env_steps):
+        try:
+            self.task_queue.put_nowait((TaskType.UPDATE_ENV_STEPS, env_steps))
+        except Full:
+            pass
 
     def join(self):
         join_or_kill(self.process)

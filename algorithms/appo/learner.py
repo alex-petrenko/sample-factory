@@ -783,6 +783,7 @@ class LearnerWorker:
                     if self.aux_loss_module is not None:
                         for p in self.aux_loss_module.parameters():
                             p.grad = None
+
                     loss.backward()
 
                     if self.cfg.max_grad_norm > 0.0:

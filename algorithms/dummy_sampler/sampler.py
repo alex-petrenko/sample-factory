@@ -39,8 +39,9 @@ class DummySampler(AlgorithmBase):
         p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of processes to use to sample the environment.')
         p.add_argument('--num_envs_per_worker', default=1, type=int, help='Number of envs on a single CPU sampled sequentially.')
 
-        p.add_argument('--sample_env_frames', default=int(2e6), type=int, help='Stop after sampling this many env frames (this takes frameskip into account)')
-        p.add_argument('--sample_env_frames_per_worker', default=int(1e6), type=int, help='Stop after sampling this many env frames per worker (this takes frameskip into account)')
+        p.add_argument('--sample_env_frames', default=int(2e9), type=int, help='Stop after sampling this many env frames (this takes frameskip into account)')
+        p.add_argument('--sample_env_frames_per_worker', default=int(1e9), type=int, help='Stop after sampling this many env frames per worker (this takes frameskip into account)')
+        p.add_argument('--timeout_seconds', default=600, type=int, help='Stop after sampling for this many seconds')
 
         p.add_argument(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
@@ -210,6 +211,7 @@ class DummySampler(AlgorithmBase):
 
     def run(self):
         for p in self.processes:
+            time.sleep(0.3)
             p.start()
 
         finished_reset = np.zeros([self.cfg.num_workers], dtype=np.bool)
@@ -223,7 +225,7 @@ class DummySampler(AlgorithmBase):
                 pass
 
         log.debug('All workers finished reset!')
-        time.sleep(3)
+        time.sleep(2)
         self.start_event.set()
 
         start = time.time()
@@ -245,6 +247,11 @@ class DummySampler(AlgorithmBase):
                         env_frames += msg['env_frames']
 
                     if env_frames >= self.cfg.sample_env_frames:
+                        log.warning('Desired number of frames reached')
+                        self.terminate.value = True
+
+                    if time.time() - start > self.cfg.timeout_seconds:
+                        log.warning('Terminated by timer')
                         self.terminate.value = True
                 except Empty:
                     pass
