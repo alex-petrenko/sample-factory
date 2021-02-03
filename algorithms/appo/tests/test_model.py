@@ -20,6 +20,7 @@ class TestModel(TestCase):
         cfg.actor_critic_share_weights = True
         cfg.hidden_size = 128
         cfg.use_rnn = True
+        cfg.env_framestack = 4
 
         env = create_env(env_name, cfg=cfg)
 
