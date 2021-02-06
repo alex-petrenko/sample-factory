@@ -32,6 +32,8 @@ def add_quadrotors_env_args(env, parser):
 
     p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals'], help='Choose what kind of obs to send to encoder.')
     p.add_argument('--quads_neighbor_hidden_size', default=-1, type=int, help='Choose the hidden size for the neighbor encoder')
+    p.add_argument('--quads_curriculum_mode', default='none', type=str, choices=['none', 'epsilon_greedy', 'UCB1'], help='Which curriculum mode to use')
+    p.add_argument('--quads_epsilon', default=0.2, type=float, help='based on quads_use_curriculum = True, the probability to explore the scenarios')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_obstacle_mode', default='no_obstacles', type=str, choices=['no_obstacles', 'static', 'dynamic'], help='Choose which obstacle mode to run')
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')
