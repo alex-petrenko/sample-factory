@@ -15,8 +15,8 @@ from utils.utils import log, str2bool
 # TODO: this is not portable, a hack
 SBATCH_TEMPLATE = (
     '#!/bin/bash\n'
-    'source /home/apetrenk/anaconda3/etc/profile.d/conda.sh\n'
-    'conda activate sample-factory-pytorch-1.6\n'
+    'source /homes/petrenko/miniconda3/etc/profile.d/conda.sh\n'
+    'conda activate sample-factory\n'
     'cd ~/sample-factory\n'
 )
 

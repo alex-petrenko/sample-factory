@@ -395,3 +395,13 @@ python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_fram
 [2021-01-20 15:19:10,326][21337] Train loop timing: init: 1.4870, train_wait: 0.4033, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.2437, bptt_initial: 2.6465, bptt_forward_core: 0.2964, bptt: 0.3046, tail: 0.1642, vtrace: 0.7640, losses: 0.3053, clip: 5.2748, update: 7.0887, after_optimizer: 0.2019, train: 12.0959
 [2021-01-20 15:19:10,490][21304] Collected {0: 2015232}, FPS: 48426.0
 [2021-01-20 15:19:10,490][21304] Timing: experience: 41.4455
+
+Version V115 (added CPC|A)
+python -m algorithms.appo.train_appo --env=doom_benchmark --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=20 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_v115 --benchmark=True --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2
+[2021-01-27 00:53:20,314][32001] Env runner 1, CPU aff. [1], rollouts 800: timing wait_actor: 0.0000, waiting: 1.2012, reset: 17.7077, save_policy_outputs: 0.9435, env_step: 34.6930, overhead: 3.1826, prepare_next_step: 1.3126, complete_rollouts: 0.0135, enqueue_policy_requests: 0.1804, one_step: 0.0155, work: 40.8831
+[2021-01-27 00:53:20,367][32000] Env runner 0, CPU aff. [0], rollouts 780: timing wait_actor: 0.0000, waiting: 1.0936, reset: 16.2466, save_policy_outputs: 0.9469, env_step: 34.6927, overhead: 3.2715, prepare_next_step: 1.3379, complete_rollouts: 0.0151, enqueue_policy_requests: 0.1740, one_step: 0.0335, work: 41.0321
+[2021-01-27 00:53:20,553][31999] Policy worker avg. requests 8.24, timing: init: 1.9279, wait_policy_total: 12.4854, wait_policy: 0.0051, handle_policy_step: 33.5467, one_step: 0.0039, deserialize: 1.1213, stack: 6.6523, obs_to_device: 7.0963, forward: 9.7408, to_cpu: 2.7980, format_outputs: 0.9287, postprocess: 4.1197, weight_update: 0.0007
+[2021-01-27 00:53:20,657][31983] GPU learner timing: extract: 0.1711, buffers: 0.0588, batching: 4.6699, buff_ready: 0.2086, tensors_gpu_float: 1.6051, squeeze: 0.0060, prepare: 6.6216, batcher_mem: 4.5712
+[2021-01-27 00:53:20,963][31983] Train loop timing: init: 1.4324, train_wait: 0.5063, epoch_init: 0.0012, minibatch_init: 0.0006, forward_head: 0.2521, bptt_initial: 2.6369, bptt_forward_core: 0.3000, bptt: 0.3113, tail: 0.1638, vtrace: 0.8323, losses: 0.3192, clip: 5.2483, update: 7.1884, after_optimizer: 0.1826, train: 12.2588
+[2021-01-27 00:53:21,129][31950] Collected {0: 2023424}, FPS: 48158.9
+[2021-01-27 00:53:21,129][31950] Timing: experience: 41.6754
