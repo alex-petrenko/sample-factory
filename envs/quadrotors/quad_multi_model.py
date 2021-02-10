@@ -98,13 +98,14 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
 
 class QuadMultiMeanEncoder(EncoderBase):
     # Mean embedding encoder based on the DeepRL for Swarms Paper
-    def __init__(self, cfg, obs_space, timing, self_obs_dim=18, neighbor_obs_dim=6, neighbor_hidden_size=128, obstacle_obs_dim=6, obstacle_hidden_size=32):
+    def __init__(self, cfg, obs_space, timing):
         super().__init__(cfg, timing)
-        self.neighbor_encoder_type = 'attention'  # TODO: config
+        # internal params -- cannot change from cmd line
+        self.self_obs_dim = 18
+        self.neighbor_hidden_size = 128
+        self.obstacle_obs_dim = 6
 
-        self.self_obs_dim = self_obs_dim
         self.neighbor_obs_type = cfg.neighbor_obs_type
-        self.neighbor_hidden_size = neighbor_hidden_size
         self.use_spectral_norm = cfg.use_spectral_norm
         self.obstacle_mode = cfg.quads_obstacle_mode
         if cfg.quads_local_obs == -1:
@@ -115,7 +116,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         if self.neighbor_obs_type == 'pos_vel_goals':
             self.neighbor_obs_dim = 9  # include goal pos info
         elif self.neighbor_obs_type == 'pos_vel':
-            self.neighbor_obs_dim = neighbor_obs_dim
+            self.neighbor_obs_dim = 6
         elif self.neighbor_obs_type == 'attn':
             self.neighbor_obs_dim = 11
         elif cfg.neighbor_obs_type == 'none':
@@ -124,6 +125,21 @@ class QuadMultiMeanEncoder(EncoderBase):
             self.num_use_neighbor_obs = 0
         else:
             raise NotImplementedError(f'Unknown value {cfg.neighbor_obs_type} passed to --neighbor_obs_type')
+
+        # encode the neighboring drone's observations
+        neighbor_encoder_out_size = 0
+        if self.num_use_neighbor_obs > 0:
+            if self.neighbor_obs_type == 'pos_vel' or self.neighbor_obs_type == 'pos_vel_goals':
+                self.neighbor_encoder = QuadNeighborhoodEncoderDeepsets(cfg, self.neighbor_obs_dim,
+                                                                        self.neighbor_hidden_size, self.use_spectral_norm,
+                                                                        self.self_obs_dim, self.num_use_neighbor_obs)
+            elif self.neighbor_obs_type == 'attn':
+                self.neighbor_encoder = QuadNeighborhoodEncoderAttention(cfg, self.neighbor_obs_dim,
+                                                                         self.neighbor_hidden_size, self.use_spectral_norm,
+                                                                         self.self_obs_dim, self.num_use_neighbor_obs)
+            else:
+                raise NotImplementedError()
+            neighbor_encoder_out_size = self.neighbor_hidden_size
 
         fc_encoder_layer = cfg.hidden_size
         # encode the current drone's observations
@@ -135,23 +151,11 @@ class QuadMultiMeanEncoder(EncoderBase):
         )
         self_encoder_out_size = calc_num_elements(self.self_encoder, (self.self_obs_dim,))
 
-        # encode the neighboring drone's observations
-        neighbor_encoder_out_size = 0
-        if self.num_use_neighbor_obs > 0:
-            if self.neighbor_encoder_type == 'deepsets':
-                self.neighbor_encoder = QuadNeighborhoodEncoderDeepsets(cfg, self.neighbor_obs_dim, self.neighbor_hidden_size, self.use_spectral_norm, self.self_obs_dim, self.num_use_neighbor_obs)
-            elif self.neighbor_encoder_type == 'attention':
-                self.neighbor_encoder = QuadNeighborhoodEncoderAttention(cfg, self.neighbor_obs_dim, self.neighbor_hidden_size, self.use_spectral_norm, self.self_obs_dim, self.num_use_neighbor_obs)
-            else:
-                raise NotImplementedError()
-
-            neighbor_encoder_out_size = self.neighbor_hidden_size
-
         # encode the obstacle observations
         obstacle_encoder_out_size = 0
         if self.obstacle_mode != 'no_obstacles':
-            self.obstacle_obs_dim = obstacle_obs_dim
-            self.obstacle_hidden_size = obstacle_hidden_size
+            self.obstacle_obs_dim = 6  # internal param
+            self.obstacle_hidden_size = 32  # internal param
             self.obstacle_encoder = nn.Sequential(
                 fc_layer(self.obstacle_obs_dim, self.obstacle_hidden_size, spec_norm=self.use_spectral_norm),
                 nonlinearity(cfg),
