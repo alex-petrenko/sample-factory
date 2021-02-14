@@ -78,7 +78,8 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_settle=cfg.quads_settle, quads_settle_range_meters=cfg.quads_settle_range_meters,
         quads_vel_reward_out_range=cfg.quads_vel_reward_out_range, quads_obstacle_mode=cfg.quads_obstacle_mode,
         quads_view_mode=cfg.quads_view_mode, quads_obstacle_num=cfg.quads_obstacle_num, quads_obstacle_type=cfg.quads_obstacle_type, quads_obstacle_size=cfg.quads_obstacle_size,
-        adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs
+        adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs,
+        replay_buffer=cfg.replay_buffer
     )
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
