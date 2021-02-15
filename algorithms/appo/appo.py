@@ -225,8 +225,8 @@ class APPO(ReinforcementLearningAlgorithm):
         # CPC|A options
         p.add_argument('--use_cpc', default=False, type=str2bool, help='Use CPC|A as an auxiliary loss durning learning')
         p.add_argument('--cpc_forward_steps', default=8, type=int, help='Number of forward prediction steps for CPC')
-        p.add_argument('--cpc_time_subsample', default=6, type=int, help='Number of timesteps to sample from each batch.  This should be less than recurrence to decorrelate experience.')
-        p.add_argument('--cpc_forward_subsample', default=2, type=int, help='Number of forward steps to sample for loss computation.  This should be less than cpc_forward_steps to decorrelate gradients.')
+        p.add_argument('--cpc_time_subsample', default=6, type=int, help='Number of timesteps to sample from each batch. This should be less than recurrence to decorrelate experience.')
+        p.add_argument('--cpc_forward_subsample', default=2, type=int, help='Number of forward steps to sample for loss computation. This should be less than cpc_forward_steps to decorrelate gradients.')
 
         # debugging options
         p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
