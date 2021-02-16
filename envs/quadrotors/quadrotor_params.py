@@ -30,7 +30,6 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_settle', default=False, type=str2bool, help='Use velocity penalty and equal distance rewards when drones are within a certain radius of the goal')
     p.add_argument('--quads_vel_reward_out_range', default=0.8, type=float, help='We only use this parameter when quads_settle=True, the meaning of this parameter is that we would punish the quadrotor if it flies out of the range that we defined')
     p.add_argument('--quads_settle_range_meters', default=1.0, type=float, help='Radius of the sphere around the goal with velocity penalty to help quadrotors stop and settle at the goal')
-    p.add_argument('--quads_spacing_coeff', default=0.0, type=float, help='Override default coefficient for spacing penalty between drones ')
 
     p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals', 'pos_ndist_vel_goals_gdist'], help='Choose what kind of obs to send to encoder.')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
