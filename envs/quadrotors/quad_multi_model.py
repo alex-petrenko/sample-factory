@@ -102,7 +102,7 @@ class QuadMultiMeanEncoder(EncoderBase):
         super().__init__(cfg, timing)
         # internal params -- cannot change from cmd line
         self.self_obs_dim = 18
-        self.neighbor_hidden_size = 128
+        self.neighbor_hidden_size = 256
         self.obstacle_obs_dim = 6
 
         self.neighbor_obs_type = cfg.neighbor_obs_type
