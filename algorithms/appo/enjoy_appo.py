@@ -128,7 +128,8 @@ def enjoy(cfg, max_num_frames=1e9):
 
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(done):
-                    env.render()
+                    if not cfg.no_render:
+                        env.render()
                     time.sleep(0.05)
 
                 if all(finished_episode):
