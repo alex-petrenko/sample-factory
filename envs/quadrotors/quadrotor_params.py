@@ -40,7 +40,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_collision_vel_penalty_radius', default=0.0, type=float, help='cushion space, when dist < vel_penalty_radius * arm, if they are still trying move close to each other, we would penalize them')
     p.add_argument('--quads_collision_smooth_vel_max_penalty', default=10.0, type=float, help='It is used for smooth collision function, the idea is we also penalize drones when they are close, and they also try to move closer')
 
-    p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals', 'pos_ndist_vel_goals_gdist'], help='Choose what kind of obs to send to encoder.')
+    p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals', 'pos_vel_goals_ndist_gdist'], help='Choose what kind of obs to send to encoder.')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_obstacle_mode', default='no_obstacles', type=str, choices=['no_obstacles', 'static', 'dynamic'], help='Choose which obstacle mode to run')
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')
