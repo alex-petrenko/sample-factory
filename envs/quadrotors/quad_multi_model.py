@@ -101,7 +101,13 @@ class QuadMultiMeanEncoder(EncoderBase):
     def __init__(self, cfg, obs_space, timing):
         super().__init__(cfg, timing)
         # internal params -- cannot change from cmd line
-        self.self_obs_dim = 18
+        if cfg.quads_obs_repr == 'xyz_vxyz_R_omega':
+            self.self_obs_dim = 18
+        elif cfg.quads_obs_repr == 'xyz_vxyz_R_omega_wall':
+            self.self_obs_dim = 24
+        else:
+            raise NotImplementedError(f'Layer {cfg.quads_obs_repr} not supported!')
+
         self.neighbor_hidden_size = cfg.quads_neighbor_hidden_size
         self.obstacle_obs_dim = 6
 
