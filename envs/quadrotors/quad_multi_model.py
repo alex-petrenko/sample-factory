@@ -134,7 +134,7 @@ class QuadMultiMeanEncoder(EncoderBase):
                 self.neighbor_encoder = QuadNeighborhoodEncoderDeepsets(cfg, self.neighbor_obs_dim,
                                                                         self.neighbor_hidden_size, self.use_spectral_norm,
                                                                         self.self_obs_dim, self.num_use_neighbor_obs)
-            elif self.neighbor_obs_type == 'attention':
+            elif neighbor_encoder_type == 'attention':
                 self.neighbor_encoder = QuadNeighborhoodEncoderAttention(cfg, self.neighbor_obs_dim,
                                                                          self.neighbor_hidden_size, self.use_spectral_norm,
                                                                          self.self_obs_dim, self.num_use_neighbor_obs)
