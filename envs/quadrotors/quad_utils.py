@@ -80,11 +80,12 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         quads_vel_reward_out_range=cfg.quads_vel_reward_out_range, quads_obstacle_mode=cfg.quads_obstacle_mode,
         quads_view_mode=cfg.quads_view_mode, quads_obstacle_num=cfg.quads_obstacle_num, quads_obstacle_type=cfg.quads_obstacle_type, quads_obstacle_size=cfg.quads_obstacle_size,
         adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs,
-        replay_buffer=cfg.replay_buffer
+        replay_buffer_sample_prob=cfg.replay_buffer_sample_prob
     )
 
     if cfg.replay_buffer:
-        env = ExperienceReplayWrapper(env)
+        assert cfg.replay_buffer_sample_prob > 0, 'replay buffer is enabled but sample probability is 0.0'
+        env = ExperienceReplayWrapper(env, cfg.replay_buffer_sample_prob)
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
     if cfg.quads_effort_reward is not None:
