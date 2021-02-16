@@ -4,6 +4,7 @@ from envs.quadrotors.quad_multi_model import register_models
 from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrapper
 from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrapper
 from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
+from gym_art.quadrotor_multi.quad_experience_replay import ExperienceReplayWrapper
 
 
 def make_quadrotor_env_single(cfg, **kwargs):
@@ -81,6 +82,9 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs,
         replay_buffer=cfg.replay_buffer
     )
+
+    if cfg.replay_buffer:
+        env = ExperienceReplayWrapper(env)
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
     if cfg.quads_effort_reward is not None:
