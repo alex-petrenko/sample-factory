@@ -6,7 +6,7 @@ from envs.env_utils import RewardShapingInterface
 DEFAULT_QUAD_REWARD_SHAPING = dict(
     quad_rewards=dict(
         pos=1.0, effort=0.05, spin=0.1, vel=0.0, crash=1.0, orient=1.0, yaw=0.0,
-        quadcol_bin=0.0, quadsettle=0.0, quadcol_bin_obst=0.0, quad_spacing_coeff=0.0
+        quadcol_bin=0.0, quadsettle=0.0, quadcol_bin_obst=0.0
     ),
 )
 
