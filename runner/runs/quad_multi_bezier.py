@@ -6,7 +6,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     '8_bezier_col_penalties',
-    'python -m run_algorithm --env=quadrotor_multi --train_for_env_steps=2000000000 --algo=APPO --use_rnn=False --num_workers=36 --num_envs_per_worker=4 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 --nonlinearity=tanh --actor_critic_share_weights=False --policy_initialization=xavier_uniform --adaptive_stddev=False --hidden_size=256 --with_vtrace=False --max_policy_lag=100000000 --gae_lambda=1.00 --max_grad_norm=5.0 --exploration_loss_coeff=0.0 --rollout=128 --batch_size=1024 --extend_obs=True --quads_use_numba=True --quads_num_agents=8 --quads_episode_duration=15.0 --quads_mode=ep_rand_bezier --quads_dist_between_goals=0.0 --quads_collision_reward=1.0 --encoder_custom=quad_multi_encoder_deepset --with_pbt=False',
+    'python -m run_algorithm --env=quadrotor_multi --train_for_env_steps=2000000000 --algo=APPO --use_rnn=False --num_workers=36 --num_envs_per_worker=4 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 --nonlinearity=tanh --actor_critic_share_weights=False --policy_initialization=xavier_uniform --adaptive_stddev=False --hidden_size=256 --with_vtrace=False --max_policy_lag=100000000 --gae_lambda=1.00 --max_grad_norm=5.0 --exploration_loss_coeff=0.0 --rollout=128 --batch_size=1024 --extend_obs=True --quads_use_numba=True --quads_num_agents=8 --quads_episode_duration=15.0 --quads_mode=ep_rand_bezier --quads_dist_between_goals=0.0 --quads_collision_reward=1.0 --encoder_custom=quad_multi_encoder --with_pbt=False',
     _params.generate_params(randomize=False),
 )
 

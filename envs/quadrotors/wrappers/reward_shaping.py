@@ -73,15 +73,21 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
                 info['true_reward'] = true_reward
                 if 'episode_extra_stats' not in info:
                     info['episode_extra_stats'] = dict()
-                info['episode_extra_stats'].update(self.cumulative_rewards[i])
+                episode_extra_stats = info['episode_extra_stats']
+                episode_extra_stats.update(self.cumulative_rewards[i])
+
+                if hasattr(self.env.unwrapped, 'scenario') and self.env.unwrapped.scenario:
+                    scenario_name = self.env.unwrapped.scenario.name()
+                    for rew_key in ['rew_pos', 'rewraw_pos', 'rew_crash', 'rewraw_crash']:
+                        episode_extra_stats[f'{rew_key}_{scenario_name}'] = self.cumulative_rewards[i][rew_key]
 
                 episode_actions = np.array(self.episode_actions)
                 episode_actions = episode_actions.transpose()
                 for action_idx in range(episode_actions.shape[0]):
                     mean_action = np.mean(episode_actions[action_idx])
                     std_action = np.std(episode_actions[action_idx])
-                    info['episode_extra_stats'][f'z_action{action_idx}_mean'] = mean_action
-                    info['episode_extra_stats'][f'z_action{action_idx}_std'] = std_action
+                    episode_extra_stats[f'z_action{action_idx}_mean'] = mean_action
+                    episode_extra_stats[f'z_action{action_idx}_std'] = std_action
 
                 self.cumulative_rewards[i] = dict()
 
