@@ -17,7 +17,8 @@ _experiment = Experiment(
     '--quads_settle_reward=0.1 --quads_collision_hitbox_radius=2.0 --quads_collision_falloff_radius=4.0 '
     '--quads_collision_smooth_max_penalty=10.0 --quads_collision_vel_penalty_mode=quadratic '
     '--quads_collision_smooth_vel_coeff=2.0 --quads_collision_vel_penalty_radius=6.0 '
-    '--quads_collision_smooth_vel_max_penalty=10.0 --quads_num_agents=16',
+    '--quads_collision_smooth_vel_max_penalty=10.0 --quads_local_obs=8 --quads_local_metric=dist '
+    '--quads_local_coeff=1.0  --quads_num_agents=16',
     _params.generate_params(randomize=False),
 )
 
