@@ -18,8 +18,8 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_discretize_actions', default=-1, type=int, help='Discretize actions into N bins for each individual action. Default (-1) means no discretization')
     p.add_argument('--quads_clip_input', default=False, type=str2bool, help='Whether to clip input to ensure it stays relatively small')
     p.add_argument('--quads_effort_reward', default=None, type=float, help='Override default value for effort reward')
-    p.add_argument('--quads_episode_duration', default=7.0, type=float, help='Override default value for episode duration')
-    p.add_argument('--quads_num_agents', default=4, type=int, help='Override default value for the number of quadrotors')
+    p.add_argument('--quads_episode_duration', default=15.0, type=float, help='Override default value for episode duration')
+    p.add_argument('--quads_num_agents', default=8, type=int, help='Override default value for the number of quadrotors')
     p.add_argument('--quads_neighbor_hidden_size', default=256, type=int, help='The hidden size for the neighbor encoder')
     p.add_argument('--quads_neighbor_encoder_type', default='attention', type=str, choices=['attention', 'mean_embed'], help='The hidden size for the neighbor encoder')
 

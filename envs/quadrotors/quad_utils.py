@@ -69,6 +69,8 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
     extended_obs = cfg.neighbor_obs_type
 
+    use_replay_buffer = cfg.replay_buffer_sample_prob > 0.0
+
     env = QuadrotorEnvMulti(
         num_agents=cfg.quads_num_agents,
         dynamics_params=quad, raw_control=raw_control, raw_control_zero_middle=raw_control_zero_middle,
@@ -84,11 +86,10 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         collision_smooth_max_penalty=cfg.quads_collision_smooth_max_penalty, collision_vel_penalty_mode=cfg.quads_collision_vel_penalty_mode,
         collision_smooth_vel_coeff=cfg.quads_collision_smooth_vel_coeff, collision_vel_penalty_radius=cfg.quads_collision_vel_penalty_radius,
         collision_smooth_vel_max_penalty=cfg.quads_collision_smooth_vel_max_penalty,
-        replay_buffer_sample_prob = cfg.replay_buffer_sample_prob
+        use_replay_buffer=use_replay_buffer,
     )
 
-    if cfg.replay_buffer:
-        assert cfg.replay_buffer_sample_prob > 0, 'replay buffer is enabled but sample probability is 0.0'
+    if use_replay_buffer:
         env = ExperienceReplayWrapper(env, cfg.replay_buffer_sample_prob)
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
