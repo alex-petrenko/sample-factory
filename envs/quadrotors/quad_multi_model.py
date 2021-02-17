@@ -101,8 +101,14 @@ class QuadMultiMeanEncoder(EncoderBase):
     def __init__(self, cfg, obs_space, timing):
         super().__init__(cfg, timing)
         # internal params -- cannot change from cmd line
-        self.self_obs_dim = 18
-        self.neighbor_hidden_size = 256
+        if cfg.quads_obs_repr == 'xyz_vxyz_R_omega':
+            self.self_obs_dim = 18
+        elif cfg.quads_obs_repr == 'xyz_vxyz_R_omega_wall':
+            self.self_obs_dim = 24
+        else:
+            raise NotImplementedError(f'Layer {cfg.quads_obs_repr} not supported!')
+
+        self.neighbor_hidden_size = cfg.quads_neighbor_hidden_size
         self.obstacle_obs_dim = 6
 
         self.neighbor_obs_type = cfg.neighbor_obs_type
@@ -117,9 +123,9 @@ class QuadMultiMeanEncoder(EncoderBase):
             self.neighbor_obs_dim = 9  # include goal pos info
         elif self.neighbor_obs_type == 'pos_vel':
             self.neighbor_obs_dim = 6
-        elif self.neighbor_obs_type == 'attn':
+        elif self.neighbor_obs_type == 'pos_vel_goals_ndist_gdist':
             self.neighbor_obs_dim = 11
-        elif cfg.neighbor_obs_type == 'none':
+        elif self.neighbor_obs_type == 'none':
             # override these params so that neighbor encoder is a no-op during inference
             self.neighbor_obs_dim = 0
             self.num_use_neighbor_obs = 0
@@ -129,11 +135,12 @@ class QuadMultiMeanEncoder(EncoderBase):
         # encode the neighboring drone's observations
         neighbor_encoder_out_size = 0
         if self.num_use_neighbor_obs > 0:
-            if self.neighbor_obs_type == 'pos_vel' or self.neighbor_obs_type == 'pos_vel_goals':
+            neighbor_encoder_type = cfg.quads_neighbor_encoder_type
+            if neighbor_encoder_type == 'mean_embed':
                 self.neighbor_encoder = QuadNeighborhoodEncoderDeepsets(cfg, self.neighbor_obs_dim,
                                                                         self.neighbor_hidden_size, self.use_spectral_norm,
                                                                         self.self_obs_dim, self.num_use_neighbor_obs)
-            elif self.neighbor_obs_type == 'attn':
+            elif neighbor_encoder_type == 'attention':
                 self.neighbor_encoder = QuadNeighborhoodEncoderAttention(cfg, self.neighbor_obs_dim,
                                                                          self.neighbor_hidden_size, self.use_spectral_norm,
                                                                          self.self_obs_dim, self.num_use_neighbor_obs)

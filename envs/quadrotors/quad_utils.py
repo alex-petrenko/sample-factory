@@ -79,8 +79,12 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         swarm_obs=extended_obs, quads_use_numba=cfg.quads_use_numba, quads_settle=cfg.quads_settle, quads_settle_range_meters=cfg.quads_settle_range_meters,
         quads_vel_reward_out_range=cfg.quads_vel_reward_out_range, quads_obstacle_mode=cfg.quads_obstacle_mode,
         quads_view_mode=cfg.quads_view_mode, quads_obstacle_num=cfg.quads_obstacle_num, quads_obstacle_type=cfg.quads_obstacle_type, quads_obstacle_size=cfg.quads_obstacle_size,
-        adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs,
-        replay_buffer_sample_prob=cfg.replay_buffer_sample_prob
+        adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs, obs_repr=cfg.quads_obs_repr,
+        collision_hitbox_radius=cfg.quads_collision_hitbox_radius, collision_falloff_radius=cfg.quads_collision_falloff_radius,
+        collision_smooth_max_penalty=cfg.quads_collision_smooth_max_penalty, collision_vel_penalty_mode=cfg.quads_collision_vel_penalty_mode,
+        collision_smooth_vel_coeff=cfg.quads_collision_smooth_vel_coeff, collision_vel_penalty_radius=cfg.quads_collision_vel_penalty_radius,
+        collision_smooth_vel_max_penalty=cfg.quads_collision_smooth_vel_max_penalty,
+        replay_buffer_sample_prob = cfg.replay_buffer_sample_prob
     )
 
     if cfg.replay_buffer:
@@ -94,7 +98,6 @@ def make_quadrotor_env_multi(cfg, **kwargs):
     reward_shaping['quad_rewards']['quadcol_bin'] = cfg.quads_collision_reward
     reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
     reward_shaping['quad_rewards']['quadcol_bin_obst'] = cfg.quads_collision_obstacle_reward
-    reward_shaping['quad_rewards']['quad_spacing_coeff'] = cfg.quads_spacing_coeff
 
     env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
 
