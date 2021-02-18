@@ -5,9 +5,9 @@ _params = ParamGrid([
 ])
 
 _experiment = Experiment(
-    'quad_mix_baseline-16_mixed',
+    'quad_mix_baseline-8_mixed',
     'python -m run_algorithm --env=quadrotor_multi --train_for_env_steps=2000000000 --algo=APPO --use_rnn=False '
-    '--num_workers=36 --num_envs_per_worker=2 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 '
+    '--num_workers=36 --num_envs_per_worker=4 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 '
     '--nonlinearity=tanh --actor_critic_share_weights=False --policy_initialization=xavier_uniform '
     '--adaptive_stddev=False --with_vtrace=False --max_policy_lag=100000000 --hidden_size=256 '
     '--gae_lambda=1.00 --max_grad_norm=5.0 --exploration_loss_coeff=0.0 --rollout=128 --batch_size=1024 '
@@ -16,12 +16,12 @@ _experiment = Experiment(
     '--quads_neighbor_hidden_size=256 --quads_neighbor_encoder_type=attention --neighbor_obs_type=pos_vel '
     '--quads_settle_reward=0.0 --quads_collision_hitbox_radius=2.0 --quads_collision_falloff_radius=4.0 '
     '--quads_collision_smooth_max_penalty=5.0 '
-    '--quads_collision_smooth_vel_coeff=0.0 --quads_local_obs=8 --quads_local_metric=dist '
-    '--quads_local_coeff=1.0 --quads_num_agents=16',
+    '--quads_local_obs=6 --quads_local_metric=dist '
+    '--quads_local_coeff=1.0 --quads_num_agents=8',
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_v115', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_v115', experiments=[_experiment])
 
 # On Brain server, when you use num_workers = 72, if the system reports: Resource temporarily unavailable,
 # then, try to use two commands below
