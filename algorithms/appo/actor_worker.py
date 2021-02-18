@@ -14,7 +14,7 @@ from algorithms.appo.appo_utils import TaskType, make_env_func, set_gpus_for_pro
 from algorithms.appo.policy_manager import PolicyManager
 from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.spaces.discretized import Discretized
-from envs.env_utils import set_reward_shaping, set_env_steps
+from envs.env_utils import set_reward_shaping, find_training_info_interface, set_training_info
 from utils.timing import Timing
 from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
 
@@ -103,6 +103,8 @@ class ActorState:
                     'Mixed discrete & continuous action spaces are not supported (should be an easy fix)'
                 )
 
+        self.env_training_info_interface = find_training_info_interface(env)
+
     def _env_set_curr_policy(self):
         """
         Most environments do not need to know index of the policy that currently collects experience.
@@ -118,7 +120,7 @@ class ActorState:
 
         if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
             set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
-            set_env_steps(self.env, self.approx_env_steps.get(self.curr_policy_id, 0))
+            set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
     def set_trajectory_data(self, data, traj_buffer_idx, rollout_step):
         """
@@ -175,7 +177,7 @@ class ActorState:
             self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
             self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
 
-            set_env_steps(self.env, self.approx_env_steps.get(self.curr_policy_id, 0))
+            set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
     def finalize_trajectory(self, rollout_step):
         """

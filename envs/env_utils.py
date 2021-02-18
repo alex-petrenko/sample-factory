@@ -80,11 +80,49 @@ def get_default_reward_shaping(env):
     return None
 
 
+# TODO: this requires modifying the underlying env (in env.unwrapped...)
+# It is more desirable to use the TrainingInfoInterface approach, where we look for a wrapper that imlpements the interface
 def set_reward_shaping(env, reward_shaping: dict, agent_idx: int):
     if hasattr(env.unwrapped, 'reward_shaping_interface'):
         if isinstance(env.unwrapped.reward_shaping_interface, RewardShapingInterface):
             env.unwrapped.reward_shaping_interface.set_reward_shaping(reward_shaping, agent_idx)
 
 
-def set_env_steps(env, approx_total_training_steps: int):
-    setattr(env.unwrapped, 'approx_total_training_steps', approx_total_training_steps)
+class TrainingInfoInterface:
+    def __init__(self):
+        self.training_info = dict()
+
+    def set_training_info(self, training_info):
+        """
+        Send the training information to the environment, i.e. number of training steps so far.
+        Some environments rely on that i.e. to implement curricula.
+        :param training_info: dictionary containing information about the current training session. Guaranteed to
+        contain 'approx_total_training_steps' (approx because it lags a bit behind due to multiprocess synchronization)
+        """
+        self.training_info = training_info
+
+
+def find_wrapper_interface(env, interface_type):
+    """Unwrap the env until we find the wrapper that implements interface_type."""
+    unwrapped = env.unwrapped
+    while True:
+        if isinstance(env, interface_type):
+            return env
+        elif env == unwrapped:
+            return None  # unwrapped all the way and didn't find the interface
+        else:
+            env = env.env  # unwrap by one layer
+
+
+def find_training_info_interface(env):
+    """Unwrap the env until we find the wrapper that implements TrainingInfoInterface."""
+    return find_wrapper_interface(env, TrainingInfoInterface)
+
+
+def set_training_info(training_info_interface, approx_total_training_steps: int):
+    if training_info_interface:
+        training_info_dict = dict(approx_total_training_steps=approx_total_training_steps)
+        training_info_interface.set_training_info(training_info_dict)
+
+
+

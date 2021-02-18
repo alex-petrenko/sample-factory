@@ -6,6 +6,13 @@ from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrappe
 from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
 
 
+class AnnealSchedule:
+    def __init__(self, coeff_name, final_value, anneal_env_steps):
+        self.coeff_name = coeff_name
+        self.final_value = final_value
+        self.anneal_env_steps = anneal_env_steps
+
+
 def make_quadrotor_env_single(cfg, **kwargs):
     from gym_art.quadrotor_single.quadrotor import QuadrotorEnv
 
@@ -80,22 +87,26 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         quads_view_mode=cfg.quads_view_mode, quads_obstacle_num=cfg.quads_obstacle_num, quads_obstacle_type=cfg.quads_obstacle_type, quads_obstacle_size=cfg.quads_obstacle_size,
         adaptive_env=cfg.quads_adaptive_env, obstacle_traj=cfg.quads_obstacle_traj, local_obs=cfg.quads_local_obs, obs_repr=cfg.quads_obs_repr,
         collision_hitbox_radius=cfg.quads_collision_hitbox_radius, collision_falloff_radius=cfg.quads_collision_falloff_radius,
-        collision_smooth_max_penalty=cfg.quads_collision_smooth_max_penalty, collision_vel_penalty_mode=cfg.quads_collision_vel_penalty_mode,
-        collision_smooth_vel_coeff=cfg.quads_collision_smooth_vel_coeff, collision_vel_penalty_radius=cfg.quads_collision_vel_penalty_radius,
-        collision_smooth_vel_max_penalty=cfg.quads_collision_smooth_vel_max_penalty, local_metric=cfg.quads_local_metric,
-        local_coeff=cfg.quads_local_coeff
+        local_metric=cfg.quads_local_metric,
+        local_coeff=cfg.quads_local_coeff,  # how much velocity matters in "distance" calculation
     )
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
     if cfg.quads_effort_reward is not None:
         reward_shaping['quad_rewards']['effort'] = cfg.quads_effort_reward
 
-    reward_shaping['quad_rewards']['quadcol_bin'] = cfg.quads_collision_reward
     reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
     reward_shaping['quad_rewards']['quadcol_bin_obst'] = cfg.quads_collision_obstacle_reward
 
-    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping)
+    # this is annealed by the reward shaping wrapper
+    reward_shaping['quad_rewards']['quadcol_bin'] = 0.0
+    reward_shaping['quad_rewards']['quadcol_bin_smooth_max'] = 0.0
+    annealing = [
+        AnnealSchedule('quadcol_bin', cfg.quads_collision_reward, 1e9),
+        AnnealSchedule('quadcol_bin_smooth_max', cfg.quads_collision_smooth_max_penalty, 1e9),
+    ]
 
+    env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping, annealing=annealing)
     return env
 
 
@@ -106,7 +117,7 @@ def make_quadrotor_env(env_name, cfg=None, **kwargs):
     elif env_name == 'quadrotor_multi':
         return make_quadrotor_env_multi(cfg, **kwargs)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 def ensure_initialized():
