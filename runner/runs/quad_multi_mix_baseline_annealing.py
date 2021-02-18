@@ -18,18 +18,16 @@ QUAD_BASELINE_CLI = (
     '--quads_settle_reward=0.0 --quads_collision_hitbox_radius=2.0 --quads_collision_falloff_radius=4.0 '
     '--quads_local_obs=6 --quads_local_metric=dist '
     '--quads_local_coeff=1.0 --quads_num_agents=8 '
-    '--quads_collision_reward=5.0 '
-    '--quads_collision_smooth_max_penalty=5.0 '
-    '--quads_neighbor_encoder_type=attention'
+    '--anneal_collision_steps=500000000'
 )
 
 _experiment = Experiment(
-    'quad_mix_baseline-8_mixed',
+    'quad_mix_baseline-8_mixed_anneal',
     QUAD_BASELINE_CLI,
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_v115', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_anneal_v115', experiments=[_experiment])
 
 # On Brain server, when you use num_workers = 72, if the system reports: Resource temporarily unavailable,
 # then, try to use two commands below

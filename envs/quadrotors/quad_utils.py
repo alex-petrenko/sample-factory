@@ -104,14 +104,19 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
     reward_shaping['quad_rewards']['quadsettle'] = cfg.quads_settle_reward
     reward_shaping['quad_rewards']['quadcol_bin_obst'] = cfg.quads_collision_obstacle_reward
+    reward_shaping['quad_rewards']['quadcol_bin'] = cfg.quads_collision_reward
+    reward_shaping['quad_rewards']['quadcol_bin_smooth_max'] = cfg.quads_collision_smooth_max_penalty
 
     # this is annealed by the reward shaping wrapper
-    reward_shaping['quad_rewards']['quadcol_bin'] = 0.0
-    reward_shaping['quad_rewards']['quadcol_bin_smooth_max'] = 0.0
-    annealing = [
-        AnnealSchedule('quadcol_bin', cfg.quads_collision_reward, 1e9),
-        AnnealSchedule('quadcol_bin_smooth_max', cfg.quads_collision_smooth_max_penalty, 1e9),
-    ]
+    if cfg.anneal_collision_steps > 0:
+        reward_shaping['quad_rewards']['quadcol_bin'] = 0.0
+        reward_shaping['quad_rewards']['quadcol_bin_smooth_max'] = 0.0
+        annealing = [
+            AnnealSchedule('quadcol_bin', cfg.quads_collision_reward, cfg.anneal_collision_steps),
+            AnnealSchedule('quadcol_bin_smooth_max', cfg.quads_collision_smooth_max_penalty, cfg.anneal_collision_steps),
+        ]
+    else:
+        annealing = None
 
     env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping, annealing=annealing)
     return env
