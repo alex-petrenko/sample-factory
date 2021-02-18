@@ -4,6 +4,7 @@ from envs.quadrotors.quad_multi_model import register_models
 from envs.quadrotors.wrappers.additional_input import QuadsAdditionalInputWrapper
 from envs.quadrotors.wrappers.discrete_actions import QuadsDiscreteActionsWrapper
 from envs.quadrotors.wrappers.reward_shaping import QuadsRewardShapingWrapper, DEFAULT_QUAD_REWARD_SHAPING
+from gym_art.quadrotor_multi.quad_experience_replay import ExperienceReplayWrapper
 
 
 class AnnealSchedule:
@@ -75,6 +76,8 @@ def make_quadrotor_env_multi(cfg, **kwargs):
 
     extended_obs = cfg.neighbor_obs_type
 
+    use_replay_buffer = cfg.replay_buffer_sample_prob > 0.0
+
     env = QuadrotorEnvMulti(
         num_agents=cfg.quads_num_agents,
         dynamics_params=quad, raw_control=raw_control, raw_control_zero_middle=raw_control_zero_middle,
@@ -89,7 +92,11 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         collision_hitbox_radius=cfg.quads_collision_hitbox_radius, collision_falloff_radius=cfg.quads_collision_falloff_radius,
         local_metric=cfg.quads_local_metric,
         local_coeff=cfg.quads_local_coeff,  # how much velocity matters in "distance" calculation
+        use_replay_buffer=use_replay_buffer,
     )
+
+    if use_replay_buffer:
+        env = ExperienceReplayWrapper(env, cfg.replay_buffer_sample_prob)
 
     reward_shaping = copy.deepcopy(DEFAULT_QUAD_REWARD_SHAPING)
     if cfg.quads_effort_reward is not None:

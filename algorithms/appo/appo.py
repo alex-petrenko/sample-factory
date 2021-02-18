@@ -610,12 +610,23 @@ class APPO(ReinforcementLearningAlgorithm):
                 if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and self.total_train_seconds > 300):
                     stat_value = np.mean(stat[policy_id])
                     writer = self.writers[policy_id]
-                    writer.add_scalar(f'0_aux/avg_{key}', float(stat_value), env_steps)
+
+                    # custom summaries have their own sections in tensorboard
+                    if '/' in key:
+                        avg_tag = key
+                        min_tag = f'{key}_min'
+                        max_tag = f'{key}_max'
+                    else:
+                        avg_tag = f'0_aux/avg_{key}'
+                        min_tag = f'0_aux/avg_{key}_min'
+                        max_tag = f'0_aux/avg_{key}_max'
+
+                    writer.add_scalar(avg_tag, float(stat_value), env_steps)
 
                     # for key stats report min/max as well
                     if key in ('reward', 'true_reward', 'len'):
-                        writer.add_scalar(f'0_aux/avg_{key}_min', float(min(stat[policy_id])), env_steps)
-                        writer.add_scalar(f'0_aux/avg_{key}_max', float(max(stat[policy_id])), env_steps)
+                        writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
+                        writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 
             for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:
                 extra_summaries_func(policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg)

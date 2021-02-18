@@ -4,8 +4,7 @@ _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444]),
 ])
 
-_experiment = Experiment(
-    'quad_mix_baseline-8_mixed',
+QUAD_BASELINE_CLI = (
     'python -m run_algorithm --env=quadrotor_multi --train_for_env_steps=2000000000 --algo=APPO --use_rnn=False '
     '--num_workers=36 --num_envs_per_worker=4 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 '
     '--nonlinearity=tanh --actor_critic_share_weights=False --policy_initialization=xavier_uniform '
@@ -17,7 +16,12 @@ _experiment = Experiment(
     '--quads_settle_reward=0.0 --quads_collision_hitbox_radius=2.0 --quads_collision_falloff_radius=4.0 '
     '--quads_collision_smooth_max_penalty=5.0 '
     '--quads_local_obs=6 --quads_local_metric=dist '
-    '--quads_local_coeff=1.0 --quads_num_agents=8',
+    '--quads_local_coeff=1.0 --quads_num_agents=8'
+)
+
+_experiment = Experiment(
+    'quad_mix_baseline-8_mixed',
+    QUAD_BASELINE_CLI,
     _params.generate_params(randomize=False),
 )
 
