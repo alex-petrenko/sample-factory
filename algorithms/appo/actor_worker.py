@@ -79,7 +79,6 @@ class ActorState:
         self.last_episode_duration = 0
         self.last_episode_true_reward = 0
         self.last_episode_extra_stats = dict()
-        self.replay_buffer_stats = dict()
 
         # whether the new episode was started during the current rollout
         self.new_episode = False
@@ -177,7 +176,6 @@ class ActorState:
             self.new_episode = True
             self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
             self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
-            self.replay_buffer_stats = info.get('replay_buffer_stats', dict())
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
@@ -227,12 +225,10 @@ class ActorState:
 
         stats['true_reward'] = self.last_episode_true_reward
         stats['episode_extra_stats'] = self.last_episode_extra_stats
-        stats['replay_buffer_stats'] = self.replay_buffer_stats
 
         report = dict(episodic=stats, policy_id=self.curr_policy_id)
         self.last_episode_reward = self.last_episode_duration = self.last_episode_true_reward = 0
         self.last_episode_extra_stats = dict()
-        self.replay_buffer_stats = dict()
         return report
 
 
