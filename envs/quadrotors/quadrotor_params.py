@@ -35,11 +35,6 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_collision_falloff_radius', default=0.0, type=float, help='The falloff radius for the smooth penalty. 0: radius is 0 arm_length, which means we would not add extra penalty except drones collide')
     p.add_argument('--quads_collision_smooth_max_penalty', default=10.0, type=float, help='The upper bound of the collision function given distance among drones')
 
-    p.add_argument('--quads_collision_vel_penalty_mode', default='none', type=str, choices=['none', 'linear', 'quadratic'], help='linear: denominator is dist, quadratic: denominator is dist ** 2')
-    p.add_argument('--quads_collision_smooth_vel_coeff', default=0.0, type=float, help='This is a coeff for vel penalty, the coeff of F = -coeff * penalty_coeff * transform_vel / penalty_denominator')
-    p.add_argument('--quads_collision_vel_penalty_radius', default=0.0, type=float, help='cushion space, when dist < vel_penalty_radius * arm, if they are still trying move close to each other, we would penalize them')
-    p.add_argument('--quads_collision_smooth_vel_max_penalty', default=10.0, type=float, help='It is used for smooth collision function, the idea is we also penalize drones when they are close, and they also try to move closer')
-
     p.add_argument('--neighbor_obs_type', default='none', type=str, choices=['none', 'pos_vel', 'pos_vel_goals', 'pos_vel_goals_ndist_gdist'], help='Choose what kind of obs to send to encoder.')
     p.add_argument('--quads_use_numba', default=False, type=str2bool, help='Whether to use numba for jit or not')
     p.add_argument('--quads_obstacle_mode', default='no_obstacles', type=str, choices=['no_obstacles', 'static', 'dynamic'], help='Choose which obstacle mode to run')
@@ -48,15 +43,15 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
     p.add_argument('--quads_obstacle_traj', default='gravity', type=str, choices=['gravity', 'electron'],  help='Choose the type of force to use')
     p.add_argument('--quads_local_obs', default=-1, type=int, help='Number of neighbors to consider. -1=all neighbors. 0=blind agents, 0<n<num_agents-1 = nonzero number of agents')
+    p.add_argument('--quads_local_coeff', default=0.0, type=float, help='This parameter is used for the metric of select which drones are the N closest drones.')
+    p.add_argument('--quads_local_metric', default='dist_inverse', type=str, choices=['dist', 'dist_inverse'], help='The main part of evaluate the closest drones')
 
     p.add_argument('--quads_view_mode', default='local', type=str, choices=['local', 'global'], help='Choose which kind of view/camera to use')
     p.add_argument('--quads_adaptive_env', default=False, type=str2bool, help='Iteratively shrink the environment into a tunnel to increase obstacle density based on statistics')
 
-    p.add_argument('--quads_mode', default='static_same_goal', type=str, choices=['static_same_goal', 'static_diff_goal', 'dynamic_same_goal', 'dynamic_diff_goal', 'circular_config', 'ep_lissajous3D', 'ep_rand_bezier', 'swarm_vs_swarm', 'dynamic_formations', 'mix', 'tunnel'], help='Choose which scenario to run. Ep = evader pursuit')
+    p.add_argument('--quads_mode', default='static_same_goal', type=str, choices=['static_same_goal', 'static_diff_goal', 'dynamic_same_goal', 'dynamic_diff_goal', 'circular_config', 'ep_lissajous3D', 'ep_rand_bezier', 'swarm_vs_swarm', 'swap_goals', 'dynamic_formations', 'mix', 'tunnel'], help='Choose which scenario to run. Ep = evader pursuit')
     p.add_argument('--quads_formation', default='circle_horizontal', type=str, choices=['circle_xz_vertical', 'circle_yz_vertical', 'circle_horizontal', 'sphere', 'grid_xz_vertical', 'grid_yz_vertical', 'grid_horizontal'], help='Choose the swarm formation at the goal')
     p.add_argument('--quads_formation_size', default=-1.0, type=float, help='The size of the formation, interpreted differently depending on the formation type. Default (-1) means it is determined by the mode')
     p.add_argument('--room_dims', nargs='+', default=[10, 10, 10], type=float, help='Length, width, and height dimensions respectively of the quadrotor env')
     p.add_argument('--quads_obs_repr', default='xyz_vxyz_R_omega', type=str, help='obs space for drone itself')
-    p.add_argument('--replay_buffer', default=False, type=str2bool, help='Use replay buffer to replay collision events')
     p.add_argument('--replay_buffer_sample_prob', default=0.0, type=float, help='Probability at which we sample from it rather than resetting the env. Set to 0.0 (default) to disable the replay. Set to value in (0.0, 1.0] to use replay buffer')
-

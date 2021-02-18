@@ -88,7 +88,6 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
         attention_weights_softmax = torch.nn.functional.softmax(attention_weights, dim=1)
         attention_weights_softmax = attention_weights_softmax.view(-1, 1)
 
-
         final_neighborhood_embedding = attention_weights_softmax * neighbor_values
         final_neighborhood_embedding = final_neighborhood_embedding.view(batch_size, -1, self.neighbor_hidden_size)
         final_neighborhood_embedding = torch.sum(final_neighborhood_embedding, dim=1)
@@ -96,7 +95,7 @@ class QuadNeighborhoodEncoderAttention(QuadNeighborhoodEncoder):
         return final_neighborhood_embedding
 
 
-class QuadMultiMeanEncoder(EncoderBase):
+class QuadMultiEncoder(EncoderBase):
     # Mean embedding encoder based on the DeepRL for Swarms Paper
     def __init__(self, cfg, obs_space, timing):
         super().__init__(cfg, timing)
@@ -207,6 +206,6 @@ class QuadMultiMeanEncoder(EncoderBase):
 
 
 def register_models():
-    quad_custom_encoder_name = 'quad_multi_encoder_deepset'
+    quad_custom_encoder_name = 'quad_multi_encoder'
     if quad_custom_encoder_name not in ENCODER_REGISTRY:
-        register_custom_encoder(quad_custom_encoder_name, QuadMultiMeanEncoder)
+        register_custom_encoder(quad_custom_encoder_name, QuadMultiEncoder)

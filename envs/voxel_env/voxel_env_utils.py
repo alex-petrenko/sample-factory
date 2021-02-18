@@ -1,16 +1,16 @@
 import gym
 from voxel_env.voxel_env_gym import VoxelEnv, make_env_multitask
 
-from envs.env_utils import RewardShapingInterface
+from envs.env_utils import RewardShapingInterface, TrainingInfoInterface
 from utils.utils import str2bool, log
 
 
-class Wrapper(gym.Wrapper, RewardShapingInterface):
+class Wrapper(gym.Wrapper, RewardShapingInterface, TrainingInfoInterface):
     """Sets interface for PBT reward shaping, and also extra summaries for multi-task learning."""
-
     def __init__(self, env, increase_team_spirit, max_team_spirit_steps):
         gym.Wrapper.__init__(self, env)
         RewardShapingInterface.__init__(self)
+        TrainingInfoInterface.__init__(self)
 
         self.num_agents = env.unwrapped.num_agents
         self.is_multiagent = env.unwrapped.is_multiagent
@@ -22,7 +22,8 @@ class Wrapper(gym.Wrapper, RewardShapingInterface):
 
         self.increase_team_spirit = increase_team_spirit
         self.max_team_spirit_steps = max_team_spirit_steps
-        self.unwrapped.approx_total_training_steps = 0  # updated by training loop, see set_env_steps()
+
+        self.approx_total_training_steps = 0
 
     def get_default_reward_shaping(self):
         return self.env.unwrapped.get_default_reward_shaping()
@@ -49,13 +50,15 @@ class Wrapper(gym.Wrapper, RewardShapingInterface):
                 extra_stats = info['episode_extra_stats']
                 extra_stats[f'z_{self.env.unwrapped.scenario_name.casefold()}_true_reward'] = info['true_reward']
                 extra_stats[f'z_{self.env.unwrapped.scenario_name.casefold()}_reward'] = self.episode_rewards[i]
-                extra_stats['z_approx_total_training_steps'] = self.unwrapped.approx_total_training_steps
+
+                approx_total_training_steps = self.training_info.get('approx_total_training_steps', 0)
+                extra_stats['z_approx_total_training_steps'] = approx_total_training_steps
 
                 self.episode_rewards[i] = 0
 
                 if self.increase_team_spirit:
                     rew_shaping = self.get_current_reward_shaping(i)
-                    rew_shaping['teamSpirit'] = min(self.unwrapped.approx_total_training_steps / self.max_team_spirit_steps, 1.0)
+                    rew_shaping['teamSpirit'] = min(approx_total_training_steps / self.max_team_spirit_steps, 1.0)
                     self.set_reward_shaping(rew_shaping, i)
                     extra_stats['teamSpirit'] = rew_shaping['teamSpirit']
 
