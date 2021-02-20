@@ -2,7 +2,10 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 from runner.runs.quad_multi_mix_baseline import QUAD_BASELINE_CLI
 
 _params = ParamGrid([
-    ('seed', [1111, 2222, 3333, 4444]),
+    ('quads_collision_falloff_radius', [4.0, 8.0]),
+    ('quads_collision_reward', [5.0]),
+    ('quads_collision_smooth_max_penalty', [10.0]),
+    ('quads_neighbor_encoder_type', ['attention', 'mean_embed']),
     ('replay_buffer_sample_prob', [0.5]),
 ])
 
