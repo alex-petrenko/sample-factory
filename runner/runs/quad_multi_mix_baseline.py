@@ -2,8 +2,9 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('quads_collision_reward', [5.0]),
-    ('quads_collision_smooth_max_penalty', [5.0, 10.0]),
+    ('quads_collision_smooth_max_penalty', [10.0]),
     ('quads_neighbor_encoder_type', ['attention', 'mean_embed']),
+    ('quads_local_obs', [6, -1])
 ])
 
 QUAD_BASELINE_CLI = (
@@ -29,7 +30,7 @@ _experiment = Experiment(
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_v115', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_local_v115', experiments=[_experiment])
 
 # On Brain server, when you use num_workers = 72, if the system reports: Resource temporarily unavailable,
 # then, try to use two commands below
