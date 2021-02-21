@@ -15,9 +15,6 @@ class Wrapper(gym.Wrapper, RewardShapingInterface, TrainingInfoInterface):
         self.num_agents = env.unwrapped.num_agents
         self.is_multiagent = env.unwrapped.is_multiagent
 
-        # save a reference to this wrapper in the actual env class, for other wrappers and for outside access
-        self.env.unwrapped.reward_shaping_interface = self
-
         self.episode_rewards = [0] * self.num_agents
 
         self.increase_team_spirit = increase_team_spirit
@@ -63,11 +60,6 @@ class Wrapper(gym.Wrapper, RewardShapingInterface, TrainingInfoInterface):
                     extra_stats['teamSpirit'] = rew_shaping['teamSpirit']
 
         return obs, rewards, dones, infos
-
-    def close(self):
-        # remove the reference to avoid dependency cycles
-        self.env.unwrapped.reward_shaping_interface = None
-        return self.env.close()
 
 
 def make_voxel_env(env_name, cfg=None, env_config=None, **kwargs):

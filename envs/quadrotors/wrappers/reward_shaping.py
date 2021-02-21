@@ -23,7 +23,6 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface, TrainingInf
 
         self.num_agents = env.num_agents if hasattr(env, 'num_agents') else 1
 
-        self.env.unwrapped.reward_shaping_interface = self
         self.reward_shaping_updated = True
 
         self.annealing = annealing
@@ -75,7 +74,7 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface, TrainingInf
                 true_reward_consider_collisions = True
                 if true_reward_consider_collisions:
                     # we ideally want zero collisions, so collisions between quads are given very high weight
-                    true_reward += 10000 * self.cumulative_rewards[i]['rewraw_quadcol']
+                    true_reward += 1000 * self.cumulative_rewards[i]['rewraw_quadcol']
 
                 info['true_reward'] = true_reward
                 if 'episode_extra_stats' not in info:
@@ -115,8 +114,3 @@ class QuadsRewardShapingWrapper(gym.Wrapper, RewardShapingInterface, TrainingInf
             self.episode_actions = []
 
         return obs, rewards, dones, infos
-
-    def close(self):
-        # remove the reference to avoid dependency cycles
-        self.env.unwrapped.reward_shaping_interface = None
-        return self.env.close()
