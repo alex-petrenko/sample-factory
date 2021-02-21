@@ -12,12 +12,12 @@ _params = ParamGrid([
 PBT_CLI = QUAD_BASELINE_CLI + (
     ' --pbt_replace_reward_gap=0.2 --pbt_replace_reward_gap_absolute=200.0 --pbt_period_env_steps=10000000 --pbt_start_mutation=50000000 --with_pbt=True --num_policies=8'
     ' --pbt_mix_policies_in_one_env=False'
-    ' --num_workers=72 --num_envs_per_worker=12'
+    ' --num_workers=72 --num_envs_per_worker=10'
 )
 
 _experiment = Experiment(
     'quad_mix_baseline-8_pbt',
-    QUAD_BASELINE_CLI,
+    PBT_CLI,
     _params.generate_params(randomize=False),
 )
 
