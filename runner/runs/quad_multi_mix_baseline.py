@@ -4,7 +4,6 @@ _params = ParamGrid([
     ('quads_collision_reward', [5.0]),
     ('quads_collision_smooth_max_penalty', [10.0]),
     ('quads_neighbor_encoder_type', ['attention', 'mean_embed']),
-    ('quads_local_obs', [6, -1])
 ])
 
 QUAD_BASELINE_CLI = (
@@ -20,8 +19,10 @@ QUAD_BASELINE_CLI = (
     '--quads_local_obs=6 --quads_local_metric=dist '
     '--quads_local_coeff=1.0 --quads_num_agents=8 '
     '--quads_collision_reward=5.0 '
-    '--quads_collision_smooth_max_penalty=5.0 '
-    '--quads_neighbor_encoder_type=attention'
+    '--quads_collision_smooth_max_penalty=10.0 '
+    '--quads_neighbor_encoder_type=attention '
+    '--replay_buffer_sample_prob=0.75 '
+    '--anneal_collision_steps=300000000'
 )
 
 _experiment = Experiment(
