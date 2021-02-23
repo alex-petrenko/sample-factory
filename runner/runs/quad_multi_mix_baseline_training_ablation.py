@@ -7,13 +7,13 @@ _params = ParamGrid([
 
 _experiment_no_replay = Experiment(
     'quad_mix_baseline-8_mixed_noreplay',
-    QUAD_BASELINE_CLI + '--replay_buffer_sample_prob=0.00',
+    QUAD_BASELINE_CLI + ' --replay_buffer_sample_prob=0.00',
     _params.generate_params(randomize=False),
 )
 
 _experiment_no_anneal = Experiment(
     'quad_mix_baseline-8_mixed_noannealing',
-    QUAD_BASELINE_CLI + '--anneal_collision_steps=0',
+    QUAD_BASELINE_CLI + ' --anneal_collision_steps=0',
     _params.generate_params(randomize=False),
 )
 
