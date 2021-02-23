@@ -129,7 +129,6 @@ class QuadMultiEncoder(EncoderBase):
             raise NotImplementedError(f'Layer {cfg.quads_obs_repr} not supported!')
 
         self.neighbor_hidden_size = cfg.quads_neighbor_hidden_size
-        self.obstacle_obs_dim = 6
 
         self.neighbor_obs_type = cfg.neighbor_obs_type
         self.use_spectral_norm = cfg.use_spectral_norm
@@ -185,7 +184,7 @@ class QuadMultiEncoder(EncoderBase):
         # encode the obstacle observations
         obstacle_encoder_out_size = 0
         if self.obstacle_mode != 'no_obstacles':
-            self.obstacle_obs_dim = 6  # internal param
+            self.obstacle_obs_dim = 10  # internal param, pos_vel_size_type, 3 * 3 + 1, note: for size, we should consider it's length in xyz direction
             self.obstacle_hidden_size = 32  # internal param
             self.obstacle_encoder = nn.Sequential(
                 fc_layer(self.obstacle_obs_dim, self.obstacle_hidden_size, spec_norm=self.use_spectral_norm),
