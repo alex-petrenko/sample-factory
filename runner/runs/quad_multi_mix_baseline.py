@@ -2,8 +2,6 @@ from runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('quads_collision_reward', [5.0]),
-    ('quads_collision_smooth_max_penalty', [10.0]),
-    ('quads_neighbor_encoder_type', ['attention', 'mean_embed']),
 ])
 
 QUAD_BASELINE_CLI = (
