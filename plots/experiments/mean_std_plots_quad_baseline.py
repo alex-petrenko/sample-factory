@@ -1,101 +1,77 @@
+import argparse
+import os
 import pickle
 import sys
-
 from os.path import join
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
-
-from plots.plot_utils import GREEN, BLUE, set_matplotlib_params
-from utils.utils import log, ensure_dir_exists
-
-import ast
-import argparse
-import os
-import re
-from pathlib import Path
-
-import pandas as pd
 import numpy as np
-import tensorflow as tf
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-from tensorflow.core.util.event_pb2 import Event
+
+from plots.plot_utils import BLUE, set_matplotlib_params
+from utils.utils import ensure_dir_exists
 
 set_matplotlib_params()
 
-plt.rcParams['figure.figsize'] = (1.5*8.20, 2) #(2.5, 2.0) 7.5， 4
-
-
-PLOT_NAMES = dict(
-    avg_reward='Average True Reward',
-    avg_true_reward='Average Position Reward',
-)
+plt.rcParams['figure.figsize'] = (1.5 * 8.20, 5)  # (2.5, 2.0) 7.5， 4
 
 PLOT_NAMES_LIST = ['avg_reward', 'avg_true_reward', 'avg_rew_crash', 'avg_num_collisions', 'avg_rew_orient']
 
-BASELINES = dict(
-    avg_reward=0.0,
-    avg_true_reward=-10.0
-)
+PLOT_KEY = ['0_aux/avg_reward', '0_aux/avg_true_reward', '0_aux/avg_rew_crash', '0_aux/avg_num_collisions',
+            '0_aux/avg_rew_orient']
 
-FOLDER_NAME = 'aggregates'
-hide_file = [f for f in os.listdir(os.getcwd()) if not f.startswith('.') and not f.endswith('.py')]
+PLOT_STEP = int(20e6)
+TOTAL_STEP = int(1e9)
 
+NUM_AGENTS = 8
+TIME_METRIC_COLLISION = 60  # ONE MINUTE
 
 def extract(experiments):
-    # scalar_accumulators = [EventAccumulator(str(dpath / dname / subpath)).Reload().scalars
-    #                        for dname in os.listdir(dpath) if dname != FOLDER_NAME and dname in hide_file]
-
     scalar_accumulators = [EventAccumulator(experiment_dir).Reload().scalars for experiment_dir in experiments]
 
     # Filter non event files
-    scalar_accumulators = [scalar_accumulator for scalar_accumulator in scalar_accumulators if scalar_accumulator.Keys()]
+    scalar_accumulators = [scalar_accumulator for scalar_accumulator in scalar_accumulators if
+                           scalar_accumulator.Keys()]
 
     # Get and validate all scalar keys
-    # zhehui sorted(scalar_accumulator.Keys())
     all_keys = [tuple(sorted(scalar_accumulator.Keys())) for scalar_accumulator in scalar_accumulators]
-    assert len(set(all_keys)) == 1, "All runs need to have the same scalar keys. There are mismatches in {}".format(all_keys)
-    keys = all_keys[0]
+    assert len(set(all_keys)) == 1, \
+        "All runs need to have the same scalar keys. There are mismatches in {}".format(all_keys)
 
-    all_scalar_events_per_key = [[scalar_accumulator.Items(key) for scalar_accumulator in scalar_accumulators] for key in keys]
+    keys = all_keys[0]
+    all_scalar_events_per_key = [[scalar_accumulator.Items(key)
+                                  for scalar_accumulator in scalar_accumulators] for key in keys]
 
     # Get and validate all steps per key
-    # sorted(all_scalar_events) sorted(scalar_events)
-    x_per_key = [[tuple(scalar_event.step for scalar_event in sorted(scalar_events)) for scalar_events in sorted(all_scalar_events)]
-                         for all_scalar_events in all_scalar_events_per_key]
+    x_per_key = [[tuple(scalar_event.step
+                 for scalar_event in sorted(scalar_events)) for scalar_events in sorted(all_scalar_events)]
+                 for all_scalar_events in all_scalar_events_per_key]
 
-
-    # import linear interpolation
-    # all_steps_per_key = tuple(step_id*1e6 for step_id in range(1e8/1e6))
-
-    # modify_all_steps_per_key = tuple(int(step_id*1e6) for step_id in range(1, int(1e8/1e6 + 1)))
-    plot_step = int(20e6)
-    all_steps_per_key = [[tuple(int(step_id) for step_id in range(0, int(1e9), plot_step)) for scalar_events in sorted(all_scalar_events)]
-                         for all_scalar_events in all_scalar_events_per_key]
+    plot_step = PLOT_STEP
+    all_steps_per_key = [[tuple(int(step_id) for step_id in range(0, TOTAL_STEP, plot_step))
+                          for _ in sorted(all_scalar_events)]
+                          for all_scalar_events in all_scalar_events_per_key]
 
     for i, all_steps in enumerate(all_steps_per_key):
-        assert len(set(all_steps)) == 1, "For scalar {} the step numbering or count doesn't match. Step count for all runs: {}".format(
+        assert len(set(
+            all_steps)) == 1, "For scalar {} the step numbering or count doesn't match. Step count for all runs: {}".format(
             keys[i], [len(steps) for steps in all_steps])
 
     steps_per_key = [all_steps[0] for all_steps in all_steps_per_key]
 
-    # Get and average wall times per step per key
-    # wall_times_per_key = [np.mean([tuple(scalar_event.wall_time for scalar_event in scalar_events) for scalar_events in all_scalar_events], axis=0)
-    #                       for all_scalar_events in all_scalar_events_per_key]
-
     # Get values per step per key
     values_per_key = [[[scalar_event.value for scalar_event in scalar_events] for scalar_events in all_scalar_events]
                       for all_scalar_events in all_scalar_events_per_key]
-    true_reward_key = ['0_aux/avg_reward', '0_aux/avg_true_reward', '0_aux/avg_rew_crash', '0_aux/avg_num_collisions', '0_aux/avg_rew_orient']
-    x_list = []
-    interpolated_y_list = []
+    plot_key = PLOT_KEY
+
     interpolated_keys = dict()
-    for tmp_id in range(len(true_reward_key)):
-        key_idx = keys.index(true_reward_key[tmp_id])
+    for tmp_id in range(len(plot_key)):
+        key_idx = keys.index(plot_key[tmp_id])
         values = values_per_key[key_idx]
 
         x = steps_per_key[key_idx]
-        x_list.append(x)
         x_steps = x_per_key[key_idx]
 
         interpolated_y = [[] for _ in values]
@@ -118,69 +94,21 @@ def extract(experiments):
                 else:
                     interpolated_value = values[i][idx]
 
-                interpolated_y[i].append(interpolated_value)
+                if plot_key[tmp_id] == '0_aux/avg_num_collisions':
+                    interpolated_value = interpolated_value * TIME_METRIC_COLLISION / NUM_AGENTS
+                    interpolated_value = np.log(interpolated_value)
 
+                interpolated_y[i].append(interpolated_value)
             assert len(interpolated_y[i]) == len(x)
 
         print(interpolated_y[0][:30])
 
-        interpolated_keys[true_reward_key[tmp_id]] = (x, interpolated_y)
+        interpolated_keys[plot_key[tmp_id]] = (x, interpolated_y)
 
     return interpolated_keys
 
 
-def aggregate_to_summary(dpath, aggregation_ops, extracts_per_subpath):
-    for op in aggregation_ops:
-        for subpath, all_per_key in extracts_per_subpath.items():
-            path = dpath / FOLDER_NAME / op.__name__ / dpath.name / subpath
-            aggregations_per_key = {key: (steps, wall_times, op(values, axis=0)) for key, (steps, wall_times, values) in all_per_key.items()}
-            write_summary(path, aggregations_per_key)
-
-
-def write_summary(dpath, aggregations_per_key):
-    writer = tf.summary.FileWriter(dpath)
-
-    for key, (steps, wall_times, aggregations) in aggregations_per_key.items():
-        for step, wall_time, aggregation in zip(steps, wall_times, aggregations):
-            summary = tf.Summary(value=[tf.Summary.Value(tag=key, simple_value=aggregation)])
-            scalar_event = Event(wall_time=wall_time, step=step, summary=summary)
-            writer.add_event(scalar_event)
-
-        writer.flush()
-
-
-def aggregate_to_csv(dpath, aggregation_ops, extracts_per_subpath):
-    for subpath, all_per_key in extracts_per_subpath.items():
-        for key, (steps, values) in all_per_key.items():
-            # aggregations = [op(values, axis=0) for op in aggregation_ops]
-            aggregations = [value for value in values]
-            write_csv(dpath, subpath, key, dpath.name, aggregations, steps, [1,2,3])
-
-    # for subpath, all_per_key in extracts_per_subpath.items():
-    #     for key, (steps, wall_times, values) in all_per_key.items():
-    #         aggregations = [op(values, axis=0) for op in aggregation_ops]
-    #         write_csv(dpath, subpath, key, dpath.name, aggregations, steps, aggregation_ops)
-
-
-def get_valid_filename(s):
-    s = str(s).strip().replace(' ', '_')
-    return re.sub(r'(?u)[^-\w.]', '', s)
-
-
-def write_csv(dpath, subpath, key, fname, aggregations, steps, aggregation_ops):
-    path = dpath / FOLDER_NAME
-
-    if not path.exists():
-        os.makedirs(path)
-
-    file_name = get_valid_filename(key) + '-' + get_valid_filename(subpath) + '-' + fname + '.csv'
-    # aggregation_ops_names = [aggregation_op.__name__ for aggregation_op in aggregation_ops]
-    # df = pd.DataFrame(np.transpose(aggregations), index=steps, columns=aggregation_ops_names)
-    df = pd.DataFrame(np.transpose(aggregations), index=steps)
-    df.to_csv(path / file_name, sep=';')
-
-
-def aggregate(path, subpath, experiments, count, ax):
+def aggregate(path, subpath, experiments, ax):
     print("Started aggregation {}".format(path))
 
     curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -196,33 +124,23 @@ def aggregate(path, subpath, experiments, count, ax):
         with open(join(cache_env, f'{subpath}.pickle'), 'wb') as fobj:
             pickle.dump(interpolated_keys, fobj)
 
-    for id, key in enumerate(interpolated_keys.keys()):
-        plot(id, key, interpolated_keys[key], ax[id], id)
+    for i, key in enumerate(interpolated_keys.keys()):
+        plot(i, interpolated_keys[key], ax[i])
 
 
-def plot(env, key, interpolated_key, ax, count):
-    # zhehui
+# def plot(env, key, interpolated_key, ax, count):
+def plot(index, interpolated_key, ax):
     # set title
-    title_text = PLOT_NAMES_LIST[env]
+    title_text = PLOT_NAMES_LIST[index]
     ax.set_title(title_text, fontsize=8)
 
     x, y = interpolated_key
-
     y_np = [np.array(yi) for yi in y]
     y_np = np.stack(y_np)
-
-    if env == 'doom_deadly_corridor':
-        # fix reward scale
-        y_np *= 100
-
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)
-    # y_plus_std = np.minimum(y_mean + y_std, y_np.max())
     y_plus_std = y_mean + y_std
     y_minus_std = y_mean - y_std
-
-    # Configuration
-    # fig, ax = plt.subplots()
 
     def mkfunc(x, pos):
         if x >= 1e6:
@@ -232,7 +150,6 @@ def plot(env, key, interpolated_key, ax, count):
         else:
             return '%d' % int(x)
 
-
     mkformatter = matplotlib.ticker.FuncFormatter(mkfunc)
     ax.xaxis.set_major_formatter(mkformatter)
 
@@ -241,13 +158,10 @@ def plot(env, key, interpolated_key, ax, count):
     ax.spines['left'].set_visible(False)
     ax.spines['bottom'].set_linewidth(1.0)
 
-    # xlabel_text = env.replace('_', ' ').title()
-    # plt.xlabel(xlabel_text, fontsize=8)
-    # zhehui
     # if they are bottom plots, add Environment Frames
-    # if i == 1:
-    ax.set_xlabel('Env. frames, skip=4', fontsize=8)
-    if count == 0:
+    if index == 0 or index >=3:
+        ax.set_xlabel('Env. frames', fontsize=8)
+    if index == 0:
         ax.set_ylabel('Average return', fontsize=8)
 
     # hide tick of axis
@@ -256,62 +170,31 @@ def plot(env, key, interpolated_key, ax, count):
     ax.tick_params(which='major', length=0)
 
     ax.grid(color='#B3B3B3', linestyle='-', linewidth=0.25, alpha=0.2)
-    # ax.xaxis.grid(False)
-
-    # x_delta = 0.05 * x[-1]
-    # ax.set_xlim(xmin=-x_delta, xmax=x[-1] + x_delta)
-    #
-    # y_delta = 0.06 * max(np.max(y_mean), BASELINES[env])
-    # ax.set_ylim(ymin=min(np.min(y_mean) - y_delta, 0.0), ymax=max(np.max(y_plus_std), BASELINES[env]) + y_delta)
-    # plt.grid(False)
-
-    # plt.ticklabel_format(style='sci', axis='x', scilimits=(8, 8))
     ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
 
     marker_size = 0
     lw = 1.4
     lw_baseline = 0.7
 
-    sf_plot, = ax.plot(x, y_mean, color=BLUE, label='SampleFactory', linewidth=lw, antialiased=True)
+    sf_plot, = ax.plot(x, y_mean, color=BLUE, linewidth=lw, antialiased=True)
     ax.fill_between(x, y_minus_std, y_plus_std, color=BLUE, alpha=0.25, antialiased=True, linewidth=0.0)
 
-    # baseline_y = BASELINES[env]
-    # if baseline_y is not None:
-    #     baseline_name = 'A2C'
-    #     ax.plot([x[0], x[-1]], [baseline_y, baseline_y], color=GREEN, label=baseline_name, linewidth=lw_baseline, antialiased=True, linestyle='--')
-
-    ax.legend(prop={'size': 6}, loc='lower right')
-
-    # plt.set_tight_layout()
-    # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=1, wspace=0)
-    # plt.margins(0, 0)
-
-    # plot_name = f'{env}_{key.replace("/", " ")}'
-    # plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0)
+    # ax.legend(prop={'size': 6}, loc='lower right')
 
 
 def main():
-    def param_list(param):
-        p_list = ast.literal_eval(param)
-        if type(p_list) is not list:
-            raise argparse.ArgumentTypeError("Parameter {} is not a list".format(param))
-        return p_list
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--path', type=str, help='main path for tensorboard files', default=os.getcwd())
-    # parser.add_argument('--subpaths', type=param_list, help='subpath sturctures', default=['test', 'train'])
-    parser.add_argument('--output', type=str, help='aggregation can be saves as tensorboard file (summary) or as table (csv)', default='csv')
+    parser.add_argument('--output', type=str,
+                        help='aggregation can be saves as tensorboard file (summary) or as table (csv)', default='csv')
 
     args = parser.parse_args()
-
     path = Path(args.path)
 
     if not path.exists():
         raise argparse.ArgumentTypeError('Parameter {} is not a valid path'.format(path))
 
-    # hide_file = [f for f in os.listdir(path) if not f.startswith('.') and not f.endswith('.py')]
     subpath = os.listdir(path)[0]
-    # subpaths = [path / dname / subpath for subpath in args.subpaths for dname in os.listdir(path) if dname != FOLDER_NAME and dname in hide_file]
     all_experiment_dirs = []
     for filename in Path(args.path).rglob('*.tfevents.*'):
         experiment_dir = os.path.dirname(filename)
@@ -319,9 +202,6 @@ def main():
 
     if args.output not in ['summary', 'csv']:
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
-
-    # zhehui
-    # _, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
     ax1 = plt.subplot(232)
     ax2 = plt.subplot(233)
     ax3 = plt.subplot(235)
@@ -329,44 +209,18 @@ def main():
     ax0 = plt.subplot(131)
 
     ax = (ax0, ax1, ax2, ax3, ax4)
-
-    # def f(t):
-    #     return np.exp(-t) * np.cos(2 * np.pi * t)
-    #
-    # t1 = np.arange(0, 5, 0.1)
-    # t2 = np.arange(0, 5, 0.02)
-    #
-    # plt.subplot(232)
-    # plt.plot(t1, f(t1), 'bo', t2, f(t2), 'r--')
-    #
-    # plt.subplot(233)
-    # plt.plot(t2, np.cos(2 * np.pi * t2), 'r--')
-    #
-    # plt.subplot(235)
-    # plt.plot(t1, f(t1), 'go', t2, f(t2), 'r--')
-    #
-    # plt.subplot(236)
-    # plt.plot(t2, np.cos(2 * np.pi * t2), 'r+')
-    #
-    #
-    # plt.subplot(131)
-    # plt.plot([1, 2, 3, 4], [1, 4, 9, 16])
-
-    # plt.show()
+    aggregate(path, subpath, all_experiment_dirs, ax=ax)
 
 
-    aggregate(path, subpath, all_experiment_dirs, count=0, ax=ax)
-
-
-    # plt.show()
-    # plot_name = f'{env}_{key.replace("/", " ")}'
     plt.tight_layout()
-    # # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=1, wspace=0)
     plt.subplots_adjust(wspace=0.16, hspace=0.18)
-    #
     plt.margins(0, 0)
+
+
+    # plt.show()
     plot_name = f'test'
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'), format='pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'),
+                format='pdf', bbox_inches='tight', pad_inches=0)
 
     return 0
 
