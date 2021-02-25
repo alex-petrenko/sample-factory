@@ -167,6 +167,8 @@ class QuadMultiEncoder(EncoderBase):
                 self.neighbor_encoder = QuadNeighborhoodEncoderMlp(cfg, self.neighbor_obs_dim,
                                                                    self.neighbor_hidden_size, self.use_spectral_norm,
                                                                    self.self_obs_dim, self.num_use_neighbor_obs)
+            elif neighbor_encoder_type == 'no_encoder':
+                self.neighbor_encoder = None
             else:
                 raise NotImplementedError
             neighbor_encoder_out_size = self.neighbor_hidden_size
@@ -213,7 +215,7 @@ class QuadMultiEncoder(EncoderBase):
         batch_size = obs_self.shape[0]
         # relative xyz and vxyz for the entire minibatch (batch dimension is batch_size * num_neighbors)
         all_neighbor_obs_size = self.neighbor_obs_dim * self.num_use_neighbor_obs
-        if self.num_use_neighbor_obs > 0:
+        if self.num_use_neighbor_obs > 0 and self.neighbor_encoder:
             neighborhood_embedding = self.neighbor_encoder(obs_self, obs, all_neighbor_obs_size, batch_size)
             embeddings = torch.cat((embeddings, neighborhood_embedding), dim=1)
 
