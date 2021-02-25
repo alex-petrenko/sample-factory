@@ -153,6 +153,8 @@ class QuadMultiEncoder(EncoderBase):
 
         # encode the neighboring drone's observations
         neighbor_encoder_out_size = 0
+        self.neighbor_encoder = None
+
         if self.num_use_neighbor_obs > 0:
             neighbor_encoder_type = cfg.quads_neighbor_encoder_type
             if neighbor_encoder_type == 'mean_embed':
@@ -168,9 +170,11 @@ class QuadMultiEncoder(EncoderBase):
                                                                    self.neighbor_hidden_size, self.use_spectral_norm,
                                                                    self.self_obs_dim, self.num_use_neighbor_obs)
             elif neighbor_encoder_type == 'no_encoder':
-                self.neighbor_encoder = None
+                self.neighbor_encoder = None  # blind agent
             else:
                 raise NotImplementedError
+
+        if self.neighbor_encoder:
             neighbor_encoder_out_size = self.neighbor_hidden_size
 
         fc_encoder_layer = cfg.hidden_size
