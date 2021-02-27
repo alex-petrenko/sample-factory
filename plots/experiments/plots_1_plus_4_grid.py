@@ -8,6 +8,7 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import ticker
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from plots.plot_utils import BLUE, set_matplotlib_params
@@ -17,12 +18,13 @@ set_matplotlib_params()
 
 plt.rcParams['figure.figsize'] = (1.5 * 8.20, 5)  # (2.5, 2.0) 7.5， 4
 
-PLOT_NAMES_LIST = ['avg_reward', 'avg_true_reward', 'avg_rew_crash', 'avg_num_collisions', 'avg_rew_orient']
+PLOT_NAMES_LIST = ['avg_reward', 'avg_rew_pos_swap_goals', 'avg_num_collisions_swap_goals',
+                   'avg_rew_pos_swarm_vs_swarm', 'avg_num_collisions_swarm_vs_swarm']
 
-PLOT_KEY = ['0_aux/avg_reward', '0_aux/avg_true_reward', '0_aux/avg_rew_crash', '0_aux/avg_num_collisions',
-            '0_aux/avg_rew_orient']
+PLOT_KEY = ['0_aux/avg_reward', '0_aux/avg_rew_pos_Scenario_swap_goals', '0_aux/avg_num_collisions_Scenario_swap_goals',
+            '0_aux/avg_rew_pos_Scenario_swarm_vs_swarm', '0_aux/avg_num_collisions_Scenario_swarm_vs_swarm']
 
-PLOT_STEP = int(20e6)
+PLOT_STEP = int(1e7)
 TOTAL_STEP = int(1e9)
 
 NUM_AGENTS = 8
@@ -79,12 +81,13 @@ def extract(experiments):
         for i in range(len(values)):
             idx = 0
 
-            values[i] = values[i][2:]
-            x_steps[i] = x_steps[i][2:]
+            tmp_min_step = min(len(x_steps[i]), len(values[i]))
+            values[i] = values[i][2: tmp_min_step]
+            x_steps[i] = x_steps[i][2: tmp_min_step]
 
             assert len(x_steps[i]) == len(values[i])
             for x_idx in x:
-                while x_steps[i][idx] < x_idx and idx < len(x_steps[i]):
+                while idx < len(x_steps[i]) - 1 and x_steps[i][idx] < x_idx:
                     idx += 1
 
                 if x_idx == 0:
@@ -93,10 +96,6 @@ def extract(experiments):
                     interpolated_value = (values[i][idx] + values[i][idx + 1]) / 2
                 else:
                     interpolated_value = values[i][idx]
-
-                if plot_key[tmp_id] == '0_aux/avg_num_collisions':
-                    interpolated_value = interpolated_value * TIME_METRIC_COLLISION / NUM_AGENTS
-                    interpolated_value = np.log(interpolated_value)
 
                 interpolated_y[i].append(interpolated_value)
             assert len(interpolated_y[i]) == len(x)
@@ -137,13 +136,22 @@ def plot(index, interpolated_key, ax):
     x, y = interpolated_key
     y_np = [np.array(yi) for yi in y]
     y_np = np.stack(y_np)
+    if 'num_collisions' in title_text:
+        y_np = y_np * (TIME_METRIC_COLLISION / (16 * 8))  # Per minute Per Drone
+        ax.set_yscale("symlog", base=2)
+        ax.yaxis.set_minor_locator(ticker.NullLocator())  # no minor ticks
+        ax.yaxis.set_major_formatter(ticker.ScalarFormatter())  # set regular formatting
+        # ax.set_yticks([0.0, 0.5, 1.0, 2.0, 4.0, 8.0])
+
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)
     y_plus_std = y_mean + y_std
     y_minus_std = y_mean - y_std
 
     def mkfunc(x, pos):
-        if x >= 1e6:
+        if x >= 1e9:
+            return '%dB' % int(x * 1e-9)
+        elif x >= 1e6:
             return '%dM' % int(x * 1e-6)
         elif x >= 1e3:
             return '%dK' % int(x * 1e-3)
@@ -158,9 +166,6 @@ def plot(index, interpolated_key, ax):
     ax.spines['left'].set_visible(False)
     ax.spines['bottom'].set_linewidth(1.0)
 
-    # if they are bottom plots, add Environment Frames
-    if index == 0 or index >=3:
-        ax.set_xlabel('Env. frames', fontsize=8)
     if index == 0:
         ax.set_ylabel('Average return', fontsize=8)
 
@@ -172,14 +177,18 @@ def plot(index, interpolated_key, ax):
     ax.grid(color='#B3B3B3', linestyle='-', linewidth=0.25, alpha=0.2)
     ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
 
-    marker_size = 0
     lw = 1.4
-    lw_baseline = 0.7
 
-    sf_plot, = ax.plot(x, y_mean, color=BLUE, linewidth=lw, antialiased=True)
+    ax.plot(x, y_mean, color=BLUE, linewidth=lw, antialiased=True)
     ax.fill_between(x, y_minus_std, y_plus_std, color=BLUE, alpha=0.25, antialiased=True, linewidth=0.0)
-
     # ax.legend(prop={'size': 6}, loc='lower right')
+
+
+def hide_tick_spine(ax):
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.tick_params(labelcolor='w', top=False, bottom=False, left=False, right=False)
 
 
 def main():
@@ -202,22 +211,35 @@ def main():
 
     if args.output not in ['summary', 'csv']:
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
-    ax1 = plt.subplot(232)
-    ax2 = plt.subplot(233)
-    ax3 = plt.subplot(235)
-    ax4 = plt.subplot(236)
-    ax0 = plt.subplot(131)
 
+    fig = plt.figure()
+    ax_111 = fig.add_subplot(111)
+    hide_tick_spine(ax=ax_111)
+    ax_111.set_xlabel('Env. frames')
+
+    ax_132 = fig.add_subplot(132)
+    hide_tick_spine(ax=ax_132)
+    ax_132.set_ylabel('Average Distance yo The Goal')
+
+    ax_133 = fig.add_subplot(133)
+    hide_tick_spine(ax=ax_133)
+    ax_133.set_ylabel('Num of Collisions Per minute Per drone')
+
+    ax0 = fig.add_subplot(131)
+    ax1 = fig.add_subplot(232)
+    ax2 = fig.add_subplot(233)
+    ax3 = fig.add_subplot(235)
+    ax4 = fig.add_subplot(236)
+
+    ax1.axes.get_xaxis().set_visible(False)
+    ax2.axes.get_xaxis().set_visible(False)
     ax = (ax0, ax1, ax2, ax3, ax4)
     aggregate(path, subpath, all_experiment_dirs, ax=ax)
-
 
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.16, hspace=0.18)
     plt.margins(0, 0)
 
-
-    # plt.show()
     plot_name = f'test'
     plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'),
                 format='pdf', bbox_inches='tight', pad_inches=0)
