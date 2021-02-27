@@ -9,10 +9,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import ticker
-from scipy.signal import savgol_filter
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-from plots.plot_utils import set_matplotlib_params, ORANGE, BLUE
+from plots.plot_utils import set_matplotlib_params, ORANGE
 from utils.utils import ensure_dir_exists
 from matplotlib.ticker import FuncFormatter
 
@@ -22,28 +21,25 @@ PAGE_WIDTH_INCHES = 8.2
 FULL_PAGE_WIDTH = 1.4 * PAGE_WIDTH_INCHES
 HALF_PAGE_WIDTH = FULL_PAGE_WIDTH / 2
 
-plt.rcParams['figure.figsize'] = (HALF_PAGE_WIDTH, 3.5)  # (2.5, 2.0) 7.5， 4
-plt.rcParams["axes.formatter.limits"] = [-1, 1]
+plt.rcParams['figure.figsize'] = (FULL_PAGE_WIDTH, 2.3)  # (2.5, 2.0) 7.5， 4
 
 NUM_AGENTS = 8
 EPISODE_DURATION = 16  # seconds
 TIME_METRIC_COLLISION = 60  # ONE MINUTE
 COLLISIONS_SCALE = ((TIME_METRIC_COLLISION/EPISODE_DURATION) / NUM_AGENTS) * 2  # times two because 1 collision = 2 drones collided
+COLLISIONS_OBST_SCALE = ((TIME_METRIC_COLLISION/EPISODE_DURATION) / NUM_AGENTS)  # Not times two because 1 collision = 1 drone collide with 1 obstacle, and we only talk about drones here
 
 CRASH_GROUND_SCALE = (-1.0 / EPISODE_DURATION)
 
 PLOTS = [
     dict(key='0_aux/avg_rewraw_pos', name='Avg. distance to the target', label='Avg. distance, meters', coeff=-1.0/EPISODE_DURATION, logscale=True, clip_min=0.2, y_scale_formater=[0.2, 0.5, 1.0, 2.0]),
-    dict(key='0_aux/avg_num_collisions_Scenario_ep_rand_bezier', name='Avg. collisions for pursuit evasion (bezier)', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
-    dict(key='0_aux/avg_num_collisions_after_settle', name='Avg. collisions between drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
-    dict(key='0_aux/avg_num_collisions_Scenario_static_same_goal', name='Avg. collisions for static same goal', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
+    dict(key='0_aux/avg_rewraw_crash', name='Flight performance', label='Fraction of the episode in the air', coeff=CRASH_GROUND_SCALE, mutate=lambda y: 1 - y, clip_max=1.0),
+    dict(key='0_aux/avg_num_collisions_after_settle', name='Avg. collisions between drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.1),
+    dict(key='0_aux/avg_num_collisions_obst_quad', name='Avg. collisions between the obstacle & drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_OBST_SCALE, clip_min=0.06),
 ]
 
 PLOT_STEP = int(5e6)
 TOTAL_STEP = int(1e9+10000)
-
-# 'blue': '#1F77B4', 'orange': '#FF7F0E', 'green': '#2CA02C', 'red': '#d70000'
-COLOR = ['#1F77B4', '#FF7F0E', '#2CA02C', '#d70000']
 
 
 def extract(experiments):
@@ -55,8 +51,8 @@ def extract(experiments):
 
     # Get and validate all scalar keys
     all_keys = [tuple(sorted(scalar_accumulator.Keys())) for scalar_accumulator in scalar_accumulators]
-    # assert len(set(all_keys)) == 1, \
-    #     "All runs need to have the same scalar keys. There are mismatches in {}".format(all_keys)
+    assert len(set(all_keys)) == 1, \
+        "All runs need to have the same scalar keys. There are mismatches in {}".format(all_keys)
 
     keys = all_keys[0]
     all_scalar_events_per_key = [[scalar_accumulator.Items(key)
@@ -122,8 +118,8 @@ def extract(experiments):
     return interpolated_keys
 
 
-def aggregate(path, subpath, experiments, ax, legend_name, group_id):
-    print("Started aggregation {}".format(path / subpath))
+def aggregate(path, subpath, experiments, ax):
+    print("Started aggregation {}".format(path))
 
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     cache_dir = join(curr_dir, 'cache')
@@ -139,18 +135,17 @@ def aggregate(path, subpath, experiments, ax, legend_name, group_id):
             pickle.dump(interpolated_keys, fobj)
 
     for i, key in enumerate(interpolated_keys.keys()):
-        plot(i, interpolated_keys[key], ax[i], legend_name, group_id)
+        plot(i, interpolated_keys[key], ax[i])
 
 
 # def plot(env, key, interpolated_key, ax, count):
-def plot(index, interpolated_key, ax, legend_name, group_id):
+def plot(index, interpolated_key, ax):
     params = PLOTS[index]
 
     # set title
     title_text = params['name']
     ax.set_title(title_text, fontsize=8)
-    if index >= 2:
-        ax.set_xlabel('Simulation steps')
+    ax.set_xlabel('Simulation steps')
 
     x, y = interpolated_key
     y_np = [np.array(yi) for yi in y]
@@ -161,15 +156,15 @@ def plot(index, interpolated_key, ax, legend_name, group_id):
         ax.set_yscale('log', base=2)
         ax.yaxis.set_minor_locator(ticker.NullLocator())  # no minor ticks
 
-        def scientific(x, pos):
-            # x:  tick value - ie. what you currently see in yticks
-            # pos: a position - ie. the index of the tick (from 0 to 9 in this example)
-            return '%.2f' % x
+    def scientific(x, pos):
+        # x:  tick value - ie. what you currently see in yticks
+        # pos: a position - ie. the index of the tick (from 0 to 9 in this example)
+        return '%.2f' % x
 
-        scientific_formatter = FuncFormatter(scientific)
-        ax.yaxis.set_major_formatter(scientific_formatter)
+    scientific_formatter = FuncFormatter(scientific)
+    ax.yaxis.set_major_formatter(scientific_formatter)
 
-        # ax.yaxis.set_major_formatter(scalar_formatter)  # set regular formatting
+        # ax.yaxis.set_major_formatter(ticker.ScalarFormatter())  # set regular formatting
 
     coeff = params.get('coeff', 1.0)
     y_np *= coeff
@@ -179,7 +174,6 @@ def plot(index, interpolated_key, ax, legend_name, group_id):
         for i in range(y_np.shape[1]):
             y_np[:, i] = mutate(y_np[:, i])
 
-    # y_np = savgol_filter(y_np, 5, 2)
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)
     y_plus_std = y_mean + y_std
@@ -218,19 +212,21 @@ def plot(index, interpolated_key, ax, legend_name, group_id):
     label = params.get('label')
     if label:
         ax.set_ylabel(label, fontsize=8)
-        # hide tick of axis
-        ax.xaxis.tick_bottom()
 
+    # hide tick of axis
+        ax.xaxis.tick_bottom()
     ax.yaxis.tick_left()
     ax.tick_params(which='major', length=0)
 
     ax.grid(color='#B3B3B3', linestyle='-', linewidth=0.25, alpha=0.2)
     # ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
 
-    lw = 1.0
-    ax.fill_between(x, y_minus_std, y_plus_std, color=COLOR[group_id], alpha=0.25, antialiased=True, linewidth=0.0)
-    ax.plot(x, y_mean, color=COLOR[group_id], label=legend_name, linewidth=lw, antialiased=True)
-    # ax.legend()
+    lw = 1.4
+
+    ax.plot(x, y_mean, color=ORANGE, linewidth=lw, antialiased=True)
+    ax.fill_between(x, y_minus_std, y_plus_std, color=ORANGE, alpha=0.25, antialiased=True, linewidth=0.0)
+    # ax.legend(prop={'size': 6}, loc='lower right')
+
 
 def hide_tick_spine(ax):
     ax.spines['right'].set_visible(False)
@@ -251,34 +247,47 @@ def main():
     if not path.exists():
         raise argparse.ArgumentTypeError('Parameter {} is not a valid path'.format(path))
 
-    subpaths = sorted(os.listdir(path))
-    legend_name = sorted(["BASELINE", "NO_ANNEALING", "NO_REPLAY"])
-    all_experiment_dirs = {}
-    for subpath in subpaths:
-        if subpath not in all_experiment_dirs:
-            all_experiment_dirs[subpath] = []
-
-        for filename in Path(args.path + "/" + subpath).rglob('*.tfevents.*'):
-            experiment_dir = os.path.dirname(filename)
-            all_experiment_dirs[subpath].append(experiment_dir)
+    subpath = os.listdir(path)[0]
+    all_experiment_dirs = []
+    for filename in Path(args.path).rglob('*.tfevents.*'):
+        experiment_dir = os.path.dirname(filename)
+        all_experiment_dirs.append(experiment_dir)
 
     if args.output not in ['summary', 'csv']:
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
 
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4)
     ax = (ax1, ax2, ax3, ax4)
-    for i in range(len(all_experiment_dirs)):
-        aggregate(path, subpaths[i], all_experiment_dirs[subpaths[i]], ax, legend_name[i], i)
 
-    handles, labels = ax[-1].get_legend_handles_labels()
-    lgd = fig.legend(handles, labels, bbox_to_anchor=(0.15, 0.85, 0.8, 0.2), loc='upper left', ncol=3, mode="expand", prop={'size': 6})
-    lgd.set_in_layout(True)
+    # fig = plt.figure()
+    # ax_111 = fig.add_subplot(111)
+    # hide_tick_spine(ax=ax_111)
+    # ax_111.set_xlabel('Env. frames')
+    #
+    # ax_132 = fig.add_subplot(132)
+    # hide_tick_spine(ax=ax_132)
+    # ax_132.set_ylabel('Average Distance yo The Goal')
+    #
+    # ax_133 = fig.add_subplot(133)
+    # hide_tick_spine(ax=ax_133)
+    # ax_133.set_ylabel('Num of Collisions Per minute Per drone')
+    #
+    # ax0 = fig.add_subplot(131)
+    # ax1 = fig.add_subplot(232)
+    # ax2 = fig.add_subplot(233)
+    # ax3 = fig.add_subplot(235)
+    # ax4 = fig.add_subplot(236)
+    #
+    # ax1.axes.get_xaxis().set_visible(False)
+    # ax2.axes.get_xaxis().set_visible(False)
+    # ax = (ax0, ax1, ax2, ax3, ax4)
+    aggregate(path, subpath, all_experiment_dirs, ax=ax)
 
     plt.tight_layout(pad=1.0)
-    plt.subplots_adjust(wspace=0.25, hspace=0.3)
+    plt.subplots_adjust(wspace=0.2, hspace=0.3)
     # plt.margins(0, 0)
 
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_train_setting.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_obstacle_electron.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
 
     return 0
 

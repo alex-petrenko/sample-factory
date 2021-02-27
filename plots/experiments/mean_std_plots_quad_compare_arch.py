@@ -14,7 +14,7 @@ from tensorboard.backend.event_processing.event_accumulator import EventAccumula
 from plots.plot_utils import set_matplotlib_params, ORANGE, BLUE
 from utils.utils import ensure_dir_exists
 from matplotlib.ticker import FuncFormatter
-
+from scipy.signal import savgol_filter
 set_matplotlib_params()
 
 PAGE_WIDTH_INCHES = 8.2
@@ -177,6 +177,8 @@ def plot(index, interpolated_key, ax, legend_name, group_id):
     if mutate:
         for i in range(y_np.shape[1]):
             y_np[:, i] = mutate(y_np[:, i])
+
+    # y_np = savgol_filter(y_np, 5, 2)
 
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)

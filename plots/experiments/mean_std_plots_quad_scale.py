@@ -9,12 +9,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import ticker
-from scipy.signal import savgol_filter
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from plots.plot_utils import set_matplotlib_params, ORANGE, BLUE
 from utils.utils import ensure_dir_exists
 from matplotlib.ticker import FuncFormatter
+from scipy.signal import savgol_filter
 
 set_matplotlib_params()
 
@@ -22,7 +22,7 @@ PAGE_WIDTH_INCHES = 8.2
 FULL_PAGE_WIDTH = 1.4 * PAGE_WIDTH_INCHES
 HALF_PAGE_WIDTH = FULL_PAGE_WIDTH / 2
 
-plt.rcParams['figure.figsize'] = (HALF_PAGE_WIDTH, 3.5)  # (2.5, 2.0) 7.5， 4
+plt.rcParams['figure.figsize'] = (HALF_PAGE_WIDTH, 2)  # (2.5, 2.0) 7.5， 4
 plt.rcParams["axes.formatter.limits"] = [-1, 1]
 
 NUM_AGENTS = 8
@@ -34,13 +34,11 @@ CRASH_GROUND_SCALE = (-1.0 / EPISODE_DURATION)
 
 PLOTS = [
     dict(key='0_aux/avg_rewraw_pos', name='Avg. distance to the target', label='Avg. distance, meters', coeff=-1.0/EPISODE_DURATION, logscale=True, clip_min=0.2, y_scale_formater=[0.2, 0.5, 1.0, 2.0]),
-    dict(key='0_aux/avg_num_collisions_Scenario_ep_rand_bezier', name='Avg. collisions for pursuit evasion (bezier)', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
     dict(key='0_aux/avg_num_collisions_after_settle', name='Avg. collisions between drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
-    dict(key='0_aux/avg_num_collisions_Scenario_static_same_goal', name='Avg. collisions for static same goal', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
 ]
 
 PLOT_STEP = int(5e6)
-TOTAL_STEP = int(1e9+10000)
+TOTAL_STEP = int(1.4e9+10000)
 
 # 'blue': '#1F77B4', 'orange': '#FF7F0E', 'green': '#2CA02C', 'red': '#d70000'
 COLOR = ['#1F77B4', '#FF7F0E', '#2CA02C', '#d70000']
@@ -180,6 +178,7 @@ def plot(index, interpolated_key, ax, legend_name, group_id):
             y_np[:, i] = mutate(y_np[:, i])
 
     # y_np = savgol_filter(y_np, 5, 2)
+
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)
     y_plus_std = y_mean + y_std
@@ -252,7 +251,7 @@ def main():
         raise argparse.ArgumentTypeError('Parameter {} is not a valid path'.format(path))
 
     subpaths = sorted(os.listdir(path))
-    legend_name = sorted(["BASELINE", "NO_ANNEALING", "NO_REPLAY"])
+    legend_name = sorted(["16"])
     all_experiment_dirs = {}
     for subpath in subpaths:
         if subpath not in all_experiment_dirs:
@@ -265,8 +264,8 @@ def main():
     if args.output not in ['summary', 'csv']:
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
 
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
-    ax = (ax1, ax2, ax3, ax4)
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax = (ax1, ax2)
     for i in range(len(all_experiment_dirs)):
         aggregate(path, subpaths[i], all_experiment_dirs[subpaths[i]], ax, legend_name[i], i)
 
@@ -278,7 +277,7 @@ def main():
     plt.subplots_adjust(wspace=0.25, hspace=0.3)
     # plt.margins(0, 0)
 
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_train_setting.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_train_scaling.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
 
     return 0
 
