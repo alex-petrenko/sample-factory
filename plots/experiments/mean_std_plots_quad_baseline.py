@@ -8,25 +8,37 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import ticker
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-from plots.plot_utils import BLUE, set_matplotlib_params
+from plots.plot_utils import set_matplotlib_params, ORANGE
 from utils.utils import ensure_dir_exists
 
 set_matplotlib_params()
 
-plt.rcParams['figure.figsize'] = (1.5 * 8.20, 5)  # (2.5, 2.0) 7.5， 4
+PAGE_WIDTH_INCHES = 8.2
+FULL_PAGE_WIDTH = 1.4 * PAGE_WIDTH_INCHES
+HALF_PAGE_WIDTH = FULL_PAGE_WIDTH / 2
 
-PLOT_NAMES_LIST = ['avg_reward', 'avg_true_reward', 'avg_rew_crash', 'avg_num_collisions', 'avg_rew_orient']
-
-PLOT_KEY = ['0_aux/avg_reward', '0_aux/avg_true_reward', '0_aux/avg_rew_crash', '0_aux/avg_num_collisions',
-            '0_aux/avg_rew_orient']
-
-PLOT_STEP = int(20e6)
-TOTAL_STEP = int(1e9)
+plt.rcParams['figure.figsize'] = (FULL_PAGE_WIDTH, 2.3)  # (2.5, 2.0) 7.5， 4
 
 NUM_AGENTS = 8
+EPISODE_DURATION = 16  # seconds
 TIME_METRIC_COLLISION = 60  # ONE MINUTE
+COLLISIONS_SCALE = ((TIME_METRIC_COLLISION/EPISODE_DURATION) / NUM_AGENTS) * 2  # times two because 1 collision = 2 drones collided
+
+CRASH_GROUND_SCALE = (-1.0 / EPISODE_DURATION)
+
+PLOTS = [
+    dict(key='0_aux/avg_reward', name='Total reward', label='Avg. episode reward'),
+    dict(key='0_aux/avg_rewraw_pos', name='Avg. distance to the target', label='Avg. distance, meters', coeff=1.0/EPISODE_DURATION),
+    dict(key='0_aux/avg_num_collisions_after_settle', name='Avg. collisions between drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
+    dict(key='0_aux/avg_rewraw_crash', name='Flight performance', label='Fraction of the episode in the air', coeff=CRASH_GROUND_SCALE, mutate=lambda y: 1 - y, clip_max=1.0),
+]
+
+PLOT_STEP = int(5e6)
+TOTAL_STEP = int(1e9+10000)
+
 
 def extract(experiments):
     scalar_accumulators = [EventAccumulator(experiment_dir).Reload().scalars for experiment_dir in experiments]
@@ -64,11 +76,10 @@ def extract(experiments):
     # Get values per step per key
     values_per_key = [[[scalar_event.value for scalar_event in scalar_events] for scalar_events in all_scalar_events]
                       for all_scalar_events in all_scalar_events_per_key]
-    plot_key = PLOT_KEY
 
     interpolated_keys = dict()
-    for tmp_id in range(len(plot_key)):
-        key_idx = keys.index(plot_key[tmp_id])
+    for tmp_id in range(len(PLOTS)):
+        key_idx = keys.index(PLOTS[tmp_id]['key'])
         values = values_per_key[key_idx]
 
         x = steps_per_key[key_idx]
@@ -79,12 +90,13 @@ def extract(experiments):
         for i in range(len(values)):
             idx = 0
 
-            values[i] = values[i][2:]
-            x_steps[i] = x_steps[i][2:]
+            tmp_min_step = min(len(x_steps[i]), len(values[i]))
+            values[i] = values[i][2: tmp_min_step]
+            x_steps[i] = x_steps[i][2: tmp_min_step]
 
             assert len(x_steps[i]) == len(values[i])
             for x_idx in x:
-                while x_steps[i][idx] < x_idx and idx < len(x_steps[i]):
+                while idx < len(x_steps[i]) - 1 and x_steps[i][idx] < x_idx:
                     idx += 1
 
                 if x_idx == 0:
@@ -94,16 +106,12 @@ def extract(experiments):
                 else:
                     interpolated_value = values[i][idx]
 
-                if plot_key[tmp_id] == '0_aux/avg_num_collisions':
-                    interpolated_value = interpolated_value * TIME_METRIC_COLLISION / NUM_AGENTS
-                    interpolated_value = np.log(interpolated_value)
-
                 interpolated_y[i].append(interpolated_value)
             assert len(interpolated_y[i]) == len(x)
 
         print(interpolated_y[0][:30])
 
-        interpolated_keys[plot_key[tmp_id]] = (x, interpolated_y)
+        interpolated_keys[PLOTS[tmp_id]['key']] = (x, interpolated_y)
 
     return interpolated_keys
 
@@ -130,20 +138,52 @@ def aggregate(path, subpath, experiments, ax):
 
 # def plot(env, key, interpolated_key, ax, count):
 def plot(index, interpolated_key, ax):
+    params = PLOTS[index]
+
     # set title
-    title_text = PLOT_NAMES_LIST[index]
+    title_text = params['name']
     ax.set_title(title_text, fontsize=8)
+    ax.set_xlabel('Simulation steps')
 
     x, y = interpolated_key
     y_np = [np.array(yi) for yi in y]
     y_np = np.stack(y_np)
+
+    logscale = params.get('logscale', False)
+    if logscale:
+        ax.set_yscale('log', base=2)
+        ax.yaxis.set_minor_locator(ticker.NullLocator())  # no minor ticks
+        ax.yaxis.set_major_formatter(ticker.ScalarFormatter())  # set regular formatting
+
+    coeff = params.get('coeff', 1.0)
+    y_np *= coeff
+
+    mutate = params.get('mutate', None)
+    if mutate:
+        for i in range(y_np.shape[1]):
+            y_np[:, i] = mutate(y_np[:, i])
+
     y_mean = np.mean(y_np, axis=0)
     y_std = np.std(y_np, axis=0)
     y_plus_std = y_mean + y_std
     y_minus_std = y_mean - y_std
 
+    clip_max = params.get('clip_max', None)
+    if clip_max:
+        y_mean = np.minimum(y_mean, clip_max)
+        y_plus_std = np.minimum(y_plus_std, clip_max)
+        y_minus_std = np.minimum(y_minus_std, clip_max)
+
+    clip_min = params.get('clip_min', None)
+    if clip_min:
+        y_mean = np.maximum(y_mean, clip_min)
+        y_plus_std = np.maximum(y_plus_std, clip_min)
+        y_minus_std = np.maximum(y_minus_std, clip_min)
+
     def mkfunc(x, pos):
-        if x >= 1e6:
+        if x >= 1e9:
+            return '%dB' % int(x * 1e-9)
+        elif x >= 1e6:
             return '%dM' % int(x * 1e-6)
         elif x >= 1e3:
             return '%dK' % int(x * 1e-3)
@@ -158,28 +198,30 @@ def plot(index, interpolated_key, ax):
     ax.spines['left'].set_visible(False)
     ax.spines['bottom'].set_linewidth(1.0)
 
-    # if they are bottom plots, add Environment Frames
-    if index == 0 or index >=3:
-        ax.set_xlabel('Env. frames', fontsize=8)
-    if index == 0:
-        ax.set_ylabel('Average return', fontsize=8)
+    label = params.get('label')
+    if label:
+        ax.set_ylabel(label, fontsize=8)
 
     # hide tick of axis
-    ax.xaxis.tick_bottom()
+        ax.xaxis.tick_bottom()
     ax.yaxis.tick_left()
     ax.tick_params(which='major', length=0)
 
     ax.grid(color='#B3B3B3', linestyle='-', linewidth=0.25, alpha=0.2)
     ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
 
-    marker_size = 0
     lw = 1.4
-    lw_baseline = 0.7
 
-    sf_plot, = ax.plot(x, y_mean, color=BLUE, linewidth=lw, antialiased=True)
-    ax.fill_between(x, y_minus_std, y_plus_std, color=BLUE, alpha=0.25, antialiased=True, linewidth=0.0)
-
+    ax.plot(x, y_mean, color=ORANGE, linewidth=lw, antialiased=True)
+    ax.fill_between(x, y_minus_std, y_plus_std, color=ORANGE, alpha=0.25, antialiased=True, linewidth=0.0)
     # ax.legend(prop={'size': 6}, loc='lower right')
+
+
+def hide_tick_spine(ax):
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.tick_params(labelcolor='w', top=False, bottom=False, left=False, right=False)
 
 
 def main():
@@ -202,25 +244,39 @@ def main():
 
     if args.output not in ['summary', 'csv']:
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
-    ax1 = plt.subplot(232)
-    ax2 = plt.subplot(233)
-    ax3 = plt.subplot(235)
-    ax4 = plt.subplot(236)
-    ax0 = plt.subplot(131)
 
-    ax = (ax0, ax1, ax2, ax3, ax4)
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4)
+    ax = (ax1, ax2, ax3, ax4)
+
+    # fig = plt.figure()
+    # ax_111 = fig.add_subplot(111)
+    # hide_tick_spine(ax=ax_111)
+    # ax_111.set_xlabel('Env. frames')
+    #
+    # ax_132 = fig.add_subplot(132)
+    # hide_tick_spine(ax=ax_132)
+    # ax_132.set_ylabel('Average Distance yo The Goal')
+    #
+    # ax_133 = fig.add_subplot(133)
+    # hide_tick_spine(ax=ax_133)
+    # ax_133.set_ylabel('Num of Collisions Per minute Per drone')
+    #
+    # ax0 = fig.add_subplot(131)
+    # ax1 = fig.add_subplot(232)
+    # ax2 = fig.add_subplot(233)
+    # ax3 = fig.add_subplot(235)
+    # ax4 = fig.add_subplot(236)
+    #
+    # ax1.axes.get_xaxis().set_visible(False)
+    # ax2.axes.get_xaxis().set_visible(False)
+    # ax = (ax0, ax1, ax2, ax3, ax4)
     aggregate(path, subpath, all_experiment_dirs, ax=ax)
 
-
-    plt.tight_layout()
-    plt.subplots_adjust(wspace=0.16, hspace=0.18)
+    plt.tight_layout(pad=1.0)
+    plt.subplots_adjust(wspace=0.2, hspace=0.3)
     plt.margins(0, 0)
 
-
-    # plt.show()
-    plot_name = f'test'
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/reward_{plot_name}.pdf'),
-                format='pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_baseline.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
 
     return 0
 
