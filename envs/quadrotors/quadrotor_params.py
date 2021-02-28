@@ -41,7 +41,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--quads_obstacle_num', default=0, type=int, help='Choose the number of obstacle(s)')
     p.add_argument('--quads_obstacle_type', default='sphere', type=str, choices=['sphere', 'cube', 'random'], help='Choose the type of obstacle(s)')
     p.add_argument('--quads_obstacle_size', default=0.0, type=float, help='Choose the size of obstacle(s)')
-    p.add_argument('--quads_obstacle_traj', default='gravity', type=str, choices=['gravity', 'electron'],  help='Choose the type of force to use')
+    p.add_argument('--quads_obstacle_traj', default='gravity', type=str, choices=['gravity', 'electron', 'mix'],  help='Choose the type of force to use')
     p.add_argument('--quads_local_obs', default=-1, type=int, help='Number of neighbors to consider. -1=all neighbors. 0=blind agents, 0<n<num_agents-1 = nonzero number of agents')
     p.add_argument('--quads_local_coeff', default=0.0, type=float, help='This parameter is used for the metric of select which drones are the N closest drones.')
     p.add_argument('--quads_local_metric', default='dist_inverse', type=str, choices=['dist', 'dist_inverse'], help='The main part of evaluate the closest drones')
@@ -57,3 +57,7 @@ def add_quadrotors_env_args(env, parser):
     p.add_argument('--replay_buffer_sample_prob', default=0.0, type=float, help='Probability at which we sample from it rather than resetting the env. Set to 0.0 (default) to disable the replay. Set to value in (0.0, 1.0] to use replay buffer')
 
     p.add_argument('--anneal_collision_steps', default=0.0, type=float, help='Anneal collision penalties over this many steps. Default (0.0) is no annealing')
+    p.add_argument('--quads_obstacle_obs_mode', default='relative', type=str, choices=['relative', 'absolute', 'half_relative'],  help='Choose the type of force to use')
+    p.add_argument('--quads_obstacle_hidden_size', default=32, type=int, help='Choose the type of force to use')
+    p.add_argument('--quads_collision_obst_smooth_max_penalty', default=10.0, type=float, help='The upper bound of the collision function given distance among drones')
+    p.add_argument('--quads_obst_penalty_fall_off', default=10.0, type=float, help='The upper bound of the collision function given distance among drones')
