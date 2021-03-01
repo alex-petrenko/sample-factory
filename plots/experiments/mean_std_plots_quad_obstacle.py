@@ -13,6 +13,7 @@ from tensorboard.backend.event_processing.event_accumulator import EventAccumula
 
 from plots.plot_utils import set_matplotlib_params, ORANGE
 from utils.utils import ensure_dir_exists
+from matplotlib.ticker import FuncFormatter
 
 set_matplotlib_params()
 
@@ -26,14 +27,15 @@ NUM_AGENTS = 8
 EPISODE_DURATION = 16  # seconds
 TIME_METRIC_COLLISION = 60  # ONE MINUTE
 COLLISIONS_SCALE = ((TIME_METRIC_COLLISION/EPISODE_DURATION) / NUM_AGENTS) * 2  # times two because 1 collision = 2 drones collided
+COLLISIONS_OBST_SCALE = ((TIME_METRIC_COLLISION/EPISODE_DURATION) / NUM_AGENTS)  # Not times two because 1 collision = 1 drone collide with 1 obstacle, and we only talk about drones here
 
 CRASH_GROUND_SCALE = (-1.0 / EPISODE_DURATION)
 
 PLOTS = [
-    dict(key='0_aux/avg_reward', name='Total reward', label='Avg. episode reward'),
-    dict(key='0_aux/avg_rewraw_pos', name='Avg. distance to the target', label='Avg. distance, meters', coeff=-1.0/EPISODE_DURATION),
-    dict(key='0_aux/avg_num_collisions_after_settle', name='Avg. collisions between drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.05),
+    dict(key='0_aux/avg_rewraw_pos', name='Avg. distance to the target', label='Avg. distance, meters', coeff=-1.0/EPISODE_DURATION, logscale=True, clip_min=0.2, y_scale_formater=[0.2, 0.5, 1.0, 2.0]),
     dict(key='0_aux/avg_rewraw_crash', name='Flight performance', label='Fraction of the episode in the air', coeff=CRASH_GROUND_SCALE, mutate=lambda y: 1 - y, clip_max=1.0),
+    dict(key='0_aux/avg_num_collisions_after_settle', name='Avg. collisions between drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_SCALE, clip_min=0.1),
+    dict(key='0_aux/avg_num_collisions_obst_quad', name='Avg. collisions between the obstacle & drones per minute', label='Number of collisions', logscale=True, coeff=COLLISIONS_OBST_SCALE, clip_min=0.06),
 ]
 
 PLOT_STEP = int(5e6)
@@ -153,7 +155,16 @@ def plot(index, interpolated_key, ax):
     if logscale:
         ax.set_yscale('log', base=2)
         ax.yaxis.set_minor_locator(ticker.NullLocator())  # no minor ticks
-        ax.yaxis.set_major_formatter(ticker.ScalarFormatter())  # set regular formatting
+
+    def scientific(x, pos):
+        # x:  tick value - ie. what you currently see in yticks
+        # pos: a position - ie. the index of the tick (from 0 to 9 in this example)
+        return '%.2f' % x
+
+    scientific_formatter = FuncFormatter(scientific)
+    ax.yaxis.set_major_formatter(scientific_formatter)
+
+        # ax.yaxis.set_major_formatter(ticker.ScalarFormatter())  # set regular formatting
 
     coeff = params.get('coeff', 1.0)
     y_np *= coeff
@@ -208,7 +219,7 @@ def plot(index, interpolated_key, ax):
     ax.tick_params(which='major', length=0)
 
     ax.grid(color='#B3B3B3', linestyle='-', linewidth=0.25, alpha=0.2)
-    ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
+    # ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
 
     lw = 1.4
 
@@ -276,7 +287,7 @@ def main():
     plt.subplots_adjust(wspace=0.2, hspace=0.3)
     # plt.margins(0, 0)
 
-    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_baseline.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(os.path.join(os.getcwd(), f'../final_plots/quads_obstacle_electron.pdf'), format='pdf', bbox_inches='tight', pad_inches=0.01)
 
     return 0
 
