@@ -870,6 +870,8 @@ class ActorWorker:
                     self.report_queue.put(dict(critical_error=self.worker_idx))
                 except KeyboardInterrupt:
                     self.terminate = True
+                except Full:
+                    log.warning('Could not report training stats, the report queue is full!')
                 except:
                     log.exception('Unknown exception in rollout worker')
                     self.terminate = True
