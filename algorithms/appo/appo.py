@@ -254,7 +254,7 @@ class APPO(ReinforcementLearningAlgorithm):
 
         self.actor_workers = None
 
-        self.report_queue = MpQueue(20 * 1000 * 1000)
+        self.report_queue = MpQueue(40 * 1000 * 1000)
         self.policy_workers = dict()
         self.policy_queues = dict()
 

@@ -9,6 +9,7 @@ import pwd
 import tempfile
 from _queue import Empty
 from os.path import join
+from queue import Full
 from subprocess import check_output, CalledProcessError, run
 from sys import platform
 
@@ -113,6 +114,17 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
             return q.get(timeout=timeout)
         except Empty:
             log.info('Queue timed out (%s), timeout %.3f', msg, timeout)
+
+
+def safe_put(q, msg, attempts=3, queue_name=''):
+    for attempt in range(attempts):
+        try:
+            q.put(msg)
+            return
+        except Full:
+            log.warning('Could not put msg to queue, the queue %s is full! Attempt %d', queue_name, attempt)
+
+    log.error('Failed to put msg to queue %s after %d attempts. The message is lost!', queue_name, attempts)
 
 
 # CLI args

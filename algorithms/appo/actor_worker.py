@@ -16,7 +16,8 @@ from algorithms.appo.population_based_training import PbtTask
 from algorithms.utils.spaces.discretized import Discretized
 from envs.env_utils import set_reward_shaping, find_training_info_interface, set_training_info
 from utils.timing import Timing
-from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, set_attr_if_exists
+from utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, \
+    set_attr_if_exists, safe_put
 
 
 def transform_dict_observations(observations):
@@ -522,7 +523,7 @@ class VectorEnvRunner:
             #     'Reset progress w:%d-%d finished %d/%d, still initializing envs...',
             #     self.worker_idx, self.split_idx, env_i + 1, len(self.envs),
             # )
-            report_queue.put(dict(initialized_env=(self.worker_idx, self.split_idx, env_i)))
+            safe_put(report_queue, dict(initialized_env=(self.worker_idx, self.split_idx, env_i)), queue_name='report')
 
         policy_request = self._format_policy_request()
         return policy_request
@@ -735,7 +736,7 @@ class ActorWorker:
 
     def _report_stats(self, stats):
         for report in stats:
-            self.report_queue.put(report)
+            safe_put(self.report_queue, report, queue_name='report')
 
     def _handle_reset(self):
         """
@@ -747,7 +748,7 @@ class ActorWorker:
             self._enqueue_policy_request(split_idx, policy_inputs)
 
         log.info('Finished reset for worker %d', self.worker_idx)
-        self.report_queue.put(dict(finished_reset=self.worker_idx))
+        safe_put(self.report_queue, dict(finished_reset=self.worker_idx), queue_name='report')
 
     def _advance_rollouts(self, data, timing):
         """
@@ -860,18 +861,16 @@ class ActorWorker:
                         timing_stats = dict(wait_actor=timing.wait_actor, step_actor=timing.one_step)
                         memory_mb = memory_consumption_mb()
                         stats = dict(memory_actor=memory_mb)
-                        self.report_queue.put(dict(timing=timing_stats, stats=stats))
+                        safe_put(self.report_queue, dict(timing=timing_stats, stats=stats), queue_name='report')
                         last_report = time.time()
 
                 except RuntimeError as exc:
                     log.warning('Error while processing data w: %d, exception: %s', self.worker_idx, exc)
                     log.warning('Terminate process...')
                     self.terminate = True
-                    self.report_queue.put(dict(critical_error=self.worker_idx))
+                    safe_put(self.report_queue, dict(critical_error=self.worker_idx), queue_name='report')
                 except KeyboardInterrupt:
                     self.terminate = True
-                except Full:
-                    log.warning('Could not report training stats, the report queue is full!')
                 except:
                     log.exception('Unknown exception in rollout worker')
                     self.terminate = True
