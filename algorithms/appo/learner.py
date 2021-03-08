@@ -30,7 +30,7 @@ from algorithms.utils.algo_utils import calculate_gae, EPS
 from algorithms.utils.pytorch_utils import to_scalar
 from utils.decay import LinearDecay
 from utils.timing import Timing
-from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill, safe_get
+from utils.utils import log, AttrDict, experiment_dir, ensure_dir_exists, join_or_kill, safe_get, safe_put
 
 
 # noinspection PyPep8Naming
@@ -1049,7 +1049,7 @@ class LearnerWorker:
         self.is_training = False
 
         try:
-            self.report_queue.put(stats)
+            safe_put(self.report_queue, stats, queue_name='report')
         except Full:
             log.warning('Could not report training stats, the report queue is full!')
 
