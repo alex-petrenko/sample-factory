@@ -13,7 +13,7 @@ import sys
 import time
 from os.path import join
 
-from utils.utils import kill
+from sample_factory.utils.utils import kill
 
 
 def tb_version():

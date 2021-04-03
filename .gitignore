@@ -104,7 +104,7 @@ venv.bak/
 .mypy_cache/
 
 _vizdoom.ini
-train_dir/**
+train_dir/
 train_dir_old/**
 trained_policies/**
 .vis/
@@ -139,4 +139,4 @@ trained_policies/**
 *~
 
 cmake-build*
-envs/doom/multiplayer/tests/_vizdoom/
+sample_factory/envs/doom/multiplayer/tests/_vizdoom/
