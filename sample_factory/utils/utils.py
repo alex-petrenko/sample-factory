@@ -10,7 +10,7 @@ import tempfile
 from _queue import Empty
 from os.path import join
 from queue import Full
-from subprocess import check_output, CalledProcessError, run
+from subprocess import check_output, CalledProcessError, run, SubprocessError
 from sys import platform
 
 import numpy as np
@@ -351,15 +351,33 @@ def done_filename(cfg):
 
 
 def get_git_commit_hash():
-    path_to_project = os.path.dirname(os.path.realpath(__file__))
-    try:
-        git_hash = check_output(['git', 'rev-parse', 'HEAD'],
-                                cwd=path_to_project,
-                                timeout=5).strip().decode('ascii')
-    except CalledProcessError:
-        # this scenario is for when there's no git and we are returning an unknown value
-        git_hash = 'unknown'
-    return git_hash
+    git_hash = 'unknown'
+    git_repo_name = 'not a git repository'
+
+    cwd = os.getcwd()
+
+    # check if we're inside a git repository
+    curr_dir = cwd
+    is_git_repo = False
+    max_depth = 20
+    for _ in range(max_depth):
+        if '.git' in os.listdir(curr_dir):
+            is_git_repo = True
+            break
+
+        parent_dir = os.path.dirname(curr_dir)
+        if curr_dir == parent_dir:  # climbed all the way to the root
+            break
+        curr_dir = parent_dir
+
+    if is_git_repo:
+        try:
+            git_hash = check_output(['git', 'rev-parse', 'HEAD'], cwd=curr_dir, timeout=1).strip().decode('ascii')
+            git_repo_name = check_output(['git', 'config', '--get', 'remote.origin.url'], cwd=curr_dir, timeout=1).strip().decode('ascii')
+        except SubprocessError:
+            log.debug('Could not query the git revision for the logs, perhaps git is not available')
+
+    return git_hash, git_repo_name
 
 
 def save_git_diff(directory):

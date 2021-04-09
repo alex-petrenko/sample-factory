@@ -97,7 +97,7 @@ def parse_args(argv=None, evaluation=False, parser=None):
             del cli_args.__dict__[arg_name]
 
     args.cli_args = vars(cli_args)
-    args.git_hash = get_git_commit_hash()
+    args.git_hash, args.git_repo_name = get_git_commit_hash()
     return args
 
 

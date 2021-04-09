@@ -282,7 +282,7 @@ a week. We provide a dataset of pre-generated levels to make training on DMLab-3
 Sample Factory uses Tensorboard summaries. Run Tensorboard to monitor your experiment: `tensorboard --logdir=train_dir --port=6006`
 
 Additionally, we provide a helper script that has nice command line interface to monitor the experiment folders 
-using wildcard masks: `./tb.py '*custom_experiment*' '*another*custom*experiment_name'`
+using wildcard masks: `python -m sample_factory.tb '*custom_experiment*' '*another*custom*experiment_name'`
 
 ### Runner interface
 
@@ -376,7 +376,6 @@ If you use this repository in your work or otherwise wish to cite it, please mak
   year={2020}
 }
 ```
-
 
 For questions, issues, inquiries please email apetrenko1991@gmail.com. 
 Github issues and pull requests are welcome.
