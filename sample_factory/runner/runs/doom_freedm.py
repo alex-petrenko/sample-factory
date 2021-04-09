@@ -6,7 +6,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'bots_freedm_fs2',
-    'python -m algorithms.appo.train_appo --env=doom_freedm --train_for_seconds=360000 --algo=APPO --gamma=0.995 --env_frameskip=2 --use_rnn=True --reward_scale=0.5 --num_workers=20 --num_envs_per_worker=4 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --benchmark=False --start_bot_difficulty=150',
+    'python -m sample_factory.algorithms.appo.train_appo --env=doom_freedm --train_for_seconds=360000 --algo=APPO --gamma=0.995 --env_frameskip=2 --use_rnn=True --reward_scale=0.5 --num_workers=20 --num_envs_per_worker=4 --num_policies=1 --ppo_epochs=1 --rollout=32 --recurrence=32 --macro_batch=2048 --batch_size=2048 --benchmark=False --start_bot_difficulty=150',
     _params.generate_params(randomize=False),
 )
 
