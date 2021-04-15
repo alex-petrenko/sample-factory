@@ -49,6 +49,7 @@ setup(
 
     package_dir={'': './'},
     packages=setuptools.find_packages(where='./', include='sample_factory*'),
+    include_package_data=True,
 
     python_requires='>=3.6',
 )
