@@ -1,0 +1,2 @@
+include sample_factory/envs/doom/scenarios/*.cfg
+include sample_factory/envs/doom/scenarios/*.wad
