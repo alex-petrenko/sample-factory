@@ -59,11 +59,11 @@ class SharedBuffers:
         hidden_size = get_hidden_size(self.cfg)
 
         log.debug('Allocating shared memory for trajectories')
-        self.tensors = TensorDict()
+        self._tensors = TensorDict()
 
         # policy inputs
         obs_dict = TensorDict()
-        self.tensors['obs'] = obs_dict
+        self._tensors['obs'] = obs_dict
         if isinstance(obs_space, spaces.Dict):
             for space_name, space in obs_space.spaces.items():
                 obs_dict[space_name] = self.init_tensor(space.dtype, space.shape)
@@ -71,8 +71,8 @@ class SharedBuffers:
             raise Exception('Only Dict observations spaces are supported')
 
         # env outputs
-        self.tensors['rewards'] = self.init_tensor(torch.float32, [1])
-        self.tensors['dones'] = self.init_tensor(torch.bool, [1])
+        self._tensors['rewards'] = self.init_tensor(torch.float32, [1])
+        self._tensors['dones'] = self.init_tensor(torch.bool, [1])
 
         # policy outputs
         policy_outputs = [
@@ -88,14 +88,13 @@ class SharedBuffers:
         policy_outputs = sorted(policy_outputs, key=lambda policy_output: policy_output.name)
 
         for po in policy_outputs:
-            self.tensors[po.name] = self.init_tensor(torch.float32, [po.size])
+            self._tensors[po.name] = self.init_tensor(torch.float32, [po.size])
 
-        ensure_memory_shared(self.tensors)
+        ensure_memory_shared(self._tensors)
 
         # this is for performance optimization
         # indexing in numpy arrays is faster than in PyTorch tensors
-        self.tensors_individual_transitions = self.tensor_dict_to_numpy(len(self.tensor_dimensions()))
-        self.tensor_trajectories = self.tensor_dict_to_numpy(len(self.tensor_dimensions()) - 1)
+        self.tensors = self.tensor_dict_to_numpy()
 
         # create a shared tensor to indicate when the learner is done with the trajectory buffer and
         # it can be used to store the next trajectory
@@ -106,9 +105,9 @@ class SharedBuffers:
             self.num_agents,
             self.num_traj_buffers,
         ]
-        self.is_traj_tensor_available = torch.ones(traj_buffer_available_shape, dtype=torch.uint8)
-        self.is_traj_tensor_available.share_memory_()
-        self.is_traj_tensor_available = to_numpy(self.is_traj_tensor_available, 2)
+        self._is_traj_tensor_available = torch.ones(traj_buffer_available_shape, dtype=torch.uint8)
+        self._is_traj_tensor_available.share_memory_()
+        self.is_traj_tensor_available = self._is_traj_tensor_available.numpy()
 
         # copying small policy outputs (e.g. individual value predictions & action logits) to shared memory is a
         # bottleneck on the policy worker. For optimization purposes we create additional tensors to hold
@@ -124,17 +123,19 @@ class SharedBuffers:
         ]
 
         self.policy_outputs = policy_outputs
-        self.policy_output_tensors = torch.zeros(policy_outputs_shape, dtype=torch.float32)
-        self.policy_output_tensors.share_memory_()
-        self.policy_output_tensors = to_numpy(self.policy_output_tensors, 4)
+        self._policy_output_tensors = torch.zeros(policy_outputs_shape, dtype=torch.float32)
+        self._policy_output_tensors.share_memory_()
+        self.policy_output_tensors = self._policy_output_tensors.numpy()
 
-        self.policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
-        self.policy_versions.share_memory_()
+        self._policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
+        self._policy_versions.share_memory_()
+        self.policy_versions = self._policy_versions.numpy()
 
         # a list of boolean flags to be shared among components that indicate that experience collection should be
         # temporarily stopped (e.g. due to too much experience accumulated on the learner)
-        self.stop_experience_collection = torch.ones([self.cfg.num_policies], dtype=torch.bool)
-        self.stop_experience_collection.share_memory_()
+        self._stop_experience_collection = torch.ones([self.cfg.num_policies], dtype=torch.bool)
+        self._stop_experience_collection.share_memory_()
+        self.stop_experience_collection = self._stop_experience_collection.numpy()
 
     def calc_num_trajectory_buffers(self):
         # calculate how many buffers are required per env runner to collect one "macro batch" for training
@@ -174,12 +175,12 @@ class SharedBuffers:
         ]
         return dimensions
 
-    def tensor_dict_to_numpy(self, num_dimensions):
-        numpy_dict = copy_dict_structure(self.tensors)
-        for d1, d2, key, curr_t, value2 in iter_dicts_recursively(self.tensors, numpy_dict):
+    def tensor_dict_to_numpy(self):
+        numpy_dict = copy_dict_structure(self._tensors)
+        for d1, d2, key, curr_t, value2 in iter_dicts_recursively(self._tensors, numpy_dict):
             assert isinstance(curr_t, torch.Tensor)
             assert value2 is None
-            d2[key] = to_numpy(curr_t, num_dimensions)
+            d2[key] = curr_t.numpy()
             assert isinstance(d2[key], np.ndarray)
         return numpy_dict
 
@@ -205,10 +206,22 @@ class TensorDict(dict):
         if isinstance(new_data, (dict, TensorDict)):
             for new_data_key, new_data_value in new_data.items():
                 self.set_data_func(x[new_data_key], index, new_data_value)
-        elif isinstance(new_data, torch.Tensor):
-            x[index].copy_(new_data)
-        elif isinstance(new_data, np.ndarray):
-            t = torch.from_numpy(new_data)
+        if torch.is_tensor(x):
+            if isinstance(new_data, torch.Tensor):
+                t = new_data
+            elif isinstance(new_data, np.ndarray):
+                t = torch.from_numpy(new_data)
+            else:
+                raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+
             x[index].copy_(t)
-        else:
-            raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+
+        elif isinstance(x, np.ndarray):
+            if isinstance(new_data, torch.Tensor):
+                n = new_data.numpy()
+            elif isinstance(new_data, np.ndarray):
+                n = new_data
+            else:
+                raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+
+            x[index] = n

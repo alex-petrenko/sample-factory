@@ -65,6 +65,7 @@ class ActorState:
 
         self.policy_output_names = [p.name for p in policy_outputs_info]
         self.policy_output_sizes = [p.size for p in policy_outputs_info]
+        self.policy_output_indices = np.cumsum(self.policy_output_sizes)
         self.policy_output_tensors = policy_output_tensors
 
         self.last_actions = None
@@ -137,16 +138,14 @@ class ActorState:
         self.traj_tensors.set_data(index, data)
 
     def _reset_rnn_state(self):
-        self.last_rnn_state.fill_(0.0)
+        self.last_rnn_state[:] = 0.0
 
     def curr_actions(self):
         """
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
         if self.integer_actions:
-            actions = self.last_actions.type(torch.int32).numpy()
-        else:
-            actions = self.last_actions.numpy()
+            actions = self.last_actions.astype(np.int32)
 
         if len(actions) == 1:
             actions = actions.item()
@@ -166,8 +165,8 @@ class ActorState:
         we finalize the trajectory buffer and send it to the learner.
         """
 
-        self.traj_tensors['rewards'][traj_buffer_idx, rollout_step][0] = float(reward)
-        self.traj_tensors['dones'][traj_buffer_idx, rollout_step][0] = done
+        self.traj_tensors['rewards'][traj_buffer_idx, rollout_step] = float(reward)
+        self.traj_tensors['dones'][traj_buffer_idx, rollout_step] = done
 
         env_steps = info.get('num_frames', 1)
         self.rollout_env_steps += env_steps
@@ -279,7 +278,7 @@ class VectorEnvRunner:
         self.num_agents = num_agents  # queried from env
 
         index = (worker_idx, split_idx)
-        self.traj_tensors = shared_buffers.tensors_individual_transitions.index(index)
+        self.traj_tensors = shared_buffers.tensors.index(index)
         self.traj_tensors_available = shared_buffers.is_traj_tensor_available[index]
         self.num_traj_buffers = shared_buffers.num_traj_buffers
         self.policy_outputs = shared_buffers.policy_outputs
@@ -341,7 +340,7 @@ class VectorEnvRunner:
 
         As a performance optimization, all these tensors are squished together into a single tensor.
         This allows us to copy them to shared memory only once, which makes a difference on the policy worker.
-        Here we do torch.split to separate them back into individual tensors.
+        Here we do np.split to separate them back into individual tensors.
 
         :param policy_id: index of the policy whose outputs we're currently processing
         :return: whether we got all outputs for all the actors in our VectorEnvRunner. If this is True then we're
@@ -357,10 +356,10 @@ class VectorEnvRunner:
 
                 if actor_policy == policy_id:
                     # via shared memory mechanism the new data should already be copied into the shared tensors
-                    policy_outputs = torch.split(
+                    policy_outputs = np.split(
                         actor_state.policy_output_tensors,
-                        split_size_or_sections=actor_state.policy_output_sizes,
-                        dim=0,
+                        indices_or_sections=actor_state.policy_output_indices,
+                        axis=0,
                     )
                     policy_outputs_dict = dict()
                     new_rnn_state = None

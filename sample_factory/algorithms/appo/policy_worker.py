@@ -56,7 +56,6 @@ class PolicyWorker:
         self.initialized_event.clear()
 
         self.shared_buffers = shared_buffers
-        self.tensors_individual_transitions = self.shared_buffers.tensors_individual_transitions
         self.policy_versions = shared_buffers.policy_versions
         self.stop_experience_collection = shared_buffers.stop_experience_collection
 
@@ -80,23 +79,25 @@ class PolicyWorker:
     def _handle_policy_steps(self, timing):
         with torch.no_grad():
             with timing.add_time('deserialize'):
-                observations = AttrDict()
-                rnn_states = []
-
-                traj_tensors = self.shared_buffers.tensors_individual_transitions
+                indices = []
                 for request in self.requests:
                     actor_idx, split_idx, request_data = request
 
                     for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
-                        index = actor_idx, split_idx, env_idx, agent_idx, traj_buffer_idx, rollout_step
-                        dict_of_lists_append(observations, traj_tensors['obs'], index)
-                        rnn_states.append(traj_tensors['rnn_states'][index])
+                        index = [actor_idx, split_idx, env_idx, agent_idx, traj_buffer_idx, rollout_step]
+                        indices.append(index)
                         self.total_num_samples += 1
+
+                traj_tensors = self.shared_buffers.tensors
+
+                indices = tuple(np.array(indices).T)
+                observations = traj_tensors['obs'].index(indices)
+                rnn_states = traj_tensors['rnn_states'][indices]
 
             with timing.add_time('stack'):
                 for key, x in observations.items():
-                    observations[key] = torch.stack(x)
-                rnn_states = torch.stack(rnn_states)
+                    observations[key] = torch.from_numpy(x)
+                rnn_states = torch.from_numpy(rnn_states)
                 num_samples = rnn_states.shape[0]
 
             with timing.add_time('obs_to_device'):
@@ -137,13 +138,16 @@ class PolicyWorker:
 
         policy_outputs = self.shared_buffers.policy_output_tensors
 
+        output_indices = []
         for request in requests:
             actor_idx, split_idx, request_data = request
-            worker_outputs = policy_outputs[actor_idx, split_idx]
             for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
-                worker_outputs[env_idx, agent_idx].copy_(output_tensors[output_idx])
-                output_idx += 1
+                output_indices.append([actor_idx, split_idx, env_idx, agent_idx])
+
             outputs_ready.add((actor_idx, split_idx))
+
+        output_indices = tuple(np.array(output_indices).T)
+        policy_outputs[output_indices] = output_tensors.numpy()
 
         for actor_idx, split_idx in outputs_ready:
             advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
