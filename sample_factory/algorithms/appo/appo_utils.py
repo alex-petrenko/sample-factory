@@ -198,7 +198,7 @@ class TensorBatcher:
             log.info('Allocating new CPU tensor batch (could not get from the pool)')
 
             for d1, cache_d, key, tensor_arr, _ in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
-                cache_d[key] = torch.cat(tensor_arr, dim=0)
+                cache_d[key] = torch.from_numpy(np.concatenate(tensor_arr, axis=0))
                 if use_pinned_memory:
                     cache_d[key] = cache_d[key].pin_memory()
         else:
@@ -207,7 +207,7 @@ class TensorBatcher:
                     offset = 0
                     for t in tensor_arr:
                         first_dim = t.shape[0]
-                        cache_t[offset:offset + first_dim].copy_(t)
+                        cache_t[offset:offset + first_dim].copy_(torch.as_tensor(t))
                         offset += first_dim
 
         return tensor_batch
