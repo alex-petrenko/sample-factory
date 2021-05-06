@@ -1,5 +1,3 @@
-import re
-
 import setuptools
 from setuptools import setup
 
@@ -21,7 +19,7 @@ setup(
     description='High throughput asynchronous reinforcement learning framework',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    version='1.117.3',
+    version='1.118.0',
     url='https://github.com/alex-petrenko/sample-factory',
     author='Aleksei Petrenko',
     license='MIT',
