@@ -115,17 +115,12 @@ def register_default_envs(env_registry):
         from sample_factory.envs.minigrid.minigrid_params import minigrid_override_defaults
         return make_minigrid_env, None, minigrid_override_defaults
 
-    def voxel_env_funcs():
-        from sample_factory.envs.voxel_env.voxel_env_utils import make_voxel_env, add_voxel_env_args, voxel_env_override_defaults
-        return make_voxel_env, add_voxel_env_args, voxel_env_override_defaults
-
     default_envs = {
         'doom_': doom_funcs,
         'atari_': atari_funcs,
         'dmlab_': dmlab_funcs,
         'mujoco_': mujoco_funcs,
         'MiniGrid': minigrid_funcs,
-        'voxel_env_': voxel_env_funcs,
     }
 
     for envs_prefix, env_funcs in default_envs.items():
