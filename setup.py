@@ -21,11 +21,11 @@ setup(
     description='High throughput asynchronous reinforcement learning framework',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    version='1.117.2',
+    version='1.117.3',
     url='https://github.com/alex-petrenko/sample-factory',
     author='Aleksei Petrenko',
     license='MIT',
-    keywords='asynchronous reinforcement learning policy gradient ppo appo impala',
+    keywords='asynchronous reinforcement learning policy gradient ppo appo impala ai',
     project_urls={
         'Github': 'https://github.com/alex-petrenko/sample-factory',
         'Videos': 'https://sites.google.com/view/sample-factory',
