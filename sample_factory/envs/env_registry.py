@@ -82,6 +82,11 @@ class EnvRegistry:
 
             return self.registry[env_prefix]
 
+        msg = (f'Could not resolve {full_env_name}. '
+               'Did you register the family of environments in the registry? See sample_factory_examples for details.')
+        log.warning(msg)
+        raise RuntimeError(msg)
+
 
 def register_default_envs(env_registry):
     """
