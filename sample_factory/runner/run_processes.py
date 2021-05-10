@@ -4,8 +4,9 @@ import os
 import subprocess
 import sys
 import time
+from os.path import join
 
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import log, ensure_dir_exists
 
 
 def run(run_description, args):
@@ -56,9 +57,11 @@ def run(run_description, args):
             cmd_tokens = cmd.split(' ')
 
             # workaround to make sure we're running the correct python executable from our virtual env
-            if cmd_tokens[0] == 'python':
+            if cmd_tokens[0].startswith('python'):
                 cmd_tokens[0] = sys.executable
                 log.debug('Using Python executable %s', cmd_tokens[0])
+
+            ensure_dir_exists(join(run_description.train_dir, root_dir, name))
 
             envvars = os.environ.copy()
 
