@@ -8,7 +8,11 @@ env:
     - TRAVIS_VIZDOOM_ENV_TIMEOUT=20
 
 notifications:
-  email: false
+  email:
+    recipients:
+    - apetrenko1991@gmail.com
+    on_success: change
+    on_failure: always
 
 before_install:
   - sudo apt-get update
