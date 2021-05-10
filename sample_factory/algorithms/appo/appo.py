@@ -37,7 +37,7 @@ from sample_factory.algorithms.utils.algo_utils import EXTRA_PER_POLICY_SUMMARIE
 from sample_factory.envs.env_utils import get_default_reward_shaping
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
-    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename, save_git_diff
+    ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename, save_git_diff, init_file_logger
 
 if os.name == 'nt':
     from sample_factory.utils import Queue as MpQueue
@@ -316,6 +316,7 @@ class APPO(ReinforcementLearningAlgorithm):
     def initialize(self):
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
+        init_file_logger(experiment_dir(self.cfg))
 
     def finalize(self):
         pass

@@ -17,11 +17,20 @@ import numpy as np
 import psutil
 from colorlog import ColoredFormatter
 
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
 
-formatter = ColoredFormatter(
-    "%(log_color)s[%(asctime)s][%(process)05d] %(message)s",
+# Logging
+
+log = logging.getLogger('rl')
+log.setLevel(logging.DEBUG)
+log.handlers = []  # No duplicated handlers
+log.propagate = False  # workaround for duplicated logs in ipython
+log_level = logging.DEBUG
+
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(log_level)
+
+stream_formatter = ColoredFormatter(
+    '%(log_color)s[%(asctime)s][%(process)05d] %(message)s',
     datefmt=None,
     reset=True,
     log_colors={
@@ -35,13 +44,16 @@ formatter = ColoredFormatter(
     secondary_log_colors={},
     style='%'
 )
-ch.setFormatter(formatter)
+stream_handler.setFormatter(stream_formatter)
+log.addHandler(stream_handler)
 
-log = logging.getLogger('rl')
-log.setLevel(logging.DEBUG)
-log.handlers = []  # No duplicated handlers
-log.propagate = False  # workaround for duplicated logs in ipython
-log.addHandler(ch)
+
+def init_file_logger(experiment_dir_):
+    file_handler = logging.FileHandler(join(experiment_dir_, 'sf_log.txt'))
+    file_handler.setLevel(log_level)
+    file_formatter = logging.Formatter(fmt='[%(asctime)s][%(process)05d] %(message)s', datefmt=None, style='%')
+    file_handler.setFormatter(file_formatter)
+    log.addHandler(file_handler)
 
 
 # general Python utilities
