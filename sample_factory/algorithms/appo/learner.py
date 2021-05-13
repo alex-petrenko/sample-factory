@@ -204,8 +204,8 @@ class LearnerWorker:
         self.obs_space = obs_space
         self.action_space = action_space
 
+        self.free_buffers_queue = shared_buffers.free_buffers_queue
         self.rollout_tensors = shared_buffers.tensors
-        self.traj_tensors_available = shared_buffers.is_traj_tensor_available
         self.policy_versions = shared_buffers.policy_versions
         self.stop_experience_collection = shared_buffers.stop_experience_collection
 
@@ -330,10 +330,6 @@ class LearnerWorker:
 
         return buffer
 
-    def _mark_rollout_buffer_free(self, rollout):
-        r = rollout
-        self.traj_tensors_available[r.worker_idx, r.split_idx, r.env_idx, r.agent_idx, r.traj_buffer_idx] = 1
-
     def _prepare_train_buffer(self, rollouts, macro_batch_size, timing):
         trajectories = [AttrDict(r['t']) for r in rollouts]
 
@@ -364,8 +360,8 @@ class LearnerWorker:
             buffer = self.tensor_batcher.cat(buffer, macro_batch_size, use_pinned_memory, timing)
 
         with timing.add_time('buff_ready'):
-            for r in rollouts:
-                self._mark_rollout_buffer_free(r)
+            free_buffer_indices = [int(r.traj_buffer_idx) for r in rollouts]
+            self.free_buffers_queue.put_many(free_buffer_indices)
 
         with timing.add_time('tensors_gpu_float'):
             device_buffer = self._copy_train_data_to_device(buffer)
@@ -423,12 +419,12 @@ class LearnerWorker:
         discard_rollouts = 0
         policy_version = self.train_step
         for r in rollouts:
-            rollout_min_version = r['t']['policy_version'].min().item()
+            rollout_min_version = r.t['policy_version'].min().item()
             if policy_version - rollout_min_version >= self.cfg.max_policy_lag:
                 discard_rollouts += 1
-                self._mark_rollout_buffer_free(r)
+                self.free_buffers_queue.put(r.traj_buffer_idx)
             else:
-                break
+                break  # TODO: why do we break here? this assumes that all "newer" rollouts don't have old experience which might not be true if we have inactive agents.
 
         if discard_rollouts > 0:
             log.warning(
@@ -1111,18 +1107,10 @@ class LearnerWorker:
         return discarding_rate
 
     def _extract_rollouts(self, data):
-        data = AttrDict(data)
-        worker_idx, split_idx, traj_buffer_idx = data.worker_idx, data.split_idx, data.traj_buffer_idx
-
         rollouts = []
-        for rollout_data in data.rollouts:
-            env_idx, agent_idx = rollout_data['env_idx'], rollout_data['agent_idx']
-            tensors = self.rollout_tensors.index((worker_idx, split_idx, env_idx, agent_idx, traj_buffer_idx))
-
+        for rollout_data in data:
+            tensors = self.rollout_tensors.index(rollout_data['traj_buffer_idx'])
             rollout_data['t'] = tensors
-            rollout_data['worker_idx'] = worker_idx
-            rollout_data['split_idx'] = split_idx
-            rollout_data['traj_buffer_idx'] = traj_buffer_idx
             rollouts.append(AttrDict(rollout_data))
 
         return rollouts

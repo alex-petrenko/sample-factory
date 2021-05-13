@@ -159,10 +159,9 @@ class APPO(ReinforcementLearningAlgorithm):
                  'policy-lag may exceed this value.',
         )
         p.add_argument(
-            '--min_traj_buffers_per_worker', default=2, type=int,
-            help='How many shared rollout tensors to allocate per actor worker to exchange information between actors and learners'
-                 'Default value of 2 is fine for most workloads, except when differences in 1-step simulation time are extreme, like with some DMLab environments.'
-                 'If you see a lot of warnings about actor workers having to wait for trajectory buffers, try increasing this to 4-6, this should eliminate the problem at a cost of more RAM.',
+            '--traj_buffers_excess_ratio', default=1.2, type=float,
+            help='Increase this value to make sure the system always has enough free trajectory buffers (can be useful when i.e. a lot of inactive agents in multi-agent envs)'
+                 'Decrease this to 1.0 to save as much RAM as possible.',
         )
         p.add_argument(
             '--decorrelate_experience_max_seconds', default=10, type=int,

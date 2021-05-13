@@ -9,7 +9,7 @@ def get_gpus_without_triggering_pytorch_cuda_initialization(envvars):
     returncode = out.returncode
 
     from sample_factory.utils.utils import log
-    if returncode or err_output:
+    if returncode:
         log.error(
             'Querying available GPUs... return code %d, error: %s, stdout: %s', returncode, err_output, text_output,
         )

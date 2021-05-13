@@ -84,7 +84,7 @@ class PolicyWorker:
                     actor_idx, split_idx, request_data = request
 
                     for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
-                        index = [actor_idx, split_idx, env_idx, agent_idx, traj_buffer_idx, rollout_step]
+                        index = [traj_buffer_idx, rollout_step]
                         indices.append(index)
                         self.total_num_samples += 1
 
@@ -133,7 +133,6 @@ class PolicyWorker:
         self.requests = []
 
     def _enqueue_policy_outputs(self, requests, output_tensors):
-        output_idx = 0
         outputs_ready = set()
 
         policy_outputs = self.shared_buffers.policy_output_tensors
