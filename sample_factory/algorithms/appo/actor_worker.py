@@ -88,8 +88,6 @@ class ActorState:
 
         self.last_episode_reward = 0
         self.last_episode_duration = 0
-        self.last_episode_true_reward = 0
-        self.last_episode_extra_stats = dict()
 
         # dictionary with current training progress per policy
         # values are approximate because we get updates from the master process once every few seconds
@@ -188,15 +186,21 @@ class ActorState:
 
         self.is_active = info.get('is_active', True)
 
+        report = None
         if done:
-            self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
-            self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
+            last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
+            last_episode_extra_stats = info.get('episode_extra_stats', dict())
+
+            report = self.episodic_stats(last_episode_true_reward, last_episode_extra_stats)
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
             new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
+                log.warning('Changing policy on rollout step %d', rollout_step)
+
+        return report
 
     def finalize_trajectory(self, rollout_step):
         """
@@ -229,8 +233,10 @@ class ActorState:
                 traj_buffer_idx=self.curr_traj_buffer_idx,
             )
             trajectories.append(traj_dict)
+            self.num_trajectories += 1
 
-        self.num_trajectories += 1
+            # TODO! duplicate the buffer here! Otherwise two learners will double-release it
+
         self.rollout_env_steps = 0
 
         return trajectories
@@ -240,15 +246,14 @@ class ActorState:
         if done:
             self._reset_rnn_state()
 
-    def episodic_stats(self):
+    def episodic_stats(self, last_episode_true_reward, last_episode_extra_stats):
         stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
 
-        stats['true_reward'] = self.last_episode_true_reward
-        stats['episode_extra_stats'] = self.last_episode_extra_stats
+        stats['true_reward'] = last_episode_true_reward
+        stats['episode_extra_stats'] = last_episode_extra_stats
 
         report = dict(episodic=stats, policy_id=self.curr_policy_id)
-        self.last_episode_reward = self.last_episode_duration = self.last_episode_true_reward = 0
-        self.last_episode_extra_stats = dict()
+        self.last_episode_reward = self.last_episode_duration = 0
         return report
 
 
@@ -431,23 +436,21 @@ class VectorEnvRunner:
         for agent_i in range(self.num_agents):
             actor_state = env_actor_states[agent_i]
 
-            actor_state.record_env_step(
+            episode_report = actor_state.record_env_step(
                 rewards[agent_i], dones[agent_i], infos[agent_i], self.rollout_step,
             )
 
             actor_state.last_obs = new_obs[agent_i]
             actor_state.update_rnn_state(dones[agent_i])
 
-            # save episode stats if we are at the episode boundary
-            if dones[agent_i]:
-                episodic_stats.append(actor_state.episodic_stats())
+            if episode_report:
+                episodic_stats.append(episode_report)
 
         return episodic_stats
 
     def _finalize_trajectories(self):
         """
         Do some postprocessing when we're done with the rollout.
-        Also see comments in actor_state.finalize_trajectory (IMPORTANT)
         """
 
         rollouts = []
@@ -701,7 +704,7 @@ class ActorWorker:
             policy_request = (self.worker_idx, split_idx, requests)
             self.policy_queues[policy_id].put(policy_request)
 
-    def _enqueue_complete_rollouts(self, split_idx, complete_rollouts):
+    def _enqueue_complete_rollouts(self, complete_rollouts):
         """Send complete rollouts from VectorEnv to the learner."""
         if self.cfg.sampler_only:
             return
@@ -751,7 +754,7 @@ class ActorWorker:
 
         with timing.add_time('complete_rollouts'):
             if complete_rollouts:
-                self._enqueue_complete_rollouts(split_idx, complete_rollouts)
+                self._enqueue_complete_rollouts(complete_rollouts)
 
                 if self.num_complete_rollouts == 0 and not self.cfg.benchmark:
                     # we just finished our first complete rollouts, perfect time to wait for experience derorrelation
