@@ -75,7 +75,11 @@ class SharedBuffers:
 
         # env outputs
         self._tensors['rewards'] = self.init_tensor(torch.float32, [1])
+        self._tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values it will be obvious
         self._tensors['dones'] = self.init_tensor(torch.bool, [1])
+        self._tensors['dones'].fill_(True)
+        self._tensors['policy_id'] = self.init_tensor(torch.int, [1])
+        self._tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
 
         # policy outputs
         policy_outputs = [

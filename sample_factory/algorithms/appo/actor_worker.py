@@ -73,7 +73,15 @@ class ActorState:
         self.last_policy_steps = None
         self.last_rnn_state = None
 
-        self.ready = False
+        self.ready = False  # whether this agent received actions from the policy and can act in the environment again
+
+        # By returning info = {'is_active': False, ...} the environment can indicate that the agent is not active,
+        # i.e. dead or otherwise disabled. Experience from such agents will be ignored.
+        self.is_active = True
+
+        # This flag is reset at the beginning of every rollout. If the agent was inactive during the entire rollout
+        # then it is ignored and no experience is sent to the learner.
+        self.has_rollout_data = False
 
         self.num_trajectories = 0
         self.rollout_env_steps = 0
@@ -82,9 +90,6 @@ class ActorState:
         self.last_episode_duration = 0
         self.last_episode_true_reward = 0
         self.last_episode_extra_stats = dict()
-
-        # whether the new episode was started during the current rollout
-        self.new_episode = False
 
         # dictionary with current training progress per policy
         # values are approximate because we get updates from the master process once every few seconds
@@ -118,12 +123,15 @@ class ActorState:
     def _on_new_policy(self, new_policy_id):
         """Called when the new policy is sampled for this actor."""
         self.curr_policy_id = new_policy_id
-        # we're switching to a different policy - reset the rnn hidden state
+
+        # policy change can only happen at the episode boundary so no need to reset rnn state (but I guess does not hurt)
         self._reset_rnn_state()
 
         if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
             set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
+
+        self._env_set_curr_policy()
 
     def update_traj_buffer(self, traj_buffer_idx):
         """Set ActorState to use a new shared buffer for the next trajectory."""
@@ -170,54 +178,62 @@ class ActorState:
 
         self.curr_traj_buffer['rewards'][rollout_step] = float(reward)
         self.curr_traj_buffer['dones'][rollout_step] = done
+        self.curr_traj_buffer['policy_id'][rollout_step] = -1 if not self.is_active else self.curr_policy_id
 
-        env_steps = info.get('num_frames', 1)
+        self.has_rollout_data = self.has_rollout_data or self.is_active
+
+        env_steps = info.get('num_frames', 1) if self.is_active else 0
         self.rollout_env_steps += env_steps
         self.last_episode_duration += env_steps
 
+        self.is_active = info.get('is_active', True)
+
         if done:
-            self.new_episode = True
             self.last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
             self.last_episode_extra_stats = info.get('episode_extra_stats', dict())
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
+            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx)
+            if new_policy_id != self.curr_policy_id:
+                self._on_new_policy(new_policy_id)
+
     def finalize_trajectory(self, rollout_step):
         """
         Do some postprocessing after we finished the entire rollout.
-        The key thing to notice here: we never change the policy that generates the actions in the middle of the
-        rollout! The policy index (in PBT scenarios) is only changed between rollouts.
-        This means that a little bit of experience in the beginning of the next rollout can be collected
-        by another policy. It never matters when rollout << episode_len, but if the rollouts are long and
-        episodes are short, you might need to address this problem.
-
-        An alternative approach to this could be to just stop acting in the environment up until the end of the
-        rollout, and then mask these skipped frames as "invalid" on the learner. The current approach is much cleaner
-        though (but not universally applicable).
 
         :param rollout_step: number of steps since we started the current rollout. This should be equal to
         cfg.rollout in this function
         :return: dictionary with auxiliary information about the trajectory
         """
 
-        t_id = f'{self.curr_policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
-        traj_dict = dict(
-            t_id=t_id, length=rollout_step, env_steps=self.rollout_env_steps, policy_id=self.curr_policy_id,
-            traj_buffer_idx=self.curr_traj_buffer_idx,
-        )
+        if not self.has_rollout_data:
+            # this agent was inactive the entire rollout, send no trajectories to the learners
+            return []
+
+        self.has_rollout_data = False
+
+        # We could change policy id in the middle of the rollout (i.e. on the episode boundary), in which case
+        # this trajectory should be sent to two learners, one for the original policy id, one for the new one.
+        # The part of the experience that belongs to a different policy will be ignored on the learner.
+        trajectories = []
+        for policy_id in np.unique(self.curr_traj_buffer['policy_id']):
+            policy_id = int(policy_id)
+            if policy_id == -1:
+                # -1 is a policy that does not exist, used to mark inactive agents not controlled by any policy
+                continue
+
+            t_id = f'{policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
+            traj_dict = dict(
+                t_id=t_id, length=rollout_step, env_steps=self.rollout_env_steps, policy_id=policy_id,
+                traj_buffer_idx=self.curr_traj_buffer_idx,
+            )
+            trajectories.append(traj_dict)
 
         self.num_trajectories += 1
         self.rollout_env_steps = 0
 
-        if self.new_episode:
-            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx)
-            if new_policy_id != self.curr_policy_id:
-                self._on_new_policy(new_policy_id)
-                self._env_set_curr_policy()
-
-            self.new_episode = False
-
-        return traj_dict
+        return trajectories
 
     def update_rnn_state(self, done):
         """If we encountered an episode boundary, reset rnn states to their default values."""
@@ -276,7 +292,7 @@ class VectorEnvRunner:
         self.worker_idx = worker_idx
         self.split_idx = split_idx
 
-        self.rollout_step = 0  # TODO: can be different for different workers if some of them are dead (inactive)
+        self.rollout_step = 0
 
         self.num_agents = num_agents  # queried from env
 
@@ -349,6 +365,9 @@ class VectorEnvRunner:
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
+                if not actor_state.is_active:
+                    continue
+
                 actor_policy = actor_state.curr_policy_id
 
                 if actor_policy == policy_id:
@@ -379,7 +398,6 @@ class VectorEnvRunner:
 
         # Potential optimization: when actions are ready for all actors within one environment we can execute
         # a simulation step right away, without waiting for all other actions to be calculated.
-        # Can be useful when number of agents per environment is small.
         return all_actors_ready
 
     def _process_rewards(self, rewards, env_i):
@@ -414,7 +432,7 @@ class VectorEnvRunner:
             actor_state = env_actor_states[agent_i]
 
             actor_state.record_env_step(
-                rewards[agent_i], dones[agent_i], infos[agent_i], self.rollout_step,  # TODO: rollout step per actor
+                rewards[agent_i], dones[agent_i], infos[agent_i], self.rollout_step,
             )
 
             actor_state.last_obs = new_obs[agent_i]
@@ -427,8 +445,6 @@ class VectorEnvRunner:
         return episodic_stats
 
     def _finalize_trajectories(self):
-        # TODO: do this individually per agent, since with inactive agents we can be at different points in the rollout
-
         """
         Do some postprocessing when we're done with the rollout.
         Also see comments in actor_state.finalize_trajectory (IMPORTANT)
@@ -437,10 +453,9 @@ class VectorEnvRunner:
         rollouts = []
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
-                rollout = self.actor_states[env_i][agent_i].finalize_trajectory(self.rollout_step)
-                rollouts.append(rollout)
+                rollouts.extend(self.actor_states[env_i][agent_i].finalize_trajectory(self.rollout_step))
 
-        return rollouts  # TODO: use traj_buffer_idx on the learner
+        return rollouts
 
     def _format_policy_request(self):
         """
@@ -457,14 +472,16 @@ class VectorEnvRunner:
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
-                policy_id = actor_state.curr_policy_id
 
-                # where policy worker should look for the policy inputs for the next step
-                data = (env_i, agent_i, actor_state.curr_traj_buffer_idx, self.rollout_step)
+                if actor_state.is_active:
+                    policy_id = actor_state.curr_policy_id
 
-                if policy_id not in policy_request:
-                    policy_request[policy_id] = []
-                policy_request[policy_id].append(data)
+                    # where policy worker should look for the policy inputs for the next step
+                    data = (env_i, agent_i, actor_state.curr_traj_buffer_idx, self.rollout_step)
+
+                    if policy_id not in policy_request:
+                        policy_request[policy_id] = []
+                    policy_request[policy_id].append(data)
 
         return policy_request
 
@@ -481,11 +498,15 @@ class VectorEnvRunner:
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
-                actor_state.ready = False
 
-                # populate policy inputs in shared memory
-                policy_inputs = dict(obs=actor_state.last_obs, rnn_states=actor_state.last_rnn_state)
-                actor_state.set_trajectory_data(policy_inputs, self.rollout_step)
+                if actor_state.is_active:
+                    actor_state.ready = False
+
+                    # populate policy inputs in shared memory
+                    policy_inputs = dict(obs=actor_state.last_obs, rnn_states=actor_state.last_rnn_state)
+                    actor_state.set_trajectory_data(policy_inputs, self.rollout_step)
+                else:
+                    actor_state.ready = True
 
     def reset(self, report_queue):
         """
@@ -547,14 +568,12 @@ class VectorEnvRunner:
                 stats = self._process_env_step(new_obs, rewards, dones, infos, env_i)
                 episodic_stats.extend(stats)
 
-        # TODO: different actors can have different rollout steps
-        self.rollout_step = self.rollout_step + 1
+        self.rollout_step += 1
         if self.rollout_step == self.cfg.rollout:
             # finalize and serialize the trajectory if we have a complete rollout
             complete_rollouts = self._finalize_trajectories()
-            self.rollout_step = 0  # TODO: rollout per actor
+            self.rollout_step = 0
 
-            # TODO: request individually for agents because they can be inactive
             traj_buffer_indices = self.shared_buffers.get_trajectory_buffers(self.num_envs * self.num_agents, timing)
             for env_i in range(self.num_envs):
                 for agent_i in range(self.num_agents):
@@ -693,7 +712,7 @@ class ActorWorker:
             if policy_id not in rollouts_per_policy:
                 rollouts_per_policy[policy_id] = []
 
-            rollouts_per_policy[policy_id].append(rollout)  # TODO: rollouts are not dictionaries on the learner
+            rollouts_per_policy[policy_id].append(rollout)
 
         for policy_id, rollouts in rollouts_per_policy.items():
             self.learner_queues[policy_id].put((TaskType.TRAIN, rollouts))

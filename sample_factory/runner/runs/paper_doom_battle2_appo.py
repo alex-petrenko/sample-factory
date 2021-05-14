@@ -13,4 +13,4 @@ _experiments = [
 ]
 
 
-RUN_DESCRIPTION = RunDescription('doom_battle2_appo_v1.118.0_fs4', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription('doom_battle2_appo_v1.119.0_fs4', experiments=_experiments)

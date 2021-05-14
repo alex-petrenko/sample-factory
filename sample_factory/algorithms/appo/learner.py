@@ -23,7 +23,8 @@ else:
 
 from sample_factory.algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars_for_policy, \
     TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
-from sample_factory.algorithms.appo.model import CPCA, create_actor_critic
+from sample_factory.algorithms.appo.model import create_actor_critic
+from sample_factory.algorithms.appo.aux_losses import CPCA
 from sample_factory.algorithms.appo.population_based_training import PbtTask
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.algo_utils import calculate_gae, EPS
@@ -369,7 +370,7 @@ class LearnerWorker:
         with timing.add_time('squeeze'):
             # will squeeze actions only in simple categorical case
             tensors_to_squeeze = [
-                'actions', 'log_prob_actions', 'policy_version', 'values',
+                'actions', 'log_prob_actions', 'policy_version', 'policy_id', 'values',
                 'rewards', 'dones', 'rewards_cpu', 'dones_cpu',
             ]
             for tensor_name in tensors_to_squeeze:
@@ -416,23 +417,39 @@ class LearnerWorker:
         if len(rollouts) < rollouts_in_macro_batch:
             return rollouts
 
-        discard_rollouts = 0
+        to_discard = 0
+        to_process = []
         policy_version = self.train_step
         for r in rollouts:
-            rollout_min_version = r.t['policy_version'].min().item()
-            if policy_version - rollout_min_version >= self.cfg.max_policy_lag:
-                discard_rollouts += 1
+            mask = r.t['policy_id'] == self.policy_id
+            if np.any(mask):
+                rollout_newest_version = r.t['policy_version'][mask].max().item()
+            else:
+                log.error(
+                    'Learner %d got a rollout without any transitions produced by policy %d. This must be a bug.',
+                    self.policy_id, self.policy_id,
+                )
+                log.error('Rollout policy ids: %r', r.t['policy_id'])
+                rollout_newest_version = policy_version - self.cfg.max_policy_lag
+
+            if policy_version - rollout_newest_version >= self.cfg.max_policy_lag:
+                # the entire rollout is too old, discard it!
+                to_discard += 1
                 self.free_buffers_queue.put(r.traj_buffer_idx)
             else:
-                break  # TODO: why do we break here? this assumes that all "newer" rollouts don't have old experience which might not be true if we have inactive agents.
+                # There is some experience in the rollout that we can learn from.
+                # Old experience (older than max policy lag), experience from other policies (in case of policy
+                # change on episode boundary), and experience from inactive agents (policy id = -1) will be masked
+                # out during loss calculations.
+                to_process.append(r)
 
-        if discard_rollouts > 0:
+        if to_discard > 0:
             log.warning(
                 'Discarding %d old rollouts, cut by policy lag threshold %d (learner %d)',
-                discard_rollouts, self.cfg.max_policy_lag, self.policy_id,
+                to_discard, self.cfg.max_policy_lag, self.policy_id,
             )
-            rollouts = rollouts[discard_rollouts:]
-            self.num_discarded_rollouts += discard_rollouts
+            rollouts = to_process
+            self.num_discarded_rollouts += to_discard
 
         if len(rollouts) >= rollouts_in_macro_batch:
             # process newest rollouts
@@ -554,33 +571,37 @@ class LearnerWorker:
                 self.last_milestone_time = time.time()
 
     @staticmethod
-    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high):
+    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids):
         clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
         loss_unclipped = ratio * adv
         loss_clipped = clipped_ratio * adv
         loss = torch.min(loss_unclipped, loss_clipped)
+        loss = torch.masked_select(loss, valids)
         loss = -loss.mean()
 
         return loss
 
-    def _value_loss(self, new_values, old_values, target, clip_value):
+    def _value_loss(self, new_values, old_values, target, clip_value, valids):
         value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
         value_original_loss = (new_values - target).pow(2)
         value_clipped_loss = (value_clipped - target).pow(2)
         value_loss = torch.max(value_original_loss, value_clipped_loss)
+        value_loss = torch.masked_select(value_loss, valids)
         value_loss = value_loss.mean()
+
         value_loss *= self.cfg.value_loss_coeff
 
         return value_loss
 
-    def entropy_exploration_loss(self, action_distribution):
+    def entropy_exploration_loss(self, action_distribution, valids):
         entropy = action_distribution.entropy()
+        entropy = torch.masked_select(entropy, valids)
         entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
         return entropy_loss
 
-    def symmetric_kl_exploration_loss(self, action_distribution):
+    def symmetric_kl_exploration_loss(self, action_distribution, valids):
         kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
-        kl_prior = kl_prior.mean()
+        kl_prior = torch.masked_select(kl_prior, valids).mean()
         if not torch.isfinite(kl_prior):
             kl_prior = torch.zeros(kl_prior.shape)
         kl_prior = torch.clamp(kl_prior, max=30)
@@ -610,6 +631,8 @@ class LearnerWorker:
 
     def _train(self, gpu_buffer, batch_size, experience_size, timing):
         with torch.no_grad():
+            policy_version_before_train = self.train_step
+
             early_stopping_tolerance = 1e-6
             early_stop = False
             prev_epoch_actor_loss = 1e9
@@ -678,13 +701,6 @@ class LearnerWorker:
                         core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
 
                 num_trajectories = head_outputs.size(0) // recurrence
-                if self.aux_loss_module is not None:
-                    with timing.add_time('aux_loss'):
-                        aux_loss = self.aux_loss_module(mb.actions.view(num_trajectories, recurrence, -1),
-                                                       (1.0 - mb.dones).view(num_trajectories, recurrence, 1),
-                                                       head_outputs.view(num_trajectories, recurrence, -1),
-                                                       core_outputs.view(num_trajectories, recurrence, -1)
-                                                       )
 
                 with timing.add_time('tail'):
                     assert core_outputs.shape[0] == head_outputs.shape[0]
@@ -702,6 +718,12 @@ class LearnerWorker:
                     values = result.values.squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
+                    # ignore experience from other agents (i.e. on episode boundary) and from inactive agents
+                    valids = mb.policy_id == self.policy_id
+
+                    # ignore experience that was older than the threshold even before training started
+                    valids = valids & (policy_version_before_train - mb.policy_version < self.cfg.max_policy_lag)
+
                     if self.cfg.with_vtrace:
                         ratios_cpu = ratio.cpu()
                         values_cpu = values.cpu()
@@ -747,18 +769,30 @@ class LearnerWorker:
                     adv = adv.to(self.device)
 
                 with timing.add_time('losses'):
-                    policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high)
+                    policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)
 
-                    exploration_loss = self.exploration_loss_func(action_distribution)
+                    exploration_loss = self.exploration_loss_func(action_distribution, valids)
                     actor_loss = policy_loss + exploration_loss
                     epoch_actor_losses.append(actor_loss.item())
 
                     targets = targets.to(self.device)
                     old_values = mb.values
-                    value_loss = self._value_loss(values, old_values, targets, clip_value)
+                    value_loss = self._value_loss(values, old_values, targets, clip_value, valids)
                     critic_loss = value_loss
 
                     loss = actor_loss + critic_loss
+
+                    if self.aux_loss_module is not None:
+                        with timing.add_time('aux_loss'):
+                            aux_loss = self.aux_loss_module(
+                                mb.actions.view(num_trajectories, recurrence, -1),
+                                (1.0 - mb.dones).view(num_trajectories, recurrence, 1),
+                                valids.view(num_trajectories, recurrence, -1),
+                                head_outputs.view(num_trajectories, recurrence, -1),
+                                core_outputs.view(num_trajectories, recurrence, -1),
+                            )
+
+                            loss = loss + aux_loss
 
                     high_loss = 30.0
                     if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(exploration_loss)) > high_loss:
@@ -767,9 +801,6 @@ class LearnerWorker:
                             to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(exploration_loss),
                         )
                         force_summaries = True
-
-                    if self.aux_loss_module is not None:
-                        loss = loss + aux_loss
 
                 # update the weights
                 with timing.add_time('update'):
@@ -830,6 +861,9 @@ class LearnerWorker:
         self.last_summary_time = time.time()
         stats = AttrDict()
 
+        stats.valids_fraction = var.valids.float().mean()
+        stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
+
         grad_norm = sum(
             p.grad.data.norm(2).item() ** 2
             for p in self.actor_critic.parameters()
@@ -884,7 +918,7 @@ class LearnerWorker:
             adam_max_second_moment = max(tensor_state['exp_avg_sq'].max().item(), adam_max_second_moment)
         stats.adam_max_second_moment = adam_max_second_moment
 
-        version_diff = var.curr_policy_version - var.mb.policy_version
+        version_diff = (var.curr_policy_version - var.mb.policy_version)[var.mb.policy_id == self.policy_id]
         stats.version_diff_avg = version_diff.mean()
         stats.version_diff_min = version_diff.min()
         stats.version_diff_max = version_diff.max()
