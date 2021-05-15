@@ -56,7 +56,7 @@ def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tens
 
     rollout_boundaries = dones.clone().detach()
     rollout_boundaries[T - 1::T] = 1  # end of each rollout is the boundary
-    rollout_boundaries = rollout_boundaries.nonzero().squeeze(dim=1) + 1
+    rollout_boundaries = rollout_boundaries.nonzero(as_tuple=False).squeeze(dim=1) + 1
 
     first_len = rollout_boundaries[0].unsqueeze(0)
 
@@ -205,7 +205,7 @@ class LearnerWorker:
         self.obs_space = obs_space
         self.action_space = action_space
 
-        self.free_buffers_queue = shared_buffers.free_buffers_queue
+        self.shared_buffers = shared_buffers
         self.rollout_tensors = shared_buffers.tensors
         self.policy_versions = shared_buffers.policy_versions
         self.stop_experience_collection = shared_buffers.stop_experience_collection
@@ -361,8 +361,7 @@ class LearnerWorker:
             buffer = self.tensor_batcher.cat(buffer, macro_batch_size, use_pinned_memory, timing)
 
         with timing.add_time('buff_ready'):
-            free_buffer_indices = [int(r.traj_buffer_idx) for r in rollouts]
-            self.free_buffers_queue.put_many(free_buffer_indices)
+            self.shared_buffers.free_trajectory_buffers([r.traj_buffer_idx for r in rollouts])
 
         with timing.add_time('tensors_gpu_float'):
             device_buffer = self._copy_train_data_to_device(buffer)
@@ -435,7 +434,7 @@ class LearnerWorker:
             if policy_version - rollout_newest_version >= self.cfg.max_policy_lag:
                 # the entire rollout is too old, discard it!
                 to_discard += 1
-                self.free_buffers_queue.put(r.traj_buffer_idx)
+                self.shared_buffers.free_trajectory_buffers([r.traj_buffer_idx])
             else:
                 # There is some experience in the rollout that we can learn from.
                 # Old experience (older than max policy lag), experience from other policies (in case of policy

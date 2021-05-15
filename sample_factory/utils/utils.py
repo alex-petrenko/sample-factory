@@ -129,14 +129,18 @@ def safe_get(q, timeout=1e6, msg='Queue timeout'):
 
 
 def safe_put(q, msg, attempts=3, queue_name=''):
+    safe_put_many(q, [msg], attempts, queue_name)
+
+
+def safe_put_many(q, msgs, attempts=3, queue_name=''):
     for attempt in range(attempts):
         try:
-            q.put(msg)
+            q.put_many(msgs)
             return
         except Full:
-            log.warning('Could not put msg to queue, the queue %s is full! Attempt %d', queue_name, attempt)
+            log.warning('Could not put msgs to queue, the queue %s is full! Attempt %d', queue_name, attempt)
 
-    log.error('Failed to put msg to queue %s after %d attempts. The message is lost!', queue_name, attempts)
+    log.error('Failed to put msgs to queue %s after %d attempts. Messages are lost!', queue_name, attempts)
 
 
 # CLI args
