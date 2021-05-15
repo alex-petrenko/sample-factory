@@ -159,7 +159,7 @@ class APPO(ReinforcementLearningAlgorithm):
                  'policy-lag may exceed this value.',
         )
         p.add_argument(
-            '--traj_buffers_excess_ratio', default=1.2, type=float,
+            '--traj_buffers_excess_ratio', default=1.3, type=float,
             help='Increase this value to make sure the system always has enough free trajectory buffers (can be useful when i.e. a lot of inactive agents in multi-agent envs)'
                  'Decrease this to 1.0 to save as much RAM as possible.',
         )

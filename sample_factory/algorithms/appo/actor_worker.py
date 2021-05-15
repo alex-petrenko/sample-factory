@@ -198,7 +198,6 @@ class ActorState:
             new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
-                log.warning('Changing policy on rollout step %d', rollout_step)
 
         return report
 
@@ -221,21 +220,34 @@ class ActorState:
         # this trajectory should be sent to two learners, one for the original policy id, one for the new one.
         # The part of the experience that belongs to a different policy will be ignored on the learner.
         trajectories = []
+        buffers_used = set()
+
         for policy_id in np.unique(self.curr_traj_buffer['policy_id']):
             policy_id = int(policy_id)
             if policy_id == -1:
                 # -1 is a policy that does not exist, used to mark inactive agents not controlled by any policy
                 continue
 
+            traj_buffer_idx = self.curr_traj_buffer_idx
+            if traj_buffer_idx in buffers_used:
+                # This rollout needs to be sent to multiple learners, i.e. because the policy changed in the middle
+                # of the rollout. If we use the same shared buffer on multiple learners, we need some mechanism
+                # to guarantee that this buffer will only be released once. It seems easier to just copy all data to
+                # a new buffer for each additional learner. This should be a very rare event so the performance impact
+                # is negligible.
+                traj_buffer_idx = self.shared_buffers.get_trajectory_buffers(num_buffers=1)[0]
+                buffer = self.shared_buffers.tensors.index(traj_buffer_idx)
+                buffer.set_data(slice(None), self.curr_traj_buffer)  # copy TensorDict data recursively
+
+            buffers_used.add(traj_buffer_idx)
+
             t_id = f'{policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
             traj_dict = dict(
                 t_id=t_id, length=rollout_step, env_steps=self.rollout_env_steps, policy_id=policy_id,
-                traj_buffer_idx=self.curr_traj_buffer_idx,
+                traj_buffer_idx=traj_buffer_idx,
             )
             trajectories.append(traj_dict)
             self.num_trajectories += 1
-
-            # TODO! duplicate the buffer here! Otherwise two learners will double-release it
 
         self.rollout_env_steps = 0
 
