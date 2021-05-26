@@ -267,8 +267,11 @@ class LearnerWorker:
                                       'continuous action spaces. Use entropy exploration loss')
 
         self.exploration_loss_func = None  # deferred initialization
-+
-    def start_process(self):
+
+        self.ctx = None
+
+    def start_process(self, ctx):
+        self.ctx = ctx
         self.process.start()
 
     def deferred_initialization(self):
@@ -1207,6 +1210,14 @@ class LearnerWorker:
         return total_minibatches_on_learner >= max_minibatches_on_learner
 
     def _run(self):
+        ctx = self.ctx
+        from sample_factory.envs import env_registry
+        env_registry.ENV_REGISTRY = ctx.env_registry
+        from sample_factory.algorithms.appo import model_utils
+        model_utils.ENCODER_REGISTRY = ctx.encoder_registry
+
+        self.shared_buffers.init_numpy_buffers()
+
         self.deferred_initialization()
 
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
@@ -1217,8 +1228,8 @@ class LearnerWorker:
         except psutil.AccessDenied:
             log.error('Low niceness requires sudo!')
 
-        if self.cfg.device == 'gpu':
-            cuda_envvars_for_policy(self.policy_id, 'learner')
+        # if self.cfg.device == 'gpu':
+        #     cuda_envvars_for_policy(self.policy_id, 'learner')
 
         torch.multiprocessing.set_sharing_strategy('file_system')
         torch.set_num_threads(self.cfg.learner_main_loop_num_cores)

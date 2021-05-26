@@ -66,7 +66,10 @@ class PolicyWorker:
 
         self.process = TorchProcess(target=self._run, daemon=True)
 
-    def start_process(self):
+        self.ctx = None
+
+    def start_process(self, ctx):
+        self.ctx = ctx
         self.process.start()
 
     def _init(self):
@@ -175,12 +178,20 @@ class PolicyWorker:
 
     # noinspection PyProtectedMember
     def _run(self):
+        ctx = self.ctx
+        from sample_factory.envs import env_registry
+        env_registry.ENV_REGISTRY = ctx.env_registry
+        from sample_factory.algorithms.appo import model_utils
+        model_utils.ENCODER_REGISTRY = ctx.encoder_registry
+
+        self.shared_buffers.init_numpy_buffers()
+
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         psutil.Process().nice(min(self.cfg.default_niceness + 2, 20))
 
-        cuda_envvars_for_policy(self.policy_id, 'inference')
+        # cuda_envvars_for_policy(self.policy_id, 'inference')
         torch.multiprocessing.set_sharing_strategy('file_system')
 
         timing = Timing()

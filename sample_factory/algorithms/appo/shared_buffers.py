@@ -99,10 +99,6 @@ class SharedBuffers:
 
         ensure_memory_shared(self._tensors)
 
-        # this is for performance optimization
-        # indexing in numpy arrays is faster than in PyTorch tensors
-        self.tensors = self.tensor_dict_to_numpy()
-
         # copying small policy outputs (e.g. individual value predictions & action logits) to shared memory is a
         # bottleneck on the policy worker. For optimization purposes we create additional tensors to hold
         # just concatenated policy outputs. Rollout workers parse the data and add it to the trajectory buffers
@@ -119,23 +115,39 @@ class SharedBuffers:
         self.policy_outputs = policy_outputs
         self._policy_output_tensors = torch.zeros(policy_outputs_shape, dtype=torch.float32)
         self._policy_output_tensors.share_memory_()
-        self.policy_output_tensors = self._policy_output_tensors.numpy()
 
         self._policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
         self._policy_versions.share_memory_()
-        self.policy_versions = self._policy_versions.numpy()
 
         # a list of boolean flags to be shared among components that indicate that experience collection should be
         # temporarily stopped (e.g. due to too much experience accumulated on the learner)
         self._stop_experience_collection = torch.ones([self.cfg.num_policies], dtype=torch.bool)
         self._stop_experience_collection.share_memory_()
-        self.stop_experience_collection = self._stop_experience_collection.numpy()
 
         queue_max_size_bytes = self.num_traj_buffers * 40  # 40 bytes to encode an int should be enough?
         self.free_buffers_queue = faster_fifo.Queue(max_size_bytes=queue_max_size_bytes)
 
         # since all buffers are initially free, we add all buffer indices to the queue
         self.free_buffers_queue.put_many_nowait([int(i) for i in np.arange(self.num_traj_buffers)])
+
+        # deferred initialization after fork
+        self.tensors = None
+        self.policy_output_tensors = None
+        self.policy_versions = None
+        self.stop_experience_collection = None
+
+    def init_numpy_buffers(self):
+        """
+        Indexing into numpy arrays is much faster than PyTorch tensors. We thus wrap all CPU tensors with numpy
+        arrays that point to the same region of shared memory.
+        Such non-owning arrays can't be properly pickled, thus with multiprocessing "spawn" mode we have to do
+        this initialization after the child process is started.
+
+        """
+        self.tensors = self.tensor_dict_to_numpy()
+        self.policy_output_tensors = self._policy_output_tensors.numpy()
+        self.policy_versions = self._policy_versions.numpy()
+        self.stop_experience_collection = self._stop_experience_collection.numpy()
 
     def calc_num_trajectory_buffers(self):
         """

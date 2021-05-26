@@ -316,7 +316,7 @@ def make_doom_env(env_name, cfg, **kwargs):
 
 
 def ensure_initialized():
-    global VIZDOOM_INITIALIZED
+    global VIZDOOM_INITIALIZED  # TODO: refactor this for multiprocessing 'spawn'
     if VIZDOOM_INITIALIZED:
         return
 

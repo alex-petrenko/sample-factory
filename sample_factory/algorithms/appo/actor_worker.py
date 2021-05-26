@@ -710,6 +710,11 @@ class ActorWorker:
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
         self.process = TorchProcess(target=self._run, daemon=True)
+
+        self.ctx = None
+
+    def start_process(self, ctx):
+        self.ctx = ctx
         self.process.start()
 
     def _init(self):
@@ -842,16 +847,26 @@ class ActorWorker:
         Currently there is no mechanism to restart dead workers if something bad happens during training. We can only
         retry on the initial reset(). This is definitely something to work on.
         """
+
+        # TODO: refactor
+        ctx = self.ctx
+        from sample_factory.envs import env_registry
+        env_registry.ENV_REGISTRY = ctx.env_registry
+        from sample_factory.algorithms.appo import model_utils
+        model_utils.ENCODER_REGISTRY = ctx.encoder_registry
+
+        self.shared_buffers.init_numpy_buffers()
+
         log.info('Initializing vector env runner %d...', self.worker_idx)
 
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        if self.cfg.actor_worker_gpus:
-            set_gpus_for_process(
-                self.worker_idx,
-                num_gpus_per_process=1, process_type='actor', gpu_mask=self.cfg.actor_worker_gpus,
-            )
+        # if self.cfg.actor_worker_gpus:
+        #     set_gpus_for_process(
+        #         self.worker_idx,
+        #         num_gpus_per_process=1, process_type='actor', gpu_mask=self.cfg.actor_worker_gpus,
+        #     )
 
         torch.multiprocessing.set_sharing_strategy('file_system')
 

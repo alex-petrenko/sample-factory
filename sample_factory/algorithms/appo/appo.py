@@ -236,8 +236,11 @@ class APPO(ReinforcementLearningAlgorithm):
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        # EXPERIMENTAL
+        multiprocessing.set_start_method('spawn')
+
         # we should not use CUDA in the main thread, only on the workers
-        set_global_cuda_envvars(cfg)
+        # set_global_cuda_envvars(cfg)
 
         tmp_env = make_env_func(self.cfg, env_config=None)
         self.obs_space = tmp_env.observation_space
@@ -322,17 +325,19 @@ class APPO(ReinforcementLearningAlgorithm):
     def finalize(self):
         pass
 
-    def create_actor_worker(self, idx, actor_queue):
+    def create_actor_worker(self, idx, actor_queue, ctx):
         learner_queues = {p: w.task_queue for p, w in self.learner_workers.items()}
 
-        return ActorWorker(
+        worker = ActorWorker(
             self.cfg, self.obs_space, self.action_space, self.num_agents, idx, self.traj_buffers,
             task_queue=actor_queue, policy_queues=self.policy_queues,
             report_queue=self.report_queue, learner_queues=learner_queues,
         )
+        worker.start_process(ctx)
+        return worker
 
     # noinspection PyProtectedMember
-    def init_subset(self, indices, actor_queues):
+    def init_subset(self, indices, actor_queues, ctx):
         """
         Initialize a subset of actor workers (rollout workers) and wait until the first reset() is completed for all
         envs on these workers.
@@ -349,7 +354,7 @@ class APPO(ReinforcementLearningAlgorithm):
         workers = dict()
         last_env_initialized = dict()
         for i in indices:
-            w = self.create_actor_worker(i, actor_queues[i])
+            w = self.create_actor_worker(i, actor_queues[i], ctx)
             w.init()
             w.request_reset()
             workers[i] = w
@@ -396,7 +401,7 @@ class APPO(ReinforcementLearningAlgorithm):
                     stuck_worker = w
                     stuck_worker.process.kill()
 
-                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx])
+                    new_worker = self.create_actor_worker(worker_idx, actor_queues[worker_idx], ctx)
                     new_worker.init()
                     new_worker.request_reset()
 
@@ -406,11 +411,15 @@ class APPO(ReinforcementLearningAlgorithm):
 
         return workers.values()
 
-    # noinspection PyUnresolvedReferences
     def init_workers(self):
         """
         Initialize all types of workers and start their worker processes.
         """
+        ctx = AttrDict()
+        from sample_factory.envs.env_registry import global_env_registry
+        ctx.env_registry = global_env_registry()
+        from sample_factory.algorithms.appo.model_utils import ENCODER_REGISTRY
+        ctx.encoder_registry = ENCODER_REGISTRY
 
         actor_queues = [MpQueue(2 * 1000 * 1000) for _ in range(self.cfg.num_workers)]
 
@@ -431,7 +440,7 @@ class APPO(ReinforcementLearningAlgorithm):
                 self.report_queue, policy_worker_queues[policy_id], self.traj_buffers,
                 policy_locks[policy_id], resume_experience_collection_cv[policy_id],
             )
-            learner_worker.start_process()
+            learner_worker.start_process(ctx)
             learner_worker.init()
 
             self.learner_workers[policy_id] = learner_worker
@@ -451,7 +460,7 @@ class APPO(ReinforcementLearningAlgorithm):
                     policy_locks[policy_id], resume_experience_collection_cv[policy_id],
                 )
                 self.policy_workers[policy_id].append(policy_worker)
-                policy_worker.start_process()
+                policy_worker.start_process(ctx)
 
         log.info('Initializing actors...')
 
@@ -465,7 +474,7 @@ class APPO(ReinforcementLearningAlgorithm):
         max_parallel_init = int(1e9)  # might be useful to limit this for some envs
         worker_indices = list(range(self.cfg.num_workers))
         for i in range(0, self.cfg.num_workers, max_parallel_init):
-            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues)
+            workers = self.init_subset(worker_indices[i:i + max_parallel_init], actor_queues, ctx)
             self.actor_workers.extend(workers)
 
     def init_pbt(self):
