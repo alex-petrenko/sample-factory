@@ -267,7 +267,7 @@ class LearnerWorker:
                                       'continuous action spaces. Use entropy exploration loss')
 
         self.exploration_loss_func = None  # deferred initialization
-+
+
     def start_process(self):
         self.process.start()
 
