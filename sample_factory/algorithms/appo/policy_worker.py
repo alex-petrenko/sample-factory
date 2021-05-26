@@ -56,6 +56,8 @@ class PolicyWorker:
         self.initialized_event.clear()
 
         self.shared_buffers = shared_buffers
+        self.traj_tensors = self.shared_buffers.tensors
+        self.policy_outputs = self.shared_buffers.policy_output_tensors
 
         self.latest_policy_version = -1
         self.num_policy_updates = 0
@@ -86,11 +88,9 @@ class PolicyWorker:
                         indices.append(index)
                         self.total_num_samples += 1
 
-                traj_tensors = self.shared_buffers.tensors
-
                 indices = tuple(np.array(indices).T)
-                observations = traj_tensors['obs'].index(indices)
-                rnn_states = traj_tensors['rnn_states'][indices]
+                observations = self.traj_tensors['obs'].index(indices)
+                rnn_states = self.traj_tensors['rnn_states'][indices]
 
             with timing.add_time('stack'):
                 for key, x in observations.items():
@@ -133,8 +133,6 @@ class PolicyWorker:
     def _enqueue_policy_outputs(self, requests, output_tensors):
         outputs_ready = set()
 
-        policy_outputs = self.shared_buffers.policy_output_tensors
-
         output_indices = []
         for request in requests:
             actor_idx, split_idx, request_data = request
@@ -144,7 +142,7 @@ class PolicyWorker:
             outputs_ready.add((actor_idx, split_idx))
 
         output_indices = tuple(np.array(output_indices).T)
-        policy_outputs[output_indices] = output_tensors.numpy()
+        self.policy_outputs[output_indices] = output_tensors.numpy()
 
         for actor_idx, split_idx in outputs_ready:
             advance_rollout_request = dict(split_idx=split_idx, policy_id=self.policy_id)
