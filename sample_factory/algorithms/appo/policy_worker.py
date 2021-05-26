@@ -56,8 +56,6 @@ class PolicyWorker:
         self.initialized_event.clear()
 
         self.shared_buffers = shared_buffers
-        self.policy_versions = shared_buffers.policy_versions
-        self.stop_experience_collection = shared_buffers.stop_experience_collection
 
         self.latest_policy_version = -1
         self.num_policy_updates = 0
@@ -159,7 +157,7 @@ class PolicyWorker:
         self.latest_policy_version = policy_version
 
     def _update_weights(self, timing):
-        learner_policy_version = self.policy_versions[self.policy_id].item()
+        learner_policy_version = self.shared_buffers.policy_versions[self.policy_id].item()
         if self.latest_policy_version < learner_policy_version and self.shared_model_weights is not None:
             with timing.timeit('weight_update'):
                 with self.policy_lock:
@@ -227,7 +225,7 @@ class PolicyWorker:
 
         while not self.terminate:
             try:
-                while self.stop_experience_collection[self.policy_id]:
+                while self.shared_buffers.stop_experience_collection[self.policy_id]:
                     with self.resume_experience_collection_cv:
                         self.resume_experience_collection_cv.wait(timeout=0.05)
 

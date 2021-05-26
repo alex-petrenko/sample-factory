@@ -255,7 +255,7 @@ class TensorDict(dict):
 
         elif isinstance(x, np.ndarray):
             if isinstance(new_data, torch.Tensor):
-                n = new_data.numpy()
+                n = new_data.cpu().numpy()
             elif isinstance(new_data, np.ndarray):
                 n = new_data
             else:

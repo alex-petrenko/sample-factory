@@ -242,15 +242,21 @@ def list_child_processes():
 
 
 def kill_processes(processes):
+    # do not kill to avoid permanent memleaks
+    # https://pytorch.org/docs/stable/multiprocessing.html#file-system-file-system
+    processes_to_save = ['torch_shm', 'resource_tracker', 'semaphore_tracker']
+
     for p in processes:
         try:
-            if 'torch_shm' in p.name():
-                # do not kill to avoid permanent memleaks
-                # https://pytorch.org/docs/stable/multiprocessing.html#file-system-file-system
+            kill_proc = True
+            for proc_to_save in processes_to_save:
+                if any(proc_to_save in s for s in [p.name()] + p.cmdline()):
+                    kill_proc = False
+
+            if not kill_proc:
                 continue
 
-            # log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
-            log.debug('Child process name %d %r %r', p.pid, p.name(), p.exe())
+            log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
             if p.is_running():
                 log.debug('Killing process %s...', p.name())
                 p.kill()

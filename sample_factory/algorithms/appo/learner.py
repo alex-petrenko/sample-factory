@@ -196,7 +196,7 @@ class LearnerWorker:
         # PBT-related stuff
         self.should_save_model = True  # set to true if we need to save the model to disk on the next training iteration
         self.load_policy_id = None  # non-None when we need to replace our parameters with another policy's parameters
-        self.pbt_mutex = threading.Lock()
+        self.pbt_mutex = None  # deferred initialization
         self.new_cfg = None  # non-None when we need to update the learning hyperparameters
 
         self.terminate = False
@@ -206,9 +206,11 @@ class LearnerWorker:
         self.action_space = action_space
 
         self.shared_buffers = shared_buffers
-        self.rollout_tensors = shared_buffers.tensors
-        self.policy_versions = shared_buffers.policy_versions
-        self.stop_experience_collection = shared_buffers.stop_experience_collection
+
+        # deferred initialization
+        self.rollout_tensors = None
+        self.policy_versions = None
+        self.stop_experience_collection = None
 
         self.stop_experience_collection_num_msgs = self.resume_experience_collection_num_msgs = 0
 
@@ -232,16 +234,15 @@ class LearnerWorker:
         # we send weight updates via these queues
         self.policy_worker_queues = policy_worker_queues
 
-        self.experience_buffer_queue = Queue()
+        self.experience_buffer_queue = None  # deferred initialization
 
-        self.tensor_batch_pool = ObjectPool()
-        self.tensor_batcher = TensorBatcher(self.tensor_batch_pool)
+        self.tensor_batch_pool = self.tensor_batcher = None
 
         self.with_training = True  # set to False for debugging no-training regime
         self.train_in_background = self.cfg.train_in_background_thread  # set to False for debugging
 
-        self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
-        self.train_thread_initialized = threading.Event()
+        self.training_thread = None
+        self.train_thread_initialized = None
 
         self.is_training = False
 
@@ -265,17 +266,33 @@ class LearnerWorker:
             raise NotImplementedError('KL-divergence exploration loss is not supported with '
                                       'continuous action spaces. Use entropy exploration loss')
 
+        self.exploration_loss_func = None  # deferred initialization
++
+    def start_process(self):
+        self.process.start()
+
+    def deferred_initialization(self):
+        self.rollout_tensors = self.shared_buffers.tensors
+        self.policy_versions = self.shared_buffers.policy_versions
+        self.stop_experience_collection = self.shared_buffers.stop_experience_collection
+
+        self.pbt_mutex = threading.Lock()
+        self.experience_buffer_queue = Queue()
+
+        self.tensor_batch_pool = ObjectPool()
+        self.tensor_batcher = TensorBatcher(self.tensor_batch_pool)
+
+        self.training_thread = Thread(target=self._train_loop) if self.train_in_background else None
+        self.train_thread_initialized = threading.Event()
+
         if self.cfg.exploration_loss_coeff == 0.0:
-            self.exploration_loss_func = lambda action_distr: 0.0
+            self.exploration_loss_func = lambda action_distr, valids: 0.0
         elif self.cfg.exploration_loss == 'entropy':
             self.exploration_loss_func = self.entropy_exploration_loss
         elif self.cfg.exploration_loss == 'symmetric_kl':
             self.exploration_loss_func = self.symmetric_kl_exploration_loss
         else:
             raise NotImplementedError(f'{self.cfg.exploration_loss} not supported!')
-
-    def start_process(self):
-        self.process.start()
 
     def _init(self):
         log.info('Waiting for the learner to initialize...')
@@ -301,9 +318,9 @@ class LearnerWorker:
         Perhaps should be re-implemented in PyTorch tensors, similar to V-trace for uniformity.
         """
 
-        rewards = torch.stack(buffer.rewards).numpy().squeeze()  # [E, T]
-        dones = torch.stack(buffer.dones).numpy().squeeze()  # [E, T]
-        values_arr = torch.stack(buffer.values).numpy().squeeze()  # [E, T]
+        rewards = np.stack(buffer.rewards).squeeze()  # [E, T]
+        dones = np.stack(buffer.dones).squeeze()  # [E, T]
+        values_arr = np.stack(buffer.values).squeeze()  # [E, T]
 
         # calculating fake values for the last step in the rollout
         # this will make sure that advantage of the very last action is always zero
@@ -1190,6 +1207,8 @@ class LearnerWorker:
         return total_minibatches_on_learner >= max_minibatches_on_learner
 
     def _run(self):
+        self.deferred_initialization()
+
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -1293,6 +1312,7 @@ class LearnerWorker:
 
     def close(self):
         self.task_queue.put((TaskType.TERMINATE, None))
+        self.shared_buffers._stop_experience_collection[self.policy_id] = False
 
     def join(self):
         join_or_kill(self.process)

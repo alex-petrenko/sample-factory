@@ -44,22 +44,16 @@ class _ActorCriticBase(nn.Module):
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.orthogonal_(layer.weight.data, gain=gain)
                 layer.bias.data.fill_(0)
-            elif type(layer) == nn.GRUCell or type(layer) == nn.LSTMCell:  # TODO: test for LSTM
-                nn.init.orthogonal_(layer.weight_ih, gain=gain)
-                nn.init.orthogonal_(layer.weight_hh, gain=gain)
-                layer.bias_ih.data.fill_(0)
-                layer.bias_hh.data.fill_(0)
             else:
+                # LSTMs and GRUs initialize themselves
+                # should we use orthogonal/xavier for LSTM cells as well?
+                # I never noticed much difference between different initialization schemes, and here it seems safer to
+                # go with default initialization,
                 pass
         elif self.cfg.policy_initialization == 'xavier_uniform':
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.xavier_uniform_(layer.weight.data, gain=gain)
                 layer.bias.data.fill_(0)
-            elif type(layer) == nn.GRUCell or type(layer) == nn.LSTMCell:
-                nn.init.xavier_uniform_(layer.weight_ih, gain=gain)
-                nn.init.xavier_uniform_(layer.weight_hh, gain=gain)
-                layer.bias_ih.data.fill_(0)
-                layer.bias_hh.data.fill_(0)
             else:
                 pass
 

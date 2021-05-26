@@ -75,6 +75,17 @@ def parse_args(argv=None, evaluation=False, parser=None):
 
     # parse all the arguments (algo, env, and optionally evaluation)
     args = parser.parse_args(argv)
+    args = postprocess_args(args, argv, parser)
+
+    return args
+
+
+def postprocess_args(args, argv, parser):
+    """
+    Postprocessing after parse_args is called.
+    Makes it easy to use SF within another codebase which might have its own parse_args call.
+
+    """
 
     if args.help:
         parser.print_help()

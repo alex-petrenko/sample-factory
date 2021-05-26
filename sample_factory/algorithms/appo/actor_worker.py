@@ -163,6 +163,8 @@ class ActorState:
         """
         if self.integer_actions:
             actions = self.last_actions.astype(np.int32)
+        else:
+            actions = self.last_actions
 
         if len(actions) == 1:
             actions = actions.item()
@@ -327,7 +329,7 @@ class VectorEnvRunner:
         self.num_agents = num_agents  # queried from env
 
         self.shared_buffers = shared_buffers
-        self.policy_output_tensors = shared_buffers.policy_output_tensors[worker_idx, split_idx]
+        self.policy_output_tensors = self.shared_buffers.policy_output_tensors[self.worker_idx, self.split_idx]
 
         self.envs, self.actor_states, self.episode_rewards = [], [], []
 
@@ -375,7 +377,7 @@ class VectorEnvRunner:
             for agent_i in range(self.num_agents):
                 self.actor_states[env_i][agent_i].approx_env_steps = env_steps
 
-    def _process_policy_outputs(self, policy_id):
+    def _process_policy_outputs(self, policy_id, timing):
         """
         Process the latest data from the policy worker (for policy = policy_id).
         Policy outputs currently include new RNN states, actions, values, logprobs, etc. See shared_buffers.py
@@ -403,11 +405,13 @@ class VectorEnvRunner:
 
                 if actor_policy == policy_id:
                     # via shared memory mechanism the new data should already be copied into the shared tensors
-                    policy_outputs = np.split(
-                        actor_state.policy_output_tensors,
-                        indices_or_sections=actor_state.policy_output_indices,
-                        axis=0,
-                    )
+
+                    with timing.add_time('split_output_tensors'):
+                        policy_outputs = np.split(
+                            actor_state.policy_output_tensors,
+                            indices_or_sections=actor_state.policy_output_indices,
+                            axis=0,
+                        )
                     policy_outputs_dict = dict()
                     new_rnn_state = None
                     for tensor_idx, name in enumerate(actor_state.policy_output_names):
@@ -602,7 +606,7 @@ class VectorEnvRunner:
 
         with timing.add_time('save_policy_outputs'):
             policy_id = data['policy_id']
-            all_actors_ready = self._process_policy_outputs(policy_id)
+            all_actors_ready = self._process_policy_outputs(policy_id, timing)
             if not all_actors_ready:
                 # not all policies involved sent their actions, waiting for more
                 return None, None, None
@@ -639,9 +643,9 @@ class VectorEnvRunner:
 
 class ActorWorker:
     """
-    Top-level class defining the actor worker (rollout worker in the paper, sorry for the confusion, too lazy to rename)
+    Top-level class defining the actor worker (rollout worker in the paper)
 
-    Works with an array (vector) of environments that is processes in portions.
+    Works with an array (vector) of environments that is processed in portions.
     Simple case, env vector is split into two parts:
     1. Do an environment step in the 1st half of the vector (envs 1..N/2)
     2. Send observations to a queue for action generation elsewhere (e.g. on a GPU worker)
@@ -651,7 +655,7 @@ class ActorWorker:
 
     As a result, if action generation is fast enough, this env runner should be busy 100% of the time
     calculating env steps, without waiting for actions.
-    This is somewhat similar to double-buffered rendering in computer graphics.
+    This is similar to double-buffered rendering in computer graphics.
 
     """
 

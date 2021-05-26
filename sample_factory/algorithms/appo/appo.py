@@ -43,6 +43,8 @@ if os.name == 'nt':
     from sample_factory.utils import Queue as MpQueue
 else:
     from faster_fifo import Queue as MpQueue
+    # noinspection PyUnresolvedReferences
+    import faster_fifo_reduction
 
 
 torch.multiprocessing.set_sharing_strategy('file_system')
