@@ -1,7 +1,7 @@
 import os
+import time
 import random
 import shutil
-import time
 from os.path import join
 
 import cv2
@@ -11,6 +11,7 @@ import numpy as np
 
 from sample_factory.envs.dmlab import dmlab_level_cache
 from sample_factory.envs.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
+from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
 from sample_factory.utils.utils import log, ensure_dir_exists
 
 ACTION_SET = (
@@ -48,10 +49,6 @@ EXTENDED_ACTION_SET = (
 def dmlab_level_to_level_name(level):
     level_name = level.split('/')[-1]
     return level_name
-
-
-def string_to_hash_bucket(s, vocabulary_size):
-    return (hash(s) % (vocabulary_size - 1)) + 1  # 0 means absence of an instruction
 
 
 class DmlabGymEnv(gym.Env):

@@ -6,6 +6,7 @@ from unittest import TestCase
 
 from sample_factory.algorithms.utils.algo_utils import num_env_steps
 from sample_factory.algorithms.utils.arguments import default_cfg
+from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
 
 from sample_factory.envs.env_utils import dmlab_available, vizdoom_available
 from sample_factory.utils.timing import Timing
@@ -138,3 +139,15 @@ class TestDmlab(TestCase):
     @unittest.skipUnless(dmlab_available(), 'Dmlab package not installed')
     def test_dmlab_performance(self):
         test_env_performance(self.make_env, 'dmlab')
+
+    def test_hash_bucket(self):
+        vocab_size = 42
+        data = {
+            'a cupful of liquid that was almost, but not quite, entirely unlike tea': 37,
+            'aaabbbccc': 28,
+            '12313123132': 28,
+            'RL': 24,
+            'dmlab': 35,
+        }
+        for s, h in data.items():
+            self.assertEqual(string_to_hash_bucket(s, vocab_size), h)
