@@ -16,8 +16,10 @@ ENCODER_REGISTRY = dict()
 
 
 def register_custom_encoder(custom_encoder_name, encoder_cls):
+    if custom_encoder_name in ENCODER_REGISTRY:
+        log.warning('Encoder %s already registered', custom_encoder_name)
+
     assert issubclass(encoder_cls, EncoderBase), 'Custom encoders must be derived from EncoderBase'
-    assert custom_encoder_name not in ENCODER_REGISTRY
 
     log.debug('Adding model class %r to registry (with name %s)', encoder_cls, custom_encoder_name)
     ENCODER_REGISTRY[custom_encoder_name] = encoder_cls

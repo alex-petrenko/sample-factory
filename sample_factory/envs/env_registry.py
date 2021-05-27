@@ -88,6 +88,36 @@ class EnvRegistry:
         raise RuntimeError(msg)
 
 
+def doom_funcs():
+    from sample_factory.envs.doom.doom_utils import make_doom_env
+    from sample_factory.envs.doom.doom_params import add_doom_env_args, doom_override_defaults
+    return make_doom_env, add_doom_env_args, doom_override_defaults
+
+
+def atari_funcs():
+    from sample_factory.envs.atari.atari_utils import make_atari_env
+    from sample_factory.envs.atari.atari_params import atari_override_defaults
+    return make_atari_env, None, atari_override_defaults
+
+
+def dmlab_funcs():
+    from sample_factory.envs.dmlab.dmlab_env import make_dmlab_env
+    from sample_factory.envs.dmlab.dmlab_params import add_dmlab_env_args, dmlab_override_defaults
+    return make_dmlab_env, add_dmlab_env_args, dmlab_override_defaults
+
+
+def mujoco_funcs():
+    from sample_factory.envs.mujoco.mujoco_utils import make_mujoco_env
+    from sample_factory.envs.mujoco.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
+    return make_mujoco_env, add_mujoco_env_args, mujoco_override_defaults
+
+
+def minigrid_funcs():
+    from sample_factory.envs.minigrid.minigrid_utils import make_minigrid_env
+    from sample_factory.envs.minigrid.minigrid_params import minigrid_override_defaults
+    return make_minigrid_env, None, minigrid_override_defaults
+
+
 def register_default_envs(env_registry):
     """
     Register default envs.
@@ -95,30 +125,6 @@ def register_default_envs(env_registry):
     This allows us to import only Python modules that we use.
 
     """
-    def doom_funcs():
-        from sample_factory.envs.doom.doom_utils import make_doom_env
-        from sample_factory.envs.doom.doom_params import add_doom_env_args, doom_override_defaults
-        return make_doom_env, add_doom_env_args, doom_override_defaults
-
-    def atari_funcs():
-        from sample_factory.envs.atari.atari_utils import make_atari_env
-        from sample_factory.envs.atari.atari_params import atari_override_defaults
-        return make_atari_env, None, atari_override_defaults
-
-    def dmlab_funcs():
-        from sample_factory.envs.dmlab.dmlab_env import make_dmlab_env
-        from sample_factory.envs.dmlab.dmlab_params import add_dmlab_env_args, dmlab_override_defaults
-        return make_dmlab_env, add_dmlab_env_args, dmlab_override_defaults
-
-    def mujoco_funcs():
-        from sample_factory.envs.mujoco.mujoco_utils import make_mujoco_env
-        from sample_factory.envs.mujoco.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
-        return make_mujoco_env, add_mujoco_env_args, mujoco_override_defaults
-
-    def minigrid_funcs():
-        from sample_factory.envs.minigrid.minigrid_utils import make_minigrid_env
-        from sample_factory.envs.minigrid.minigrid_params import minigrid_override_defaults
-        return make_minigrid_env, None, minigrid_override_defaults
 
     default_envs = {
         'doom_': doom_funcs,
