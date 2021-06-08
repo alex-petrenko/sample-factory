@@ -16,7 +16,7 @@ def get_algo_class(algo):
         from sample_factory.algorithms.appo.appo import APPO
         algo_class = APPO
     elif algo == 'DUMMY_SAMPLER':
-        from sample_factory.algorithms.dummy_sampler import DummySampler
+        from sample_factory.algorithms.dummy_sampler.sampler import DummySampler
         algo_class = DummySampler
     else:
         log.warning('Algorithm %s is not supported', algo)
@@ -32,10 +32,10 @@ def arg_parser(argv=None, evaluation=False):
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, add_help=False)
 
     # common args
-    parser.add_argument('--algo', type=str, default=None, required=True, help='Algo type to use (pass "APPO" if in doubt)')
+    parser.add_argument('--algo', type=str, default='APPO', required=True, help='Algo type to use (pass "APPO" if in doubt)')
     parser.add_argument('--env', type=str, default=None, required=True, help='Fully-qualified environment name in the form envfamily_envname, e.g. atari_breakout or doom_battle')
     parser.add_argument(
-        '--experiment', type=str, default=None, required=True,
+        '--experiment', type=str, default='default_experiment',
         help='Unique experiment name. This will also be the name for the experiment folder in the train dir.'
              'If the experiment folder with this name aleady exists the experiment will be RESUMED!'
              'Any parameters passed from command line that do not match the parameters stored in the experiment cfg.json file will be overridden.',

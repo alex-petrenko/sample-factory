@@ -1,7 +1,11 @@
+import os
 import sys
 
 
-def get_gpus_without_triggering_pytorch_cuda_initialization(envvars):
+def get_gpus_without_triggering_pytorch_cuda_initialization(envvars=None):
+    if envvars is None:
+        envvars = os.environ
+
     import subprocess
     out = subprocess.run([sys.executable, '-m', 'sample_factory.utils.get_available_gpus'], capture_output=True, env=envvars)
     text_output = out.stdout.decode()
