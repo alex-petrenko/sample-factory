@@ -37,6 +37,14 @@ Consider using Sample Factory if you train agents in these environments.
 4. Sample Factory can be a good choice as a prototype for a single node in a distributed RL system or as a reference
 codebase for other types of async RL algorithms.
 
+## Recent releases
+
+#### v1.120.0
+* Support inactive agents. Do deactivate an agent for a portion of the episode the environment should return `info={'is_active': False}` for the inactive agent. Useful for environments such as hide-n-seek.
+* Improved memory consumption and performance with better shared memory management.
+* Experiment logs are now saved into the experiment folder as `sf_log.txt`
+* DMLab-related bug fixes (courtesy of @donghoonlee04 and @sungwoong. Thank you!)
+
 ## Installation
 
 Just install from PyPI:
