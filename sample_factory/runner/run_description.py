@@ -90,7 +90,7 @@ class Experiment:
         self.params = list(param_generator)
         self.env_vars = env_vars
 
-    def generate_experiments(self):
+    def generate_experiments(self, experiment_arg_name):
         """Yields tuples of (cmd, experiment_name)"""
         num_experiments = 1 if len(self.params) == 0 else len(self.params)
 
@@ -119,28 +119,33 @@ class Experiment:
 
             experiment_name = f'{experiment_idx:02d}_' + '_'.join(experiment_name_tokens)
 
-            cmd_tokens.append(f'--experiment {experiment_name}')
+            cmd_tokens.append(f'{experiment_arg_name} {experiment_name}')
             param_str = ' '.join(cmd_tokens)
 
             yield param_str, experiment_name
 
 
 class RunDescription:
-    def __init__(self, run_name, experiments, train_dir=None):
-        if train_dir is None:
-            train_dir = ensure_dir_exists(join(os.getcwd(), 'train_dir'))
-
-        self.train_dir = train_dir
+    def __init__(self, run_name, experiments, experiment_dirs_sf_format=True, experiment_arg_name='--experiment', experiment_dir_arg_name='--train_dir'):
         self.run_name = run_name
         self.experiments = experiments
         self.experiment_suffix = ''
 
-    def generate_experiments(self):
+        self.experiment_dirs_sf_format = experiment_dirs_sf_format
+        self.experiment_arg_name = experiment_arg_name
+        self.experiment_dir_arg_name = experiment_dir_arg_name
+
+    def generate_experiments(self, train_dir):
         """Yields tuples (final cmd for experiment, experiment_name, root_dir)."""
         for experiment in self.experiments:
             root_dir = join(self.run_name, f'{experiment.base_name}_{self.experiment_suffix}')
 
-            experiment_cmds = experiment.generate_experiments()
+            experiment_cmds = experiment.generate_experiments(self.experiment_arg_name)
             for experiment_cmd, experiment_name in experiment_cmds:
-                experiment_cmd += f' --train_dir={self.train_dir} --experiments_root={root_dir}'
+                if self.experiment_dirs_sf_format:
+                    experiment_cmd += f' --train_dir={train_dir} --experiments_root={root_dir}'
+                else:
+                    experiment_dir = join(train_dir, root_dir)
+                    os.makedirs(experiment_dir, exist_ok=True)
+                    experiment_cmd += f' {self.experiment_dir_arg_name}={experiment_dir}'
                 yield experiment_cmd, experiment_name, root_dir, experiment.env_vars

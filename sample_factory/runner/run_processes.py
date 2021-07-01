@@ -20,7 +20,7 @@ def run(run_description, args):
     processes = []
     processes_per_gpu = {g: [] for g in range(args.num_gpus)}
 
-    experiments = run_description.generate_experiments()
+    experiments = run_description.generate_experiments(args.train_dir)
     next_experiment = next(experiments, None)
 
     def find_least_busy_gpu():
@@ -61,7 +61,7 @@ def run(run_description, args):
                 cmd_tokens[0] = sys.executable
                 log.debug('Using Python executable %s', cmd_tokens[0])
 
-            ensure_dir_exists(join(run_description.train_dir, root_dir, name))
+            ensure_dir_exists(join(args.train_dir, root_dir))
 
             envvars = os.environ.copy()
 

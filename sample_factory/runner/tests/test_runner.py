@@ -48,7 +48,7 @@ class TestRunner(TestCase):
         params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
         cmd = 'python super_rl.py'
         ex = Experiment('test', cmd, params.generate_params(randomize=False))
-        cmds = ex.generate_experiments()
+        cmds = ex.generate_experiments('train_dir')
         for index, value in enumerate(cmds):
             command, name = value
             self.assertTrue(command.startswith(cmd))
@@ -61,7 +61,7 @@ class TestRunner(TestCase):
             Experiment('test2', 'python super_rl2.py', params.generate_params(randomize=False)),
         ]
         rd = RunDescription('test_run', experiments)
-        cmds = rd.generate_experiments()
+        cmds = rd.generate_experiments('train_dir')
         for command, name, root_dir, env_vars in cmds:
             exp_name = split(root_dir)[-1]
             self.assertIn('--experiment', command)
@@ -83,13 +83,18 @@ class TestRunner(TestCase):
         ]
         train_dir = ensure_dir_exists(join(project_tmp_dir(), 'tests'))
         root_dir_name = '__test_run__'
-        rd = RunDescription(root_dir_name, experiments, train_dir)
+        rd = RunDescription(root_dir_name, experiments)
 
         args = runner_argparser().parse_args([])
         args.max_parallel = 8
         args.pause_between = 0
+        args.train_dir = train_dir
 
         run(rd, args)
+
+        rd2 = RunDescription(root_dir_name, experiments, experiment_dirs_sf_format=False, experiment_arg_name='--experiment_tst', experiment_dir_arg_name='--dir')
+        run(rd2, args)
+
         logging.disable(logging.NOTSET)
 
         shutil.rmtree(join(train_dir, root_dir_name))

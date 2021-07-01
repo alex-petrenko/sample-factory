@@ -41,7 +41,7 @@ def run_slurm(run_description, args):
         log.info('Creating %s...', workdir)
         os.makedirs(workdir)
 
-    experiments = run_description.generate_experiments()
+    experiments = run_description.generate_experiments(args.train_dir)
     sbatch_files = []
     for experiment in experiments:
         cmd, name, *_ = experiment
