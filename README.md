@@ -352,12 +352,6 @@ Consider installing VizDoom for a more comprehensive set of tests.
 
 ### Caveats
 
-- We never change the policy that generates the actions in the middle of the rollout!
-The policy index (in PBT scenarios) is only changed between rollouts.
-This means that a little bit of experience in the beginning of the next rollout can be collected
-by another policy. It never matters when rollout << episode_len, but if the rollouts are long and
-episodes are short, you might need to address this. See `finalize_trajectory()` in `actor_worker.py` docs for details.
-
 - Multiplayer VizDoom environments can freeze your console sometimes, simple `reset` takes care of this
 - Sometimes VizDoom instances don't clear their internal shared memory buffers used to communicate between Python and
 a Doom executable. The file descriptors for these buffers tend to pile up. `rm /dev/shm/ViZDoom*` will take care of this issue.
