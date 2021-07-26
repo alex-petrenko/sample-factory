@@ -1208,7 +1208,7 @@ class LearnerWorker:
 
     def _run(self):
         self.deferred_initialization()
-        log.log(f'LEARNER\tpid {os.getpid()}\tparent {os.getppid()}')
+        log.info(f'LEARNER\tpid {os.getpid()}\tparent {os.getppid()}')
 
         # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
         signal.signal(signal.SIGINT, signal.SIG_IGN)
