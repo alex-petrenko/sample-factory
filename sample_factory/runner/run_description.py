@@ -135,7 +135,7 @@ class RunDescription:
         self.experiment_arg_name = experiment_arg_name
         self.experiment_dir_arg_name = experiment_dir_arg_name
 
-    def generate_experiments(self, train_dir):
+    def generate_experiments(self, train_dir, makedirs=True):
         """Yields tuples (final cmd for experiment, experiment_name, root_dir)."""
         for experiment in self.experiments:
             root_dir = join(self.run_name, f'{experiment.base_name}_{self.experiment_suffix}')
@@ -146,6 +146,7 @@ class RunDescription:
                     experiment_cmd += f' --train_dir={train_dir} --experiments_root={root_dir}'
                 else:
                     experiment_dir = join(train_dir, root_dir)
-                    os.makedirs(experiment_dir, exist_ok=True)
+                    if makedirs:
+                        os.makedirs(experiment_dir, exist_ok=True)
                     experiment_cmd += f' {self.experiment_dir_arg_name}={experiment_dir}'
                 yield experiment_cmd, experiment_name, root_dir, experiment.env_vars

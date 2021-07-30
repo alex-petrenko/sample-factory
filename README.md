@@ -39,6 +39,9 @@ codebase for other types of async RL algorithms.
 
 ## Recent releases
 
+#### v1.120.1
+* Runner interface improvements for Slurm
+
 #### v1.120.0
 * Support inactive agents. Do deactivate an agent for a portion of the episode the environment should return `info={'is_active': False}` for the inactive agent. Useful for environments such as hide-n-seek.
 * Improved memory consumption and performance with better shared memory management.
