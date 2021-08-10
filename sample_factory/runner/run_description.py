@@ -99,7 +99,7 @@ class Experiment:
             experiment_name_tokens = [self.base_name]
 
             # abbreviations for parameter names that we've used
-            param_abbrs = []
+            param_shorthands = []
 
             if len(self.params) > 0:
                 params = self.params[experiment_idx]
@@ -107,14 +107,22 @@ class Experiment:
                     param_str = f'--{param} {value}'
                     cmd_tokens.append(param_str)
 
-                    abbr = None
-                    for l in range(len(param)):
-                        abbr = param[:l+3]
-                        if abbr not in param_abbrs:
-                            break
+                    # choosing a unique shorthand for the parameter
+                    # step 1: finding the longest prefix which is exactly the same as some other param
+                    max_shared_prefix = 0
+                    for other_param in params.keys():
+                        if other_param == param:
+                            continue
+                        for prefix_l in range(min(len(param), len(other_param))):
+                            if param[:prefix_l] == other_param[:prefix_l]:
+                                max_shared_prefix = max(prefix_l, max_shared_prefix)
 
-                    param_abbrs.append(abbr)
-                    experiment_name_token = f'{abbr}_{value}'
+                    # step 2: shorthand is the longest shared prefix plus a couple more characters
+                    shorthand_l = min(max_shared_prefix + 3, len(param))
+                    shorthand = param[:shorthand_l]
+
+                    param_shorthands.append(shorthand)
+                    experiment_name_token = f'{shorthand}_{value}'
                     experiment_name_tokens.append(experiment_name_token)
 
             experiment_name = f'{experiment_idx:02d}_' + '_'.join(experiment_name_tokens)

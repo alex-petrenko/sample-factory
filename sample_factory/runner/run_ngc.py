@@ -30,12 +30,12 @@ def run_ngc(run_description, args):
     ngc_template = ' '.join(ngc_template.split())
 
     log.info('NGC template: %s', ngc_template)
-
     experiments = run_description.generate_experiments(args.train_dir, makedirs=False)
     for experiment_idx, experiment in enumerate(experiments):
         cmd, name, *_ = experiment
 
-        job_name = f'{args.run.split(".")[-1]}_{experiment_idx:03d}'
+        job_name = name
+        log.info('Job name: %s', job_name)
 
         ngc_job_cmd = ngc_template.replace('{{ name }}', job_name).replace('{{ experiment_cmd }}', cmd)
 
