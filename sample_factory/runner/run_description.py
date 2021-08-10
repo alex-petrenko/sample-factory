@@ -1,11 +1,11 @@
-import os
+import re, os
 from os.path import join
 
 import numpy as np
 
 from collections import OrderedDict
 
-from sample_factory.utils.utils import ensure_dir_exists
+from sample_factory.utils.utils import log
 
 
 class ParamGenerator:
@@ -107,25 +107,22 @@ class Experiment:
                     param_str = f'--{param} {value}'
                     cmd_tokens.append(param_str)
 
-                    # choosing a unique shorthand for the parameter
-                    # step 1: finding the longest prefix which is exactly the same as some other param
-                    max_shared_prefix = 0
-                    for other_param in params.keys():
-                        if other_param == param:
-                            continue
-                        for prefix_l in range(min(len(param), len(other_param))):
-                            if param[:prefix_l] == other_param[:prefix_l]:
-                                max_shared_prefix = max(prefix_l, max_shared_prefix)
+                    param_tokens = re.split('[._-]', param)
+                    shorthand_tokens = [t[0] for t in param_tokens[:-1]]
 
-                    # step 2: shorthand is the longest shared prefix plus a couple more characters
-                    shorthand_l = min(max_shared_prefix + 3, len(param))
-                    shorthand = param[:shorthand_l]
+                    last_token_l = min(3, len(param_tokens[-1]))
+                    shorthand = '.'.join(shorthand_tokens + [param_tokens[-1][:last_token_l]])
+                    while last_token_l <= len(param_tokens[-1]) and shorthand in param_shorthands:
+                        last_token_l += 1
+                        shorthand = '.'.join(shorthand_tokens + [param_tokens[-1][:last_token_l]])
 
                     param_shorthands.append(shorthand)
                     experiment_name_token = f'{shorthand}_{value}'
                     experiment_name_tokens.append(experiment_name_token)
 
             experiment_name = f'{experiment_idx:02d}_' + '_'.join(experiment_name_tokens)
+            if len(experiment_name) > 120:
+                log.warning('Experiment name is extra long! (%d characters)', len(experiment_name))
 
             cmd_tokens.append(f'{experiment_arg_name} {experiment_name}')
             param_str = ' '.join(cmd_tokens)
