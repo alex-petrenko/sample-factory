@@ -121,7 +121,7 @@ class Experiment:
                     experiment_name_tokens.append(experiment_name_token)
 
             experiment_name = f'{experiment_idx:02d}_' + '_'.join(experiment_name_tokens)
-            if len(experiment_name) > 120:
+            if len(experiment_name) > 100:
                 log.warning('Experiment name is extra long! (%d characters)', len(experiment_name))
 
             cmd_tokens.append(f'{experiment_arg_name} {experiment_name}')

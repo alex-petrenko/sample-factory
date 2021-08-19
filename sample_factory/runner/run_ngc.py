@@ -11,7 +11,7 @@ from sample_factory.utils.utils import log, str2bool
 
 
 def add_ngc_args(parser):
-    parser.add_argument('--ngc_job_template', default=None, type=str, required=True, help='NGC command line template, specifying instance type, docker container, etc.')
+    parser.add_argument('--ngc_job_template', default=None, type=str, help='NGC command line template, specifying instance type, docker container, etc.')
     parser.add_argument('--ngc_print_only', default=False, type=str2bool, help='Just print commands to the console without executing')
     return parser
 
