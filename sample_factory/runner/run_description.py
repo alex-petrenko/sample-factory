@@ -90,7 +90,7 @@ class Experiment:
         self.params = list(param_generator)
         self.env_vars = env_vars
 
-    def generate_experiments(self, experiment_arg_name, customize_experiment_name):
+    def generate_experiments(self, experiment_arg_name, customize_experiment_name, param_prefix):
         """Yields tuples of (cmd, experiment_name)"""
         num_experiments = 1 if len(self.params) == 0 else len(self.params)
 
@@ -104,7 +104,7 @@ class Experiment:
             if len(self.params) > 0:
                 params = self.params[experiment_idx]
                 for param, value in params.items():
-                    param_str = f'--{param} {value}'
+                    param_str = f'{param_prefix}{param}={value}'
                     cmd_tokens.append(param_str)
 
                     param_tokens = re.split('[._-]', param)
@@ -127,7 +127,7 @@ class Experiment:
             else:
                 experiment_name = self.base_name
 
-            cmd_tokens.append(f'{experiment_arg_name} {experiment_name}')
+            cmd_tokens.append(f'{experiment_arg_name}={experiment_name}')
             param_str = ' '.join(cmd_tokens)
 
             yield param_str, experiment_name
@@ -137,7 +137,7 @@ class RunDescription:
     def __init__(
             self, run_name, experiments, experiment_dirs_sf_format=True,
             experiment_arg_name='--experiment', experiment_dir_arg_name='--train_dir',
-            customize_experiment_name=True,
+            customize_experiment_name=True, param_prefix='--',
     ):
         self.run_name = run_name
         self.experiments = experiments
@@ -149,12 +149,14 @@ class RunDescription:
 
         self.customize_experiment_name = customize_experiment_name
 
+        self.param_prefix = param_prefix
+
     def generate_experiments(self, train_dir, makedirs=True):
         """Yields tuples (final cmd for experiment, experiment_name, root_dir)."""
         for experiment in self.experiments:
             root_dir = join(self.run_name, f'{experiment.base_name}_{self.experiment_suffix}')
 
-            experiment_cmds = experiment.generate_experiments(self.experiment_arg_name, self.customize_experiment_name)
+            experiment_cmds = experiment.generate_experiments(self.experiment_arg_name, self.customize_experiment_name, self.param_prefix)
             for experiment_cmd, experiment_name in experiment_cmds:
                 if self.experiment_dirs_sf_format:
                     experiment_cmd += f' --train_dir={train_dir} --experiments_root={root_dir}'

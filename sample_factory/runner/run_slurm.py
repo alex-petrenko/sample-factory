@@ -88,6 +88,11 @@ def run_slurm(run_description, args):
             output, err = process.communicate()
             exit_code = process.wait()
             log.info('Output: %s, err: %s, exit code: %r', output, err, exit_code)
+
+            if exit_code != 0:
+                log.error('sbatch process failed!')
+                time.sleep(5)
+
         job_id = int(output)
         job_ids.append(str(job_id))
 
@@ -98,7 +103,9 @@ def run_slurm(run_description, args):
 
     scancel_cmd = f'scancel {" ".join(job_ids)}'
 
-    log.info(f'Cancel with: \n\t %s \n', scancel_cmd)
+    log.info('Jobs queued: %r', job_ids)
+
+    log.info('Use this command to cancel your jobs: \n\t %s \n', scancel_cmd)
 
     with open(join(workdir, 'scancel.sh'), 'w') as fobj:
         fobj.write(scancel_cmd)
