@@ -19,7 +19,7 @@ setup(
     description='High throughput asynchronous reinforcement learning framework',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    version='1.120.1',
+    version='1.120.2',
     url='https://github.com/alex-petrenko/sample-factory',
     author='Aleksei Petrenko',
     license='MIT',
@@ -49,5 +49,5 @@ setup(
     packages=setuptools.find_packages(where='./', include='sample_factory*'),
     include_package_data=True,
 
-    python_requires='>=3.6',
+    python_requires='>=3.7',
 )
