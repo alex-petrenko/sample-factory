@@ -327,6 +327,9 @@ RUN_DESCRIPTION = RunDescription('doom_basic_envs_appo', experiments=_experiment
 
 ```
 
+Runner script should be importable (i.e. be in your project or in PYTHONPATH), and should define a single variable
+`RUN_DESCRIPTION`, which contains a list of experiments (each experiment can be a hyperparameter search), as well as some auxiliary parameters.
+
 When such a script is saved i.e. at `myproject/train_10_seeds.py` in your project using Sample Factory, you can use this command to
 execute it:
 
@@ -334,11 +337,14 @@ execute it:
 python -m sample_factory.runner.run --run=myproject.train_10_seeds --runner=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
 ``` 
 
-This will cycle through the requested configurations, training 12 experiments at the same time, 3 per GPU on 4 GPUs.
-Use `--runner=slurm` for basic Slurm support (experimental).
+This will cycle through the requested configurations, training 12 experiments at the same time, 3 per GPU on 4 GPUs using local OS-level parallelism.
+
+Runner supports other backends for parallel execution: `--runner=slurm` and `--runner=ngc` for Slurm and NGC support respectively.
 
 Individual experiments will be stored in `train_dir/run_name` so the whole experiment can be easily monitored
 with a single Tensorboard command.
+
+Find more information on runner API in `runner/README.md`.
 
 ### Dummy sampler
 

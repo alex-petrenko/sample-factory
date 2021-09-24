@@ -13,7 +13,7 @@ def runner_argparser():
     parser.add_argument('--train_dir', default='./train_dir', type=str, help='Directory for sub-experiments')
 
     parser.add_argument('--run', default=None, type=str, help='Name of the python module that describes the run, e.g. sample_factory.runner.runs.doom_battle_hybrid')
-    parser.add_argument('--runner', default='processes', choices=['processes', 'slurm', 'ngc'])
+    parser.add_argument('--runner', default='processes', choices=['processes', 'slurm', 'ngc'], help='Runner backend, use OS multiprocessing by default')
     parser.add_argument('--pause_between', default=10, type=int, help='Pause in seconds between processes')
     parser.add_argument('--num_gpus', default=1, type=int, help='How many GPUs to use')
     parser.add_argument('--experiments_per_gpu', default=-1, type=int, help='How many experiments can we squeeze on a single GPU (-1 for not altering CUDA_VISIBLE_DEVICES at all)')
