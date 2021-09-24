@@ -344,7 +344,7 @@ Runner supports other backends for parallel execution: `--runner=slurm` and `--r
 Individual experiments will be stored in `train_dir/run_name` so the whole experiment can be easily monitored
 with a single Tensorboard command.
 
-Find more information on runner API in `runner/README.md`.
+Find more information on runner API in [runner/README.md](https://github.com/alex-petrenko/sample-factory/blob/master/sample_factory/runner/README.md).
 
 ### Dummy sampler
 
