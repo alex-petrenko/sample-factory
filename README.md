@@ -39,6 +39,13 @@ codebase for other types of async RL algorithms.
 
 ## Recent releases
 
+##### v1.121.0
+* Added fixed KL divergence penalty as in https://arxiv.org/pdf/1707.06347.pdf 
+Its usage is highly encouraged in environments with continuous action spaces (i.e. set --kl_loss_coeff=1.0).
+Otherwise numerical instabilities can occur in certain environments, especially when the policy lag is high
+
+* More summaries related to the new loss
+
 ##### v1.120.2
 * More improvements and fixes in runner interface, including support for NGC cluster
 

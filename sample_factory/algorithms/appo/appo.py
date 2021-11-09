@@ -123,6 +123,10 @@ class APPO(ReinforcementLearningAlgorithm):
         p.add_argument('--exploration_loss_coeff', default=0.003, type=float,
                        help='Coefficient for the exploration component of the loss function.')
         p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
+        p.add_argument('--kl_loss_coeff', default=0.0, type=float,
+                       help='Coefficient for fixed KL loss (as used by Schulman et al. in https://arxiv.org/pdf/1707.06347.pdf). '
+                            'Highly recommended for environments with continuous action spaces.',
+                       )
         p.add_argument('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
                        help='Usually the exploration loss is based on maximizing the entropy of the probability'
                             ' distribution. Note that mathematically maximizing entropy of the categorical probability '

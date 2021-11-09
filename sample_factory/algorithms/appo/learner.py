@@ -249,9 +249,9 @@ class LearnerWorker:
         self.train_step = self.env_steps = 0
 
         # decay rate at which summaries are collected
-        # save summaries every 20 seconds in the beginning, but decay to every 4 minutes in the limit, because we
+        # save summaries every 5 seconds in the beginning, but decay to every 4 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
-        self.summary_rate_decay_seconds = LinearDecay([(0, 20), (100000, 120), (1000000, 240)])
+        self.summary_rate_decay_seconds = LinearDecay([(0, 5), (100000, 120), (1000000, 240)])
         self.last_summary_time = 0
 
         self.last_saved_time = self.last_milestone_time = 0
@@ -266,7 +266,9 @@ class LearnerWorker:
             raise NotImplementedError('KL-divergence exploration loss is not supported with '
                                       'continuous action spaces. Use entropy exploration loss')
 
-        self.exploration_loss_func = None  # deferred initialization
+        # deferred initialization
+        self.exploration_loss_func = None
+        self.kl_loss_func = None
 
     def start_process(self):
         self.process.start()
@@ -288,11 +290,22 @@ class LearnerWorker:
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr, valids: 0.0
         elif self.cfg.exploration_loss == 'entropy':
-            self.exploration_loss_func = self.entropy_exploration_loss
+            self.exploration_loss_func = self._entropy_exploration_loss
         elif self.cfg.exploration_loss == 'symmetric_kl':
-            self.exploration_loss_func = self.symmetric_kl_exploration_loss
+            self.exploration_loss_func = self._symmetric_kl_exploration_loss
         else:
             raise NotImplementedError(f'{self.cfg.exploration_loss} not supported!')
+
+        if self.cfg.kl_loss_coeff == 0.0:
+            if is_continuous_action_space(self.action_space):
+                log.warning(
+                    'WARNING! It is recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks. '
+                    'I.e. set --kl_loss_coeff=1.0'
+                )
+                time.sleep(3.0)
+            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: 0.0
+        else:
+            self.kl_loss_func = self._kl_loss
 
     def _init(self):
         log.info('Waiting for the learner to initialize...')
@@ -609,13 +622,23 @@ class LearnerWorker:
 
         return value_loss
 
-    def entropy_exploration_loss(self, action_distribution, valids):
+    def _kl_loss(self, action_space, action_logits, action_distribution, valids):
+        old_action_distribution = get_action_distribution(action_space, action_logits)
+        kl_loss = action_distribution.kl_divergence(old_action_distribution)
+        kl_loss = torch.masked_select(kl_loss, valids)
+        kl_loss = kl_loss.mean()
+
+        kl_loss *= self.cfg.kl_loss_coeff
+
+        return kl_loss
+
+    def _entropy_exploration_loss(self, action_distribution, valids):
         entropy = action_distribution.entropy()
         entropy = torch.masked_select(entropy, valids)
         entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
         return entropy_loss
 
-    def symmetric_kl_exploration_loss(self, action_distribution, valids):
+    def _symmetric_kl_exploration_loss(self, action_distribution, valids):
         kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
         kl_prior = torch.masked_select(kl_prior, valids).mean()
         if not torch.isfinite(kl_prior):
@@ -786,9 +809,10 @@ class LearnerWorker:
 
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)
-
                     exploration_loss = self.exploration_loss_func(action_distribution, valids)
-                    actor_loss = policy_loss + exploration_loss
+                    kl_loss = self.kl_loss_func(self.actor_critic.action_space, mb.action_logits, action_distribution, valids)
+
+                    actor_loss = policy_loss + exploration_loss + kl_loss
                     epoch_actor_losses.append(actor_loss.item())
 
                     targets = targets.to(self.device)
@@ -811,10 +835,10 @@ class LearnerWorker:
                             loss = loss + aux_loss
 
                     high_loss = 30.0
-                    if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(exploration_loss)) > high_loss:
+                    if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(exploration_loss)) > high_loss or abs(to_scalar(kl_loss)) > high_loss:
                         log.warning(
-                            'High loss value: %.4f %.4f %.4f %.4f (recommended to adjust the --reward_scale parameter)',
-                            to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(exploration_loss),
+                            'High loss value: l:%.4f pl:%.4f vl:%.4f exp_l:%.4f kl_l:%.4f (recommended to adjust the --reward_scale parameter)',
+                            to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(exploration_loss), to_scalar(kl_loss),
                         )
                         force_summaries = True
 
@@ -890,6 +914,7 @@ class LearnerWorker:
         stats.value = var.result.values.mean()
         stats.entropy = var.action_distribution.entropy().mean()
         stats.policy_loss = var.policy_loss
+        stats.kl_loss = var.kl_loss
         stats.value_loss = var.value_loss
         stats.exploration_loss = var.exploration_loss
         if self.aux_loss_module is not None:
@@ -918,8 +943,10 @@ class LearnerWorker:
             )
             kl_old = var.action_distribution.kl_divergence(old_action_distribution)
             kl_old_mean = kl_old.mean()
+            kl_old_max = kl_old.max()
 
             stats.kl_divergence = kl_old_mean
+            stats.kl_divergence_max = kl_old_max
             stats.value_delta = value_delta_avg
             stats.value_delta_max = value_delta_max
             stats.fraction_clipped = ((var.ratio < var.clip_ratio_low).float() + (var.ratio > var.clip_ratio_high).float()).mean()
