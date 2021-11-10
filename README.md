@@ -67,7 +67,7 @@ Just install from PyPI:
 #### Advanced installation
 
 PyPI dependency resolution may result in suboptimal performance, i.e. some versions of MKL and Numpy are known to be slower.
-To guarantee the maximum throughput (up to 10% faster than pip version) consider using our Conda environment with exact package versions:
+To guarantee the maximum throughput (~10% faster than pip version) consider using our Conda environment with exact package versions:
 
 - Clone the repo: `git clone https://github.com/alex-petrenko/sample-factory.git`
 
@@ -100,25 +100,9 @@ Sample Factory comes with a particularly comprehensive support for VizDoom and D
 
 #### VizDoom
 
-Follow these steps to add support for VizDoom environments
-
-- Install Linux dependencies (from [VizDoom linux_deps](https://github.com/mwydmuch/ViZDoom/blob/master/doc/Building.md#linux_deps)):
-
-```
-# ZDoom dependencies
-sudo apt install build-essential zlib1g-dev libsdl2-dev libjpeg-dev \
-nasm tar libbz2-dev libgtk2.0-dev cmake git libfluidsynth-dev libgme-dev \
-libopenal-dev timidity libwildmidi-dev unzip cmake
-
-# VizDoom dependencies
-sudo apt install libboost-all-dev python3-dev python3-pip
-```
-
-- Install VizDoom Python API: 
-`pip install git+https://github.com/alex-petrenko/ViZDoom@doom_bot_project#egg=vizdoom`
-
-It is important that you install this version and not the version from pip. It contains important fixes 
-that allow us to add support for multi-agent environments.
+To install VizDoom just follow system setup instructions from the original repository ([VizDoom linux_deps](https://github.com/mwydmuch/ViZDoom/blob/master/doc/Building.md#linux_deps)),
+after which the latest VizDoom can be installed from PyPI: ```pip install vizdoom```.
+Version 1.1.9 or above is recommended as it fixes bugs related to multi-agent training.
 
 #### DMLab
  
