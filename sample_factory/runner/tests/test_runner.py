@@ -48,7 +48,7 @@ class TestRunner(TestCase):
         params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
         cmd = 'python super_rl.py'
         ex = Experiment('test', cmd, params.generate_params(randomize=False))
-        cmds = ex.generate_experiments('train_dir')
+        cmds = ex.generate_experiments('train_dir', customize_experiment_name=True, param_prefix='--')
         for index, value in enumerate(cmds):
             command, name = value
             self.assertTrue(command.startswith(cmd))
