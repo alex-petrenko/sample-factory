@@ -61,7 +61,7 @@ DOOM_ENVS = [
     DoomSpec(
         'doom_basic', 'basic.cfg',
         Discrete(1 + 3),  # idle, left, right, attack
-        0.01, 300,
+        reward_scaling=0.01, default_timeout=300,
     ),
 
     DoomSpec(
@@ -168,7 +168,19 @@ def doom_env_by_name(name):
     for cfg in DOOM_ENVS:
         if cfg.name == name:
             return cfg
-    raise Exception('Unknown Doom env')
+    raise RuntimeError('Unknown Doom env')
+
+
+def register_additional_doom_env(doom_spec):
+    try:
+        spec = doom_env_by_name(doom_spec.name)
+        log.error('Doom env spec %s already exists', spec.name)
+        return
+    except RuntimeError:
+        pass
+
+    log.debug('Registering Doom environment %s...', doom_spec.name)
+    DOOM_ENVS.append(doom_spec)
 
 
 # noinspection PyUnusedLocal

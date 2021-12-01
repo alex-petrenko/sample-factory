@@ -1,2 +1,5 @@
-include sample_factory/envs/doom/scenarios/*.cfg
-include sample_factory/envs/doom/scenarios/*.wad
+recursive-include . *.md
+recursive-include . *.cfg
+recursive-include . *.wad
+recursive-include . *.sh
+include LICENSE

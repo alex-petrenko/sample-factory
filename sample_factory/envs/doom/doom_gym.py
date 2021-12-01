@@ -116,8 +116,17 @@ class VizdoomEnv(gym.Env):
 
         self.delta_actions_scaling_factor = 7.5
 
-        scenarios_dir = join(os.path.dirname(__file__), 'scenarios')
-        self.config_path = join(scenarios_dir, config_file)
+        if os.path.isabs(config_file):
+            self.config_path = config_file
+        else:
+            scenarios_dir = join(os.path.dirname(__file__), 'scenarios')
+            self.config_path = join(scenarios_dir, config_file)
+            if not os.path.isfile(self.config_path):
+                log.warning(
+                    'File %s not found in scenarios dir %s. Consider providing absolute path?',
+                    config_file, scenarios_dir,
+                )
+
         self.variable_indices = self._parse_variable_indices(self.config_path)
 
         # only created if we call render() method
