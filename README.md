@@ -9,6 +9,8 @@ Codebase for high throughput asynchronous reinforcement learning.
 
 **Paper:** https://arxiv.org/abs/2006.11751
 
+**Cite:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
+
 **Talk:** https://youtu.be/lLG17LKKSZc
 
 **Videos:** https://sites.google.com/view/sample-factory
