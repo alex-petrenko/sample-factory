@@ -7,4 +7,4 @@ conda install -c conda-forge cmake gtk2 sdl2
 ```
 Then install from sources:
 - clone repo
-- `python setup.py build && pip setup.py install`
+- `python setup.py build && python setup.py install`
