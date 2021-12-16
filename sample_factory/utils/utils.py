@@ -331,7 +331,12 @@ def remove_if_exists(file):
 
 
 def get_username():
-    return pwd.getpwuid(os.getuid()).pw_name
+    uid = os.getuid()
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        # worst case scenario - let's just use uid
+        return str(uid)
 
 
 def project_tmp_dir():
