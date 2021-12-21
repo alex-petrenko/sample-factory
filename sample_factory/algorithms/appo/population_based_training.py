@@ -11,7 +11,7 @@ from os.path import join
 
 import numpy as np
 
-from sample_factory.algorithms.appo.appo_utils import TaskType, iterate_recursively
+from sample_factory.algorithms.appo.appo_utils import TaskType, iter_dicts_recursively, iterate_recursively
 from sample_factory.algorithms.utils.algo_utils import EPS
 from sample_factory.utils.utils import log, experiment_dir
 
@@ -188,18 +188,21 @@ class PopulationBasedTraining:
         return new_value
 
     def _perturb(self, old_params, default_params):
-        """Params assumed to be a flat dict."""
+        """Params assumed to be a flat dict or a dict of dicts, etc."""
         params = copy.deepcopy(old_params)
 
-        for key, value in params.items():
+        # this will iterate over all leaf nodes in two identical (potentially nested) dicts
+        for d_params, d_default, key, value, value_default in iter_dicts_recursively(params, default_params):
             if isinstance(value, (tuple, list)):
                 # this is the case for reward shaping delta params
-                params[key] = tuple(
-                    self._perturb_param(p, f'{key}_{i}', default_params[key][i])
-                    for i, p in enumerate(value)
+                # i.e. where reward is characterized by two values (one corresponding to a negative or a positive change
+                # of something in the environment, like health).
+                # See envs/doom/wrappers/reward_shaping.py:39 for example
+                d_params[key] = tuple(
+                    self._perturb_param(p, f'{key}_{i}', value_default[i]) for i, p in enumerate(value)
                 )
             else:
-                params[key] = self._perturb_param(value, key, default_params[key])
+                d_params[key] = self._perturb_param(value, key, value_default)
 
         return params
 

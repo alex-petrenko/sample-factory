@@ -41,6 +41,10 @@ codebase for other types of async RL algorithms.
 
 ## Recent releases
 
+##### v1.121.3
+* Fixed a small bug related to population-based training (a reward shaping dictionary was assumed to be a flat dict,
+while it could be a nested dict in some envs)
+
 ##### v1.121.2
 * Fixed a bug that prevented Vizdoom *.cfg and *.wad files from being copied to site-packages during installation from PyPI
 * Added example on how to use custom Vizdoom envs without modifying the source code (`sample_factory_examples/train_custom_vizdoom_env.py`)

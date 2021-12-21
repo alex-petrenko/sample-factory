@@ -73,7 +73,11 @@ def _copy_dict_structure_func(d, d_copy):
 
 
 def iter_dicts_recursively(d1, d2):
-    """Assuming dicts have the exact same structure."""
+    """
+    Assuming structure of d1 is strictly included into d2.
+    I.e. each key at each recursion level is also present in d2. This is also true when d1 and d2 have the same
+    structure.
+    """
     for k, v in d1.items():
         assert k in d2
 
