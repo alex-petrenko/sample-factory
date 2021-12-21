@@ -14,6 +14,7 @@ Trained with Sample Factory 1.121.2 in VizDoom 1.1.11.
 
 * download and unzip into a local directory `./train_dir` (resulting tree should look like `train_dir/doom_battle_battle2_appo_v1.121.2`)
 * make sure VizDoom and Sample Factory are installed (see main README.md)
+* full configuration for the above experiments can be found in `cfg.json` in the experiment folder
 
 ##### `Battle` agent
 
