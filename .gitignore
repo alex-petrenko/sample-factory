@@ -107,6 +107,7 @@ _vizdoom.ini
 train_dir/
 train_dir_old/**
 trained_policies/**
+!trained_policies/*.md
 .vis/
 
 

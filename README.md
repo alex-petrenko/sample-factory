@@ -363,6 +363,10 @@ python -m sample_factory.run_algorithm --algo=DUMMY_SAMPLER --env=doom_benchmark
 To run unit tests execute `./all_tests.sh` from the root of the repo.
 Consider installing VizDoom for a more comprehensive set of tests.
 
+### Trained policies
+
+See a separate [trained_policies/README.md](https://github.com/alex-petrenko/sample-factory/blob/master/trained_policies/README.md).
+
 ### Caveats
 
 - Multiplayer VizDoom environments can freeze your console sometimes, simple `reset` takes care of this
