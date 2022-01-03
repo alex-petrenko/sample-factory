@@ -1,0 +1,7 @@
+- API similar to rlpyt (sampler classes, assemble an algorithm from building blocks, composition)
+- synchronous sampler
+- configuration (use Hydra?)
+- restart workers when they crash, not only when they crash on startup
+- Weights and biases
+- Isaac Gym interop
+- transformer support
