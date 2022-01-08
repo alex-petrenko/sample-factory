@@ -55,17 +55,19 @@ class APPO(ReinforcementLearningAlgorithm):
 
     @classmethod
     def add_cli_args(cls, parser):
-        p = parser
-        super().add_cli_args(p)
-        p.add_argument('--experiment_summaries_interval', default=20, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
+        def arg(*args, **kwargs):
+            parser.add_argument(*args, **kwargs)
 
-        p.add_argument('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
-        p.add_argument('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
-        p.add_argument('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
+        super().add_cli_args(parser)
+        arg('--experiment_summaries_interval', default=20, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
 
-        p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False')
+        arg('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
+        arg('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
+        arg('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')
 
-        p.add_argument(
+        arg('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False')
+
+        arg(
             '--rollout', default=32, type=int,
             help='Length of the rollout from each environment in timesteps.'
                  'Once we collect this many timesteps on actor worker, we send this trajectory to the learner.'
@@ -80,30 +82,30 @@ class APPO(ReinforcementLearningAlgorithm):
                  '(see function finalize_trajectory in actor_worker.py)',
         )
 
-        p.add_argument('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
+        arg('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
-        p.add_argument(
+        arg(
             '--recurrence', default=32, type=int,
             help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly'
                  'For V-trace recurrence should be equal to rollout length.',
         )
 
-        p.add_argument('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
-        p.add_argument('--rnn_type', default='gru', choices=['gru', 'lstm'], type=str, help='Type of RNN cell to use if use_rnn is True')
-        p.add_argument('--rnn_num_layers', default=1, type=int, help='Number of RNN layers to use if use_rnn is True')
+        arg('--use_rnn', default=True, type=str2bool, help='Whether to use RNN core in a policy or not')
+        arg('--rnn_type', default='gru', choices=['gru', 'lstm'], type=str, help='Type of RNN cell to use if use_rnn is True')
+        arg('--rnn_num_layers', default=1, type=int, help='Number of RNN layers to use if use_rnn is True')
 
-        p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
-        p.add_argument('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
-        p.add_argument('--batch_size', default=1024, type=int, help='Minibatch size for SGD')
-        p.add_argument(
+        arg('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
+        arg('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
+        arg('--batch_size', default=1024, type=int, help='Minibatch size for SGD')
+        arg(
             '--num_batches_per_iteration', default=1, type=int,
             help='How many minibatches we collect before training on the collected experience. It is generally recommended to set this to 1 for most experiments, because any higher value will increase the policy lag.'
                  'But in some specific circumstances it can be beneficial to have a larger macro-batch in order to shuffle and decorrelate the minibatches.'
                  'Here and throughout the codebase: macro batch is the portion of experience that learner processes per iteration (consisting of 1 or several minibatches)',
         )
-        p.add_argument('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
+        arg('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
 
-        p.add_argument(
+        arg(
             '--num_minibatches_to_accumulate', default=-1, type=int,
             help='This parameter governs the maximum number of minibatches the learner can accumulate before further experience collection is stopped.'
                  'The default value (-1) will set this to 2 * num_batches_per_iteration, so if the experience collection is faster than the training,'
@@ -117,17 +119,17 @@ class APPO(ReinforcementLearningAlgorithm):
                  'regular synchronous PPO.',
         )
 
-        p.add_argument('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
+        arg('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
-        p.add_argument('--exploration_loss_coeff', default=0.003, type=float,
+        arg('--exploration_loss_coeff', default=0.003, type=float,
                        help='Coefficient for the exploration component of the loss function.')
-        p.add_argument('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
-        p.add_argument('--kl_loss_coeff', default=0.0, type=float,
+        arg('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
+        arg('--kl_loss_coeff', default=0.0, type=float,
                        help='Coefficient for fixed KL loss (as used by Schulman et al. in https://arxiv.org/pdf/1707.06347.pdf). '
                             'Highly recommended for environments with continuous action spaces.',
                        )
-        p.add_argument('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
+        arg('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
                        help='Usually the exploration loss is based on maximizing the entropy of the probability'
                             ' distribution. Note that mathematically maximizing entropy of the categorical probability '
                             'distribution is exactly the same as minimizing the (regular) KL-divergence between'
@@ -146,30 +148,30 @@ class APPO(ReinforcementLearningAlgorithm):
                        )
 
         # APPO-specific
-        p.add_argument(
+        arg(
             '--num_envs_per_worker', default=2, type=int,
             help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-30 range for Atari/VizDoom'
                  'Must be even for double-buffered sampling!',
         )
-        p.add_argument(
+        arg(
             '--worker_num_splits', default=2, type=int,
             help='Typically we split a vector of envs into two parts for "double buffered" experience collection'
                  'Set this to 1 to disable double buffering. Set this to 3 for triple buffering!',
         )
 
-        p.add_argument('--num_policies', default=1, type=int, help='Number of policies to train jointly')
-        p.add_argument('--policy_workers_per_policy', default=1, type=int, help='Number of policy workers that compute forward pass (per policy)')
-        p.add_argument(
+        arg('--num_policies', default=1, type=int, help='Number of policies to train jointly')
+        arg('--policy_workers_per_policy', default=1, type=int, help='Number of policy workers that compute forward pass (per policy)')
+        arg(
             '--max_policy_lag', default=10000, type=int,
             help='Max policy lag in policy versions. Discard all experience that is older than this. This should be increased for configurations with multiple epochs of SGD because naturally'
                  'policy-lag may exceed this value.',
         )
-        p.add_argument(
+        arg(
             '--traj_buffers_excess_ratio', default=1.3, type=float,
             help='Increase this value to make sure the system always has enough free trajectory buffers (can be useful when i.e. a lot of inactive agents in multi-agent envs)'
                  'Decrease this to 1.0 to save as much RAM as possible.',
         )
-        p.add_argument(
+        arg(
             '--decorrelate_experience_max_seconds', default=10, type=int,
             help='Decorrelating experience serves two benefits. First: this is better for learning because samples from workers come from random moments in the episode, becoming more "i.i.d".'
                  'Second, and more important one: this is good for environments with highly non-uniform one-step times, including long and expensive episode resets. If experience is not decorrelated'
@@ -177,65 +179,74 @@ class APPO(ReinforcementLearningAlgorithm):
                  'which will increase the policy-lag of the new experience collected. The performance of the Sample Factory is best when experience is generated as more-or-less'
                  'uniform stream. Try increasing this to 100-200 seconds to smoothen the experience distribution in time right from the beginning (it will eventually spread out and settle anyway)',
         )
-        p.add_argument(
+        arg(
             '--decorrelate_envs_on_one_worker', default=True, type=str2bool,
             help='In addition to temporal decorrelation of worker processes, also decorrelate envs within one worker process'
                  'For environments with a fixed episode length it can prevent the reset from happening in the same rollout for all envs simultaneously, which makes experience collection more uniform.',
         )
 
-        p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction. If this is True, then GAE is not used')
-        p.add_argument('--vtrace_rho', default=1.0, type=float, help='rho_hat clipping parameter of the V-trace algorithm (importance sampling truncation)')
-        p.add_argument('--vtrace_c', default=1.0, type=float, help='c_hat clipping parameter of the V-trace algorithm. Low values for c_hat can reduce variance of the advantage estimates (similar to GAE lambda < 1)')
+        arg('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction. If this is True, then GAE is not used')
+        arg('--vtrace_rho', default=1.0, type=float, help='rho_hat clipping parameter of the V-trace algorithm (importance sampling truncation)')
+        arg('--vtrace_c', default=1.0, type=float, help='c_hat clipping parameter of the V-trace algorithm. Low values for c_hat can reduce variance of the advantage estimates (similar to GAE lambda < 1)')
 
-        p.add_argument(
+        arg(
             '--set_workers_cpu_affinity', default=True, type=str2bool,
             help='Whether to assign workers to specific CPU cores or not. The logic is beneficial for most workloads because prevents a lot of context switching.'
                  'However for some environments it can be better to disable it, to allow one worker to use all cores some of the time. This can be the case for some DMLab environments with very expensive episode reset'
                  'that can use parallel CPU cores for level generation.',
         )
-        p.add_argument(
+        arg(
             '--force_envs_single_thread', default=True, type=str2bool,
             help='Some environments may themselves use parallel libraries such as OpenMP or MKL. Since we parallelize environments on the level of workers, there is no need to keep this parallel semantic.'
                  'This flag uses threadpoolctl to force libraries such as OpenMP and MKL to use only a single thread within the environment.'
                  'Default value (True) is recommended unless you are running fewer workers than CPU cores.',
         )
-        p.add_argument('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
+        arg('--reset_timeout_seconds', default=120, type=int, help='Fail worker on initialization if not a single environment was reset in this time (worker probably got stuck)')
 
-        p.add_argument('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
+        arg('--default_niceness', default=0, type=int, help='Niceness of the highest priority process (the learner). Values below zero require elevated privileges.')
 
-        p.add_argument(
+        arg(
             '--train_in_background_thread', default=True, type=str2bool,
             help='Using background thread for training is faster and allows preparing the next batch while training is in progress.'
                  'Unfortunately debugging can become very tricky in this case. So there is an option to use only a single thread on the learner to simplify the debugging.',
         )
-        p.add_argument('--learner_main_loop_num_cores', default=1, type=int, help='When batching on the learner is the bottleneck, increasing the number of cores PyTorch uses can improve the performance')
-        p.add_argument('--actor_worker_gpus', default=[], type=int, nargs='*', help='By default, actor workers only use CPUs. Changes this if e.g. you need GPU-based rendering on the actors')
+        arg('--learner_main_loop_num_cores', default=1, type=int, help='When batching on the learner is the bottleneck, increasing the number of cores PyTorch uses can improve the performance')
+        arg('--actor_worker_gpus', default=[], type=int, nargs='*', help='By default, actor workers only use CPUs. Changes this if e.g. you need GPU-based rendering on the actors')
 
         # PBT stuff
-        p.add_argument('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
-        p.add_argument('--pbt_mix_policies_in_one_env', default=True, type=str2bool, help='For multi-agent envs, whether we mix different policies in one env.')
-        p.add_argument('--pbt_period_env_steps', default=int(5e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
-        p.add_argument('--pbt_start_mutation', default=int(2e7), type=int, help='Allow initial diversification, start PBT after this many env steps')
-        p.add_argument('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
-        p.add_argument('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
-        p.add_argument('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
-        p.add_argument('--pbt_replace_reward_gap_absolute', default=1e-6, type=float, help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
-        p.add_argument('--pbt_optimize_batch_size', default=False, type=str2bool, help='Whether to optimize batch size or not (experimental)')
-        p.add_argument(
+        arg('--with_pbt', default=False, type=str2bool, help='Enables population-based training basic features')
+        arg('--pbt_mix_policies_in_one_env', default=True, type=str2bool, help='For multi-agent envs, whether we mix different policies in one env.')
+        arg('--pbt_period_env_steps', default=int(5e6), type=int, help='Periodically replace the worst policies with the best ones and perturb the hyperparameters')
+        arg('--pbt_start_mutation', default=int(2e7), type=int, help='Allow initial diversification, start PBT after this many env steps')
+        arg('--pbt_replace_fraction', default=0.3, type=float, help='A portion of policies performing worst to be replace by better policies (rounded up)')
+        arg('--pbt_mutation_rate', default=0.15, type=float, help='Probability that a parameter mutates')
+        arg('--pbt_replace_reward_gap', default=0.1, type=float, help='Relative gap in true reward when replacing weights of the policy with a better performing one')
+        arg('--pbt_replace_reward_gap_absolute', default=1e-6, type=float, help='Absolute gap in true reward when replacing weights of the policy with a better performing one')
+        arg('--pbt_optimize_batch_size', default=False, type=str2bool, help='Whether to optimize batch size or not (experimental)')
+        arg('--pbt_optimize_gamma', default=False, type=str2bool, help='Whether to optimize gamma, discount factor, or not (experimental)')
+        arg(
             '--pbt_target_objective', default='true_reward', type=str,
             help='Policy stat to optimize with PBT. true_reward (default) is equal to raw env reward if not specified, but can also be any other per-policy stat.'
                  'For DMlab-30 use value "dmlab_target_objective" (which is capped human normalized score)',
         )
+        arg(
+            '--pbt_perturb_min', default=1.05, type=float,
+            help='When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max]',
+        )
+        arg(
+            '--pbt_perturb_min', default=1.5, type=float,
+            help='When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max]',
+        )
 
         # CPC|A options
-        p.add_argument('--use_cpc', default=False, type=str2bool, help='Use CPC|A as an auxiliary loss durning learning')
-        p.add_argument('--cpc_forward_steps', default=8, type=int, help='Number of forward prediction steps for CPC')
-        p.add_argument('--cpc_time_subsample', default=6, type=int, help='Number of timesteps to sample from each batch. This should be less than recurrence to decorrelate experience.')
-        p.add_argument('--cpc_forward_subsample', default=2, type=int, help='Number of forward steps to sample for loss computation. This should be less than cpc_forward_steps to decorrelate gradients.')
+        arg('--use_cpc', default=False, type=str2bool, help='Use CPC|A as an auxiliary loss durning learning')
+        arg('--cpc_forward_steps', default=8, type=int, help='Number of forward prediction steps for CPC')
+        arg('--cpc_time_subsample', default=6, type=int, help='Number of timesteps to sample from each batch. This should be less than recurrence to decorrelate experience.')
+        arg('--cpc_forward_subsample', default=2, type=int, help='Number of forward steps to sample for loss computation. This should be less than cpc_forward_steps to decorrelate gradients.')
 
         # debugging options
-        p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')
-        p.add_argument('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
+        arg('--benchmark', default=False, type=str2bool, help='Benchmark mode')
+        arg('--sampler_only', default=False, type=str2bool, help='Do not send experience to the learner, measuring sampling throughput')
 
     def __init__(self, cfg):
         super().__init__(cfg)

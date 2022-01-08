@@ -26,8 +26,10 @@ def perturb_vtrace(x, cfg):
     return perturb_float(x, perturb_amount=1.005)
 
 
-def perturb_exponential_decay(x, cfg):
-    perturbed = perturb_float(1.0 - x)
+def perturb_exponential_decay(x, cfg, perturb_amount_min=1.01, perturb_amount_max=1.2):
+    # very conservative values, things like gamma should not change quickly
+    perturb_amount = random.uniform(perturb_amount_min, perturb_amount_max)
+    perturbed = perturb_float(1.0 - x, perturb_amount=perturb_amount)
     new_value = 1.0 - perturbed
     new_value = max(EPS, new_value)
     return new_value
@@ -54,6 +56,7 @@ class PbtTask(Enum):
 
 HYPERPARAMS_TO_TUNE = {
     'learning_rate', 'exploration_loss_coeff', 'value_loss_coeff', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value',
+    # batch size and gamma are added with a CLI parameter
 }
 
 # if not specified then tune all rewards
@@ -87,8 +90,10 @@ class PopulationBasedTraining:
     def __init__(self, cfg, default_reward_shaping, summary_writers):
         self.cfg = cfg
 
-        if cfg.pbt_optimize_batch_size and 'batch_size' not in HYPERPARAMS_TO_TUNE:
+        if cfg.pbt_optimize_batch_size:
             HYPERPARAMS_TO_TUNE.add('batch_size')
+        if cfg.pbt_optimize_gamma:
+            HYPERPARAMS_TO_TUNE.add('gamma')
 
         self.last_update = [0] * self.cfg.num_policies
 
@@ -179,7 +184,7 @@ class PopulationBasedTraining:
         elif type(param) is bool:
             new_value = not param
         elif isinstance(param, numbers.Number):
-            perturb_amount = random.uniform(1.01, 1.5)
+            perturb_amount = random.uniform(self.cfg.pbt_perturb_min, self.cfg.pbt_perturb_max)
             new_value = perturb_float(float(param), perturb_amount=perturb_amount)
         else:
             raise RuntimeError('Unsupported parameter type')
