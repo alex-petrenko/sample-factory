@@ -5,3 +5,4 @@
 - Weights and biases
 - Isaac Gym interop
 - transformer support
+- get rid of environment families by prefix?
