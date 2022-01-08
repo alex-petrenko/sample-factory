@@ -33,7 +33,7 @@ def init_wandb(cfg):
         wandb.init(
             project=cfg.wandb_project, entity=cfg.wandb_user, sync_tensorboard=True,
             id=wandb_unique_id,
-            name=cfg.experiment,
+            name=wandb_unique_id,
             group=wandb_group, job_type=cfg.wandb_job_type, tags=cfg.wandb_tags,
             resume=True,
             settings=wandb.Settings(start_method='fork'),
