@@ -41,6 +41,16 @@ codebase for other types of async RL algorithms.
 
 ## Recent releases
 
+##### v1.121.4
+* Support Weights and Biases (see section "WandB support")
+* More configurable population-based training: 
+can set from command line whether or not to mutate gamma, plus the perturbation magnitude for all float hyperparams can also be set from command line:
+```
+--pbt_optimize_gamma: Whether to optimize gamma, discount factor, or not (experimental) (default: False)
+--pbt_perturb_min: When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max] (default: 1.05)
+--pbt_perturb_max: When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max] (default: 1.5)
+```
+
 ##### v1.121.3
 * Fixed a small bug related to population-based training (a reward shaping dictionary was assumed to be a flat dict,
 while it could be a nested dict in some envs)
@@ -298,6 +308,30 @@ Sample Factory uses Tensorboard summaries. Run Tensorboard to monitor your exper
 
 Additionally, we provide a helper script that has nice command line interface to monitor the experiment folders 
 using wildcard masks: `python -m sample_factory.tb '*custom_experiment*' '*another*custom*experiment_name'`
+
+#### WandB support
+
+Sample Factory also supports experiment monitoring with Weights and Biases.
+In order to setup WandB locally run `wandb login` in the terminal (https://docs.wandb.ai/quickstart#1.-set-up-wandb)
+
+Example command line to run an experiment with WandB monitoring:
+
+```
+python -m sample_factory.algorithms.appo.train_appo --env=doom_basic --algo=APPO --train_for_env_steps=30000000 --num_workers=20 --num_envs_per_worker=20 --experiment=doom_basic --with_wandb=True --wandb_user=<your_wandb_user> --wandb_tags test benchmark doom appo
+```
+
+A total list of WandB settings: 
+```
+--with_wandb: Enables Weights and Biases integration (default: False)
+--wandb_user: WandB username (entity). Must be specified from command line! Also see https://docs.wandb.ai/quickstart#1.-set-up-wandb (default: None)
+--wandb_project: WandB "Project" (default: sample_factory)
+--wandb_group: WandB "Group" (to group your experiments). By default this is the name of the env. (default: None)
+--wandb_job_type: WandB job type (default: SF)
+--wandb_tags: [WANDB_TAGS [WANDB_TAGS ...]] Tags can help with finding experiments in WandB web console (default: [])
+```
+
+Once the experiment is started the link to the monitored session is going to be available in the logs (or by searching in Wandb Web console).
+
 
 ### Runner interface
 
