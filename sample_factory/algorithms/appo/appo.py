@@ -38,6 +38,7 @@ from sample_factory.envs.env_utils import get_default_reward_shaping
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import summaries_dir, experiment_dir, log, str2bool, memory_consumption_mb, cfg_file, \
     ensure_dir_exists, list_child_processes, kill_processes, AttrDict, done_filename, save_git_diff, init_file_logger
+from sample_factory.utils.wandb_utils import init_wandb, finish_wandb
 
 if os.name == 'nt':
     from sample_factory.utils import Queue as MpQueue
@@ -234,7 +235,7 @@ class APPO(ReinforcementLearningAlgorithm):
             help='When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max]',
         )
         arg(
-            '--pbt_perturb_min', default=1.5, type=float,
+            '--pbt_perturb_max', default=1.5, type=float,
             help='When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max]',
         )
 
@@ -243,6 +244,14 @@ class APPO(ReinforcementLearningAlgorithm):
         arg('--cpc_forward_steps', default=8, type=int, help='Number of forward prediction steps for CPC')
         arg('--cpc_time_subsample', default=6, type=int, help='Number of timesteps to sample from each batch. This should be less than recurrence to decorrelate experience.')
         arg('--cpc_forward_subsample', default=2, type=int, help='Number of forward steps to sample for loss computation. This should be less than cpc_forward_steps to decorrelate gradients.')
+
+        # Weights and Biases experiment monitoring
+        arg('--with_wandb', default=False, type=str2bool, help='Enables Weights and Biases integration')
+        arg('--wandb_user', default=None, type=str, help='WandB username (entity). Must be specified from command line! Also see https://docs.wandb.ai/quickstart#1.-set-up-wandb')
+        arg('--wandb_project', default='sample_factory', type=str, help='WandB "Project"')
+        arg('--wandb_group', default=None, type=str, help='WandB "Group" (to group your experiments). By default this is the name of the env.')
+        arg('--wandb_job_type', default='SF', type=str, help='WandB job type')
+        arg('--wandb_tags', default=[], type=str, nargs='*', help='Tags can help with finding experiments in WandB web console')
 
         # debugging options
         arg('--benchmark', default=False, type=str2bool, help='Benchmark mode')
@@ -308,6 +317,8 @@ class APPO(ReinforcementLearningAlgorithm):
         self.throughput_stats = [deque([], maxlen=5) for _ in range(self.cfg.num_policies)]
         self.avg_stats = dict()
         self.stats = dict()  # regular (non-averaged) stats
+
+        init_wandb(self.cfg)
 
         self.writers = dict()
         writer_keys = list(range(self.cfg.num_policies))
@@ -728,6 +739,8 @@ class APPO(ReinforcementLearningAlgorithm):
         for i, w in enumerate(all_workers):
             w.join()
         log.debug('Workers joined!')
+
+        finish_wandb(self.cfg)
 
         # VizDoom processes often refuse to die for an unidentified reason, so we're force killing them with a hack
         kill_processes(child_processes)
