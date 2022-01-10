@@ -137,6 +137,8 @@ Command lines for running experiments with these datasets are provided in the se
  
 ALE envs are supported out-of-the-box, although the existing wrappers and hyperparameters
 aren't well optimized for sample efficiency in Atari. Tuned Atari training examples would be a welcome contribution.
+
+Since ~2022 some extra steps might be required to install atari: `pip install "gym[atari,accept-rom-license]"`
  
 #### Custom multi-agent environments
 
