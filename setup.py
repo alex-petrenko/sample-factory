@@ -19,7 +19,7 @@ setup(
     description='High throughput asynchronous reinforcement learning framework',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    version='1.121.3',
+    version='1.121.4',
     url='https://github.com/alex-petrenko/sample-factory',
     author='Aleksei Petrenko',
     license='MIT',
@@ -42,6 +42,7 @@ setup(
         'faster-fifo>=1.2.0',
         'filelock',
         'opencv-python',
+        'wandb>=0.12.9',
     ],
 
     package_dir={'': './'},

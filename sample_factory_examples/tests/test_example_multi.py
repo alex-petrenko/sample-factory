@@ -33,7 +33,7 @@ class TestExampleMulti(TestCase):
         # test training for a few thousand frames
         cfg = parse_args(argv=['--algo=APPO', '--env=my_custom_multi_env_v1', f'--experiment={experiment_name}'])
         cfg.num_workers = 6
-        cfg.train_for_env_steps = 300000
+        cfg.train_for_env_steps = 350000
         cfg.save_every_sec = 1
         cfg.decorrelate_experience_max_seconds = 0
         cfg.seed = 0
