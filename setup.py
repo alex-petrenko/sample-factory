@@ -34,6 +34,7 @@ setup(
         'numpy>=1.18.1<2.0',
         'torch>=1.6<2.0',
         'gym>=0.17.1<1.0',
+        'pyglet',  # gym dependency
         'tensorboard>=1.15.0',
         'tensorboardx>=2.0',
         'psutil>=5.7.0',

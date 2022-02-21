@@ -129,6 +129,7 @@ def run_rl(cfg):
     learner.init()
 
     runner = SyncRunner(cfg, comm_broker, sampler, batcher, learner)
+    runner.init()
     status = runner.run()
     return status
 

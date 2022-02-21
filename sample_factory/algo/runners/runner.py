@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import time
@@ -13,7 +14,7 @@ from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_E
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
-    memory_consumption_mb, summaries_dir
+    memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
 
 
 class Callback:
@@ -374,8 +375,21 @@ class Runner(Configurable):
         callback = PeriodicCallbackEnvStepsPerPolicy(func, period_env_steps, policy_id)
         self.register_periodic_callback(callback)
 
+    def _cfg_dict(self):
+        if isinstance(self.cfg, dict):
+            return self.cfg
+        else:
+            return vars(self.cfg)
+
+    def _save_cfg(self):
+        cfg_dict = self._cfg_dict()
+        with open(cfg_file(self.cfg), 'w') as json_file:
+            json.dump(cfg_dict, json_file, indent=2)
+
     def init(self):
-        self.sampler.init()
+        self._save_cfg()
+        save_git_diff(experiment_dir(cfg=self.cfg))
+        init_file_logger(experiment_dir(self.cfg))
 
     def run(self):
         status = ExperimentStatus.SUCCESS
