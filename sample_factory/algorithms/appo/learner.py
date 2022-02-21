@@ -692,6 +692,7 @@ class LearnerWorker:
             recurrence = self.cfg.recurrence
 
             if self.cfg.with_vtrace:
+                # TODO: vtrace can be done outside of the train function and this condition won't be required
                 assert recurrence == self.cfg.rollout and recurrence > 1, \
                     'V-trace requires to recurrence and rollout to be equal'
 

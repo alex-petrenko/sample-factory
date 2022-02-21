@@ -22,7 +22,7 @@ class TestDoom(TestCase):
 
     @staticmethod
     def doom_multiagent(make_multi_env, worker_index, num_steps=1000):
-        env_config = AttrDict({'worker_index': worker_index, 'vector_index': 0, 'safe_init': False})
+        env_config = AttrDict(worker_index=worker_index, vector_index=0, safe_init=False)
         multi_env = make_multi_env(env_config)
 
         obs = multi_env.reset()

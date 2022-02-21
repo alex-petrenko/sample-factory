@@ -101,7 +101,7 @@ class APPO(ReinforcementLearningAlgorithm):
         arg(
             '--num_batches_per_iteration', default=1, type=int,
             help='How many minibatches we collect before training on the collected experience. It is generally recommended to set this to 1 for most experiments, because any higher value will increase the policy lag.'
-                 'But in some specific circumstances it can be beneficial to have a larger macro-batch in order to shuffle and decorrelate the minibatches.'
+                 'But in some specific circumstances it can be beneficial to have a larger "macro"-batch in order to shuffle and decorrelate the minibatches.'
                  'Here and throughout the codebase: macro batch is the portion of experience that learner processes per iteration (consisting of 1 or several minibatches)',
         )
         arg('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
@@ -123,13 +123,12 @@ class APPO(ReinforcementLearningAlgorithm):
         arg('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')
 
         # components of the loss function
-        arg('--exploration_loss_coeff', default=0.003, type=float,
-                       help='Coefficient for the exploration component of the loss function.')
+        arg('--exploration_loss_coeff', default=0.003, type=float, help='Coefficient for the exploration component of the loss function.')
         arg('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         arg('--kl_loss_coeff', default=0.0, type=float,
-                       help='Coefficient for fixed KL loss (as used by Schulman et al. in https://arxiv.org/pdf/1707.06347.pdf). '
-                            'Highly recommended for environments with continuous action spaces.',
-                       )
+            help='Coefficient for fixed KL loss (as used by Schulman et al. in https://arxiv.org/pdf/1707.06347.pdf). '
+                 'Highly recommended for environments with continuous action spaces.',
+        )
         arg('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
                        help='Usually the exploration loss is based on maximizing the entropy of the probability'
                             ' distribution. Note that mathematically maximizing entropy of the categorical probability '

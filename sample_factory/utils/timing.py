@@ -66,6 +66,7 @@ class Timing(AttrDict):
 
 
 def init_global_profiler(t):
+    """This is for debugging purposes. Normally prefer to pass it around."""
     global TIMING
     log.info('Setting global profiler in process %r', psutil.Process())
     TIMING = t

@@ -31,15 +31,15 @@ setup(
 
     # might want to add max versions restrictions, i.e. torch < 2?
     install_requires=[
-        'numpy>=1.18.1',
-        'torch>=1.6',
-        'gym>=0.17.1',
+        'numpy>=1.18.1<2.0',
+        'torch>=1.6<2.0',
+        'gym>=0.17.1<1.0',
         'tensorboard>=1.15.0',
         'tensorboardx>=2.0',
         'psutil>=5.7.0',
         'threadpoolctl>=2.0.0',
         'colorlog',
-        'faster-fifo>=1.2.0',
+        'faster-fifo>=1.2.0<2.0',
         'filelock',
         'opencv-python',
         'wandb>=0.12.9',

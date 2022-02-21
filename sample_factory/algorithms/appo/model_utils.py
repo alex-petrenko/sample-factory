@@ -290,10 +290,12 @@ class MlpEncoder(EncoderBase):
         x = self.forward_fc_blocks(x)
         return x
 
+
 def fc_layer(in_features, out_features, bias=True, spec_norm=False):
     if spec_norm:
         return spectral_norm(nn.Linear(in_features, out_features, bias))
     return nn.Linear(in_features, out_features, bias)
+
 
 def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:

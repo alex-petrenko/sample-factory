@@ -7,7 +7,7 @@ import multiprocessing
 from queue import Empty
 
 
-class Queue:
+class MpQueueWrapper:
     def __init__(self, max_size_bytes=200000):
         self.q = multiprocessing.Queue(max_size_bytes)
 
