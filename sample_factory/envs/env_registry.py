@@ -1,7 +1,5 @@
 from sample_factory.utils.utils import log
 
-ENV_REGISTRY = None
-
 
 class EnvRegistryEntry:
     def __init__(self, env_name_prefix, make_env_func, add_extra_params_func=None, override_default_params_func=None):
@@ -138,22 +136,3 @@ def register_default_envs(env_registry):
         env_registry.register_env_deferred(envs_prefix, env_funcs)
 
     log.debug('Default env families supported: %r', [f'{k}*' for k in default_envs.keys()])
-
-
-def ensure_env_registry_initialized():
-    global ENV_REGISTRY
-
-    if ENV_REGISTRY:
-        return
-
-    ENV_REGISTRY = EnvRegistry()
-    register_default_envs(ENV_REGISTRY)
-
-
-def global_env_registry():
-    """
-    :return: global env registry
-    :rtype: EnvRegistry
-    """
-    ensure_env_registry_initialized()
-    return ENV_REGISTRY

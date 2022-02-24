@@ -65,6 +65,9 @@ def sample_actions_log_probs(distribution):
     else:
         actions = distribution.sample()
         log_prob_actions = distribution.log_prob(actions)
+
+        # if len(log_prob_actions.shape) == 1:
+        #     log_prob_actions.unsqueeze_(dim=1)
         return actions, log_prob_actions
 
 

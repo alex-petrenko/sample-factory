@@ -87,7 +87,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         return x, new_rnn_states
 
     def forward_tail(self, core_output, with_action_distribution=False):
-        values = self.critic_linear(core_output)
+        values = self.critic_linear(core_output).squeeze()
 
         action_distribution_params, action_distribution = self.action_parameterization(core_output)
 
@@ -96,7 +96,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
         result = AttrDict(dict(
             actions=actions,
-            action_logits=action_distribution_params,  # perhaps `action_logits` is not the best name here since we now support continuous actions
+            action_logits=action_distribution_params,  # TODO! `action_logits` is not the best name here since we now support continuous actions
             log_prob_actions=log_prob_actions,
             values=values,
         ))

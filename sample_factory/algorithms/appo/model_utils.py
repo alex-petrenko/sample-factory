@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
 
+from sample_factory.algo.utils.context import global_encoder_registry
 from sample_factory.algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.algo_utils import EPS
 from sample_factory.algorithms.utils.pytorch_utils import calc_num_elements
@@ -11,18 +12,16 @@ from sample_factory.utils.utils import AttrDict
 from sample_factory.utils.utils import log
 
 
-# register custom encoders
-ENCODER_REGISTRY = dict()
-
-
 def register_custom_encoder(custom_encoder_name, encoder_cls):
-    if custom_encoder_name in ENCODER_REGISTRY:
+    encoder_registry = global_encoder_registry()
+
+    if custom_encoder_name in encoder_registry:
         log.warning('Encoder %s already registered', custom_encoder_name)
 
     assert issubclass(encoder_cls, EncoderBase), 'Custom encoders must be derived from EncoderBase'
 
     log.debug('Adding model class %r to registry (with name %s)', encoder_cls, custom_encoder_name)
-    ENCODER_REGISTRY[custom_encoder_name] = encoder_cls
+    encoder_registry[custom_encoder_name] = encoder_cls
 
 
 def get_hidden_size(cfg):
@@ -299,7 +298,7 @@ def fc_layer(in_features, out_features, bias=True, spec_norm=False):
 
 def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:
-        encoder_cls = ENCODER_REGISTRY[cfg.encoder_custom]
+        encoder_cls = global_encoder_registry()[cfg.encoder_custom]
         encoder = encoder_cls(cfg, obs_space, timing)
     else:
         encoder = create_standard_encoder(cfg, obs_space, timing)

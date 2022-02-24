@@ -1,3 +1,4 @@
+import multiprocessing
 import sys
 from dataclasses import dataclass
 
@@ -10,6 +11,7 @@ from sample_factory.algo.learners.learner import Learner
 from sample_factory.algo.runners.runner_sync import SyncRunner
 from sample_factory.algo.samplers.sampler_sync import SyncSampler
 from sample_factory.algo.utils.communication_broker import SyncCommBroker
+from sample_factory.algo.utils.context import sf_global_context, set_global_context
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algorithms.appo.appo_utils import make_env_func
 from sample_factory.algorithms.appo.model import _ActorCriticBase, create_actor_critic
@@ -48,7 +50,9 @@ class EnvInfo:
     frameskip: int
 
 
-def obtain_env_info(cfg: AttrDict):
+def get_env_info(sf_context, res_queue, cfg):
+    set_global_context(sf_context)
+
     gpu_actions = cfg.env_gpu_actions
 
     # Perhaps run this in a separate process for environments that allocate some exclusive process-wise resources
@@ -70,8 +74,25 @@ def obtain_env_info(cfg: AttrDict):
     #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
 
     tmp_env.close()
+    del tmp_env
 
-    return EnvInfo(obs_space, action_space, num_agents, gpu_actions, integer_actions, frameskip)
+    env_info_ = EnvInfo(obs_space, action_space, num_agents, gpu_actions, integer_actions, frameskip)
+    log.debug('Env info: %r', env_info_)
+    res_queue.put(env_info_)
+
+
+def obtain_env_info(cfg: AttrDict):
+    sf_context = sf_global_context()
+
+    ctx = multiprocessing.get_context('spawn')
+    q = ctx.Queue()
+    p = ctx.Process(target=get_env_info, args=(sf_context, q, cfg))
+    p.start()
+
+    env_info = q.get()
+    p.join()
+
+    return env_info
 
 
 # TODO: all components should use the same function

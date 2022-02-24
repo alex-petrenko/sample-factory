@@ -782,7 +782,7 @@ class ActorWorker:
         actions for the very first env step.
         """
         for split_idx, env_runner in enumerate(self.env_runners):
-            policy_inputs = env_runner.reset(self.report_queue)
+            policy_inputs = env_runner.reset()
             self._enqueue_policy_request(split_idx, policy_inputs)
 
         log.info('Finished reset for worker %d', self.worker_idx)

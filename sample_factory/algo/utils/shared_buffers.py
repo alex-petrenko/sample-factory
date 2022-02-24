@@ -14,6 +14,10 @@ def init_trajectory_tensor(num_trajectories, rollout_len, tensor_type, tensor_sh
         tensor_type = to_torch_dtype(tensor_type)
 
     dimensions = [num_trajectories, rollout_len]
+
+    # filter out dimensions with size 0
+    tensor_shape = [x for x in tensor_shape if x]
+
     final_shape = dimensions + list(tensor_shape)
     t = torch.zeros(final_shape, dtype=tensor_type)
 
@@ -49,26 +53,26 @@ def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size
         raise Exception('Only Dict observations spaces are supported')
 
     # env outputs
-    tensors['rewards'] = init_tensor(torch.float32, [1])
+    tensors['rewards'] = init_tensor(torch.float32, [])
     tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values by mistake it will be obvious
-    tensors['dones'] = init_tensor(torch.bool, [1])
+    tensors['dones'] = init_tensor(torch.bool, [])
     tensors['dones'].fill_(True)
-    tensors['policy_id'] = init_tensor(torch.int, [1])
+    tensors['policy_id'] = init_tensor(torch.int, [])
     tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
 
     # policy outputs, this matches the expected output of the actor-critic
     policy_outputs = [
-        ('actions', num_actions),
-        ('action_logits', num_action_logits),
-        ('log_prob_actions', 1),
-        ('values', 1),
-        ('policy_version', 1),
-        ('rnn_states', hidden_size)
+        ('actions', [num_actions]),
+        ('action_logits', [num_action_logits]),
+        ('log_prob_actions', []),
+        ('values', []),
+        ('policy_version', []),
+        ('rnn_states', [hidden_size])
     ]
 
-    for name, size in policy_outputs:
+    for name, shape in policy_outputs:
         assert name not in tensors
-        tensors[name] = init_tensor(torch.float32, [size])
+        tensors[name] = init_tensor(torch.float32, shape)
 
     return tensors
 

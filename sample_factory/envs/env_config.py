@@ -1,4 +1,4 @@
-from sample_factory.envs.env_registry import global_env_registry
+from sample_factory.algo.utils.context import global_env_registry
 
 
 def env_override_defaults(env, parser):

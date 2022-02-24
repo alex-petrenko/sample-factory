@@ -35,7 +35,7 @@ def register_doom_envs_rllib(**kwargs):
                 try:
                     with lock.acquire(timeout=10):
                         print('Env created, resetting...')
-                        env.reset()
+                        env.reset(),
                         print('Env reset completed! Config:', env_config)
                         break
                 except Timeout:

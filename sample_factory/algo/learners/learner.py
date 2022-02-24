@@ -617,18 +617,12 @@ class Learner(Configurable):
                 d[k] = v.reshape(shape)
 
             # TODO: inefficiency, do we need these on the GPU in the first place?
-            with timing.add_time('cpu_tensors'):
-                train_buffer['dones_cpu'] = train_buffer['dones'].to('cpu', copy=True, non_blocking=True).float()
-                train_buffer['rewards_cpu'] = train_buffer['rewards'].to('cpu', copy=True, non_blocking=True).float()
+            train_buffer['dones_cpu'] = train_buffer['dones'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
+            train_buffer['rewards_cpu'] = train_buffer['rewards'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
 
-            with timing.add_time('squeeze'):
-                # will squeeze actions only in simple categorical case
-                tensors_to_squeeze = [
-                    'actions', 'log_prob_actions', 'policy_version', 'policy_id', 'values',
-                    'rewards', 'dones', 'rewards_cpu', 'dones_cpu',
-                ]
-                for tensor_name in tensors_to_squeeze:
-                    train_buffer[tensor_name].squeeze_()
+            # will squeeze actions only in simple categorical case
+            for tensor_name in ['actions']:
+                train_buffer[tensor_name].squeeze_()
 
         train_stats = self._train(train_buffer, self.cfg.batch_size, experience_size, timing)
 

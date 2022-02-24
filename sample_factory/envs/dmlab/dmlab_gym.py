@@ -172,7 +172,7 @@ class DmlabGymEnv(gym.Env):
         else:
             self.last_reset_seed = self.random_state.randint(0, 2 ** 31 - 1)
 
-        self.dmlab.reset(seed=self.last_reset_seed)
+        self.dmlab.reset()
         self.last_observation = self.format_obs_dict(self.dmlab.observations())
         return self.last_observation
 

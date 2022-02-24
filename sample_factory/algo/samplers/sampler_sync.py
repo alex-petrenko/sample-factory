@@ -64,7 +64,15 @@ class SyncSampler(Sampler):
 
         return actions
 
-    def process_env_step(self, rewards, dones, infos):
+    def process_rewards(self, rewards):
+        rewards = rewards * self.cfg.reward_scale
+        rewards = torch.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
+        return rewards
+
+    def process_env_step(self, rewards_orig, dones_orig, infos):
+        rewards = rewards_orig.cpu()
+        dones = dones_orig.cpu()
+
         self.curr_episode_reward += rewards
         self.curr_episode_len += 1
 
@@ -78,8 +86,13 @@ class SyncSampler(Sampler):
 
             last_episode_reward = self.curr_episode_reward[agent_i].item()
             last_episode_duration = self.curr_episode_len[agent_i].item()
-            last_episode_true_reward = infos[agent_i].get('true_reward', last_episode_reward)
-            last_episode_extra_stats = infos[agent_i].get('episode_extra_stats', None)
+
+            last_episode_true_reward = last_episode_reward
+            last_episode_extra_stats = None
+
+            if infos:
+                last_episode_true_reward = infos[agent_i].get('true_reward', last_episode_reward)
+                last_episode_extra_stats = infos[agent_i].get('episode_extra_stats', None)
 
             stats = dict(reward=last_episode_reward, len=last_episode_duration, true_reward=last_episode_true_reward)
             if last_episode_extra_stats:
@@ -115,27 +128,33 @@ class SyncSampler(Sampler):
                 # copy all policy outputs to corresponding trajectory buffers - except for rnn_states!
                 # they should be saved to the next step
                 del policy_outputs['rnn_states']
+
+                for key, value in policy_outputs.items():
+                    curr_step[key][:] = value
+
                 curr_step[:] = policy_outputs
                 curr_step['policy_version'].fill_(self.buffer_mgr.policy_versions[self.curr_policy_id])
 
                 actions = self.preprocess_actions(policy_outputs['actions'])
                 self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
-                stats = self.process_env_step(rewards, dones, infos)
-                episodic_stats.extend(stats)
+
+                self.policy_id_buffer.fill_(self.curr_policy_id)
 
                 # this should yield indices of inactive agents
-                inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
-
-                # policy_id value "-1" indicates inactive agents
-                self.policy_id_buffer.fill_(self.curr_policy_id)
-                self.policy_id_buffer[inactive_agents] = -1
+                if infos:
+                    inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
+                    self.policy_id_buffer[inactive_agents] = -1
 
                 # record the results from the env step
-                curr_step[:] = dict(rewards=rewards, dones=dones, policy_id=self.policy_id_buffer)
+                curr_step[:] = dict(rewards=self.process_rewards(rewards), dones=dones, policy_id=self.policy_id_buffer)
 
                 # reset next-step hidden states to zero if we encountered an episode boundary
                 # not sure if this is the best practice, but this is what everybody seems to be doing
-                self.last_rnn_state = new_rnn_state * (1.0 - curr_step['dones'].float())
+                not_done = (1.0 - curr_step['dones'].float()).unsqueeze(-1)
+                self.last_rnn_state = new_rnn_state * not_done
+
+                stats = self.process_env_step(rewards, dones, infos)
+                episodic_stats.extend(stats)
 
             # returning the slice of the trajectory buffer we managed to populate
             traj_slice = slice(self.traj_start, self.traj_start + num_agents)
