@@ -40,10 +40,12 @@ class _ActorCriticBase(nn.Module):
         # gain = nn.init.calculate_gain(self.cfg.nonlinearity)
         gain = self.cfg.policy_init_gain
 
+        if hasattr(layer, 'bias') and isinstance(layer.bias, torch.nn.parameter.Parameter):
+            layer.bias.data.fill_(0)
+
         if self.cfg.policy_initialization == 'orthogonal':
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.orthogonal_(layer.weight.data, gain=gain)
-                layer.bias.data.fill_(0)
             else:
                 # LSTMs and GRUs initialize themselves
                 # should we use orthogonal/xavier for LSTM cells as well?
@@ -53,9 +55,11 @@ class _ActorCriticBase(nn.Module):
         elif self.cfg.policy_initialization == 'xavier_uniform':
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.xavier_uniform_(layer.weight.data, gain=gain)
-                layer.bias.data.fill_(0)
             else:
                 pass
+        elif self.cfg.policy_initialization == 'torch_default':
+            # do nothing
+            pass
 
 
 class _ActorCriticSharedWeights(_ActorCriticBase):

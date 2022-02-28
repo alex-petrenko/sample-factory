@@ -41,6 +41,11 @@ codebase for other types of async RL algorithms.
 
 ## Recent releases
 
+##### v1.122.0 (not yet on PyPI)
+
+* Added adaptive learning rate scheduler
+* Added default PyTorch model tensor initialization 
+
 ##### v1.121.4
 * Support Weights and Biases (see section "WandB support")
 * More configurable population-based training: 

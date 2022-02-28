@@ -43,6 +43,15 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--stats_avg', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 
         p.add_argument('--learning_rate', default=1e-4, type=float, help='LR')
+        p.add_argument(
+            '--lr_schedule', default='constant', choices=['constant', 'kl_adaptive_minibatch', 'kl_adaptive_epoch'],
+            type=str,
+            help=('Learning rate schedule to use. Constant keeps constant learning rate throughout training.'
+                  'kl_adaptive* schedulers look at --lr_schedule_kl_threshold and if KL-divergence with behavior policy'
+                  'after the last minibatch/epoch significantly deviates from this threshold, lr is apropriately'
+                  'increased or decreased'),
+        )
+        p.add_argument('--lr_schedule_kl_threshold', default=0.008, type=float, help='Used with kl_adaptive_* schedulers')
 
         p.add_argument('--train_for_env_steps', default=int(1e10), type=int, help='Stop after all policies are trained for this many env steps')
         p.add_argument('--train_for_seconds', default=int(1e10), type=int, help='Stop training after this many seconds')
@@ -68,7 +77,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--encoder_extra_fc_layers', default=1, type=int, help='Number of fully-connected layers of size "hidden size" to add after the basic encoder (e.g. convolutional)')
         p.add_argument('--hidden_size', default=512, type=int, help='Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)')
         p.add_argument('--nonlinearity', default='elu', choices=['elu', 'relu', 'tanh'], type=str, help='Type of nonlinearity to use')
-        p.add_argument('--policy_initialization', default='orthogonal', choices=['orthogonal', 'xavier_uniform'], type=str, help='NN weight initialization')
+        p.add_argument('--policy_initialization', default='orthogonal', choices=['orthogonal', 'xavier_uniform', 'torch_default'], type=str, help='NN weight initialization')
         p.add_argument('--policy_init_gain', default=1.0, type=float, help='Gain parameter of PyTorch initialization schemas (i.e. Xavier)')
         p.add_argument('--actor_critic_share_weights', default=True, type=str2bool, help='Whether to share the weights between policy and value function')
 
