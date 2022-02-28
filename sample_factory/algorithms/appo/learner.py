@@ -720,7 +720,6 @@ class LearnerWorker:
 
     def _update_lr(self, new_lr):
         if new_lr != self._curr_lr():
-            log.debug('Updating LR to %.6f', new_lr)
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = new_lr
 
