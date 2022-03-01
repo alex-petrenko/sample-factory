@@ -5,6 +5,21 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.utils import AttrDict
 
 
+# TODO: remove code duplication (actor_worker.py)
+def preprocess_actions(env_info, actions):
+    if env_info.integer_actions:
+        actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
+
+    if not env_info.gpu_actions:
+        actions = actions.cpu().numpy()
+
+    # TODO: do we need this? actions are a tensor of size [batch_size, action_shape] (or just [batch_size] if it is a single action per env)
+    # if len(actions) == 1:
+    #     actions = actions.item()
+
+    return actions
+
+
 class Sampler(Configurable):
     def __init__(self, cfg, env_info):
         super().__init__(cfg)
@@ -50,20 +65,6 @@ class SyncSampler(Sampler):
         self.curr_episode_reward = torch.zeros(self.env_info.num_agents)
         self.curr_episode_len = torch.zeros(self.env_info.num_agents, dtype=torch.int32)
 
-    # TODO: remove code duplication (actor_worker.py)
-    def preprocess_actions(self, actions):
-        if self.env_info.integer_actions:
-            actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
-
-        if not self.env_info.gpu_actions:
-            actions = actions.cpu().numpy()
-
-        # TODO: do we need this? actions are a tensor of size [batch_size, action_shape] (or just [batch_size] if it is a single action per env)
-        # if len(actions) == 1:
-        #     actions = actions.item()
-
-        return actions
-
     def process_rewards(self, rewards):
         rewards = rewards * self.cfg.reward_scale
         rewards = torch.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
@@ -108,7 +109,7 @@ class SyncSampler(Sampler):
     def get_trajectories_sync(self):
         with torch.no_grad():
             num_agents = self.env_info.num_agents
-            if self.traj_start + num_agents > self.buffer_mgr.total_num_trajectories:
+            if self.traj_start + num_agents > self.buffer_mgr.total_num_trajectories:  # TODO: need mechanism to actually allocate and clean up trajectories
                 self.traj_start = 0
 
             # subset of trajectory buffers we're going to populate in the current iteration
@@ -135,7 +136,7 @@ class SyncSampler(Sampler):
                 curr_step[:] = policy_outputs
                 curr_step['policy_version'].fill_(self.buffer_mgr.policy_versions[self.curr_policy_id])
 
-                actions = self.preprocess_actions(policy_outputs['actions'])
+                actions = preprocess_actions(self.env_info, policy_outputs['actions'])
                 self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
 
                 self.policy_id_buffer.fill_(self.curr_policy_id)
@@ -165,7 +166,7 @@ class SyncSampler(Sampler):
 
             samples_since_last_report = num_agents * self.cfg.rollout
             self.comm_broker.send_msg(dict(
-                samples=samples_since_last_report, policy_id=self.curr_policy_id,
+                samples_collected=samples_since_last_report, policy_id=self.curr_policy_id,
             ))
 
             return [traj_slice]

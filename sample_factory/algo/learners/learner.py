@@ -2,7 +2,9 @@ import glob
 import os
 import shutil
 import time
+from abc import ABC, abstractmethod
 from os.path import join
+from typing import Optional
 
 import numpy as np
 import torch
@@ -15,6 +17,70 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
+
+
+class LearningRateScheduler:
+    def update(self, current_lr, recent_kls):
+        return current_lr
+
+    def invoke_after_each_minibatch(self):
+        return False
+
+    def invoke_after_each_epoch(self):
+        return False
+
+
+class KlAdaptiveScheduler(LearningRateScheduler, ABC):
+    def __init__(self, cfg):
+        self.lr_schedule_kl_threshold = cfg.lr_schedule_kl_threshold
+        self.min_lr = 1e-6
+        self.max_lr = 1e-2
+
+    @abstractmethod
+    def num_recent_kls_to_use(self) -> int:
+        pass
+
+    def update(self, current_lr, recent_kls):
+        num_kls_to_use = self.num_recent_kls_to_use()
+        kls = recent_kls[-num_kls_to_use:]
+        mean_kl = np.mean(kls)
+        lr = current_lr
+        if mean_kl > 2.0 * self.lr_schedule_kl_threshold:
+            lr = max(current_lr / 1.5, self.min_lr)
+        if mean_kl < (0.5 * self.lr_schedule_kl_threshold):
+            lr = min(current_lr * 1.5, self.max_lr)
+        return lr
+
+
+class KlAdaptiveSchedulerPerMinibatch(KlAdaptiveScheduler):
+    def num_recent_kls_to_use(self) -> int:
+        return 1
+
+    def invoke_after_each_minibatch(self):
+        return True
+
+
+class KlAdaptiveSchedulerPerEpoch(KlAdaptiveScheduler):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.num_minibatches_per_epoch = cfg.num_batches_per_iteration
+
+    def num_recent_kls_to_use(self) -> int:
+        return self.num_minibatches_per_epoch
+
+    def invoke_after_each_epoch(self):
+        return True
+
+
+def get_lr_scheduler(cfg) -> LearningRateScheduler:
+    if cfg.lr_schedule == 'constant':
+        return LearningRateScheduler()
+    elif cfg.lr_schedule == 'kl_adaptive_minibatch':
+        return KlAdaptiveSchedulerPerMinibatch(cfg)
+    elif cfg.lr_schedule == 'kl_adaptive_epoch':
+        return KlAdaptiveSchedulerPerEpoch(cfg)
+    else:
+        raise RuntimeError(f'Unknown scheduler {cfg.lr_schedule}')
 
 
 class Learner(Configurable):
@@ -30,6 +96,8 @@ class Learner(Configurable):
         self.device = device
 
         self.optimizer = None
+
+        self.lr_scheduler: Optional[LearningRateScheduler] = None
 
         # TODO: get rid of env_steps on the learner, we don't really care!
         self.train_step = self.env_steps = 0
@@ -90,6 +158,8 @@ class Learner(Configurable):
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
             eps=self.cfg.adam_eps,
         )
+
+        self.lr_scheduler = get_lr_scheduler(self.cfg)
 
         self.load_from_checkpoint(self.policy_id)
 
@@ -261,6 +331,15 @@ class Learner(Configurable):
         kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
         return kl_prior_loss
 
+    def _curr_lr(self):
+        for param_group in self.optimizer.param_groups:
+            return param_group['lr']
+
+    def _update_lr(self, new_lr):
+        if new_lr != self._curr_lr():
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = new_lr
+
     def _get_minibatches(self, batch_size, experience_size):
         """Generating minibatches for training."""
         assert self.cfg.rollout % self.cfg.recurrence == 0
@@ -302,6 +381,9 @@ class Learner(Configurable):
             prev_epoch_actor_loss = 1e9
             epoch_actor_losses = []
 
+            # recent mean KL-divergences per minibatch, this used by LR schedulers
+            recent_kls = []
+
             # V-trace parameters
             # noinspection PyArgumentList
             rho_hat = torch.Tensor([self.cfg.vtrace_rho])
@@ -323,12 +405,25 @@ class Learner(Configurable):
             num_sgd_steps = 0
             stats_and_summaries = None
 
+            # When it is time to record train summaries, we randomly sample epoch/batch for which the summaries are
+            # collected to get equal representation from different stages of training.
+            # Half the time, we record summaries from the very large step of training. There we will have the highest
+            # KL-divergence and ratio of PPO-clipped samples, which makes this data even more useful for analysis.
+            # Something to consider: maybe we should have these last-batch metrics in a separate summaries category?
+            with_summaries = self._should_save_summaries()
+            if np.random.rand() < 0.5:
+                summaries_epoch = np.random.randint(0, self.cfg.ppo_epochs)
+                summaries_batch = np.random.randint(0, self.cfg.num_batches_per_iteration)
+            else:
+                summaries_epoch = self.cfg.ppo_epochs - 1
+                summaries_batch = self.cfg.num_batches_per_iteration - 1
+
         for epoch in range(self.cfg.ppo_epochs):
             with timing.add_time('epoch_init'):
                 if early_stop:
                     break
 
-                summary_this_epoch = force_summaries = False
+                force_summaries = False
                 minibatches = self._get_minibatches(batch_size, experience_size)
 
             for batch_num in range(len(minibatches)):
@@ -465,7 +560,19 @@ class Learner(Configurable):
                             'High loss value: l:%.4f pl:%.4f vl:%.4f exp_l:%.4f kl_l:%.4f (recommended to adjust the --reward_scale parameter)',
                             to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(exploration_loss), to_scalar(kl_loss),
                         )
+
+                        # perhaps something weird is happening, we definitely want summaries from this step
                         force_summaries = True
+
+                with timing.add_time('kl_divergence'):
+                    # calculate KL-divergence with the behaviour policy action distribution
+                    old_action_distribution = get_action_distribution(
+                        self.actor_critic.action_space, mb.action_logits,
+                    )
+
+                    kl_old = action_distribution.kl_divergence(old_action_distribution)
+                    kl_old_mean = kl_old.mean().item()
+                    recent_kls.append(kl_old_mean)
 
                 # update the weights
                 with timing.add_time('update'):
@@ -497,18 +604,24 @@ class Learner(Configurable):
                     self.optimizer.step()
                     num_sgd_steps += 1
 
-                with torch.no_grad():
-                    with timing.add_time('after_optimizer'):
-                        self._after_optimizer_step()
+                with torch.no_grad(), timing.add_time('after_optimizer'):
+                    self._after_optimizer_step()
 
-                        # collect and report summaries
-                        with_summaries = self._should_save_summaries() or force_summaries
-                        if with_summaries and not summary_this_epoch:
-                            stats_and_summaries = self._record_summaries(AttrDict(locals()))
-                            summary_this_epoch = True
-                            force_summaries = False
+                    if self.lr_scheduler.invoke_after_each_minibatch():
+                        self._update_lr(self.lr_scheduler.update(self._curr_lr(), recent_kls))
+
+                    # collect and report summaries
+                    should_record_summaries = with_summaries
+                    should_record_summaries &= epoch == summaries_epoch and batch_num == summaries_batch
+                    should_record_summaries |= force_summaries
+                    if should_record_summaries:
+                        stats_and_summaries = self._record_summaries(AttrDict(locals()))
+                        force_summaries = False
 
             # end of an epoch
+            if self.lr_scheduler.invoke_after_each_epoch():
+                self._update_lr(self.lr_scheduler.update(self._curr_lr(), recent_kls))
+
             # this will force policy update on the inference worker (policy worker)
             self.policy_versions[self.policy_id] = self.train_step
 
@@ -532,6 +645,8 @@ class Learner(Configurable):
 
         self.last_summary_time = time.time()
         stats = AttrDict()
+
+        stats.lr = self._curr_lr()
 
         stats.valids_fraction = var.valids.float().mean()
         stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
@@ -571,16 +686,8 @@ class Learner(Configurable):
             value_delta = torch.abs(var.values - var.old_values)
             value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
-            # calculate KL-divergence with the behaviour policy action distribution
-            old_action_distribution = get_action_distribution(
-                self.actor_critic.action_space, var.mb.action_logits,
-            )
-            kl_old = var.action_distribution.kl_divergence(old_action_distribution)
-            kl_old_mean = kl_old.mean()
-            kl_old_max = kl_old.max()
-
-            stats.kl_divergence = kl_old_mean
-            stats.kl_divergence_max = kl_old_max
+            stats.kl_divergence = var.kl_old_mean
+            stats.kl_divergence_max = var.kl_old.max()
             stats.value_delta = value_delta_avg
             stats.value_delta_max = value_delta_max
             stats.fraction_clipped = ((var.ratio < var.clip_ratio_low).float() + (var.ratio > var.clip_ratio_high).float()).mean()

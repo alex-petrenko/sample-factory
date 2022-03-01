@@ -1,5 +1,4 @@
 from sample_factory.algo.runners.runner import Runner
-from sample_factory.algo.utils.communication_broker import SyncCommBroker
 
 
 class SyncRunner(Runner):
@@ -10,9 +9,7 @@ class SyncRunner(Runner):
 
     def algo_step(self, timing):
         trajectories = self.sampler.get_trajectories_sync()
-
         self.batcher.batch_trajectories(trajectories)
 
-        experience_batch = self.batcher.get_batch_sync()
-        if experience_batch is not None:
+        while (experience_batch := self.batcher.get_batch_sync()) is not None:
             self.learner.train_sync(experience_batch, timing)

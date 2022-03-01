@@ -57,18 +57,26 @@ def override_default_params_func(env, parser):
         encoder_custom='isaac_gym_mlp_encoder',
         use_rnn=False,
         adaptive_stddev=False,
+        policy_initialization='torch_default',
         env_gpu_actions=True,
         reward_scale=0.01,
         rollout=16,
         recurrence=16,  # TODO!!!
-        max_grad_norm=1.0,
+        max_grad_norm=0.0,
         batch_size=32768,
+        num_batches_per_iteration=2,
+        ppo_epochs=4,
+        ppo_clip_ratio=0.2,
         value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
+        nonlinearity='elu',
+        learning_rate=3e-4,
+        lr_schedule='kl_adaptive_epoch',
+        lr_schedule_kl_threshold=0.008,
     )
 
 
-def register_custom_components():
+def register_isaacgym_custom_components():
     global_env_registry().register_env(
         env_name_prefix='isaacgym_',
         make_env_func=make_isaacgym_env,
@@ -81,7 +89,7 @@ def register_custom_components():
 
 def main():
     """Script entry point."""
-    register_custom_components()
+    register_isaacgym_custom_components()
     cfg = parse_args()
     status = run_rl(cfg)
     return status

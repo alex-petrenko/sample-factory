@@ -13,7 +13,7 @@ from sample_factory.algo.samplers.sampler_sync import SyncSampler
 from sample_factory.algo.utils.communication_broker import SyncCommBroker
 from sample_factory.algo.utils.context import sf_global_context, set_global_context
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algorithms.appo.appo_utils import make_env_func
+from sample_factory.algorithms.appo.appo_utils import make_env_func, make_env_func_v2
 from sample_factory.algorithms.appo.model import _ActorCriticBase, create_actor_critic
 from sample_factory.algorithms.utils.arguments import parse_args
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
@@ -50,20 +50,12 @@ class EnvInfo:
     frameskip: int
 
 
-def get_env_info(sf_context, res_queue, cfg):
-    set_global_context(sf_context)
-
-    gpu_actions = cfg.env_gpu_actions
-
-    # Perhaps run this in a separate process for environments that allocate some exclusive process-wise resources
-    # in ctor (such as CUDA contexts)
-    # Otherwise this can cause problems, i.e. with envs such as Isaac Gym
-
-    tmp_env = make_env_func(cfg, env_config=None)
-    obs_space = tmp_env.observation_space
-    action_space = tmp_env.action_space
-    num_agents = tmp_env.num_agents
+def extract_env_info(env, cfg):
+    obs_space = env.observation_space
+    action_space = env.action_space
+    num_agents = env.num_agents
     integer_actions = is_integer_action_env(action_space)
+    gpu_actions = cfg.env_gpu_actions
 
     frameskip = 4 if cfg.env.startswith('doom') else 1  # TODO: this is a hack! rewrite this code!
     log.warning('Assuming frameskip %d! This is a hack. TODO', frameskip)
@@ -73,20 +65,28 @@ def get_env_info(sf_context, res_queue, cfg):
     # if self.cfg.with_pbt:
     #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
 
+    env_info = EnvInfo(obs_space, action_space, num_agents, gpu_actions, integer_actions, frameskip)
+    return env_info
+
+
+def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
+    set_global_context(sf_context)
+
+    tmp_env = make_env_func_v2(cfg, env_config=None)
+    env_info = extract_env_info(tmp_env, cfg)
     tmp_env.close()
     del tmp_env
 
-    env_info_ = EnvInfo(obs_space, action_space, num_agents, gpu_actions, integer_actions, frameskip)
-    log.debug('Env info: %r', env_info_)
-    res_queue.put(env_info_)
+    log.debug('Env info: %r', env_info)
+    res_queue.put(env_info)
 
 
-def obtain_env_info(cfg: AttrDict):
+def obtain_env_info_in_a_separate_process(cfg: AttrDict):
     sf_context = sf_global_context()
 
     ctx = multiprocessing.get_context('spawn')
     q = ctx.Queue()
-    p = ctx.Process(target=get_env_info, args=(sf_context, q, cfg))
+    p = ctx.Process(target=spawn_tmp_env_and_get_info, args=(sf_context, q, cfg))
     p.start()
 
     env_info = q.get()
@@ -131,7 +131,7 @@ def run_rl(cfg):
 
     timing = Timing()
 
-    env_info = obtain_env_info(cfg)
+    env_info = obtain_env_info_in_a_separate_process(cfg)
 
     device = init_device(cfg)
 

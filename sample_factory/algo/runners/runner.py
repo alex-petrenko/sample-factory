@@ -129,7 +129,7 @@ class Runner(Configurable):
             learner_env_steps=[self._learner_steps_handler],
             episodic=[self._episodic_stats_handler],
             train=[self._train_stats_handler],
-            samples=[self._samples_stats_handler],
+            samples_collected=[self._samples_stats_handler],
         )
 
         self.periodic_callbacks = []
@@ -207,7 +207,7 @@ class Runner(Configurable):
 
     @staticmethod
     def _samples_stats_handler(runner, msg, policy_id):
-        runner.samples_collected[policy_id] += msg['samples']
+        runner.samples_collected[policy_id] += msg['samples_collected']
 
     @staticmethod
     def _register_msg_handler(handlers_dict, key, func):
