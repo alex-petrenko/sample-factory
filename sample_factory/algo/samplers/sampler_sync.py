@@ -106,7 +106,7 @@ class SyncSampler(Sampler):
         self.curr_episode_len[finished_episodes] = 0
         return reports
 
-    def get_trajectories_sync(self):
+    def get_trajectories_sync(self, timing):
         with torch.no_grad():
             num_agents = self.env_info.num_agents
             if self.traj_start + num_agents > self.buffer_mgr.total_num_trajectories:  # TODO: need mechanism to actually allocate and clean up trajectories
@@ -123,39 +123,45 @@ class SyncSampler(Sampler):
                 curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
 
                 # obs and rnn_states obtained from the trajectory buffers should be on the same device as the model
-                policy_outputs = self.actor_critic(curr_step['obs'], curr_step['rnn_states'])
-                new_rnn_state = policy_outputs['rnn_states']
+                with timing.add_time('inference'):
+                    policy_outputs = self.actor_critic(curr_step['obs'], curr_step['rnn_states'])
 
-                # copy all policy outputs to corresponding trajectory buffers - except for rnn_states!
-                # they should be saved to the next step
-                del policy_outputs['rnn_states']
+                with timing.add_time('post_inference'):
+                    new_rnn_state = policy_outputs['rnn_states']
 
-                for key, value in policy_outputs.items():
-                    curr_step[key][:] = value
+                    # copy all policy outputs to corresponding trajectory buffers - except for rnn_states!
+                    # they should be saved to the next step
+                    del policy_outputs['rnn_states']
 
-                curr_step[:] = policy_outputs
-                curr_step['policy_version'].fill_(self.buffer_mgr.policy_versions[self.curr_policy_id])
+                    for key, value in policy_outputs.items():
+                        curr_step[key][:] = value
 
-                actions = preprocess_actions(self.env_info, policy_outputs['actions'])
-                self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
+                    curr_step[:] = policy_outputs
+                    curr_step['policy_version'].fill_(self.buffer_mgr.policy_versions[self.curr_policy_id])
 
-                self.policy_id_buffer.fill_(self.curr_policy_id)
+                    actions = preprocess_actions(self.env_info, policy_outputs['actions'])
 
-                # this should yield indices of inactive agents
-                if infos:
-                    inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
-                    self.policy_id_buffer[inactive_agents] = -1
+                with timing.add_time('env_step'):
+                    self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
 
-                # record the results from the env step
-                curr_step[:] = dict(rewards=self.process_rewards(rewards), dones=dones, policy_id=self.policy_id_buffer)
+                with timing.add_time('post_env_step'):
+                    self.policy_id_buffer.fill_(self.curr_policy_id)
 
-                # reset next-step hidden states to zero if we encountered an episode boundary
-                # not sure if this is the best practice, but this is what everybody seems to be doing
-                not_done = (1.0 - curr_step['dones'].float()).unsqueeze(-1)
-                self.last_rnn_state = new_rnn_state * not_done
+                    # this should yield indices of inactive agents
+                    if infos:
+                        inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
+                        self.policy_id_buffer[inactive_agents] = -1
 
-                stats = self.process_env_step(rewards, dones, infos)
-                episodic_stats.extend(stats)
+                    # record the results from the env step
+                    curr_step[:] = dict(rewards=self.process_rewards(rewards), dones=dones, policy_id=self.policy_id_buffer)
+
+                    # reset next-step hidden states to zero if we encountered an episode boundary
+                    # not sure if this is the best practice, but this is what everybody seems to be doing
+                    not_done = (1.0 - curr_step['dones'].float()).unsqueeze(-1)
+                    self.last_rnn_state = new_rnn_state * not_done
+
+                    stats = self.process_env_step(rewards, dones, infos)
+                    episodic_stats.extend(stats)
 
             # returning the slice of the trajectory buffer we managed to populate
             traj_slice = slice(self.traj_start, self.traj_start + num_agents)

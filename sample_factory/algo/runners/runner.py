@@ -401,7 +401,7 @@ class Runner(Configurable):
             )
             return status
 
-        with self.timing.timeit('experience'):
+        with self.timing.timeit('main_loop'):
             # noinspection PyBroadException
             try:
                 while not self._should_end_training():
@@ -417,6 +417,10 @@ class Runner(Configurable):
             except KeyboardInterrupt:
                 log.warning('Keyboard interrupt detected in the main loop, exiting...')
                 status = ExperimentStatus.INTERRUPTED
+
+        fps = self.total_env_steps_since_resume / self.timing.main_loop
+        log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
+        log.info('Timing: %s', self.timing)
 
         return status
 

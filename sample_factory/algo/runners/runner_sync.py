@@ -8,8 +8,11 @@ class SyncRunner(Runner):
         self.trajectories_per_batch = self.cfg.batch_size // self.cfg.rollout
 
     def algo_step(self, timing):
-        trajectories = self.sampler.get_trajectories_sync()
-        self.batcher.batch_trajectories(trajectories)
+        with timing.add_time('sampling'):
+            trajectories = self.sampler.get_trajectories_sync(timing)
+        with timing.add_time('batching'):
+            self.batcher.batch_trajectories(trajectories)
 
-        while (experience_batch := self.batcher.get_batch_sync()) is not None:
-            self.learner.train_sync(experience_batch, timing)
+        with timing.add_time('training'):
+            while (experience_batch := self.batcher.get_batch_sync()) is not None:
+                self.learner.train_sync(experience_batch, timing)
