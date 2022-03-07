@@ -4,6 +4,7 @@ import os
 import time
 from collections import deque, OrderedDict
 from os.path import join
+from typing import Dict
 
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -15,6 +16,7 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
+from sample_factory.utils.wandb_utils import init_wandb
 
 
 class Callback:
@@ -112,7 +114,9 @@ class Runner(Configurable):
         self.policy_avg_stats = dict()
         self.policy_lag = [dict() for _ in range(self.cfg.num_policies)]
 
-        self.writers = dict()
+        init_wandb(self.cfg)  # should be done before writers are initialized
+
+        self.writers: Dict[int, SummaryWriter] = dict()
         for policy_id in range(self.cfg.num_policies):
             summary_dir = join(summaries_dir(experiment_dir(cfg=self.cfg)), str(policy_id))
             summary_dir = ensure_dir_exists(summary_dir)
@@ -136,6 +140,7 @@ class Runner(Configurable):
         self.register_timer_callback(self._update_stats_and_print_report, period_sec=self.report_interval_sec)
         self.register_timer_callback(self._report_experiment_summaries, period_sec=self.summaries_interval_sec)
         self.register_timer_callback(self._propagate_training_info, period_sec=5)
+        self.register_timer_callback(self._flush_summary_writers, period_sec=5)
         # TODO: save model callback
 
     def _should_end_training(self):
@@ -354,6 +359,11 @@ class Runner(Configurable):
         # for w in self.actor_workers:
         #     w.update_env_steps(self.env_steps)
 
+    @staticmethod
+    def _flush_summary_writers(runner):
+        for w in runner.writers.values():
+            w.flush()
+
     def register_msg_handler(self, key, func):
         self._register_msg_handler(self.msg_handlers, key, func)
 
@@ -420,7 +430,7 @@ class Runner(Configurable):
 
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
-        log.info('Timing: %s', self.timing)
+        log.info(self.timing)
 
         return status
 

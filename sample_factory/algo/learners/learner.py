@@ -344,22 +344,27 @@ class Learner(Configurable):
         """Generating minibatches for training."""
         assert self.cfg.rollout % self.cfg.recurrence == 0
         assert experience_size % batch_size == 0, f'experience size: {experience_size}, batch size: {batch_size}'
+        minibatches_per_iteration = self.cfg.num_batches_per_iteration  # TODO rename
 
-        if self.cfg.num_batches_per_iteration == 1:
+        if minibatches_per_iteration == 1:
             return [None]  # single minibatch is actually the entire buffer, we don't need indices
 
-        # indices that will start the mini-trajectories from the same episode (for bptt)
-        indices = np.arange(0, experience_size, self.cfg.recurrence)
-        indices = np.random.permutation(indices)
+        if self.cfg.shuffle_minibatches:
+            # indices that will start the mini-trajectories from the same episode (for bptt)
+            indices = np.arange(0, experience_size, self.cfg.recurrence)
+            indices = np.random.permutation(indices)
 
-        # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
-        indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
-        indices = np.concatenate(indices)
+            # complete indices of mini trajectories, e.g. with recurrence==4: [4, 16] -> [4, 5, 6, 7, 16, 17, 18, 19]
+            indices = [np.arange(i, i + self.cfg.recurrence) for i in indices]
+            indices = np.concatenate(indices)
 
-        assert len(indices) == experience_size
+            assert len(indices) == experience_size
 
-        num_minibatches = experience_size // batch_size
-        minibatches = np.split(indices, num_minibatches)
+            num_minibatches = experience_size // batch_size
+            minibatches = np.split(indices, num_minibatches)
+        else:
+            minibatches = tuple(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_iteration))
+
         return minibatches
 
     @staticmethod

@@ -73,6 +73,7 @@ def override_default_params_func(env, parser):
         learning_rate=3e-4,
         lr_schedule='kl_adaptive_epoch',
         lr_schedule_kl_threshold=0.008,
+        shuffle_minibatches=False,
     )
 
 

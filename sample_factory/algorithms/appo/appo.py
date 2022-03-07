@@ -104,8 +104,13 @@ class APPO(ReinforcementLearningAlgorithm):
                  'But in some specific circumstances it can be beneficial to have a larger "macro"-batch in order to shuffle and decorrelate the minibatches.'
                  'Here and throughout the codebase: macro batch is the portion of experience that learner processes per iteration (consisting of 1 or several minibatches)',
         )
-        arg('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
 
+        arg('--ppo_epochs', default=1, type=int, help='Number of training epochs before a new batch of experience is collected')
+        arg(
+            '--shuffle_minibatches', default=True, type=str2bool,
+            help='Whether to randomize and shuffle minibatches between iterations'
+                 '(disabling this slightly increases learner throughput when training with many epochs/minibatches)'
+        )
         arg(
             '--num_minibatches_to_accumulate', default=-1, type=int,
             help='This parameter governs the maximum number of minibatches the learner can accumulate before further experience collection is stopped.'
