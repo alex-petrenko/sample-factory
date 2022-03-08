@@ -90,8 +90,12 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         x, new_rnn_states = self.core(head_output, rnn_states)
         return x, new_rnn_states
 
-    def forward_tail(self, core_output, with_action_distribution=False):
+    def calc_value(self, core_output):
         values = self.critic_linear(core_output).squeeze()
+        return values
+
+    def forward_tail(self, core_output, with_action_distribution=False):
+        values = self.calc_value(core_output)
 
         action_distribution_params, action_distribution = self.action_parameterization(core_output)
 
@@ -110,12 +114,16 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
         return result
 
-    def forward(self, obs_dict, rnn_states, with_action_distribution=False):
+    def forward(self, obs_dict, rnn_states, with_action_distribution=False, values_only=False):
         x = self.forward_head(obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x, with_action_distribution=with_action_distribution)
-        result.rnn_states = new_rnn_states
-        return result
+
+        if values_only:
+            return self.calc_value(x)
+        else:
+            result = self.forward_tail(x, with_action_distribution=with_action_distribution)
+            result.rnn_states = new_rnn_states
+            return result
 
 
 class _ActorCriticSeparateWeights(_ActorCriticBase):
@@ -187,7 +195,7 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         actions, log_prob_actions = sample_actions_log_probs(action_distribution)
 
         # second core output corresponds to the critic
-        values = self.critic_linear(core_outputs[1])
+        values = self.critic_linear(core_outputs[1]).squeeze()
 
         result = AttrDict(dict(
             actions=actions,
@@ -201,12 +209,21 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
 
         return result
 
-    def forward(self, obs_dict, rnn_states, with_action_distribution=False):
+    def forward(self, obs_dict, rnn_states, with_action_distribution=False, values_only=False):
         x = self.forward_head(obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x, with_action_distribution=with_action_distribution)
-        result.rnn_states = new_rnn_states
-        return result
+
+        if values_only:
+            # TODO: this can be further optimized (we don't need to calculate the entire policy head to generate values)
+            # also currently untested
+            core_outputs = x.chunk(len(self.cores), dim=1)
+            # second core output corresponds to the critic
+            values = self.critic_linear(core_outputs[1]).squeeze()
+            return values
+        else:
+            result = self.forward_tail(x, with_action_distribution=with_action_distribution)
+            result.rnn_states = new_rnn_states
+            return result
 
 
 def create_actor_critic(cfg, obs_space, action_space, timing=None):

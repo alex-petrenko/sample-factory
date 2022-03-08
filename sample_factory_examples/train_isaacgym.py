@@ -74,6 +74,9 @@ def override_default_params_func(env, parser):
         lr_schedule='kl_adaptive_epoch',
         lr_schedule_kl_threshold=0.008,
         shuffle_minibatches=False,
+        gamma=0.99,
+        gae_lambda=0.95,
+        with_vtrace=False,
     )
 
 

@@ -163,6 +163,11 @@ class SyncSampler(Sampler):
                     stats = self.process_env_step(rewards, dones, infos)
                     episodic_stats.extend(stats)
 
+            # Saving obs and hidden states for the step AFTER the last step in the current rollout.
+            # We're going to need them later when we calculate next step value estimates.
+            curr_traj['obs'][:, self.cfg.rollout] = self.last_obs
+            curr_traj['rnn_states'][:, self.cfg.rollout] = self.last_rnn_state
+
             # returning the slice of the trajectory buffer we managed to populate
             traj_slice = slice(self.traj_start, self.traj_start + num_agents)
             self.traj_start += num_agents

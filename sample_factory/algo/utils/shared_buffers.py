@@ -44,21 +44,13 @@ def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size
         return init_trajectory_tensor(num_trajectories, rollout, dtype_, shape_, device)
 
     # policy inputs
-    obs_dict = TensorDict()
-    tensors['obs'] = obs_dict
-    if isinstance(obs_space, spaces.Dict):
-        for space_name, space in obs_space.spaces.items():
-            obs_dict[space_name] = init_tensor(space.dtype, space.shape)
-    else:
+    tensors['obs'] = TensorDict()
+    if not isinstance(obs_space, spaces.Dict):
         raise Exception('Only Dict observations spaces are supported')
 
-    # env outputs
-    tensors['rewards'] = init_tensor(torch.float32, [])
-    tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values by mistake it will be obvious
-    tensors['dones'] = init_tensor(torch.bool, [])
-    tensors['dones'].fill_(True)
-    tensors['policy_id'] = init_tensor(torch.int, [])
-    tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
+    for space_name, space in obs_space.spaces.items():
+        tensors['obs'][space_name] = init_trajectory_tensor(num_trajectories, rollout + 1, space.dtype, space.shape, device)
+    tensors['rnn_states'] = init_trajectory_tensor(num_trajectories, rollout + 1, torch.float32, [hidden_size], device)
 
     # policy outputs, this matches the expected output of the actor-critic
     policy_outputs = [
@@ -67,12 +59,19 @@ def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size
         ('log_prob_actions', []),
         ('values', []),
         ('policy_version', []),
-        ('rnn_states', [hidden_size])
     ]
 
     for name, shape in policy_outputs:
         assert name not in tensors
         tensors[name] = init_tensor(torch.float32, shape)
+
+    # env outputs
+    tensors['rewards'] = init_tensor(torch.float32, [])
+    tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values by mistake it will be obvious
+    tensors['dones'] = init_tensor(torch.bool, [])
+    tensors['dones'].fill_(True)
+    tensors['policy_id'] = init_tensor(torch.int, [])
+    tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
 
     return tensors
 

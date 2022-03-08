@@ -9,6 +9,7 @@ from typing import Optional
 import numpy as np
 import torch
 
+from sample_factory.algo.utils.rl_utils import gae_advantages_returns
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
 from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
@@ -528,7 +529,7 @@ class Learner(Configurable):
 
                     adv_mean = adv.mean()
                     adv_std = adv.std()
-                    adv = (adv - adv_mean) / max(1e-3, adv_std)  # normalize advantage
+                    adv = (adv - adv_mean) / max(1e-7, adv_std)  # normalize advantage
                     adv = adv.to(self.device)
 
                 with timing.add_time('losses'):
@@ -645,6 +646,7 @@ class Learner(Configurable):
 
         return stats_and_summaries
 
+    # noinspection PyUnresolvedReferences
     def _record_summaries(self, train_loop_vars):
         var = train_loop_vars
 
@@ -717,26 +719,44 @@ class Learner(Configurable):
 
         return stats
 
-    def train_sync(self, batch: slice, timing: Timing):
+    def _prepare_batch(self, batch: slice):
         with torch.no_grad():
-            train_buffer = self.traj_tensors[batch]
+            buff = self.traj_tensors[batch]
+
+            # calculate estimated value for the next step (T+1)
+            next_values = self.actor_critic(buff['obs'][:, -1], buff['rnn_states'][:, -1], values_only=True)
+
+            # remove next step obs and rnn_states from the batch, we don't need them anymore
+            buff['obs'] = buff['obs'][:, :-1]
+            buff['rnn_states'] = buff['rnn_states'][:, :-1]
+
+            buff['advantages'], buff['returns'] = gae_advantages_returns(
+                buff['rewards'], buff['dones'], buff['values'], next_values, self.cfg.gamma, self.cfg.gae_lambda,
+            )
 
             experience_size = self.cfg.batch_size * self.cfg.num_batches_per_iteration
 
-            for d, k, v in iterate_recursively(train_buffer):
+            for d, k, v in iterate_recursively(buff):
                 # collapse first two dimensions
                 shape = (experience_size, ) + tuple(v.shape[2:])
                 d[k] = v.reshape(shape)
 
             # TODO: inefficiency, do we need these on the GPU in the first place?
-            train_buffer['dones_cpu'] = train_buffer['dones'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
-            train_buffer['rewards_cpu'] = train_buffer['rewards'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
+            buff['dones_cpu'] = buff['dones'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
+            buff['rewards_cpu'] = buff['rewards'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
 
             # will squeeze actions only in simple categorical case
             for tensor_name in ['actions']:
-                train_buffer[tensor_name].squeeze_()
+                buff[tensor_name].squeeze_()
 
-        train_stats = self._train(train_buffer, self.cfg.batch_size, experience_size, timing)
+            return buff, experience_size
+
+    def train_sync(self, batch: slice, timing: Timing):
+        with timing.add_time('prepare_batch'):
+            buff, experience_size = self._prepare_batch(batch)
+
+        with timing.add_time('train'):
+            train_stats = self._train(buff, self.cfg.batch_size, experience_size, timing)
 
         # TODO: don't use frameskip here
         self.env_steps += experience_size * self.env_info.frameskip
