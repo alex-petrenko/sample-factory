@@ -24,7 +24,7 @@ VizDoom agents trained with Sample Factory playing in real time:
 
 #### When should I use Sample Factory?
 
-1. Sample Factory is the fastest open source single-machine RL implementations (see paper for details).
+1. Sample Factory is one of the fastest open source single-machine RL implementations (see paper for details).
 If you plan to train RL agents on large amounts of experience, consider using it.
 Sample Factory can significantly speed up
 the experimentation or allow you to collect more samples in the same amount of time and achieve better performance.
