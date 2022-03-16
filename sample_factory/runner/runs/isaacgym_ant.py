@@ -2,11 +2,12 @@ from sample_factory.runner.run_description import RunDescription, Experiment, Pa
 
 _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
-    ('value_bootstrap', [False, True]),
+    ('value_bootstrap', [True]),
     ('normalize_input', [False, True]),
+    ('kl_loss_coeff', [0.0, 0.1, 1.0]),
 ])
 
-_version = 19
+_version = 20
 _vstr = f'v{_version:03d}'
 _cli = 'python -m sample_factory_examples.train_isaacgym ' \
        '--algo=APPO --env=isaacgym_ant --actor_worker_gpus 0 --train_for_env_steps=100000000 --env_agents=4096 ' \

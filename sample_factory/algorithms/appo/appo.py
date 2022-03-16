@@ -150,7 +150,7 @@ class APPO(ReinforcementLearningAlgorithm):
                  'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
                  ' so it can prevent the pathological situations where the agent stops exploring. '
                  'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
-            )
+        )
 
         # APPO-specific
         arg(
