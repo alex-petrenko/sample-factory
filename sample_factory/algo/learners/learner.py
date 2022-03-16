@@ -284,6 +284,8 @@ class Learner(Configurable):
             self.should_save_model = False
             self.last_saved_time = time.time()
 
+    #TODO: why do we apply valids masked_select to individual losses and not to the final value? This is just extra work. Will fix
+
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids):
         clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
@@ -379,7 +381,7 @@ class Learner(Configurable):
         return mb
 
     def _train(self, gpu_buffer, batch_size, experience_size, timing):
-        with torch.no_grad():
+        with torch.no_grad(), timing.add_time('prepare_train'):
             policy_version_before_train = self.train_step
 
             early_stopping_tolerance = 1e-6
@@ -423,6 +425,8 @@ class Learner(Configurable):
             else:
                 summaries_epoch = self.cfg.ppo_epochs - 1
                 summaries_batch = self.cfg.num_batches_per_iteration - 1
+
+            self.actor_critic.train()
 
         for epoch in range(self.cfg.ppo_epochs):
             with timing.add_time('epoch_init'):
@@ -527,8 +531,10 @@ class Learner(Configurable):
                         adv = mb.advantages
                         targets = mb.returns
 
+                    # TODO: this should take validity masks into account!
                     adv_mean = adv.mean()
                     adv_std = adv.std()
+
                     adv = (adv - adv_mean) / max(1e-7, adv_std)  # normalize advantage
                     adv = adv.to(self.device)
 
@@ -655,6 +661,9 @@ class Learner(Configurable):
 
         stats.lr = self._curr_lr()
 
+        if hasattr(self.actor_critic, 'running_mean_std') and self.actor_critic.running_mean_std:
+            stats.update(self.actor_critic.running_mean_std.summaries())
+
         stats.valids_fraction = var.valids.float().mean()
         stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
 
@@ -724,6 +733,7 @@ class Learner(Configurable):
             buff = self.traj_tensors[batch]
 
             # calculate estimated value for the next step (T+1)
+            self.actor_critic.eval()
             next_values = self.actor_critic(buff['obs'][:, -1], buff['rnn_states'][:, -1], values_only=True)
 
             # remove next step obs and rnn_states from the batch, we don't need them anymore

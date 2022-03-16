@@ -58,6 +58,7 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         # observation preprocessing
         p.add_argument('--obs_subtract_mean', default=0.0, type=float, help='Observation preprocessing, mean value to subtract from observation (e.g. 128.0 for 8-bit RGB)')
         p.add_argument('--obs_scale', default=1.0, type=float, help='Observation preprocessing, divide observation tensors by this scalar (e.g. 128.0 for 8-bit RGB)')
+        p.add_argument('--normalize_input', default=False, type=str2bool, help='Whether to use running mean and standard deviation to normalize observations')
 
         # RL
         p.add_argument('--gamma', default=0.99, type=float, help='Discount factor')

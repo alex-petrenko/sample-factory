@@ -120,6 +120,8 @@ class SyncSampler(Sampler):
 
     def get_trajectories_sync(self, timing):
         with torch.no_grad():
+            self.actor_critic.eval()
+
             num_agents = self.env_info.num_agents
             if self.traj_start + num_agents > self.buffer_mgr.total_num_trajectories:  # TODO: need mechanism to actually allocate and clean up trajectories
                 self.traj_start = 0

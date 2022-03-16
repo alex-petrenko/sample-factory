@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+from sample_factory.algo.utils.running_mean_std import RunningMeanStdDict
 from sample_factory.algorithms.appo.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
     ActionParameterizationDefault, normalize_obs
@@ -10,13 +11,17 @@ from sample_factory.utils.utils import AttrDict
 
 
 class _ActorCriticBase(nn.Module):
-    def __init__(self, action_space, cfg, timing):
+    def __init__(self, obs_space, action_space, cfg, timing):
         super().__init__()
         self.cfg = cfg
         self.action_space = action_space
         self.timing = timing
         self.encoders = []
         self.cores = []
+
+        self.running_mean_std = None
+        if cfg.normalize_input:
+            self.running_mean_std = RunningMeanStdDict(obs_space)
 
     def get_action_parameterization(self, core_output_size):
         if not self.cfg.adaptive_stddev and is_continuous_action_space(self.action_space):
@@ -63,8 +68,8 @@ class _ActorCriticBase(nn.Module):
 
 
 class _ActorCriticSharedWeights(_ActorCriticBase):
-    def __init__(self, make_encoder, make_core, action_space, cfg, timing):
-        super().__init__(action_space, cfg, timing)
+    def __init__(self, make_encoder, make_core, obs_space, action_space, cfg, timing):
+        super().__init__(obs_space, action_space, cfg, timing)
 
         # in case of shared weights we're using only a single encoder and a single core
         self.encoder = make_encoder()
@@ -79,10 +84,9 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         self.action_parameterization = self.get_action_parameterization(core_out_size)
 
         self.apply(self.initialize_weights)
-        self.train()  # eval() for inference?
 
     def forward_head(self, obs_dict):
-        normalize_obs(obs_dict, self.cfg)
+        normalize_obs(obs_dict, self.running_mean_std, self.cfg)
         x = self.encoder(obs_dict)
         return x
 
@@ -127,8 +131,8 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
 
 class _ActorCriticSeparateWeights(_ActorCriticBase):
-    def __init__(self, make_encoder, make_core, action_space, cfg, timing):
-        super().__init__(action_space, cfg, timing)
+    def __init__(self, make_encoder, obs_space, make_core, action_space, cfg, timing):
+        super().__init__(obs_space, action_space, cfg, timing)
 
         self.actor_encoder = make_encoder()
         self.actor_core = make_core(self.actor_encoder)
@@ -146,8 +150,6 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         self.action_parameterization = self.get_action_parameterization(self.critic_core.get_core_out_size())
 
         self.apply(self.initialize_weights)
-
-        self.train()
 
     def _core_rnn(self, head_output, rnn_states):
         """
@@ -175,7 +177,7 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         return head_output, fake_rnn_states
 
     def forward_head(self, obs_dict):
-        normalize_obs(obs_dict, self.cfg)
+        normalize_obs(obs_dict, self.running_mean_std, self.cfg)
 
         head_outputs = []
         for e in self.encoders:
@@ -237,6 +239,6 @@ def create_actor_critic(cfg, obs_space, action_space, timing=None):
         return create_core(cfg, encoder.get_encoder_out_size())
 
     if cfg.actor_critic_share_weights:
-        return _ActorCriticSharedWeights(make_encoder, make_core, action_space, cfg, timing)
+        return _ActorCriticSharedWeights(make_encoder, make_core, obs_space, action_space, cfg, timing)
     else:
-        return _ActorCriticSeparateWeights(make_encoder, make_core, action_space, cfg, timing)
+        return _ActorCriticSeparateWeights(make_encoder, make_core, obs_space, action_space, cfg, timing)

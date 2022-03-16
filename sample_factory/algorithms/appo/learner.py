@@ -1027,6 +1027,7 @@ class LearnerWorker:
         self.actor_critic = create_actor_critic(self.cfg, self.obs_space, self.action_space, timing)
         self.actor_critic.model_to_device(self.device)
         self.actor_critic.share_memory()
+        self.actor_critic.train()
 
         if self.cfg.use_cpc:
             self.aux_loss_module = CPCA(self.cfg, self.action_space)

@@ -77,6 +77,7 @@ def override_default_params_func(env, parser):
         gae_lambda=0.95,
         with_vtrace=False,
         recurrence=1,
+        value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
         experiment_summaries_interval=3,  # experiments are short so we should save summaries often
     )
 
