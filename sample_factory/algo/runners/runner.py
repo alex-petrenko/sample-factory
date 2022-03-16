@@ -140,7 +140,6 @@ class Runner(Configurable):
         self.register_timer_callback(self._update_stats_and_print_report, period_sec=self.report_interval_sec)
         self.register_timer_callback(self._report_experiment_summaries, period_sec=self.summaries_interval_sec)
         self.register_timer_callback(self._propagate_training_info, period_sec=5)
-        self.register_timer_callback(self._flush_summary_writers, period_sec=5)
         # TODO: save model callback
 
     def _should_end_training(self):
@@ -347,6 +346,10 @@ class Runner(Configurable):
                     policy_id, runner.policy_avg_stats, env_steps, runner.writers[policy_id], runner.cfg,
                 )
 
+        # flush
+        for w in runner.writers.values():
+            w.flush()
+
     @staticmethod
     def _propagate_training_info(runner):
         """
@@ -358,11 +361,6 @@ class Runner(Configurable):
         # TODO!
         # for w in self.actor_workers:
         #     w.update_env_steps(self.env_steps)
-
-    @staticmethod
-    def _flush_summary_writers(runner):
-        for w in runner.writers.values():
-            w.flush()
 
     def register_msg_handler(self, key, func):
         self._register_msg_handler(self.msg_handlers, key, func)

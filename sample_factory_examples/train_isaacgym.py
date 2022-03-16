@@ -61,7 +61,6 @@ def override_default_params_func(env, parser):
         env_gpu_actions=True,
         reward_scale=0.01,
         rollout=16,
-        recurrence=16,  # TODO!!!
         max_grad_norm=0.0,
         batch_size=32768,
         num_batches_per_iteration=2,
@@ -77,6 +76,8 @@ def override_default_params_func(env, parser):
         gamma=0.99,
         gae_lambda=0.95,
         with_vtrace=False,
+        recurrence=1,
+        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
     )
 
 

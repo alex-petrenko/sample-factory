@@ -68,6 +68,10 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
                   'Loss values become too high which requires a smaller learning rate, etc.'),
         )
         p.add_argument('--reward_clip', default=10.0, type=float, help='Clip rewards between [-c, c]. Default [-10, 10] virtually means no clipping for most envs')
+        p.add_argument(
+            '--value_bootstrap', default=False, type=str2bool,
+            help='Bootstrap returns from value estimates if episode is terminated by timeout. More info here: https://github.com/Denys88/rl_games/issues/128',
+        )
 
         # policy size and configuration
         p.add_argument('--encoder_type', default='conv', type=str, help='Type of the encoder. Supported: conv, mlp, resnet (feel free to define more)')

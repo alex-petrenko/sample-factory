@@ -35,12 +35,7 @@ class IsaacGymVecEnv(gym.Env):
         return self.env.reset()
 
     def step(self, actions):
-        obs, rewads, dones, infos = self.env.step(actions)
-
-        # our RL algorithm expects infos to be a list or tuple of dicts
-        # IsaacGym returns a dict of tensors (which is nice, but the RL code doesn't know what to do with that)
-        # let's just return None for now since we're not doing anything with infos anyways for now
-        return obs, rewads, dones, None
+        return self.env.step(actions)
 
     def render(self, mode='human'):
         pass

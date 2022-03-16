@@ -1,11 +1,11 @@
 from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
-    ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777]),
-    ('shuffle_minibatches', [False]),
+    ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
+    ('value_bootstrap', [False, True]),
 ])
 
-_version = 17
+_version = 18
 _vstr = f'v{_version:03d}'
 _cli = 'python -m sample_factory_examples.train_isaacgym ' \
        '--algo=APPO --env=isaacgym_ant --actor_worker_gpus 0 --train_for_env_steps=100000000 --env_agents=4096 ' \
@@ -14,10 +14,9 @@ _cli = 'python -m sample_factory_examples.train_isaacgym ' \
 
 _experiments = [
     Experiment(f'ant_gae_{_vstr}', _cli + ' --with_vtrace=False --recurrence=1', _params.generate_params(False)),
-    Experiment(f'ant_vtrace_{_vstr}', _cli + ' --with_vtrace=True --recurrence=16', _params.generate_params(False)),
 ]
 
-RUN_DESCRIPTION = RunDescription(f'ant_{_vstr}_gae_no_shuffle', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription(f'ant_{_vstr}_value_bootstrap', experiments=_experiments)
 
 
 # Run locally: python -m sample_factory.runner.run --run=sample_factory.runner.runs.isaacgym_ant_gae --runner=processes --max_parallel=2 --experiments_per_gpu=2 --num_gpus=1

@@ -60,7 +60,7 @@ class APPO(ReinforcementLearningAlgorithm):
             parser.add_argument(*args, **kwargs)
 
         super().add_cli_args(parser)
-        arg('--experiment_summaries_interval', default=20, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
+        arg('--experiment_summaries_interval', default=10, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
 
         arg('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         arg('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
@@ -135,22 +135,22 @@ class APPO(ReinforcementLearningAlgorithm):
                  'Highly recommended for environments with continuous action spaces.',
         )
         arg('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
-                       help='Usually the exploration loss is based on maximizing the entropy of the probability'
-                            ' distribution. Note that mathematically maximizing entropy of the categorical probability '
-                            'distribution is exactly the same as minimizing the (regular) KL-divergence between'
-                            ' this distribution and a uniform prior. The downside of using the entropy term '
-                            '(or regular asymmetric KL-divergence) is the fact that penalty does not increase as '
-                            'probabilities of some actions approach zero. I.e. numerically, there is almost '
-                            'no difference between an action distribution with a probability epsilon > 0 for '
-                            'some action and an action distribution with a probability = zero for this action.'
-                            ' For many tasks the first (epsilon) distribution is preferrable because we keep some '
-                            '(albeit small) amount of exploration, while the second distribution will never explore '
-                            'this action ever again.'
-                            'Unlike the entropy term, symmetric KL divergence between the action distribution '
-                            'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
-                            ' so it can prevent the pathological situations where the agent stops exploring. '
-                            'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
-                       )
+            help='Usually the exploration loss is based on maximizing the entropy of the probability'
+                 ' distribution. Note that mathematically maximizing entropy of the categorical probability '
+                 'distribution is exactly the same as minimizing the (regular) KL-divergence between'
+                 ' this distribution and a uniform prior. The downside of using the entropy term '
+                 '(or regular asymmetric KL-divergence) is the fact that penalty does not increase as '
+                 'probabilities of some actions approach zero. I.e. numerically, there is almost '
+                 'no difference between an action distribution with a probability epsilon > 0 for '
+                 'some action and an action distribution with a probability = zero for this action.'
+                 ' For many tasks the first (epsilon) distribution is preferrable because we keep some '
+                 '(albeit small) amount of exploration, while the second distribution will never explore '
+                 'this action ever again.'
+                 'Unlike the entropy term, symmetric KL divergence between the action distribution '
+                 'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
+                 ' so it can prevent the pathological situations where the agent stops exploring. '
+                 'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
+            )
 
         # APPO-specific
         arg(

@@ -1,4 +1,7 @@
+from typing import Dict, Any
+
 import torch
+from torch import Tensor
 
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
 from sample_factory.cfg.configurable import Configurable
@@ -65,9 +68,16 @@ class SyncSampler(Sampler):
         self.curr_episode_reward = torch.zeros(self.env_info.num_agents)
         self.curr_episode_len = torch.zeros(self.env_info.num_agents, dtype=torch.int32)
 
-    def process_rewards(self, rewards):
-        rewards = rewards * self.cfg.reward_scale
-        rewards = torch.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
+    def process_rewards(self, rewards_orig: Tensor, infos: Dict[Any, Any], values: Tensor):
+        rewards = rewards_orig * self.cfg.reward_scale
+        rewards.clamp_(-self.cfg.reward_clip, self.cfg.reward_clip)
+
+        if self.cfg.value_bootstrap and 'time_outs' in infos:
+            # What we really want here is v(t+1) which we don't have, using v(t) is an approximation that
+            # requires that rew(t) can be generally ignored.
+            # TODO: if gamma is modified by PBT it should be updated here too?!
+            rewards.add_(self.cfg.gamma * values * infos['time_outs'].float())
+
         return rewards
 
     def process_env_step(self, rewards_orig, dones_orig, infos):
@@ -91,7 +101,9 @@ class SyncSampler(Sampler):
             last_episode_true_reward = last_episode_reward
             last_episode_extra_stats = None
 
-            if infos:
+            # TODO: we somehow need to deal with two cases: when infos is a dict of tensors and when it is a list of dicts
+            # this only handles the latter.
+            if isinstance(infos, (list, tuple)):
                 last_episode_true_reward = infos[agent_i].get('true_reward', last_episode_reward)
                 last_episode_extra_stats = infos[agent_i].get('episode_extra_stats', None)
 
@@ -147,13 +159,17 @@ class SyncSampler(Sampler):
                 with timing.add_time('post_env_step'):
                     self.policy_id_buffer.fill_(self.curr_policy_id)
 
+                    # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym), or a list of dictionaries (i.e. swarm_rl quadrotors)
+                    # Need an adapter class so it's consistent, i.e. always a dict of tensors.
                     # this should yield indices of inactive agents
-                    if infos:
-                        inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
-                        self.policy_id_buffer[inactive_agents] = -1
+                    #
+                    # if infos:
+                    #     inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
+                    #     self.policy_id_buffer[inactive_agents] = -1
 
                     # record the results from the env step
-                    curr_step[:] = dict(rewards=self.process_rewards(rewards), dones=dones, policy_id=self.policy_id_buffer)
+                    processed_rewards = self.process_rewards(rewards, infos, policy_outputs['values'])
+                    curr_step[:] = dict(rewards=processed_rewards, dones=dones, policy_id=self.policy_id_buffer)
 
                     # reset next-step hidden states to zero if we encountered an episode boundary
                     # not sure if this is the best practice, but this is what everybody seems to be doing
