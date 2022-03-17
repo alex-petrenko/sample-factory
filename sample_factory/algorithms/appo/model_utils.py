@@ -66,28 +66,6 @@ def get_obs_shape(obs_space):
     return obs_shape
 
 
-def normalize_obs(obs_dict, running_mean_std, cfg):
-    with torch.no_grad():
-        mean = cfg.obs_subtract_mean
-        scale = cfg.obs_scale
-
-        if obs_dict['obs'].dtype != torch.float:
-            obs_dict['obs'] = obs_dict['obs'].float()
-
-        # TODO: this will only work in-place if we created a copy of a tensor before (i.e. float() turned uint8 tensor into float tensor)
-        # otherwise we risk overwriting existing tensors in shared memory, i.e. in the sync learner, which will lead to us scaling observations more than once
-        if abs(mean) > EPS:
-            obs_dict['obs'].sub_(mean)
-
-        if abs(scale - 1.0) > EPS:
-            obs_dict['obs'].mul_(1.0 / scale)
-
-        if running_mean_std:
-            obs_dict = running_mean_std(obs_dict)  # in-place normalization
-
-    return obs_dict
-
-
 class EncoderBase(nn.Module):
     def __init__(self, cfg, timing):
         super().__init__()

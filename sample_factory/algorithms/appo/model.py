@@ -1,11 +1,11 @@
 import torch
 from torch import nn
 
-from sample_factory.algo.utils.running_mean_std import RunningMeanStdDict
 from sample_factory.algorithms.appo.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
-    ActionParameterizationDefault, normalize_obs
+    ActionParameterizationDefault
 from sample_factory.algorithms.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
+from sample_factory.utils.normalize import Normalizer
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict
 
@@ -19,9 +19,7 @@ class _ActorCriticBase(nn.Module):
         self.encoders = []
         self.cores = []
 
-        self.running_mean_std = None
-        if cfg.normalize_input:
-            self.running_mean_std = RunningMeanStdDict(obs_space)
+        self.normalizer = Normalizer(obs_space, cfg)
 
     def get_action_parameterization(self, core_output_size):
         if not self.cfg.adaptive_stddev and is_continuous_action_space(self.action_space):
@@ -66,6 +64,9 @@ class _ActorCriticBase(nn.Module):
             # do nothing
             pass
 
+    def summaries(self):
+        return self.normalizer.summaries()  # Can add more summaries here, like weights statistics
+
 
 class _ActorCriticSharedWeights(_ActorCriticBase):
     def __init__(self, make_encoder, make_core, obs_space, action_space, cfg, timing):
@@ -85,9 +86,8 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
         self.apply(self.initialize_weights)
 
-    def forward_head(self, obs_dict):
-        normalize_obs(obs_dict, self.running_mean_std, self.cfg)
-        x = self.encoder(obs_dict)
+    def forward_head(self, normalized_obs_dict):
+        x = self.encoder(normalized_obs_dict)
         return x
 
     def forward_core(self, head_output, rnn_states):
@@ -118,8 +118,8 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
         return result
 
-    def forward(self, obs_dict, rnn_states, with_action_distribution=False, values_only=False):
-        x = self.forward_head(obs_dict)
+    def forward(self, normalized_obs_dict, rnn_states, with_action_distribution=False, values_only=False):
+        x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
 
         if values_only:
@@ -176,12 +176,10 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         """Optimization for the feed-forward case."""
         return head_output, fake_rnn_states
 
-    def forward_head(self, obs_dict):
-        normalize_obs(obs_dict, self.running_mean_std, self.cfg)
-
+    def forward_head(self, normalized_obs_dict):
         head_outputs = []
         for e in self.encoders:
-            head_outputs.append(e(obs_dict))
+            head_outputs.append(e(normalized_obs_dict))
 
         return torch.cat(head_outputs, dim=1)
 
@@ -211,8 +209,8 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
 
         return result
 
-    def forward(self, obs_dict, rnn_states, with_action_distribution=False, values_only=False):
-        x = self.forward_head(obs_dict)
+    def forward(self, normalized_obs_dict, rnn_states, with_action_distribution=False, values_only=False):
+        x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
 
         if values_only:

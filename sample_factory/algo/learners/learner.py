@@ -130,8 +130,8 @@ class Learner(Configurable):
         if self.cfg.kl_loss_coeff == 0.0:
             if is_continuous_action_space(self.env_info.action_space):
                 log.warning(
-                    'WARNING! It is recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks. '
-                    'I.e. set --kl_loss_coeff=1.0'
+                    'WARNING! It is generally recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks to avoid potential numerical issues. '
+                    'I.e. set --kl_loss_coeff=0.1'
                 )
                 time.sleep(3.0)
             self.kl_loss_func = lambda action_space, action_logits, distribution, valids: 0.0
@@ -448,7 +448,7 @@ class Learner(Configurable):
 
                 # calculate policy head outside of recurrent loop
                 with timing.add_time('forward_head'):
-                    head_outputs = self.actor_critic.forward_head(mb.obs)
+                    head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
 
                 # initial rnn states
                 with timing.add_time('bptt_initial'):
@@ -661,8 +661,7 @@ class Learner(Configurable):
 
         stats.lr = self._curr_lr()
 
-        if hasattr(self.actor_critic, 'running_mean_std') and self.actor_critic.running_mean_std:
-            stats.update(self.actor_critic.running_mean_std.summaries())
+        stats.update(self.actor_critic.summaries())
 
         stats.valids_fraction = var.valids.float().mean()
         stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
@@ -734,7 +733,8 @@ class Learner(Configurable):
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
-            next_values = self.actor_critic(buff['obs'][:, -1], buff['rnn_states'][:, -1], values_only=True)
+            normalized_last_obs = self.actor_critic.normalizer(buff['obs'][:, -1])
+            next_values = self.actor_critic(normalized_last_obs, buff['rnn_states'][:, -1], values_only=True)
 
             # remove next step obs and rnn_states from the batch, we don't need them anymore
             buff['obs'] = buff['obs'][:, :-1]
@@ -758,6 +758,11 @@ class Learner(Configurable):
             # will squeeze actions only in simple categorical case
             for tensor_name in ['actions']:
                 buff[tensor_name].squeeze_()
+
+            # normalize obs and record data statistics (hence the "train" mode)
+            self.actor_critic.train()
+            buff['normalized_obs'] = self.actor_critic.normalizer(buff['obs'])
+            del buff['obs']  # we don't need the regular obs anymore
 
             return buff, experience_size
 

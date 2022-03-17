@@ -12,9 +12,9 @@ from sample_factory.utils.utils import log
 
 
 # noinspection PyAttributeOutsideInit
-class RunningMeanStd(nn.Module):
+class RunningMeanStdInPlace(nn.Module):
     def __init__(self, input_shape, epsilon=1e-05, per_channel=False, norm_only=False):
-        super(RunningMeanStd, self).__init__()
+        super(RunningMeanStdInPlace, self).__init__()
         log.debug('RunningMeanStd input shape: %r', input_shape)
         self.input_shape = input_shape
         self.epsilon = epsilon
@@ -50,7 +50,8 @@ class RunningMeanStd(nn.Module):
         new_var = M2 / tot_count
         return new_mean, new_var, tot_count
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> None:
+        """Normalizes in-place! This means this function modifies the input tensor and returns nothing."""
         if self.training:
             mean = x.mean(self.axis)  # along channel axis
             var = x.var(self.axis)
@@ -76,25 +77,25 @@ class RunningMeanStd(nn.Module):
             current_var = self.running_var
 
         if self.norm_only:
-            y = x / torch.sqrt(current_var.float() + self.epsilon)
+            x.mul_(1.0 / torch.sqrt(current_var.float() + self.epsilon))
         else:
-            y = x - current_mean.float()
-            y.mul_(1.0 / torch.sqrt(current_var.float() + self.epsilon))
-            y.clamp_(-5.0, 5.0)
-
-        return y
+            x.sub_(current_mean.float())
+            x.mul_(1.0 / torch.sqrt(current_var.float() + self.epsilon))
+            x.clamp_(-5.0, 5.0)
 
 
-class RunningMeanStdDict(nn.Module):
+class RunningMeanStdDictInPlace(nn.Module):
     def __init__(self, obs_space: gym.spaces.Dict, epsilon=1e-05, per_channel=False, norm_only=False):
-        super(RunningMeanStdDict, self).__init__()
+        super(RunningMeanStdDictInPlace, self).__init__()
         self.obs_space = obs_space
         self.running_mean_std = nn.ModuleDict({
-            k: RunningMeanStd(space.shape, epsilon, per_channel, norm_only) for k, space in obs_space.spaces.items()
+            k: RunningMeanStdInPlace(space.shape, epsilon, per_channel, norm_only) for k, space in obs_space.spaces.items()
         })
 
-    def forward(self, x):
-        return {k: self.running_mean_std[k](v) for k, v in x.items()}
+    def forward(self, x) -> None:
+        """Normalize in-place!"""
+        for k, v in x.items():
+            self.running_mean_std[k](v)
 
     def summaries(self):
         res = dict()

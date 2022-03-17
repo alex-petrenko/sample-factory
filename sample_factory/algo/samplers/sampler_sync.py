@@ -136,9 +136,12 @@ class SyncSampler(Sampler):
                 # save observations and RNN states in a trajectory
                 curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
 
+                with timing.add_time('norm'):
+                    normalized_obs = self.actor_critic.normalizer(curr_step['obs'])
+
                 # obs and rnn_states obtained from the trajectory buffers should be on the same device as the model
                 with timing.add_time('inference'):
-                    policy_outputs = self.actor_critic(curr_step['obs'], curr_step['rnn_states'])
+                    policy_outputs = self.actor_critic(normalized_obs, curr_step['rnn_states'])
 
                 with timing.add_time('post_inference'):
                     new_rnn_state = policy_outputs['rnn_states']
