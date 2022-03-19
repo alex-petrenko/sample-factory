@@ -1,3 +1,5 @@
+# TODO: I don't think we actually need this class
+
 from collections import deque
 
 from sample_factory.cfg.configurable import Configurable

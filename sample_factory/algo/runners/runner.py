@@ -140,6 +140,10 @@ class Runner(Configurable):
         self.register_timer_callback(self._update_stats_and_print_report, period_sec=self.report_interval_sec)
         self.register_timer_callback(self._report_experiment_summaries, period_sec=self.summaries_interval_sec)
         self.register_timer_callback(self._propagate_training_info, period_sec=5)
+
+        self.register_timer_callback(self._save_policy, period_sec=self.cfg.save_every_sec)
+        self.register_timer_callback(self._save_best_policy, period_sec=self.cfg.save_best_every_sec)
+
         # TODO: save model callback
 
     def _should_end_training(self):
@@ -361,6 +365,15 @@ class Runner(Configurable):
         # TODO!
         # for w in self.actor_workers:
         #     w.update_env_steps(self.env_steps)
+
+    @staticmethod
+    def _save_policy(runner):
+        # TODO! Here we need a proper mechanism for communication with the learner even if it's in a separate process!
+        self.learner
+
+    @staticmethod
+    def _save_best_policy(runner):
+        pass
 
     def register_msg_handler(self, key, func):
         self._register_msg_handler(self.msg_handlers, key, func)
