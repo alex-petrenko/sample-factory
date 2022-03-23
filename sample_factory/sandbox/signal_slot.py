@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from multiprocessing import Queue
 from queue import Empty
-from typing import Dict, Any, Set, Callable
+from typing import Dict, Any, Set, Callable, Tuple
 
 from sample_factory.algo.utils.queues import get_mp_queue
 from sample_factory.utils.utils import log
@@ -24,24 +24,30 @@ from sample_factory.utils.utils import log
 
 
 class EventLoopObject:
-    all_objects: Dict[str, EventLoopObject] = dict()
+    _obj_ids: Set[Any] = set()
 
     def __init__(self, event_loop, object_id=None):
         # the reason we can't use regular id() is because depending on the process spawn method the same objects
         # can have the same id() (in Fork method) or different id() (spawn method)
         self.object_id = object_id if object_id is not None else str(uuid.uuid4())
-        assert self.object_id not in self.all_objects
+        assert self.object_id not in self._obj_ids, f'{self.object_id=} is not unique!'
+
+        self._obj_ids.add(object_id)
 
         self.event_loop: EventLoop = event_loop
+        self.event_loop.objects[self.object_id] = self
 
         # receivers of signals emitted by this object
-        self.receivers: Dict[str, Set[Receiver]] = dict()
-        self.receiver_queues: Dict[str, Dict[Any, int]] = dict()
+        self.send_signals_to: Dict[str, Set[Any]] = dict()
+        self.receiver_queues: Dict = dict()
+        self.receiver_refcount: Dict[Any, int] = dict()
 
-        # emitters we receive signals from
-        self.emitters: Set[Emitter] = set()
+        # connections (emitter -> slot name)
+        self.connections: Dict[Emitter, str] = dict()
 
-        self.all_objects[self.object_id] = self
+    def _add_to_loop(self, loop):
+        self.event_loop = loop
+        self.event_loop.objects[self.object_id] = self
 
     @staticmethod
     def _add_to_dict_of_sets(d: Dict[Any, Set], key, value):
@@ -49,61 +55,84 @@ class EventLoopObject:
             d[key] = set()
         d[key].add(value)
 
-    def connect(self, signal: str, other_object: EventLoopObject, slot: str):
+    def connect(self, signal: str, other: EventLoopObject, slot: str):
         emitter = Emitter(self.object_id, signal)
-        receiver = Receiver(other_object.object_id, slot)
+        receiver_id = other.object_id
 
-        self._add_to_dict_of_sets(self.receivers, signal, receiver)
+        self._add_to_dict_of_sets(self.send_signals_to, signal, receiver_id)
 
-        receiving_loop = other_object.event_loop
-        self.receiver_event_loops[receiving_loop] = self.receiver_event_loops.get(receiving_loop, 0) + 1
+        receiving_loop = other.event_loop
+        self._add_to_dict_of_sets(receiving_loop.receivers, emitter, receiver_id)
 
-        self._add_to_dict_of_sets(receiving_loop.receivers, emitter, receiver)
+        q = receiving_loop.signal_queue
+        self.receiver_queues[receiver_id] = q
+        self.receiver_refcount[receiver_id] = self.receiver_refcount.get(receiver_id, 0) + 1
 
-        self.emitters.add(emitter)
+        other.connections[emitter] = slot
 
     def disconnect(self, signal, other_object: EventLoopObject, slot: str):
-        if signal not in self.receivers:
+        if signal not in self.send_signals_to:
             log.warning(f'{self.object_id}:{signal=} is not connected to anything')
             return
 
-        receiver = Receiver(other_object.object_id, slot)
-        if receiver not in self.receivers[signal]:
-            log.warning(f'{self.object_id}:{signal=} is not connected to {other_object.object_id}:{slot=}')
+        receiver_id = other_object.object_id
+        if receiver_id not in self.send_signals_to[signal]:
+            log.warning(f'{self.object_id}:{signal=} is not connected to {receiver_id}:{slot=}')
             return
 
-        self.receivers[signal].remove(receiver)
+        self.send_signals_to[signal].remove(receiver_id)
 
-        receiving_loop = other_object.event_loop
-        if self.receiver_event_loops.get(receiving_loop, 0) == 0:
-            del self.receiver_event_loops[receiving_loop]
+        self.receiver_refcount[receiver_id] -= 1
+        if self.receiver_refcount[receiver_id] <= 0:
+            del self.receiver_refcount[receiver_id]
+            del self.receiver_queues[receiver_id]
 
-        other_object.emitters.remove(self.object_id)
+        emitter = Emitter(self.object_id, signal)
+        del other_object.connections[emitter]
+
+        loop_receivers = other_object.event_loop.receivers.get(emitter)
+        if loop_receivers is not None:
+            loop_receivers.remove(other_object.object_id)
 
     def emit(self, signal_name: str, data: Any = None):
-        for receiver in self.receiver_event_loops[signal_name]:
+        # find a set of queues we need to send this signal to
+        queues = set()
+        for receiver_id in self.send_signals_to[signal_name]:
+            queues.add(self.receiver_queues[receiver_id])
+
+        for q in queues:
             # we just push one message into each receiver event loop queue
             # event loops themselves will redistribute the signal to all receivers living on that loop
-            receiver.signal_queue.put((self.object_id, signal_name, data), block=True, timeout=1.0)
+            q.put((self.object_id, signal_name, data), block=True, timeout=1.0)
 
     def move_to_loop(self, loop: EventLoop):
         assert isinstance(loop, EventLoop), f'Should use an instance of {EventLoop.__name__}'
 
         # remove from the existing loop receivers
+        del self.event_loop.objects[self.object_id]
 
-        self.event_loop = loop
+        # remove mentions of this object from the current loop
+        # since we're moving to a different loop, we should not receive signals on this loop anymore
+        for emitter in self.connections:
+            self.event_loop.receivers[emitter].remove()
 
+        # TODO
 
+        self._add_to_loop(loop)
 
     def __del__(self):
         # TODO disconnect everything
         log.debug(f'__del__ called for {self.object_id}')
-        del self.all_objects[self.object_id]
+        self._obj_ids.remove(self.object_id)
         pass
 
 
 def connect(obj1: EventLoopObject, signal: str, obj2: EventLoopObject, slot: str):
     obj1.connect(signal, obj2, slot)
+
+
+def disconnect(obj1: EventLoopObject, signal: str, obj2: EventLoopObject, slot: str):
+    obj1.disconnect(signal, obj2, slot)
 
 
 @dataclass(frozen=True)
@@ -123,8 +152,10 @@ class EventLoop:
         self.signal_queue = get_mp_queue()
         self.loop_timeout_sec = 1.0 / loop_frequency_hz
 
-        self.objects: Set[EventLoopObject] = set()
-        self.receivers: Dict[Emitter, Set[Receiver]] = dict()
+        # objects living on this loop
+        self.objects: Dict[Any, EventLoopObject] = dict()
+
+        self.receivers: Dict[Emitter, Set[Any]] = dict()
 
         self.should_terminate = False
 
@@ -135,13 +166,17 @@ class EventLoop:
         emitter_object_id, signal_name, data = signal
         emitter = Emitter(emitter_object_id, signal_name)
 
-        receivers = self.receivers.get(emitter, ())
+        receiver_ids = self.receivers.get(emitter, ())
 
-        for receiver in receivers:
-            obj_id, slot = receiver.object_id, receiver.slot_name
-            obj = EventLoopObject.all_objects.get(receiver.object_id)
+        for obj_id in receiver_ids:
+            obj = self.objects.get(obj_id)
             if obj is None:
-                log.warning(f'Attempting to call a slot on object {obj_id} which is not found')
+                log.warning(f'Attempting to call a slot on object {obj_id} which is not found on this loop')
+                continue
+
+            slot = obj.connections.get(emitter)
+            if obj is None:
+                log.warning(f'{emitter=} does not appear to be connected to {obj_id=}')
                 continue
 
             if not hasattr(obj, slot):
@@ -156,16 +191,19 @@ class EventLoop:
             slot_callable(data)
 
     def exec(self):
-        while not self.should_terminate:
-            try:
-                # loop over all incoming signals, see if any of the objects living on this event loop are connected
-                # to this particular signal, call slots if needed
-                signals = self.signal_queue.get_many(timeout=self.loop_timeout_sec)
-            except Empty:
-                signals = ()
+        try:
+            while not self.should_terminate:
+                try:
+                    # loop over all incoming signals, see if any of the objects living on this event loop are connected
+                    # to this particular signal, call slots if needed
+                    signals = self.signal_queue.get_many(timeout=self.loop_timeout_sec)
+                except Empty:
+                    signals = ()
 
-            for signal in signals:
-                self._process_signal(signal)
+                for signal in signals:
+                    self._process_signal(signal)
+        except KeyboardInterrupt:
+            log.warning(f'Keyboard interrupt detected in the event loop {self}, exiting...')
 
 
 class EventLoopProcess(multiprocessing.Process):
@@ -205,11 +243,12 @@ def main():
     o2 = C2(event_loop, 'o2')
 
     connect(o2, 'foo_signal', o1, 'inc')
+    disconnect(o2, 'foo_signal', o1, 'inc')
+    connect(o2, 'foo_signal', o1, 'inc')
 
     o2.foo()
 
     p = EventLoopProcess()
-    o1.move_to_loop(p)
     p.start()
 
     event_loop.exec()
