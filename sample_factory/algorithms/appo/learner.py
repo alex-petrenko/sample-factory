@@ -400,8 +400,7 @@ class LearnerWorker:
         ent_coeff = 0.1
         # rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
         entropies = get_action_distribution(self.action_space, torch.Tensor(np.stack(buffer.action_logits))).entropy().numpy()
-
-        buffer.entropies = [torch.tensor(entropies).reshape(-1)]
+        buffer.weighted_entropies = ent_coeff * entropies # TODO: use this for logging in the future
         rewards = np.stack(buffer.rewards + ent_coeff * entropies).squeeze()  # [E, T]
 
         dones = np.stack(buffer.dones).squeeze()  # [E, T]
