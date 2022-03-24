@@ -397,8 +397,13 @@ class LearnerWorker:
         This is leftover the from previous version of the algorithm.
         Perhaps should be re-implemented in PyTorch tensors, similar to V-trace for uniformity.
         """
+        ent_coeff = 0.1
+        # rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
+        entropies = get_action_distribution(self.action_space, torch.Tensor(np.stack(buffer.action_logits))).entropy().numpy()
 
-        rewards = np.stack(buffer.rewards).squeeze()  # [E, T]
+        buffer.entropies = [torch.tensor(entropies).reshape(-1)]
+        rewards = np.stack(buffer.rewards + ent_coeff * entropies).squeeze()  # [E, T]
+
         dones = np.stack(buffer.dones).squeeze()  # [E, T]
         values_arr = np.stack(buffer.values).squeeze()  # [E, T]
 
