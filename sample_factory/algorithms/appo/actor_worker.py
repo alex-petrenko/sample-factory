@@ -398,7 +398,7 @@ class VectorEnvRunner:
         for env_i in range(self.num_envs):
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
-                if not actor_state.is_active:
+                if not actor_state._is_active:
                     continue
 
                 actor_policy = actor_state.curr_policy_id
@@ -528,7 +528,7 @@ class VectorEnvRunner:
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
 
-                if actor_state.is_active:
+                if actor_state._is_active:
                     policy_id = actor_state.curr_policy_id
 
                     # where policy worker should look for the policy inputs for the next step
@@ -554,7 +554,7 @@ class VectorEnvRunner:
             for agent_i in range(self.num_agents):
                 actor_state = self.actor_states[env_i][agent_i]
 
-                if actor_state.is_active:
+                if actor_state._is_active:
                     actor_state.ready = False
 
                     # populate policy inputs in shared memory
