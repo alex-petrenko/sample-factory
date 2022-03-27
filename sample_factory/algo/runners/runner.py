@@ -4,7 +4,7 @@ import os
 import time
 from collections import deque, OrderedDict
 from os.path import join
-from typing import Dict
+from typing import Dict, Iterable, Tuple, List
 
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -13,7 +13,7 @@ from sample_factory.algorithms.appo.appo_utils import iterate_recursively
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_EPISODIC_STATS_PROCESSING, \
     EXTRA_PER_POLICY_SUMMARIES
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer
+from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer, signal
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
@@ -85,6 +85,10 @@ class Runner(EventLoopObject, Configurable):
         self.event_loop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop')
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
+        self._save_cfg()
+        save_git_diff(experiment_dir(cfg=self.cfg))
+        init_file_logger(experiment_dir(self.cfg))
+
         self.timing = Timing() if timing is None else timing
 
         self.sampler, self.batcher, self.learner = None, None, None
@@ -141,7 +145,7 @@ class Runner(EventLoopObject, Configurable):
         self.subscribe('report_msg', self._process_msg)
 
         def periodic(period, cb):
-            return Timer(self.event_loop, period).connect('timeout', cb)
+            return Timer(self.event_loop, period).timeout.connect(cb)
 
         periodic(self.report_interval_sec, self._update_stats_and_print_report)
         periodic(self.summaries_interval_sec, self._report_experiment_summaries)
@@ -151,38 +155,33 @@ class Runner(EventLoopObject, Configurable):
 
         periodic(5, self._propagate_training_info)
 
-    def init(self, sampler, learner, batcher):
-        self._save_cfg()
-        save_git_diff(experiment_dir(cfg=self.cfg))
-        init_file_logger(experiment_dir(self.cfg))
+    # singals emitted by the runner
+    @signal
+    def request_trajectories(self): pass
 
-        self.sampler = sampler
-        self.batcher = batcher
-        self.learner = learner
+    @signal
+    def save_periodic(self): pass
 
-    def _should_end_training(self):
-        end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
-        end |= self.total_train_seconds > self.cfg.train_for_seconds
+    @signal
+    def save_best(self): pass
 
-        if self.cfg.benchmark:
-            end |= self.total_env_steps_since_resume >= int(2e6)
-            end |= sum(self.samples_collected) >= int(1e6)
+    def _process_msg(self, msgs):
+        if isinstance(msgs, (dict, OrderedDict)):
+            msgs = (msgs, )
 
-        return end
-
-    def _process_msg(self, msg):
-        if not isinstance(msg, (dict, OrderedDict)):
-            log.error('While parsing a message: expected a dictionary, found %r', msg)
+        if not (isinstance(msgs, (List, Tuple)) and isinstance(msgs[0], (dict, OrderedDict))):
+            log.error('While parsing a message: expected a dictionary or list/tuple of dictionaries, found %r', msgs)
             return
 
-        # some messages are policy-specific
-        policy_id = msg.get('policy_id', None)
+        for msg in msgs:
+            # some messages are policy-specific
+            policy_id = msg.get('policy_id', None)
 
-        for key in msg:
-            for handler in self.msg_handlers.get(key, []):
-                handler(self, msg)
-            for handler in self.policy_msg_handlers.get(key, []):
-                handler(self, msg, policy_id)
+            for key in msg:
+                for handler in self.msg_handlers.get(key, []):
+                    handler(self, msg)
+                for handler in self.policy_msg_handlers.get(key, []):
+                    handler(self, msg, policy_id)
 
     @staticmethod
     def _timing_msg_handler(runner, msg):
@@ -304,34 +303,33 @@ class Runner(EventLoopObject, Configurable):
         total_env_steps = sum(self.env_steps.values())
         self.print_stats(fps_stats, sample_throughput, total_env_steps)
 
-    @staticmethod
-    def _report_experiment_summaries(runner):
+    def _report_experiment_summaries(self):
         memory_mb = memory_consumption_mb()
 
-        fps_stats, sample_throughput = runner._get_perf_stats()
+        fps_stats, sample_throughput = self._get_perf_stats()
         fps = fps_stats[0]
 
         default_policy = 0
-        for policy_id, env_steps in runner.env_steps.items():
+        for policy_id, env_steps in self.env_steps.items():
             if policy_id == default_policy:
                 if not math.isnan(fps):
-                    runner.writers[policy_id].add_scalar('perf/_fps', fps, env_steps)
+                    self.writers[policy_id].add_scalar('perf/_fps', fps, env_steps)
 
-                runner.writers[policy_id].add_scalar('stats/master_process_memory_mb', float(memory_mb), env_steps)
-                for key, value in runner.avg_stats.items():
-                    if len(value) >= value.maxlen or (len(value) > 10 and runner.total_train_seconds > 300):
-                        runner.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
+                self.writers[policy_id].add_scalar('stats/master_process_memory_mb', float(memory_mb), env_steps)
+                for key, value in self.avg_stats.items():
+                    if len(value) >= value.maxlen or (len(value) > 10 and self.total_train_seconds > 300):
+                        self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
 
-                for key, value in runner.stats.items():
-                    runner.writers[policy_id].add_scalar(f'stats/{key}', value, env_steps)
+                for key, value in self.stats.items():
+                    self.writers[policy_id].add_scalar(f'stats/{key}', value, env_steps)
 
             if not math.isnan(sample_throughput[policy_id]):
-                runner.writers[policy_id].add_scalar('perf/_sample_throughput', sample_throughput[policy_id], env_steps)
+                self.writers[policy_id].add_scalar('perf/_sample_throughput', sample_throughput[policy_id], env_steps)
 
-            for key, stat in runner.policy_avg_stats.items():
-                if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and runner.total_train_seconds > 300):
+            for key, stat in self.policy_avg_stats.items():
+                if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and self.total_train_seconds > 300):
                     stat_value = np.mean(stat[policy_id])
-                    writer = runner.writers[policy_id]
+                    writer = self.writers[policy_id]
 
                     # custom summaries have their own sections in tensorboard
                     if '/' in key:
@@ -346,17 +344,17 @@ class Runner(EventLoopObject, Configurable):
                     writer.add_scalar(avg_tag, float(stat_value), env_steps)
 
                     # for key stats report min/max as well
-                    if key in ('reward', 'true_reward', 'len'):
+                    if key in ('reward', 'true_objective', 'len'):
                         writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
                         writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 
             for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:  # TODO: replace with extra callbacks/handlers
                 extra_summaries_func(
-                    policy_id, runner.policy_avg_stats, env_steps, runner.writers[policy_id], runner.cfg,
+                    policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg,
                 )
 
         # flush
-        for w in runner.writers.values():
+        for w in self.writers.values():
             w.flush()
 
     def _propagate_training_info(self):
@@ -370,14 +368,17 @@ class Runner(EventLoopObject, Configurable):
         # for w in self.actor_workers:
         #     w.update_env_steps(self.env_steps)
 
-    @staticmethod
-    def _save_policy(runner):
-        # TODO! Here we need a proper mechanism for communication with the learner even if it's in a separate process!
-        self.learner
+    def _save_policy(self):
+        self.save_periodic.emit()
 
-    @staticmethod
-    def _save_best_policy(runner):
-        pass
+    def _save_best_policy(self):
+        metric = self.cfg.save_best_metric
+        if metric in self.policy_avg_stats:
+            for policy_id in range(self.cfg.num_policies):
+                stats = self.policy_avg_stats[metric][policy_id]
+                if len(stats) > 0:
+                    avg_metric = np.mean(stats)
+                    self.save_best.emit(policy_id, metric, avg_metric)
 
     def register_msg_handler(self, key, func):
         self._register_msg_handler(self.msg_handlers, key, func)
@@ -396,63 +397,74 @@ class Runner(EventLoopObject, Configurable):
         with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
-    # def run___(self):
-    #     status = ExperimentStatus.SUCCESS
-    #
-    #     if os.path.isfile(done_filename(self.cfg)):
-    #         log.warning(
-    #             'Existence of the "done" file in the experiment folder indicates that this training session '
-    #             'is finished! Remove "done" file if you wish to continue training'
-    #         )
-    #         return status
-    #
-    #     with self.timing.timeit('main_loop'):
-    #         # noinspection PyBroadException
-    #         try:
-    #             while not self._should_end_training():
-    #                 self.algo_step(self.timing)
-    #                 self.upkeep()
-    #
-    #                 # TODO: add a periodic callback for this!
-    #                 # self.pbt.update(self.env_steps, self.policy_avg_stats)
-    #
-    #         except Exception:
-    #             log.exception('Exception in the runner main loop')
-    #             status = ExperimentStatus.FAILURE
-    #         except KeyboardInterrupt:
-    #             log.warning('Keyboard interrupt detected in the main loop, exiting...')
-    #             status = ExperimentStatus.INTERRUPTED
-    #
-    #     fps = self.total_env_steps_since_resume / self.timing.main_loop
-    #     log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
-    #     log.info(self.timing)
-    #
-    #     return status
+    # TODO: type hints
+    def init(self, sampler, batcher, learner):
+        # TODO: multiple samplers/learners for multiple policies
 
-    # noinspection PyBroadException
-    def run(self) -> StatusCode:
-        status = ExperimentStatus.SUCCESS
+        self.sampler = sampler
+        self.request_trajectories.connect(sampler.collect_trajectories)
+        sampler.report_msg.broadcast_on(self.event_loop)  # how is this going to look like for async CPU sampler
+        sampler.new_trajectories.connect(batcher.on_new_trajectories)
 
+        self.batcher = batcher
+        batcher.new_batches.connect(learner.on_new_batches)
+
+        self.learner = learner
+        learner.report_msg.connect(self._process_msg)
+        learner.finished_training_iteration.connect(sampler.collect_trajectories)  # close the synchronous loop
+        learner.finished_training_iteration.connect(self._after_training_iteration)
+
+        # auxiliary connections
+        self.save_periodic.connect(self.learner.save)
+        self.save_best.connect(self.learner.save_best)
+
+        # kickstart the algorithm
+        self.request_trajectories.emit()
+
+        # TODO: stop sampler, learner, etc. Implement when we have async versions
+
+    def _check_done(self):
+        # TODO: I don't think this works now. Do we even need this feature?
         if os.path.isfile(done_filename(self.cfg)):
             log.warning(
                 'Existence of the "done" file in the experiment folder indicates that this training session '
                 'is finished! Remove "done" file if you wish to continue training'
             )
+            return True
+
+        return False
+
+    def _should_end_training(self):
+        end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
+        end |= self.total_train_seconds > self.cfg.train_for_seconds
+
+        if self.cfg.benchmark:
+            end |= self.total_env_steps_since_resume >= int(2e6)
+            end |= sum(self.samples_collected) >= int(1e6)
+
+        return end
+
+    def _after_training_iteration(self):
+        if self._should_end_training():
+            self.event_loop.stop()
+
+    # noinspection PyBroadException
+    def run(self) -> StatusCode:
+        status = ExperimentStatus.SUCCESS
+
+        if self._check_done():
             return status
 
-        try:
-            evt_loop_status = self.event_loop.exec()
-            status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
-        except Exception as exc:
-            log.exception(f'Uncaught exception in {self.object_id} evt loop')
-            status = ExperimentStatus.FAILURE
+        with self.timing.timeit('main_loop'):
+            try:
+                evt_loop_status = self.event_loop.exec()
+                status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
+            except Exception:
+                log.exception(f'Uncaught exception in {self.object_id} evt loop')
+                status = ExperimentStatus.FAILURE
 
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
         log.info(self.timing)
 
         return status
-
-    def algo_step(self, timing):
-        """Algorithm-specific step function called from the main loop of the runner."""
-        raise NotImplementedError()

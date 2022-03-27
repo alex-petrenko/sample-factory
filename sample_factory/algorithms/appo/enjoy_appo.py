@@ -55,7 +55,7 @@ def enjoy(cfg, max_num_frames=1e9):
     actor_critic.load_state_dict(checkpoint_dict['model'])
 
     episode_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
-    true_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
+    true_objectives = [deque([], maxlen=100) for _ in range(env.num_agents)]
     num_frames = 0
 
     last_render_start = time.time()
@@ -110,8 +110,8 @@ def enjoy(cfg, max_num_frames=1e9):
                     if done_flag:
                         finished_episode[agent_i] = True
                         episode_rewards[agent_i].append(episode_reward[agent_i])
-                        true_rewards[agent_i].append(infos[agent_i].get('true_reward', episode_reward[agent_i]))
-                        log.info('Episode finished for agent %d at %d frames. Reward: %.3f, true_reward: %.3f', agent_i, num_frames, episode_reward[agent_i], true_rewards[agent_i][-1])
+                        true_objectives[agent_i].append(infos[agent_i].get('true_objective', episode_reward[agent_i]))
+                        log.info('Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f', agent_i, num_frames, episode_reward[agent_i], true_objectives[agent_i][-1])
                         rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
 
@@ -123,21 +123,21 @@ def enjoy(cfg, max_num_frames=1e9):
 
                 if all(finished_episode):
                     finished_episode = [False] * env.num_agents
-                    avg_episode_rewards_str, avg_true_reward_str = '', ''
+                    avg_episode_rewards_str, avg_true_objective_str = '', ''
                     for agent_i in range(env.num_agents):
                         avg_rew = np.mean(episode_rewards[agent_i])
-                        avg_true_rew = np.mean(true_rewards[agent_i])
+                        avg_true_rew = np.mean(true_objectives[agent_i])
                         if not np.isnan(avg_rew):
                             if avg_episode_rewards_str:
                                 avg_episode_rewards_str += ', '
                             avg_episode_rewards_str += f'#{agent_i}: {avg_rew:.3f}'
                         if not np.isnan(avg_true_rew):
-                            if avg_true_reward_str:
-                                avg_true_reward_str += ', '
-                            avg_true_reward_str += f'#{agent_i}: {avg_true_rew:.3f}'
+                            if avg_true_objective_str:
+                                avg_true_objective_str += ', '
+                            avg_true_objective_str += f'#{agent_i}: {avg_true_rew:.3f}'
 
-                    log.info('Avg episode rewards: %s, true rewards: %s', avg_episode_rewards_str, avg_true_reward_str)
-                    log.info('Avg episode reward: %.3f, avg true_reward: %.3f', np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]), np.mean([np.mean(true_rewards[i]) for i in range(env.num_agents)]))
+                    log.info('Avg episode rewards: %s, true rewards: %s', avg_episode_rewards_str, avg_true_objective_str)
+                    log.info('Avg episode reward: %.3f, avg true_objective: %.3f', np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]), np.mean([np.mean(true_objectives[i]) for i in range(env.num_agents)]))
 
                 # VizDoom multiplayer stuff
                 # for player in [1, 2, 3, 4, 5, 6, 7, 8]:

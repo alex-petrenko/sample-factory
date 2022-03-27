@@ -200,10 +200,10 @@ class ActorState:
 
         report = None
         if done:
-            last_episode_true_reward = info.get('true_reward', self.last_episode_reward)
+            last_episode_true_objective = info.get('true_objective', self.last_episode_reward)
             last_episode_extra_stats = info.get('episode_extra_stats', dict())
 
-            report = self.episodic_stats(last_episode_true_reward, last_episode_extra_stats)
+            report = self.episodic_stats(last_episode_true_objective, last_episode_extra_stats)
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
@@ -274,10 +274,10 @@ class ActorState:
         if done:
             self._reset_rnn_state()
 
-    def episodic_stats(self, last_episode_true_reward, last_episode_extra_stats):
+    def episodic_stats(self, last_episode_true_objective, last_episode_extra_stats):
         stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
 
-        stats['true_reward'] = last_episode_true_reward
+        stats['true_objective'] = last_episode_true_objective
         stats['episode_extra_stats'] = last_episode_extra_stats
 
         report = dict(episodic=stats, policy_id=self.curr_policy_id)

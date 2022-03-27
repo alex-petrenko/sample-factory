@@ -230,8 +230,8 @@ class APPO(ReinforcementLearningAlgorithm):
         arg('--pbt_optimize_batch_size', default=False, type=str2bool, help='Whether to optimize batch size or not (experimental)')
         arg('--pbt_optimize_gamma', default=False, type=str2bool, help='Whether to optimize gamma, discount factor, or not (experimental)')
         arg(
-            '--pbt_target_objective', default='true_reward', type=str,
-            help='Policy stat to optimize with PBT. true_reward (default) is equal to raw env reward if not specified, but can also be any other per-policy stat.'
+            '--pbt_target_objective', default='true_objective', type=str,
+            help='Policy stat to optimize with PBT. true_objective (default) is equal to raw env reward if not specified, but can also be any other per-policy stat.'
                  'For DMlab-30 use value "dmlab_target_objective" (which is capped human normalized score)',
         )
         arg(
@@ -656,7 +656,7 @@ class APPO(ReinforcementLearningAlgorithm):
                     writer.add_scalar(avg_tag, float(stat_value), env_steps)
 
                     # for key stats report min/max as well
-                    if key in ('reward', 'true_reward', 'len'):
+                    if key in ('reward', 'true_objective', 'len'):
                         writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
                         writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 

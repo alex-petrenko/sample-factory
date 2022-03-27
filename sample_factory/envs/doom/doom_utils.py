@@ -14,8 +14,8 @@ from sample_factory.envs.doom.wrappers.additional_input import DoomAdditionalInp
 from sample_factory.envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from sample_factory.envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from sample_factory.envs.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
-from sample_factory.envs.doom.wrappers.reward_shaping import true_reward_final_position, DoomRewardShapingWrapper, \
-    REWARD_SHAPING_DEATHMATCH_V0, true_reward_frags, REWARD_SHAPING_DEATHMATCH_V1, REWARD_SHAPING_BATTLE
+from sample_factory.envs.doom.wrappers.reward_shaping import true_objective_final_position, DoomRewardShapingWrapper, \
+    REWARD_SHAPING_DEATHMATCH_V0, true_objective_frags, REWARD_SHAPING_DEATHMATCH_V1, REWARD_SHAPING_BATTLE
 from sample_factory.envs.doom.wrappers.scenario_wrappers.gathering_reward_shaping import DoomGatheringRewardShaping
 from sample_factory.envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
@@ -52,9 +52,9 @@ class DoomSpec:
 
 
 ADDITIONAL_INPUT = (DoomAdditionalInput, {})  # health, ammo, etc. as input vector
-BATTLE_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_BATTLE, true_reward_func=None))  # "true" reward None means just the env reward (monster kills)
-BOTS_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V0, true_reward_func=true_reward_frags))
-DEATHMATCH_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V1, true_reward_func=true_reward_final_position))
+BATTLE_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_BATTLE, true_objective_func=None))  # "true" reward None means just the env reward (monster kills)
+BOTS_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V0, true_objective_func=true_objective_frags))
+DEATHMATCH_REWARD_SHAPING = (DoomRewardShapingWrapper, dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V1, true_objective_func=true_objective_final_position))
 
 
 DOOM_ENVS = [

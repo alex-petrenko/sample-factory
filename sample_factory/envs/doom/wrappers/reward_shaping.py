@@ -66,7 +66,7 @@ REWARD_SHAPING_DEATHMATCH_V1['delta'].update(dict(
 REWARD_SHAPING_BATTLE = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
 
 
-def true_reward_final_position(info):
+def true_objective_final_position(info):
     if info['LEADER_GAP'] == 0:
         # tied with the leader for the win, we don't reward for ties, only for the win
         return 0.0
@@ -79,19 +79,19 @@ def true_reward_final_position(info):
         return 1.0
 
 
-def true_reward_frags(info):
+def true_objective_frags(info):
     return info['FRAGCOUNT']
 
 
 class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
     """Convert game info variables into scalar reward using a reward shaping scheme."""
 
-    def __init__(self, env, reward_shaping_scheme=None, true_reward_func=None):
+    def __init__(self, env, reward_shaping_scheme=None, true_objective_func=None):
         gym.Wrapper.__init__(self, env)
         RewardShapingInterface.__init__(self)
 
         self.reward_shaping_scheme = reward_shaping_scheme
-        self.true_reward_func = true_reward_func
+        self.true_objective_func = true_objective_func
 
         # without this we reward using BFG and shotguns too much
         self.reward_delta_limits = dict(DAMAGECOUNT=200, HITCOUNT=5)
@@ -242,12 +242,12 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         self.prev_dead = not not info.get('DEAD', 0.0)  # float -> bool
 
         if done:
-            if self.true_reward_func is None:
-                true_reward = self.orig_env_reward
+            if self.true_objective_func is None:
+                true_objective = self.orig_env_reward
             else:
-                true_reward = self.true_reward_func(info)
+                true_objective = self.true_objective_func(info)
 
-            info['true_reward'] = true_reward
+            info['true_objective'] = true_objective
 
         return obs, rew, done, info
 

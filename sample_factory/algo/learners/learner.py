@@ -1,6 +1,5 @@
 import glob
 import os
-import shutil
 import time
 from abc import ABC, abstractmethod
 from os.path import join
@@ -15,6 +14,7 @@ from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.pytorch_utils import to_scalar
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
@@ -84,11 +84,14 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
         raise RuntimeError(f'Unknown scheduler {cfg.lr_schedule}')
 
 
-class Learner(Configurable):
-    def __init__(self, cfg, env_info, comm_broker, actor_critic, device, buffer_mgr, policy_id):
-        super().__init__(cfg)
+class Learner(EventLoopObject, Configurable):
+    def __init__(self, evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, policy_id, timing):
+        Configurable.__init__(self, cfg)
 
-        self.comm_broker = comm_broker
+        unique_name = f'{Learner.__name__}_{policy_id}'
+        EventLoopObject.__init__(self, evt_loop, unique_name)
+
+        self.timing = timing
 
         self.policy_id = policy_id
 
@@ -102,8 +105,7 @@ class Learner(Configurable):
 
         # TODO: get rid of env_steps on the learner, we don't really care!
         self.train_step = self.env_steps = 0
-
-        self.should_save_model = True  # set to true if we need to save the model to disk on the next training iteration
+        self.best_performance = -1e9
 
         # TODO: code duplication!!
         # decay rate at which summaries are collected
@@ -112,7 +114,8 @@ class Learner(Configurable):
         self.summary_rate_decay_seconds = LinearDecay([(0, 5), (100000, 120), (1000000, 240)])
         self.last_summary_time = 0
 
-        self.last_saved_time = self.last_milestone_time = 0
+        # TODO: fix milestone mechanism
+        self.last_milestone_time = 0
 
         self.traj_tensors = buffer_mgr.traj_tensors
         self.policy_versions = buffer_mgr.policy_versions
@@ -137,6 +140,12 @@ class Learner(Configurable):
             self.kl_loss_func = lambda action_space, action_logits, distribution, valids: 0.0
         else:
             self.kl_loss_func = self._kl_loss
+
+    @signal
+    def report_msg(self): pass
+
+    @signal
+    def finished_training_iteration(self): pass
 
     def init(self):
         # initialize the Torch modules
@@ -170,8 +179,8 @@ class Learner(Configurable):
         return ensure_dir_exists(checkpoint_dir)
 
     @staticmethod
-    def get_checkpoints(checkpoints_dir):
-        checkpoints = glob.glob(join(checkpoints_dir, 'checkpoint_*'))
+    def get_checkpoints(checkpoints_dir, pattern='checkpoint_*'):
+        checkpoints = glob.glob(join(checkpoints_dir, pattern))
         return sorted(checkpoints)
 
     @staticmethod
@@ -192,11 +201,11 @@ class Learner(Configurable):
                 except Exception:
                     log.exception(f'Could not load from checkpoint, attempt {attempt}')
 
-    # TODO: save and load
     def _load_state(self, checkpoint_dict, load_progress=True):
         if load_progress:
             self.train_step = checkpoint_dict['train_step']
             self.env_steps = checkpoint_dict['env_steps']
+            self.best_performance = checkpoint_dict.get('best_performance', self.best_performance)
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
 
@@ -228,12 +237,12 @@ class Learner(Configurable):
     def _after_optimizer_step(self):
         """A hook to be called after each optimizer step."""
         self.train_step += 1
-        self._maybe_save()
 
     def _get_checkpoint_dict(self):
         checkpoint = {
             'train_step': self.train_step,
             'env_steps': self.env_steps,
+            'best_performance': self.best_performance,
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         }
@@ -244,45 +253,49 @@ class Learner(Configurable):
 
         return checkpoint
 
-    # TODO: code duplication
-    def _save(self):
+    def _save_impl(self, name_prefix, name_suffix, keep_checkpoints, verbose=True):
         checkpoint = self._get_checkpoint_dict()
         assert checkpoint is not None
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
-        tmp_filepath = join(checkpoint_dir, '.temp_checkpoint')
-        checkpoint_name = f'checkpoint_{self.train_step:09d}_{self.env_steps}.pth'
+        tmp_filepath = join(checkpoint_dir, f'.{name_prefix}_temp')
+        checkpoint_name = f'{name_prefix}_{self.train_step:05d}_{self.env_steps}{name_suffix}.pth'
         filepath = join(checkpoint_dir, checkpoint_name)
-        log.info('Saving %s...', tmp_filepath)
+        if verbose:
+            log.info('Saving %s...', filepath)
+
+        # This should protect us from a rare case where something goes wrong mid-save and we end up with a corrupted
+        # checkpoint file. It better be a corrupted temp file.
         torch.save(checkpoint, tmp_filepath)
-        log.info('Renaming %s to %s', tmp_filepath, filepath)
         os.rename(tmp_filepath, filepath)
 
-        while len(self.get_checkpoints(checkpoint_dir)) > self.cfg.keep_checkpoints:
-            oldest_checkpoint = self.get_checkpoints(checkpoint_dir)[0]
+        while len(checkpoints := self.get_checkpoints(checkpoint_dir, f'{name_prefix}_*')) > keep_checkpoints:
+            oldest_checkpoint = checkpoints[0]
             if os.path.isfile(oldest_checkpoint):
-                log.debug('Removing %s', oldest_checkpoint)
+                if verbose:
+                    log.debug('Removing %s', oldest_checkpoint)
                 os.remove(oldest_checkpoint)
 
-        if self.cfg.save_milestones_sec > 0:
-            # milestones enabled
-            if time.time() - self.last_milestone_time >= self.cfg.save_milestones_sec:
-                milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
-                milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
-                log.debug('Saving a milestone %s', milestone_path)
-                shutil.copy(filepath, milestone_path)
-                self.last_milestone_time = time.time()
+    def save(self):
+        self._save_impl('checkpoint', '', self.cfg.keep_checkpoints)
 
-    # TODO: possibly move this logic into runner using timer events
-    def _maybe_save(self):
-        if time.time() - self.last_saved_time >= self.cfg.save_every_sec or self.should_save_model:
-            self._save()
+        # TODO: move milestone logic to the runner?
+        # if self.cfg.save_milestones_sec > 0:
+        #     # milestones enabled
+        #     if time.time() - self.last_milestone_time >= self.cfg.save_milestones_sec:
+        #         milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
+        #         milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
+        #         log.debug('Saving a milestone %s', milestone_path)
+        #         shutil.copy(filepath, milestone_path)
+        #         self.last_milestone_time = time.time()
 
-            # TODO: do we need this?
-            # self.model_saved_event.set()
-
-            self.should_save_model = False
-            self.last_saved_time = time.time()
+    def save_best(self, policy_id, metric, metric_value):
+        assert policy_id == self.policy_id
+        if metric_value - self.best_performance > 1e-4:
+            log.info(f'Saving new best policy, {metric}={metric_value:.4f}!')
+            self.best_performance = metric_value
+            name_suffix = f'_{metric}_{metric_value:.4f}'
+            self._save_impl('best', name_suffix, 1, verbose=False)
 
     #TODO: why do we apply valids masked_select to individual losses and not to the final value? This is just extra work. Will fix
 
@@ -766,7 +779,7 @@ class Learner(Configurable):
 
             return buff, experience_size
 
-    def train_sync(self, batch: slice, timing: Timing):
+    def train(self, batch: slice, timing: Timing):
         with timing.add_time('prepare_batch'):
             buff, experience_size = self._prepare_batch(batch)
 
@@ -792,4 +805,10 @@ class Learner(Configurable):
 
             stats['stats'] = memory_stats('learner', self.device)
 
-        self.comm_broker.send_msg(stats)
+        self.report_msg.emit(stats)
+
+    def on_new_batches(self, batches):
+        for batch in batches:
+            self.train(batch, self.timing)
+
+        self.finished_training_iteration.emit()

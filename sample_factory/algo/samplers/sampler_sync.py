@@ -5,6 +5,7 @@ from torch import Tensor
 
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.utils import AttrDict
 
 
@@ -29,11 +30,15 @@ class Sampler(Configurable):
         self.env_info = env_info
 
 
-class SyncSampler(Sampler):
-    def __init__(self, cfg, env_info, comm_broker, actor_critic, device, buffer_mgr):
-        super().__init__(cfg, env_info)
+class SyncSampler(EventLoopObject, Sampler):
+    def __init__(self, evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, timing):
+        Sampler.__init__(self, cfg, env_info)
 
-        self.comm_broker = comm_broker
+        self.curr_policy_id = 0  # sync sampler does not support multi-policy learning as of now
+        unique_name = f'{SyncSampler.__name__}_{self.curr_policy_id}'
+        EventLoopObject.__init__(self, evt_loop, unique_name)
+
+        self.timing = timing
 
         self.actor_critic = actor_critic
         self.device = device
@@ -50,9 +55,13 @@ class SyncSampler(Sampler):
 
         self.traj_start = 0
 
-        self.curr_policy_id = 0  # sync sampler does not support multi-policy learning as of now
-
         self.curr_episode_reward = self.curr_episode_len = None
+
+    @signal
+    def report_msg(self): pass
+
+    @signal
+    def new_trajectories(self): pass
 
     def init(self):
         # with sync sampler there aren't any workers, hence 0/0/0 should suffice
@@ -98,16 +107,16 @@ class SyncSampler(Sampler):
             last_episode_reward = self.curr_episode_reward[agent_i].item()
             last_episode_duration = self.curr_episode_len[agent_i].item()
 
-            last_episode_true_reward = last_episode_reward
+            last_episode_true_objective = last_episode_reward
             last_episode_extra_stats = None
 
             # TODO: we somehow need to deal with two cases: when infos is a dict of tensors and when it is a list of dicts
             # this only handles the latter.
             if isinstance(infos, (list, tuple)):
-                last_episode_true_reward = infos[agent_i].get('true_reward', last_episode_reward)
+                last_episode_true_objective = infos[agent_i].get('true_objective', last_episode_reward)
                 last_episode_extra_stats = infos[agent_i].get('episode_extra_stats', None)
 
-            stats = dict(reward=last_episode_reward, len=last_episode_duration, true_reward=last_episode_true_reward)
+            stats = dict(reward=last_episode_reward, len=last_episode_duration, true_objective=last_episode_true_objective)
             if last_episode_extra_stats:
                 stats['episode_extra_stats'] = last_episode_extra_stats
 
@@ -118,8 +127,8 @@ class SyncSampler(Sampler):
         self.curr_episode_len[finished_episodes] = 0
         return reports
 
-    def get_trajectories_sync(self, timing):
-        with torch.no_grad():
+    def collect_trajectories(self):
+        with torch.no_grad(), self.timing.add_time('sampling'):
             self.actor_critic.eval()
 
             num_agents = self.env_info.num_agents
@@ -136,14 +145,14 @@ class SyncSampler(Sampler):
                 # save observations and RNN states in a trajectory
                 curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
 
-                with timing.add_time('norm'):
+                with self.timing.add_time('norm'):
                     normalized_obs = self.actor_critic.normalizer(curr_step['obs'])
 
                 # obs and rnn_states obtained from the trajectory buffers should be on the same device as the model
-                with timing.add_time('inference'):
+                with self.timing.add_time('inference'):
                     policy_outputs = self.actor_critic(normalized_obs, curr_step['rnn_states'])
 
-                with timing.add_time('post_inference'):
+                with self.timing.add_time('post_inference'):
                     new_rnn_state = policy_outputs['rnn_states']
 
                     # copy all policy outputs to corresponding trajectory buffers - except for rnn_states!
@@ -158,10 +167,10 @@ class SyncSampler(Sampler):
 
                     actions = preprocess_actions(self.env_info, policy_outputs['actions'])
 
-                with timing.add_time('env_step'):
+                with self.timing.add_time('env_step'):
                     self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
 
-                with timing.add_time('post_env_step'):
+                with self.timing.add_time('post_env_step'):
                     self.policy_id_buffer.fill_(self.curr_policy_id)
 
                     # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym), or a list of dictionaries (i.e. swarm_rl quadrotors)
@@ -192,16 +201,12 @@ class SyncSampler(Sampler):
             # returning the slice of the trajectory buffer we managed to populate
             traj_slice = slice(self.traj_start, self.traj_start + num_agents)
             self.traj_start += num_agents
-
-            if episodic_stats:
-                self.comm_broker.send_msgs(episodic_stats)
+            self.new_trajectories.emit([traj_slice])
 
             samples_since_last_report = num_agents * self.cfg.rollout
-            self.comm_broker.send_msg(dict(
-                samples_collected=samples_since_last_report, policy_id=self.curr_policy_id,
-            ))
-
-            return [traj_slice]
+            report = [dict(samples_collected=samples_since_last_report, policy_id=self.curr_policy_id)]
+            report.extend(episodic_stats)
+            self.report_msg.emit(report)
 
     def update_training_info(self, env_steps, stats, avg_stats, policy_avg_stats):
         """

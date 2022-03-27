@@ -110,7 +110,7 @@ def init_device(cfg: AttrDict) -> torch.device:
 
 
 # TODO: refactor this - all algorithms should use the same function
-def make_model(cfg: AttrDict, env_info: EnvInfo, device: torch.device, timing: Timing) -> _ActorCriticBase:
+def make_model(cfg: AttrDict, env_info: EnvInfo, device: torch.device, timing: Timing = None) -> _ActorCriticBase:
     actor_critic = create_actor_critic(cfg, env_info.obs_space, env_info.action_space, timing)
     actor_critic.model_to_device(device)
     # self.actor_critic.share_memory()
@@ -129,28 +129,24 @@ def run_rl(cfg):
     # TODO: temporarily use stubs to figure out the interfaces
     # once everything stub components can communicate, we're ready to start development of actual components
 
-    runner = SyncRunner(cfg)
-
     env_info = obtain_env_info_in_a_separate_process(cfg)
-
     device = init_device(cfg)
-
     actor_critic = make_model(cfg, env_info, device)
-
     buffer_mgr = BufferMgr(cfg, env_info, device)
 
-    comm_broker = SyncCommBroker()
+    runner = SyncRunner(cfg)
+    evt_loop = runner.event_loop
+    # evt_loop.verbose = True
 
-    sampler = SyncSampler(cfg, env_info, comm_broker, actor_critic, device, buffer_mgr)
+    sampler = SyncSampler(evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, runner.timing)
     sampler.init()
 
-    batcher = SequentialBatcher(buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
+    batcher = SequentialBatcher(evt_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
 
-    learner = Learner(cfg, env_info, comm_broker, actor_critic, device, buffer_mgr, policy_id=0)  # currently support only single-policy learning
+    learner = Learner(evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
     learner.init()
 
-    runner = SyncRunner(cfg, comm_broker, sampler, batcher, learner)
-    runner.init()
+    runner.init(sampler, batcher, learner)
     status = runner.run()
     return status
 

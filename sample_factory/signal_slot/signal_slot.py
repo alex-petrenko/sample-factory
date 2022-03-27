@@ -7,7 +7,7 @@ import types
 import uuid
 from dataclasses import dataclass
 from queue import Empty
-from typing import Dict, Any, Set, Callable, Union, List, Optional
+from typing import Dict, Any, Set, Callable, Union, List, Optional, Iterable, Tuple
 
 import psutil
 
@@ -31,6 +31,45 @@ class Emitter:
 class Receiver:
     object_id: ObjectID
     slot_name: str
+
+
+# noinspection PyPep8Naming
+class signal:
+    def __init__(self, _):
+        self._name = None
+        self._obj: Optional[EventLoopObject] = None
+
+    @property
+    def obj(self):
+        return self._obj
+
+    @property
+    def name(self):
+        return self._name
+
+    def __set_name__(self, owner, name):
+        self._name = name
+
+    def __get__(self, obj, objtype=None):
+        assert isinstance(obj, EventLoopObject), \
+            f'signals can only be added to {EventLoopObject.__name__}, not {type(obj)}'
+        self._obj = obj
+        return self
+
+    def connect(self, other: Union[EventLoopObject, BoundMethod], slot: str = None):
+        self._obj.connect(self._name, other, slot)
+
+    def disconnect(self, other: Union[EventLoopObject, BoundMethod], slot: str = None):
+        self._obj.disconnect(self._name, other, slot)
+
+    def emit(self, *args):
+        self._obj.emit(self._name, *args)
+
+    def emit_many(self, list_of_args: Iterable[Tuple]):
+        self._obj.emit_many(self._name, list_of_args)
+
+    def broadcast_on(self, event_loop: EventLoop):
+        self._obj.register_broadcast(self._name, event_loop)
 
 
 class EventLoopObject:
@@ -82,19 +121,19 @@ class EventLoopObject:
             slot = obj.__name__
             obj = obj.__self__
 
-        assert isinstance(obj, EventLoopObject)
+        assert isinstance(obj, EventLoopObject), f'slot should be a method of {EventLoopObject.__name__}'
         assert slot is not None
         return obj, slot
 
-    def connect(self, signal: str, other: Union[EventLoopObject, BoundMethod], slot: str = None):
+    def connect(self, signal_: str, other: Union[EventLoopObject, BoundMethod], slot: str = None):
         other, slot = self._bound_method_to_obj_slot(other, slot)
 
         self._throw_if_different_processes(self, other)
 
-        emitter = Emitter(self.object_id, signal)
+        emitter = Emitter(self.object_id, signal_)
         receiver_id = other.object_id
 
-        self._add_to_dict_of_sets(self.send_signals_to, signal, receiver_id)
+        self._add_to_dict_of_sets(self.send_signals_to, signal_, receiver_id)
 
         receiving_loop = other.event_loop
         self._add_to_dict_of_sets(receiving_loop.receivers, emitter, receiver_id)
@@ -105,63 +144,68 @@ class EventLoopObject:
 
         other.connections[emitter] = slot
 
-    def disconnect(self, signal, other: Union[EventLoopObject, BoundMethod], slot: str = None):
+    def disconnect(self, signal_, other: Union[EventLoopObject, BoundMethod], slot: str = None):
         other, slot = self._bound_method_to_obj_slot(other, slot)
 
         self._throw_if_different_processes(self, other)
 
-        if signal not in self.send_signals_to:
-            log.warning(f'{self.object_id}:{signal=} is not connected to anything')
+        if signal_ not in self.send_signals_to:
+            log.warning(f'{self.object_id}:{signal_=} is not connected to anything')
             return
 
         receiver_id = other.object_id
-        if receiver_id not in self.send_signals_to[signal]:
-            log.warning(f'{self.object_id}:{signal=} is not connected to {receiver_id}:{slot=}')
+        if receiver_id not in self.send_signals_to[signal_]:
+            log.warning(f'{self.object_id}:{signal_=} is not connected to {receiver_id}:{slot=}')
             return
 
-        self.send_signals_to[signal].remove(receiver_id)
+        self.send_signals_to[signal_].remove(receiver_id)
 
         self.receiver_refcount[receiver_id] -= 1
         if self.receiver_refcount[receiver_id] <= 0:
             del self.receiver_refcount[receiver_id]
             del self.receiver_queues[receiver_id]
 
-        emitter = Emitter(self.object_id, signal)
+        emitter = Emitter(self.object_id, signal_)
         del other.connections[emitter]
 
         loop_receivers = other.event_loop.receivers.get(emitter)
         if loop_receivers is not None:
             loop_receivers.remove(other.object_id)
 
-    def register_broadcast(self, event_loop: EventLoop, signal: str):
-        self.connect(signal, event_loop.broadcast)
+    def register_broadcast(self, signal_: str, event_loop: EventLoop):
+        self.connect(signal_, event_loop.broadcast)
 
-    def subscribe(self, signal: str, slot: Union[BoundMethod, str]):
+    def subscribe(self, signal_: str, slot: Union[BoundMethod, str]):
         if isinstance(slot, (types.MethodType, types.BuiltinMethodType)):
             slot = slot.__name__
-        self.event_loop.connect(signal, self, slot)
+        self.event_loop.connect(signal_, self, slot)
 
-    def unsubscribe(self, signal: str, slot: Union[BoundMethod, str]):
+    def unsubscribe(self, signal_: str, slot: Union[BoundMethod, str]):
         if isinstance(slot, (types.MethodType, types.BuiltinMethodType)):
             slot = slot.__name__
-        self.event_loop.disconnect(signal, self, slot)
+        self.event_loop.disconnect(signal_, self, slot)
 
-    def emit(self, signal: str, *args):
+    def emit(self, signal_: str, *args):
+        self.emit_many(signal_, (args, ))
+
+    def emit_many(self, signal_: str, list_of_args: Iterable[Tuple]):
         pid = self.event_loop.process.pid
         if os.getpid() != pid:
             raise RuntimeError(
-                f'Cannot emit {signal}: object {self.object_id} lives on a different process {pid}!'
+                f'Cannot emit {signal_}: object {self.object_id} lives on a different process {pid}!'
             )
+
+        signals_to_emit = tuple((self.object_id, signal_, args) for args in list_of_args)
 
         # find a set of queues we need to send this signal to
         queues = set()
-        for receiver_id in self.send_signals_to.get(signal, ()):
+        for receiver_id in self.send_signals_to.get(signal_, ()):
             queues.add(self.receiver_queues[receiver_id])
 
         for q in queues:
-            # we just push one message into each receiver event loop queue
-            # event loops themselves will redistribute the signal to all receivers living on that loop
-            q.put((self.object_id, signal, args), block=True, timeout=1.0)
+            # we just push messages into each receiver event loop queue
+            # event loops themselves will redistribute the signals to all receivers living on that loop
+            q.put_many(signals_to_emit, block=True, timeout=1.0)
 
     def detach(self):
         """Detach the object from it's current event loop."""
@@ -172,22 +216,6 @@ class EventLoopObject:
     def __del__(self):
         self.detach()
         self._obj_ids.remove(self.object_id)
-
-
-def connect(obj1: EventLoopObject, signal: str, other: Union[EventLoopObject, BoundMethod], slot: str = None):
-    obj1.connect(signal, other, slot)
-
-
-def disconnect(obj1: EventLoopObject, signal: str, other: Union[EventLoopObject, BoundMethod], slot: str = None):
-    obj1.disconnect(signal, other, slot)
-
-
-def subscribe(signal: str, obj: EventLoopObject, slot: Union[BoundMethod, str]):
-    obj.subscribe(signal, slot)
-
-
-def unsubscribe(signal: str, obj: EventLoopObject, slot: Union[BoundMethod, str]):
-    obj.subscribe(signal, slot)
 
 
 class EventLoopStatus:
@@ -217,13 +245,30 @@ class EventLoop(EventLoopObject):
 
         self.should_terminate = False
 
+        self.verbose = False
+
+        # connect to our own termination signal
+        self.terminate.connect(self._terminate)
+
+    @signal
+    def terminate(self): pass
+
     def add_timer(self, t: Timer):
         self.timers.append(t)
 
     def remove_timer(self, t: Timer):
         self.timers.remove(t)
 
-    def terminate(self):
+    def stop(self):
+        """
+        Graceful termination: the loop will process all unprocessed signals before exiting.
+        After this the loop does only one last iteration, if any new signals are emitted during this last iteration
+        they will be ignored.
+        """
+        self.terminate.emit()
+
+    def _terminate(self):
+        """Forceful termination, some of the signals currently in the queue might remain unprocessed."""
         log.debug(f'Event loop {self.object_id} terminating...')
         self.should_terminate = True
 
@@ -234,8 +279,11 @@ class EventLoop(EventLoopObject):
         # doing this to reduce overhead
         self._process_signal((self.object_id, curr_signal, args))
 
-    def _process_signal(self, signal):
-        emitter_object_id, signal_name, args = signal
+    def _process_signal(self, signal_):
+        if self.verbose:
+            log.debug(f'Processing {signal_=}...')
+
+        emitter_object_id, signal_name, args = signal_
         emitter = Emitter(emitter_object_id, signal_name)
 
         receiver_ids = tuple(self.receivers.get(emitter, ()))
@@ -262,7 +310,15 @@ class EventLoop(EventLoopObject):
                 continue
 
             self.curr_emitter = emitter
-            slot_callable(*args)
+            if self.verbose:
+                log.debug(f'Calling slot {obj_id}:{slot}')
+
+            # noinspection PyBroadException
+            try:
+                slot_callable(*args)
+            except Exception as exc:
+                log.exception(f'Unhandled exception in {slot=} connected to {emitter=}')
+                raise exc
 
     def _calculate_timeout(self) -> Timer:
         # This can potentially be replaced with a sorted set of timers to optimize this linear search for the
@@ -290,10 +346,10 @@ class EventLoop(EventLoopObject):
                         # this is inefficient if we have a lot of short timers, but should do for now
                         for t in self.timers:
                             if t.remaining_time() <= 0:
-                                t.timeout()
+                                t.fire()
 
-                for signal in signals:
-                    self._process_signal(signal)
+                for s in signals:
+                    self._process_signal(s)
         except Exception as exc:
             log.warning(f'Unhandled exception {exc} in evt loop {self.object_id}')
             raise exc
@@ -315,7 +371,10 @@ class Timer(EventLoopObject):
         self._single_shot = single_shot
         self._is_active = False
         self._next_timeout = None
-        self.stop()
+        self.start()
+
+    @signal
+    def timeout(self): pass
 
     def set_interval(self, interval_sec: float):
         self._interval_sec = interval_sec
@@ -336,8 +395,8 @@ class Timer(EventLoopObject):
 
         self._next_timeout = time.time() + self._interval_sec
 
-    def timeout(self):
-        self.emit('timeout')
+    def fire(self):
+        self.timeout.emit()
         if self._single_shot:
             self.stop()
         else:
@@ -366,8 +425,8 @@ class EventLoopProcess(multiprocessing.Process, EventLoopObject):
         self.event_loop.process = self
         super().start()
 
-    def terminate(self) -> None:
-        self.event_loop.terminate()
+    def stop(self) -> None:
+        self.event_loop.stop()
 
 
 def process_name(p: Union[psutil.Process, multiprocessing.Process]):

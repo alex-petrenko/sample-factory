@@ -35,7 +35,7 @@ class DoomGatheringRewardShaping(gym.Wrapper):
         reward += self._reward_shaping(info, done)
 
         if done:
-            true_reward = self.orig_env_reward
-            info['true_reward'] = true_reward
+            true_objective = self.orig_env_reward
+            info['true_objective'] = true_objective
 
         return observation, reward, done, info

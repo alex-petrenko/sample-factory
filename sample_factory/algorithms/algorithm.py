@@ -37,9 +37,13 @@ class ReinforcementLearningAlgorithm(AlgorithmBase, ABC):
         p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
 
         p.add_argument('--save_every_sec', default=120, type=int, help='Checkpointing rate')
-        p.add_argument('--save_best_every_sec', default=10, type=int, help='How often we check if we should save the policy with the best score ever')
         p.add_argument('--keep_checkpoints', default=3, type=int, help='Number of model checkpoints to keep')
+
+        # TODO: check if this is working
         p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
+
+        p.add_argument('--save_best_every_sec', default=5, type=int, help='How often we check if we should save the policy with the best score ever')
+        p.add_argument('--save_best_metric', default='reward', help='Save "best" policies based on this metric (just env reward by default)')
 
         p.add_argument('--stats_avg', default=100, type=int, help='How many episodes to average to measure performance (avg. reward etc)')
 

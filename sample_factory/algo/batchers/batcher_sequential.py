@@ -1,14 +1,22 @@
 from typing import Iterable, Dict, Optional
 
+from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
 
-class SequentialBatcher:
-    def __init__(self, trajectories_per_batch: int, total_num_trajectories: int):
+
+class SequentialBatcher(EventLoopObject):
+    def __init__(self, evt_loop: EventLoop, trajectories_per_batch: int, total_num_trajectories: int):
+        unique_name = f'{SequentialBatcher.__name__}'
+        EventLoopObject.__init__(self, evt_loop, unique_name)
+
         self.slice_starts: Dict[int, slice] = dict()
         self.slice_stops: Dict[int, slice] = dict()
 
         self.trajectories_per_batch = trajectories_per_batch
         self.total_num_trajectories = total_num_trajectories
         self.next_batch_start = 0
+
+    @signal
+    def new_batches(self): pass
 
     def _add_slice(self, s):
         self.slice_starts[s.start] = s
@@ -66,3 +74,13 @@ class SequentialBatcher:
                 return batch_slice
 
         return None
+
+    def on_new_trajectories(self, trajectory_slices: Iterable[slice]):
+        self.batch_trajectories(trajectory_slices)
+
+        new_batches = []
+        while (experience_batch := self.get_batch_sync()) is not None:
+            new_batches.append(experience_batch)
+
+        if new_batches:
+            self.new_batches.emit(new_batches)
