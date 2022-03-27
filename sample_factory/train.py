@@ -129,13 +129,13 @@ def run_rl(cfg):
     # TODO: temporarily use stubs to figure out the interfaces
     # once everything stub components can communicate, we're ready to start development of actual components
 
-    timing = Timing()
+    runner = SyncRunner(cfg)
 
     env_info = obtain_env_info_in_a_separate_process(cfg)
 
     device = init_device(cfg)
 
-    actor_critic = make_model(cfg, env_info, device, timing)
+    actor_critic = make_model(cfg, env_info, device)
 
     buffer_mgr = BufferMgr(cfg, env_info, device)
 

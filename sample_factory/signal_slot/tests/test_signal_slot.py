@@ -18,6 +18,10 @@ class C1(EventLoopObject):
 
     def on_timeout(self):
         log.debug(f'on_timeout slot {self.object_id} {self.x=} process={process_name(self.event_loop.process)}, {datetime.datetime.now()}')
+        self.emit('broadcast_signal', 42, 43)
+
+    def on_bcast(self, arg1, arg2):
+        log.info(f'on_bcastC1 slot {self.object_id} {arg1=} {arg2=} process={process_name(self.event_loop.process)}, {datetime.datetime.now()}')
 
 
 class C2(EventLoopObject):
@@ -31,6 +35,9 @@ class C2(EventLoopObject):
 
     def on_reply(self, p, x):
         log.debug('reply from %s(%d) received by %s %s', p, x, self.object_id, process_name(self.event_loop.process))
+
+    def on_bcast(self, arg1, arg2):
+        log.info(f'on_bcastC2 slot {self.object_id} {arg1=} {arg2=} process={process_name(self.event_loop.process)}, {datetime.datetime.now()}')
 
 
 class TestUtils(TestCase):
@@ -76,8 +83,13 @@ class TestUtils(TestCase):
         o8 = C2(p2.event_loop, 'o8_p2')
         connect(o5, 'reply', o8, 'on_reply')
 
-        connect(t, 'timeout', o7, 'on_timeout')
-        connect(t, 'timeout', o1, 'on_timeout')
+        o1.register_broadcast(p2.event_loop, 'broadcast_signal')
+
+        o7.subscribe('broadcast_signal', o7.on_bcast)
+        o8.subscribe('broadcast_signal', o8.on_bcast)
+
+        connect(t, 'timeout', o7.on_timeout)
+        connect(t, 'timeout', o1.on_timeout)
 
         terminate_timer = Timer(event_loop, 6.1, single_shot=True)
         terminate_timer.connect('timeout', event_loop, 'terminate')

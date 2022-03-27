@@ -7,7 +7,7 @@ import types
 import uuid
 from dataclasses import dataclass
 from queue import Empty
-from typing import Dict, Any, Set, Callable, Union, List
+from typing import Dict, Any, Set, Callable, Union, List, Optional
 
 import psutil
 
@@ -18,6 +18,7 @@ from sample_factory.utils.utils import log
 ObjectID = Any  # ObjectID can be any hashable type, usually a string
 MpQueue = Any  # can actually be any multiprocessing Queue type, i.e. faster_fifo queue
 BoundMethod = Any
+StatusCode = int
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,19 @@ class EventLoopObject:
         if loop_receivers is not None:
             loop_receivers.remove(other.object_id)
 
+    def register_broadcast(self, event_loop: EventLoop, signal: str):
+        self.connect(signal, event_loop.broadcast)
+
+    def subscribe(self, signal: str, slot: Union[BoundMethod, str]):
+        if isinstance(slot, (types.MethodType, types.BuiltinMethodType)):
+            slot = slot.__name__
+        self.event_loop.connect(signal, self, slot)
+
+    def unsubscribe(self, signal: str, slot: Union[BoundMethod, str]):
+        if isinstance(slot, (types.MethodType, types.BuiltinMethodType)):
+            slot = slot.__name__
+        self.event_loop.disconnect(signal, self, slot)
+
     def emit(self, signal: str, *args):
         pid = self.event_loop.process.pid
         if os.getpid() != pid:
@@ -168,6 +182,18 @@ def disconnect(obj1: EventLoopObject, signal: str, other: Union[EventLoopObject,
     obj1.disconnect(signal, other, slot)
 
 
+def subscribe(signal: str, obj: EventLoopObject, slot: Union[BoundMethod, str]):
+    obj.subscribe(signal, slot)
+
+
+def unsubscribe(signal: str, obj: EventLoopObject, slot: Union[BoundMethod, str]):
+    obj.subscribe(signal, slot)
+
+
+class EventLoopStatus:
+    NORMAL_TERMINATION, INTERRUPTED = range(2)
+
+
 class EventLoop(EventLoopObject):
     def __init__(self, unique_loop_name):
         # objects living on this loop
@@ -186,6 +212,9 @@ class EventLoop(EventLoopObject):
 
         self.receivers: Dict[Emitter, Set[ObjectID]] = dict()
 
+        # emitter of the signal which is currently being processed
+        self.curr_emitter: Optional[Emitter] = None
+
         self.should_terminate = False
 
     def add_timer(self, t: Timer):
@@ -197,6 +226,13 @@ class EventLoop(EventLoopObject):
     def terminate(self):
         log.debug(f'Event loop {self.object_id} terminating...')
         self.should_terminate = True
+
+    def broadcast(self, *args):
+        curr_signal = self.curr_emitter.signal_name
+
+        # we could re-emit the signal to reuse the existing signal propagation mechanism, but we can avoid
+        # doing this to reduce overhead
+        self._process_signal((self.object_id, curr_signal, args))
 
     def _process_signal(self, signal):
         emitter_object_id, signal_name, args = signal
@@ -225,6 +261,7 @@ class EventLoop(EventLoopObject):
                 log.warning(f'{slot=} of {obj_id=} is not callable')
                 continue
 
+            self.curr_emitter = emitter
             slot_callable(*args)
 
     def _calculate_timeout(self) -> Timer:
@@ -233,7 +270,9 @@ class EventLoop(EventLoopObject):
         closest_timer = min(self.timers, key=lambda t: t.next_timeout())
         return closest_timer
 
-    def exec(self):
+    def exec(self) -> StatusCode:
+        status: StatusCode = EventLoopStatus.NORMAL_TERMINATION
+
         self.default_timer.start()  # this will add timer to the loop's list of timers
 
         try:
@@ -255,8 +294,14 @@ class EventLoop(EventLoopObject):
 
                 for signal in signals:
                     self._process_signal(signal)
+        except Exception as exc:
+            log.warning(f'Unhandled exception {exc} in evt loop {self.object_id}')
+            raise exc
         except KeyboardInterrupt:
             log.info(f'Keyboard interrupt detected in the event loop {self}, exiting...')
+            status = EventLoopStatus.INTERRUPTED
+
+        return status
 
     def __str__(self):
         return f'EvtLoop {process_name(self.process)}'
@@ -296,7 +341,7 @@ class Timer(EventLoopObject):
         if self._single_shot:
             self.stop()
         else:
-            self.start()
+            self._next_timeout += self._interval_sec
 
     def next_timeout(self) -> float:
         return self._next_timeout

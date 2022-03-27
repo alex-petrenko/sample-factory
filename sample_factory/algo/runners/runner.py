@@ -13,79 +13,81 @@ from sample_factory.algorithms.appo.appo_utils import iterate_recursively
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_EPISODIC_STATS_PROCESSING, \
     EXTRA_PER_POLICY_SUMMARIES
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
 from sample_factory.utils.wandb_utils import init_wandb
 
 
-class Callback:
-    def __init__(self, func):
-        self.func = func
-
-    def conditions_met(self, runner):
-        raise NotImplementedError()
-
-    def __call__(self, runner):
-        self.func(runner)
+StatusCode = int
 
 
-class PeriodicTimerCallback(Callback):
-    def __init__(self, func, period_sec):
-        super().__init__(func)
-        self.period_sec = period_sec
-        self.last_call = time.time() - period_sec  # so we call this callback as soon as the app starts
+# class Callback:
+#     def __init__(self, func):
+#         self.func = func
+#
+#     def conditions_met(self, runner):
+#         raise NotImplementedError()
+#
+#     def __call__(self, runner):
+#         self.func(runner)
+#
+#
+# class PeriodicTimerCallback(Callback):
+#     def __init__(self, func, period_sec):
+#         super().__init__(func)
+#         self.period_sec = period_sec
+#         self.last_call = time.time() - period_sec  # so we call this callback as soon as the app starts
+#
+#     def conditions_met(self, runner):
+#         return time.time() - self.last_call > self.period_sec
+#
+#     def __call__(self, runner):
+#         self.last_call = time.time()
+#         super().__call__(runner)
+#
+#
+# class PeriodicCallbackEnvSteps(Callback):
+#     def __init__(self, func, period_env_steps):
+#         super().__init__(func)
+#         self.period_env_steps = period_env_steps
+#         self.last_call = 0
+#
+#     def conditions_met(self, runner):
+#         env_steps_since_last_call = runner.total_env_steps_since_resume - self.last_call
+#         return env_steps_since_last_call >= self.period_env_steps
+#
+#     def __call__(self, runner):
+#         self.last_call = runner.total_env_steps_since_resume
+#         super().__call__(runner)
+#
+#
+# class PeriodicCallbackEnvStepsPerPolicy(PeriodicCallbackEnvSteps):
+#     def __init__(self, func, period_env_steps, policy_id):
+#         super().__init__(func, period_env_steps)
+#         self.policy_id = policy_id
+#
+#     def conditions_met(self, runner):
+#         env_steps_since_last_call = runner.env_steps[self.policy_id] - self.last_call
+#         return env_steps_since_last_call >= self.period_env_steps
+#
+#     def __call__(self, runner):
+#         self.last_call = runner.env_steps[self.policy_id]
+#         self.func(runner, self.policy_id)
 
-    def conditions_met(self, runner):
-        return time.time() - self.last_call > self.period_sec
 
-    def __call__(self, runner):
-        self.last_call = time.time()
-        super().__call__(runner)
+class Runner(EventLoopObject, Configurable):
+    def __init__(self, cfg, unique_name=None, timing=None):
+        Configurable.__init__(self, cfg)
 
-
-class PeriodicCallbackEnvSteps(Callback):
-    def __init__(self, func, period_env_steps):
-        super().__init__(func)
-        self.period_env_steps = period_env_steps
-        self.last_call = 0
-
-    def conditions_met(self, runner):
-        env_steps_since_last_call = runner.total_env_steps_since_resume - self.last_call
-        return env_steps_since_last_call >= self.period_env_steps
-
-    def __call__(self, runner):
-        self.last_call = runner.total_env_steps_since_resume
-        super().__call__(runner)
-
-
-class PeriodicCallbackEnvStepsPerPolicy(PeriodicCallbackEnvSteps):
-    def __init__(self, func, period_env_steps, policy_id):
-        super().__init__(func, period_env_steps)
-        self.policy_id = policy_id
-
-    def conditions_met(self, runner):
-        env_steps_since_last_call = runner.env_steps[self.policy_id] - self.last_call
-        return env_steps_since_last_call >= self.period_env_steps
-
-    def __call__(self, runner):
-        self.last_call = runner.env_steps[self.policy_id]
-        self.func(runner, self.policy_id)
-
-
-class Runner(Configurable):
-    def __init__(self, cfg, comm_broker, sampler, batcher, learner, timing=None):
-        super().__init__(cfg)
+        unique_name = Runner.__name__ if unique_name is None else unique_name
+        self.event_loop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop')
+        EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
         self.timing = Timing() if timing is None else timing
 
-        # component used for communication between components (i.e. sampler, learner) and the runner
-        # this way we can keep a consistent interface between sync and async runners
-        self.comm_broker = comm_broker
-
-        self.sampler = sampler
-        self.batcher = batcher
-        self.learner = learner
+        self.sampler, self.batcher, self.learner = None, None, None
 
         # env_steps counts total number of simulation steps per policy (including frameskipped)
         self.env_steps = dict()
@@ -136,15 +138,27 @@ class Runner(Configurable):
             samples_collected=[self._samples_stats_handler],
         )
 
-        self.periodic_callbacks = []
-        self.register_timer_callback(self._update_stats_and_print_report, period_sec=self.report_interval_sec)
-        self.register_timer_callback(self._report_experiment_summaries, period_sec=self.summaries_interval_sec)
-        self.register_timer_callback(self._propagate_training_info, period_sec=5)
+        self.subscribe('report_msg', self._process_msg)
 
-        self.register_timer_callback(self._save_policy, period_sec=self.cfg.save_every_sec)
-        self.register_timer_callback(self._save_best_policy, period_sec=self.cfg.save_best_every_sec)
+        def periodic(period, cb):
+            return Timer(self.event_loop, period).connect('timeout', cb)
 
-        # TODO: save model callback
+        periodic(self.report_interval_sec, self._update_stats_and_print_report)
+        periodic(self.summaries_interval_sec, self._report_experiment_summaries)
+
+        periodic(self.cfg.save_every_sec, self._save_policy)
+        periodic(self.cfg.save_best_every_sec, self._save_best_policy)
+
+        periodic(5, self._propagate_training_info)
+
+    def init(self, sampler, learner, batcher):
+        self._save_cfg()
+        save_git_diff(experiment_dir(cfg=self.cfg))
+        init_file_logger(experiment_dir(self.cfg))
+
+        self.sampler = sampler
+        self.batcher = batcher
+        self.learner = learner
 
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
@@ -156,20 +170,19 @@ class Runner(Configurable):
 
         return end
 
-    def _process_msgs(self, msgs):
-        for msg in msgs:
-            if not isinstance(msg, (dict, OrderedDict)):
-                log.error('While parsing a message: expected a dictionary, found %r', msg)
-                continue
+    def _process_msg(self, msg):
+        if not isinstance(msg, (dict, OrderedDict)):
+            log.error('While parsing a message: expected a dictionary, found %r', msg)
+            return
 
-            # some messages are policy-specific
-            policy_id = msg.get('policy_id', None)
+        # some messages are policy-specific
+        policy_id = msg.get('policy_id', None)
 
-            for key in msg:
-                for handler in self.msg_handlers.get(key, []):
-                    handler(self, msg)
-                for handler in self.policy_msg_handlers.get(key, []):
-                    handler(self, msg, policy_id)
+        for key in msg:
+            for handler in self.msg_handlers.get(key, []):
+                handler(self, msg)
+            for handler in self.policy_msg_handlers.get(key, []):
+                handler(self, msg, policy_id)
 
     @staticmethod
     def _timing_msg_handler(runner, msg):
@@ -221,11 +234,6 @@ class Runner(Configurable):
     def _register_msg_handler(handlers_dict, key, func):
         handlers_dict[key] = func
 
-    def _periodic_callbacks(self):
-        for callback in self.periodic_callbacks:
-            if callback.conditions_met(self):
-                callback(self)
-
     def _get_perf_stats(self):
         # total env steps simulated across all policies
         fps_stats = []
@@ -276,29 +284,26 @@ class Runner(Configurable):
                     policy_reward_stats.append((policy_id, f'{np.mean(reward_stats):.3f}'))
             log.debug('Avg episode reward: %r', policy_reward_stats)
 
-    # noinspection PyProtectedMember
-    @staticmethod
-    def _update_stats_and_print_report(runner):
+    def _update_stats_and_print_report(self):
         """
         Called periodically (every self.report_interval_sec seconds).
         Print experiment stats (FPS, avg rewards) to console and dump TF summaries collected from workers to disk.
         """
 
         # don't have enough statistic from the learners yet
-        if len(runner.env_steps) < runner.cfg.num_policies:
+        if len(self.env_steps) < self.cfg.num_policies:
             return
 
         now = time.time()
-        runner.fps_stats.append((now, runner.total_env_steps_since_resume))
+        self.fps_stats.append((now, self.total_env_steps_since_resume))
 
-        for policy_id in range(runner.cfg.num_policies):
-            runner.throughput_stats[policy_id].append((now, runner.samples_collected[policy_id]))
+        for policy_id in range(self.cfg.num_policies):
+            self.throughput_stats[policy_id].append((now, self.samples_collected[policy_id]))
 
-        fps_stats, sample_throughput = runner._get_perf_stats()
-        total_env_steps = sum(runner.env_steps.values())
-        runner.print_stats(fps_stats, sample_throughput, total_env_steps)
+        fps_stats, sample_throughput = self._get_perf_stats()
+        total_env_steps = sum(self.env_steps.values())
+        self.print_stats(fps_stats, sample_throughput, total_env_steps)
 
-    # noinspection PyProtectedMember
     @staticmethod
     def _report_experiment_summaries(runner):
         memory_mb = memory_consumption_mb()
@@ -354,13 +359,12 @@ class Runner(Configurable):
         for w in runner.writers.values():
             w.flush()
 
-    @staticmethod
-    def _propagate_training_info(runner):
+    def _propagate_training_info(self):
         """
         Send the training stats (such as the number of processed env steps) to the sampler.
         This can be used later by the envs to configure curriculums and so on.
         """
-        runner.sampler.update_training_info(runner.env_steps, runner.stats, runner.avg_stats, runner.policy_avg_stats)
+        self.sampler.update_training_info(self.env_steps, self.stats, self.avg_stats, self.policy_avg_stats)
 
         # TODO!
         # for w in self.actor_workers:
@@ -381,21 +385,6 @@ class Runner(Configurable):
     def register_policy_msg_handler(self, key, func):
         self._register_msg_handler(self.policy_msg_handlers, key, func)
 
-    def register_periodic_callback(self, callback):
-        self.periodic_callbacks.append(callback)
-
-    def register_timer_callback(self, func, period_sec):
-        callback = PeriodicTimerCallback(func, period_sec)
-        self.register_periodic_callback(callback)
-
-    def register_periodic_callback_env_steps(self, func, period_env_steps):
-        callback = PeriodicCallbackEnvSteps(func, period_env_steps)
-        self.register_periodic_callback(callback)
-
-    def register_periodic_callback_env_steps_per_policy(self, func, period_env_steps, policy_id):
-        callback = PeriodicCallbackEnvStepsPerPolicy(func, period_env_steps, policy_id)
-        self.register_periodic_callback(callback)
-
     def _cfg_dict(self):
         if isinstance(self.cfg, dict):
             return self.cfg
@@ -407,12 +396,41 @@ class Runner(Configurable):
         with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
-    def init(self):
-        self._save_cfg()
-        save_git_diff(experiment_dir(cfg=self.cfg))
-        init_file_logger(experiment_dir(self.cfg))
+    # def run___(self):
+    #     status = ExperimentStatus.SUCCESS
+    #
+    #     if os.path.isfile(done_filename(self.cfg)):
+    #         log.warning(
+    #             'Existence of the "done" file in the experiment folder indicates that this training session '
+    #             'is finished! Remove "done" file if you wish to continue training'
+    #         )
+    #         return status
+    #
+    #     with self.timing.timeit('main_loop'):
+    #         # noinspection PyBroadException
+    #         try:
+    #             while not self._should_end_training():
+    #                 self.algo_step(self.timing)
+    #                 self.upkeep()
+    #
+    #                 # TODO: add a periodic callback for this!
+    #                 # self.pbt.update(self.env_steps, self.policy_avg_stats)
+    #
+    #         except Exception:
+    #             log.exception('Exception in the runner main loop')
+    #             status = ExperimentStatus.FAILURE
+    #         except KeyboardInterrupt:
+    #             log.warning('Keyboard interrupt detected in the main loop, exiting...')
+    #             status = ExperimentStatus.INTERRUPTED
+    #
+    #     fps = self.total_env_steps_since_resume / self.timing.main_loop
+    #     log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
+    #     log.info(self.timing)
+    #
+    #     return status
 
-    def run(self):
+    # noinspection PyBroadException
+    def run(self) -> StatusCode:
         status = ExperimentStatus.SUCCESS
 
         if os.path.isfile(done_filename(self.cfg)):
@@ -422,33 +440,18 @@ class Runner(Configurable):
             )
             return status
 
-        with self.timing.timeit('main_loop'):
-            # noinspection PyBroadException
-            try:
-                while not self._should_end_training():
-                    self.algo_step(self.timing)
-                    self.upkeep()
-
-                    # TODO: add a periodic callback for this!
-                    # self.pbt.update(self.env_steps, self.policy_avg_stats)
-
-            except Exception:
-                log.exception('Exception in the runner main loop')
-                status = ExperimentStatus.FAILURE
-            except KeyboardInterrupt:
-                log.warning('Keyboard interrupt detected in the main loop, exiting...')
-                status = ExperimentStatus.INTERRUPTED
+        try:
+            evt_loop_status = self.event_loop.exec()
+            status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
+        except Exception as exc:
+            log.exception(f'Uncaught exception in {self.object_id} evt loop')
+            status = ExperimentStatus.FAILURE
 
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
         log.info(self.timing)
 
         return status
-
-    def upkeep(self):
-        msgs = self.comm_broker.get_msgs(block=False, timeout=None)
-        self._process_msgs(msgs)
-        self._periodic_callbacks()
 
     def algo_step(self, timing):
         """Algorithm-specific step function called from the main loop of the runner."""
