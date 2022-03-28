@@ -215,7 +215,8 @@ class Learner(EventLoopObject, Configurable):
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
 
     def load_from_checkpoint(self, policy_id):
-        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id))
+        name_prefix = dict(latest='checkpoint', best='best')[self.cfg.load_checkpoint_kind]
+        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id), pattern=f'{name_prefix}_*')
         checkpoint_dict = self.load_checkpoint(checkpoints, self.device)
         if checkpoint_dict is None:
             log.debug('Did not load from checkpoint, starting from scratch!')
@@ -259,7 +260,7 @@ class Learner(EventLoopObject, Configurable):
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
         tmp_filepath = join(checkpoint_dir, f'.{name_prefix}_temp')
-        checkpoint_name = f'{name_prefix}_{self.train_step:05d}_{self.env_steps}{name_suffix}.pth'
+        checkpoint_name = f'{name_prefix}_{self.train_step:09d}_{self.env_steps}{name_suffix}.pth'
         filepath = join(checkpoint_dir, checkpoint_name)
         if verbose:
             log.info('Saving %s...', filepath)
@@ -291,10 +292,11 @@ class Learner(EventLoopObject, Configurable):
 
     def save_best(self, policy_id, metric, metric_value):
         assert policy_id == self.policy_id
-        if metric_value - self.best_performance > 1e-4:
-            log.info(f'Saving new best policy, {metric}={metric_value:.4f}!')
+        p = 3  # precision, number of significant digits
+        if metric_value - self.best_performance > 1 / 10**p:
+            log.info(f'Saving new best policy, {metric}={metric_value:.{p}f}!')
             self.best_performance = metric_value
-            name_suffix = f'_{metric}_{metric_value:.4f}'
+            name_suffix = f'_{metric}_{metric_value:.{p}f}'
             self._save_impl('best', name_suffix, 1, verbose=False)
 
     #TODO: why do we apply valids masked_select to individual losses and not to the final value? This is just extra work. Will fix

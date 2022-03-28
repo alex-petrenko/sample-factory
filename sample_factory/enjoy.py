@@ -5,17 +5,15 @@ from collections import deque
 import numpy as np
 import torch
 
+from sample_factory.algo.learners.learner import Learner
 from sample_factory.algo.samplers.sampler_sync import preprocess_actions
-from sample_factory.algorithms.appo.actor_worker import transform_dict_observations
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
-from sample_factory.algorithms.appo.learner import LearnerWorker
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.algorithms.utils.action_distributions import ContinuousActionDistribution
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus
 from sample_factory.algorithms.utils.arguments import parse_args, load_from_checkpoint
 from sample_factory.algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
-from sample_factory.envs.create_env import create_env
 from sample_factory.train import extract_env_info
 from sample_factory.utils.utils import log, AttrDict
 
@@ -36,6 +34,7 @@ def enjoy(cfg, max_num_frames=1e9):
     # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 
+    # TODO: use the same code as in the sampler
     is_multiagent = is_multiagent_env(env)
     if not is_multiagent:
         env = MultiAgentWrapper(env)
@@ -50,10 +49,11 @@ def enjoy(cfg, max_num_frames=1e9):
     device = torch.device('cpu' if cfg.device == 'cpu' else 'cuda')
     actor_critic.model_to_device(device)
 
-    # TODO: this should use new learner code!
+    # TODO: move this to a separate IO module
     policy_id = cfg.policy_index
-    checkpoints = LearnerWorker.get_checkpoints(LearnerWorker.checkpoint_dir(cfg, policy_id))
-    checkpoint_dict = LearnerWorker.load_checkpoint(checkpoints, device)
+    name_prefix = dict(latest='checkpoint', best='best')[cfg.load_checkpoint_kind]
+    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f'{name_prefix}_*')
+    checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
     actor_critic.load_state_dict(checkpoint_dict['model'])
 
     episode_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
@@ -70,9 +70,10 @@ def enjoy(cfg, max_num_frames=1e9):
     episode_reward = None
     finished_episode = [False] * env.num_agents
 
-    with torch.no_grad():
+    with torch.inference_mode():
         while not max_frames_reached(num_frames):
-            policy_outputs = actor_critic(obs, rnn_states, with_action_distribution=True)
+            normalized_obs = actor_critic.normalizer(obs)
+            policy_outputs = actor_critic(normalized_obs, rnn_states, with_action_distribution=True)
 
             # sample actions from the distribution by default
             actions = policy_outputs.actions
@@ -113,8 +114,14 @@ def enjoy(cfg, max_num_frames=1e9):
                 for agent_i, done_flag in enumerate(dones):
                     if done_flag:
                         finished_episode[agent_i] = True
-                        episode_rewards[agent_i].append(episode_reward[agent_i].item())
-                        true_objectives[agent_i].append(infos[agent_i].get('true_objective', episode_reward[agent_i].item()))
+                        rew = episode_reward[agent_i].item()
+                        episode_rewards[agent_i].append(rew)
+
+                        true_objective = rew
+                        if isinstance(infos, (list, tuple)):
+                            true_objective = infos[agent_i].get('true_objective', rew)
+                        true_objectives[agent_i].append(true_objective)
+
                         log.info('Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f', agent_i, num_frames, episode_reward[agent_i], true_objectives[agent_i][-1])
                         rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
