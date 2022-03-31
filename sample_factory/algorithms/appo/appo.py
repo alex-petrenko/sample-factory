@@ -148,6 +148,12 @@ class APPO(ReinforcementLearningAlgorithm):
                             'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
                        )
 
+        # Max entropy PPO
+        arg('--ppo_max_entropy_coeff', default=0.1, type=float, 
+                        help='Coefficient for max entropy term added to PPO.0 means no max entropy term to env rewards.'
+                             'Note that this is different from exploration loss.'
+                        )
+
         # APPO-specific
         arg(
             '--num_envs_per_worker', default=2, type=int,
