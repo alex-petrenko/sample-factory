@@ -16,6 +16,7 @@ from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
 from sample_factory.utils.utils import log, project_tmp_dir
 
+from sample_factory.envs.doom.fixRender import SimpleImageViewer
 
 def doom_lock_file(max_parallel):
     """
@@ -443,8 +444,9 @@ class VizdoomEnv(gym.Env):
                 img = cv2.resize(img, (render_w, render_h))
 
             if self.viewer is None:
-                from gym.envs.classic_control import rendering
-                self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
+                #from gym.envs.classic_control import rendering
+                #self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
+                self.viewer = SimpleImageViewer(maxwidth=render_w)
             self.viewer.imshow(img)
             return img
         except AttributeError:
