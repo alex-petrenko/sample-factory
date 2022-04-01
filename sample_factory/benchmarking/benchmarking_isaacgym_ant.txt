@@ -1,15 +1,20 @@
 V23 adam
-main_loop: 48.4167
-  prepare_batch: 0.6725
-  sampling: 36.9251
-    norm: 0.6382, inference: 3.0674, post_inference: 0.3500, env_step: 30.9649, post_env_step: 1.2672
-  train: 10.4890
-    prepare_train: 0.0235, epoch_init: 0.0061, minibatch_init: 0.0802, forward_head: 0.2433, bptt_initial: 0.0076, bptt: 0.0132, tail: 4.8002, losses: 0.5899, kl_divergence: 0.6783, update: 3.5399, after_optimizer: 0.0428
+[2022-04-01 01:33:58,556][884528] Collected {0: 10027008}, FPS: 217925.6
+[2022-04-01 01:33:58,556][884528] Profiling tree view:
+main_loop: 45.7104
+  prepare_batch: 0.5910
+  sampling: 34.9542
+    norm: 0.6325, inference: 2.9278, post_inference: 0.3432, env_step: 29.2298, post_env_step: 1.2018
+  train: 9.8325
+    prepare_train: 0.0248, epoch_init: 0.0065, minibatch_init: 0.0796, forward_head: 0.2322, bptt_initial: 0.0075, bptt: 0.0121, tail: 4.4462, losses: 0.5395, kl_divergence: 0.6036, update: 3.4014, after_optimizer: 0.0323
 
 V23 lamb
-main_loop: 48.4040
-  prepare_batch: 0.6233
-  sampling: 34.7947
-    norm: 0.6235, inference: 2.7901, post_inference: 0.3352, env_step: 29.1915, post_env_step: 1.2291
-  train: 12.6367
-    prepare_train: 0.0239, epoch_init: 0.0060, minibatch_init: 0.0813, forward_head: 0.2523, bptt_initial: 0.0076, bptt: 0.0142, tail: 2.8584, losses: 0.5378, kl_divergence: 0.6095, update: 7.7649, after_optimizer: 0.0227
+--algo=APPO --env=isaacgym_ant --experiment=ant_v023_023_test_perf_c89b_lamb --actor_worker_gpus 0 --train_for_env_steps=10000000 --env_agents=4096 --batch_size=32768 --env_headless=True --policy_initialization=torch_default --use_rnn=False --value_bootstrap=True --normalize_input=True --optimizer=lamb --with_wandb=False --save_every_sec=15 --wandb_group=isaacgym_ant_sf2 --wandb_tags ant sync
+[2022-04-01 01:36:22,833][885177] Collected {0: 10027008}, FPS: 204651.1
+[2022-04-01 01:36:22,833][885177] Profiling tree view:
+main_loop: 48.6754
+  prepare_batch: 0.6108
+  sampling: 35.0360
+    norm: 0.6187, inference: 2.8134, post_inference: 0.3398, env_step: 29.3718, post_env_step: 1.2625
+  train: 12.6660
+    prepare_train: 0.0241, epoch_init: 0.0066, minibatch_init: 0.0828, forward_head: 0.2463, bptt_initial: 0.0077, bptt: 0.0142, tail: 2.8746, losses: 0.5413, kl_divergence: 0.6111, update: 7.7650, after_optimizer: 0.0228
