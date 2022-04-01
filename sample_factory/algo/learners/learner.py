@@ -8,6 +8,7 @@ from typing import Optional
 import numpy as np
 import torch
 
+from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
 from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
@@ -162,9 +163,16 @@ class Learner(EventLoopObject, Configurable):
         # if self.aux_loss_module is not None:
         #     params += list(self.aux_loss_module.parameters())
 
-        self.optimizer = torch.optim.Adam(
+        optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+        if self.cfg.optimizer not in optimizer_cls:
+            raise RuntimeError(f'Unknown optimizer {self.cfg.optimizer}')
+
+        optimizer_cls = optimizer_cls[self.cfg.optimizer]
+        log.debug(f'Using optimizer {optimizer_cls}')
+
+        self.optimizer = optimizer_cls(
             params,
-            self.cfg.learning_rate,
+            lr=self.cfg.learning_rate,
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
             eps=self.cfg.adam_eps,
         )

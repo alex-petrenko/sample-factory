@@ -62,6 +62,7 @@ class APPO(ReinforcementLearningAlgorithm):
         super().add_cli_args(parser)
         arg('--experiment_summaries_interval', default=10, type=int, help='How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)')
 
+        arg('--optimizer', default='adam', type=str, choices=['adam', 'lamb'], help='Type of optimizer to use')
         arg('--adam_eps', default=1e-6, type=float, help='Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)')
         arg('--adam_beta1', default=0.9, type=float, help='Adam momentum decay coefficient')
         arg('--adam_beta2', default=0.999, type=float, help='Adam second momentum decay coefficient')

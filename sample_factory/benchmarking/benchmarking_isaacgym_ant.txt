@@ -1,0 +1,15 @@
+V23 adam
+main_loop: 48.4167
+  prepare_batch: 0.6725
+  sampling: 36.9251
+    norm: 0.6382, inference: 3.0674, post_inference: 0.3500, env_step: 30.9649, post_env_step: 1.2672
+  train: 10.4890
+    prepare_train: 0.0235, epoch_init: 0.0061, minibatch_init: 0.0802, forward_head: 0.2433, bptt_initial: 0.0076, bptt: 0.0132, tail: 4.8002, losses: 0.5899, kl_divergence: 0.6783, update: 3.5399, after_optimizer: 0.0428
+
+V23 lamb
+main_loop: 48.4040
+  prepare_batch: 0.6233
+  sampling: 34.7947
+    norm: 0.6235, inference: 2.7901, post_inference: 0.3352, env_step: 29.1915, post_env_step: 1.2291
+  train: 12.6367
+    prepare_train: 0.0239, epoch_init: 0.0060, minibatch_init: 0.0813, forward_head: 0.2523, bptt_initial: 0.0076, bptt: 0.0142, tail: 2.8584, losses: 0.5378, kl_divergence: 0.6095, update: 7.7649, after_optimizer: 0.0227
