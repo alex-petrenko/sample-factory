@@ -5,7 +5,7 @@ _params = ParamGrid([
     ('optimizer', ['adam', 'lamb']),
 ])
 
-_version = 23
+_version = 24
 _vstr = f'v{_version:03d}'
 _cli = 'python -m sample_factory_examples.train_isaacgym ' \
        '--algo=APPO --env=isaacgym_ant --actor_worker_gpus 0 --train_for_env_steps=100000000 --env_agents=4096 ' \
