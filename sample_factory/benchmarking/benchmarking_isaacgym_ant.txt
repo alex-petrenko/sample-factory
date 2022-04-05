@@ -18,3 +18,13 @@ main_loop: 48.6754
     norm: 0.6187, inference: 2.8134, post_inference: 0.3398, env_step: 29.3718, post_env_step: 1.2625
   train: 12.6660
     prepare_train: 0.0241, epoch_init: 0.0066, minibatch_init: 0.0828, forward_head: 0.2463, bptt_initial: 0.0077, bptt: 0.0142, tail: 2.8746, losses: 0.5413, kl_divergence: 0.6111, update: 7.7650, after_optimizer: 0.0228
+
+V26: minor optimization, such as torch.jit for the normalizer
+[2022-04-04 22:48:02,356][2078364] Collected {0: 10027008}, FPS: 220434.8
+[2022-04-04 22:48:02,356][2078364] Profiling tree view:
+main_loop: 45.1901
+  prepare_batch: 0.8792
+  sampling: 34.1431
+    norm: 0.6982, inference: 2.9006, post_inference: 0.3601, env_step: 28.3416, post_env_step: 1.2260
+  train: 9.8336
+    prepare_train: 0.0252, epoch_init: 0.0055, minibatch_init: 0.0673, forward_head: 0.2091, bptt_initial: 0.0074, bptt: 0.0118, tail: 4.3844, losses: 0.5198, kl_divergence: 0.5518, update: 3.6099, after_optimizer: 0.0320

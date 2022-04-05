@@ -3,10 +3,11 @@ import os
 import time
 from abc import ABC, abstractmethod
 from os.path import join
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
@@ -138,7 +139,7 @@ class Learner(EventLoopObject, Configurable):
                     'I.e. set --kl_loss_coeff=0.1'
                 )
                 time.sleep(3.0)
-            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: 0.0
+            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: None, 0.0
         else:
             self.kl_loss_func = self._kl_loss
 
@@ -307,8 +308,6 @@ class Learner(EventLoopObject, Configurable):
             name_suffix = f'_{metric}_{metric_value:.{p}f}'
             self._save_impl('best', name_suffix, 1, verbose=False)
 
-    #TODO: why do we apply valids masked_select to individual losses and not to the final value? This is just extra work. Will fix
-
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids):
         clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
@@ -332,15 +331,15 @@ class Learner(EventLoopObject, Configurable):
 
         return value_loss
 
-    def _kl_loss(self, action_space, action_logits, action_distribution, valids):
+    def _kl_loss(self, action_space, action_logits, action_distribution, valids) -> Tuple[Tensor, Tensor]:
         old_action_distribution = get_action_distribution(action_space, action_logits)
-        kl_loss = action_distribution.kl_divergence(old_action_distribution)
-        kl_loss = torch.masked_select(kl_loss, valids)
+        kl_old = action_distribution.kl_divergence(old_action_distribution)
+        kl_loss = torch.masked_select(kl_old, valids)
         kl_loss = kl_loss.mean()
 
         kl_loss *= self.cfg.kl_loss_coeff
 
-        return kl_loss
+        return kl_old, kl_loss
 
     def _entropy_exploration_loss(self, action_distribution, valids):
         entropy = action_distribution.entropy()
@@ -564,7 +563,7 @@ class Learner(EventLoopObject, Configurable):
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)
                     exploration_loss = self.exploration_loss_func(action_distribution, valids)
-                    kl_loss = self.kl_loss_func(self.actor_critic.action_space, mb.action_logits, action_distribution, valids)
+                    kl_old, kl_loss = self.kl_loss_func(self.actor_critic.action_space, mb.action_logits, action_distribution, valids)
 
                     actor_loss = policy_loss + exploration_loss + kl_loss
                     epoch_actor_losses.append(actor_loss.item())
@@ -599,13 +598,14 @@ class Learner(EventLoopObject, Configurable):
                         # perhaps something weird is happening, we definitely want summaries from this step
                         force_summaries = True
 
-                with timing.add_time('kl_divergence'):
-                    # calculate KL-divergence with the behaviour policy action distribution
-                    old_action_distribution = get_action_distribution(
-                        self.actor_critic.action_space, mb.action_logits,
-                    )
-
-                    kl_old = action_distribution.kl_divergence(old_action_distribution)
+                with torch.no_grad(), timing.add_time('kl_divergence'):
+                    # if kl_old is not None it is already calculated above
+                    if kl_old is None:
+                        # calculate KL-divergence with the behaviour policy action distribution
+                        old_action_distribution = get_action_distribution(
+                            self.actor_critic.action_space, mb.action_logits,
+                        )
+                        kl_old = action_distribution.kl_divergence(old_action_distribution)
                     kl_old_mean = kl_old.mean().item()
                     recent_kls.append(kl_old_mean)
 

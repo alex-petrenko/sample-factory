@@ -3,24 +3,30 @@ PyTorch module that keeps track of tensor statistics and uses it to normalize da
 All credit goes to https://github.com/Denys88/rl_games (only slightly changed here)
 Thanks a lot, great module!
 """
+from typing import Dict, Final, Union
+
 import gym
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.jit import ScriptModule, RecursiveScriptModule
 
 from sample_factory.utils.utils import log
 
 
+_NORM_EPS = 1e-5
+
+
 # noinspection PyAttributeOutsideInit
 class RunningMeanStdInPlace(nn.Module):
-    def __init__(self, input_shape, epsilon=1e-05, per_channel=False, norm_only=False):
+    def __init__(self, input_shape, epsilon=_NORM_EPS, per_channel=False, norm_only=False):
         super(RunningMeanStdInPlace, self).__init__()
         log.debug('RunningMeanStd input shape: %r', input_shape)
-        self.input_shape = input_shape
-        self.epsilon = epsilon
+        self.input_shape: Final = input_shape
+        self.epsilon: Final[float] = epsilon
 
-        self.norm_only = norm_only
-        self.per_channel = per_channel
+        self.norm_only: Final[bool] = norm_only
+        self.per_channel: Final[bool] = per_channel
 
         if per_channel:
             if len(self.input_shape) == 3:
@@ -39,7 +45,8 @@ class RunningMeanStdInPlace(nn.Module):
         self.register_buffer('count', torch.ones((), dtype=torch.float64))
 
     @staticmethod
-    def _update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
+    @torch.jit.script
+    def _update_mean_var_count_from_moments(mean: Tensor, var: Tensor, count: Tensor, batch_mean: Tensor, batch_var: Tensor, batch_count: int):
         delta = batch_mean - mean
         tot_count = count + batch_count
 
@@ -85,24 +92,30 @@ class RunningMeanStdInPlace(nn.Module):
 
 
 class RunningMeanStdDictInPlace(nn.Module):
-    def __init__(self, obs_space: gym.spaces.Dict, epsilon=1e-05, per_channel=False, norm_only=False):
+    def __init__(self, obs_space: gym.spaces.Dict, epsilon=_NORM_EPS, per_channel=False, norm_only=False):
         super(RunningMeanStdDictInPlace, self).__init__()
-        self.obs_space = obs_space
+        self.obs_space: Final = obs_space
         self.running_mean_std = nn.ModuleDict({
             k: RunningMeanStdInPlace(space.shape, epsilon, per_channel, norm_only) for k, space in obs_space.spaces.items()
         })
 
-    def forward(self, x) -> None:
+    def forward(self, x: Dict[str, Tensor]) -> None:
         """Normalize in-place!"""
-        for k, v in x.items():
-            self.running_mean_std[k](v)
+        for k, module in self.running_mean_std.items():
+            module(x[k])
 
-    def summaries(self):
-        res = dict()
-        for k in self.obs_space:
-            stats = self.running_mean_std[k]
-            res.update({
-                f'{k}_mean': stats.running_mean.mean(),
-                f'{k}_std': stats.running_var.mean(),
-            })
-        return res
+
+def running_mean_std_summaries(running_mean_std_module: Union[nn.Module, ScriptModule, RecursiveScriptModule]):
+    m = running_mean_std_module
+    res = dict()
+
+    for name, buf in m.named_buffers():
+        # converts MODULE_NAME.running_mean_std.obs.running_mean to obs.running_mean
+        name = '_'.join(name.split('.')[-2:])
+
+        if name.endswith('running_mean'):
+            res[name] = buf.float().mean()
+        elif name.endswith('running_var'):
+            res[name.replace('_var', '_std')] = torch.sqrt(buf.float() + _NORM_EPS).mean()
+
+    return res

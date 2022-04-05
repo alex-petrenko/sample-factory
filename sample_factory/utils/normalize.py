@@ -14,7 +14,7 @@ Otherwise, we create a copy of data and do all of the operations operations in-p
 import torch
 from torch import nn
 
-from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace
+from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace, running_mean_std_summaries
 from sample_factory.algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively
 from sample_factory.algorithms.utils.algo_utils import EPS
 
@@ -29,6 +29,9 @@ class Normalizer(nn.Module):
         self.running_mean_std = None
         if cfg.normalize_input:
             self.running_mean_std = RunningMeanStdDictInPlace(obs_space)
+
+            # comment this out for debugging (i.e. to be able to step through normalizer code)
+            self.running_mean_std = torch.jit.script(self.running_mean_std)
 
         self.should_sub_mean = abs(self.sub_mean) > EPS
         self.should_scale = abs(self.scale - 1.0) > EPS
@@ -69,5 +72,5 @@ class Normalizer(nn.Module):
     def summaries(self):
         res = dict()
         if self.running_mean_std:
-            res.update(self.running_mean_std.summaries())
+            res.update(running_mean_std_summaries(self.running_mean_std))
         return res
