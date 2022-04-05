@@ -2,7 +2,8 @@ import sys
 
 # this is here just to guarantee that isaacgym is imported before PyTorch
 import isaacgym
-from torch import nn
+import torch
+from torch import nn, Tensor
 
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.algorithms.appo.model_utils import register_custom_encoder, EncoderBase, get_obs_shape
@@ -12,9 +13,9 @@ from sample_factory.train import run_rl
 from sample_factory.utils.utils import str2bool
 
 
-class IsaacGymMlpEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+class _IsaacGymMlpEncoderImlp(nn.Module):
+    def __init__(self, obs_space):
+        super().__init__()
 
         obs_shape = get_obs_shape(obs_space)
         assert len(obs_shape.obs) == 1
@@ -29,10 +30,22 @@ class IsaacGymMlpEncoder(EncoderBase):
         ]
 
         self.mlp_head = nn.Sequential(*encoder_layers)
+
+    def forward(self, obs: Tensor):
+        x = self.mlp_head(obs)
+        return x
+
+
+class IsaacGymMlpEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing):
+        super().__init__(cfg, timing)
+
+        self._impl = _IsaacGymMlpEncoderImlp(obs_space)
+        self._impl = torch.jit.script(self._impl)
         self.encoder_out_size = 64  # TODO: we should make this an abstract method
 
     def forward(self, obs_dict):
-        x = self.mlp_head(obs_dict['obs'])
+        x = self._impl(obs_dict['obs'])
         return x
 
 

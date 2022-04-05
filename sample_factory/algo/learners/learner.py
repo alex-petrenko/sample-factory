@@ -139,7 +139,7 @@ class Learner(EventLoopObject, Configurable):
                     'I.e. set --kl_loss_coeff=0.1'
                 )
                 time.sleep(3.0)
-            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: None, 0.0
+            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: (None, 0.0)
         else:
             self.kl_loss_func = self._kl_loss
 
@@ -515,21 +515,21 @@ class Learner(EventLoopObject, Configurable):
                     valids = valids & (policy_version_before_train - mb.policy_version < self.cfg.max_policy_lag)
 
                     if self.cfg.with_vtrace:
-                        ratios_cpu = ratio.cpu()
-                        values_cpu = values.cpu()
-                        rewards_cpu = mb.rewards_cpu
-                        dones_cpu = mb.dones_cpu
-
-                        vtrace_rho = torch.min(rho_hat, ratios_cpu)
-                        vtrace_c = torch.min(c_hat, ratios_cpu)
-
-                        vs = torch.zeros((num_trajectories * recurrence))
-                        adv = torch.zeros((num_trajectories * recurrence))
-
-                        next_values = (values_cpu[recurrence - 1::recurrence] - rewards_cpu[recurrence - 1::recurrence]) / gamma
-                        next_vs = next_values
-
                         with timing.add_time('vtrace'):
+                            ratios_cpu = ratio.cpu()
+                            values_cpu = values.cpu()
+                            rewards_cpu = mb.rewards_cpu
+                            dones_cpu = mb.dones_cpu
+
+                            vtrace_rho = torch.min(rho_hat, ratios_cpu)
+                            vtrace_c = torch.min(c_hat, ratios_cpu)
+
+                            vs = torch.zeros((num_trajectories * recurrence))
+                            adv = torch.zeros((num_trajectories * recurrence))
+
+                            next_values = (values_cpu[recurrence - 1::recurrence] - rewards_cpu[recurrence - 1::recurrence]) / gamma
+                            next_vs = next_values
+
                             for i in reversed(range(self.cfg.recurrence)):
                                 rewards = rewards_cpu[i::recurrence]
                                 dones = dones_cpu[i::recurrence]

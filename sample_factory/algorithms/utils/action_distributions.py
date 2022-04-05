@@ -3,8 +3,9 @@ import math
 import gym
 import numpy as np
 import torch
+from torch import Tensor
 from torch.distributions import Normal, Independent
-import torch.nn.functional as F
+from torch.nn import functional
 
 from sample_factory.utils.utils import log
 
@@ -13,10 +14,10 @@ def calc_num_actions(action_space):
     if isinstance(action_space, gym.spaces.Discrete):
         return 1
     elif isinstance(action_space, gym.spaces.Tuple):
-        return len(action_space.spaces)
+        return len(tuple(action_space.spaces))
     elif isinstance(action_space, gym.spaces.Box):
         if len(action_space.shape) != 1:
-            raise Exception('Non-trivial shape Box action spaces not currently supported. Try to flatten it.')
+            raise Exception('Non-trivial shape Box action spaces not currently supported. Try to flatten the space.')
 
         return action_space.shape[0]
     else:
@@ -65,9 +66,6 @@ def sample_actions_log_probs(distribution):
     else:
         actions = distribution.sample()
         log_prob_actions = distribution.log_prob(actions)
-
-        # if len(log_prob_actions.shape) == 1:
-        #     log_prob_actions.unsqueeze_(dim=1)
         return actions, log_prob_actions
 
 
@@ -85,13 +83,13 @@ class CategoricalActionDistribution:
     @property
     def probs(self):
         if self.p is None:
-            self.p = F.softmax(self.raw_logits, dim=-1)
+            self.p = functional.softmax(self.raw_logits, dim=-1)
         return self.p
 
     @property
     def log_probs(self):
         if self.log_p is None:
-            self.log_p = F.log_softmax(self.raw_logits, dim=-1)
+            self.log_p = functional.log_softmax(self.raw_logits, dim=-1)
         return self.log_p
 
     def sample_gumbel(self):
@@ -243,19 +241,22 @@ class TupleActionDistribution:
 
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
-    stddev_min = 1e-5
-    stddev_max = 1e5
-    stddev_span = stddev_max - stddev_min
+    stddev_min: float = 1e-5
+    stddev_max: float = 1e5
 
     def __init__(self, params):
-        # using torch.chunk here is slightly faster than plain indexing
-        self.means, self.log_std = torch.chunk(params, 2, dim=1)
-
-        self.stddevs = self.log_std.exp()
-        self.stddevs = torch.clamp(self.stddevs, self.stddev_min, self.stddev_max)
-
+        self.means, self.log_std, self.stddevs = self._init_impl(params, self.stddev_min, self.stddev_max)
         normal_dist = Normal(self.means, self.stddevs)
         super().__init__(normal_dist, 1)
+
+    @staticmethod
+    @torch.jit.script
+    def _init_impl(params: Tensor, stddev_min: float, stddev_max: float):
+        # using torch.chunk here is slightly faster than plain indexing
+        means, log_std = torch.chunk(params, 2, dim=1)
+        stddevs = log_std.exp()
+        stddevs = torch.clamp(stddevs, stddev_min, stddev_max)
+        return means, log_std, stddevs
 
     def kl_divergence(self, other):
         kl = torch.distributions.kl.kl_divergence(self, other)

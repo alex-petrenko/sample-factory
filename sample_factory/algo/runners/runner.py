@@ -4,7 +4,7 @@ import os
 import time
 from collections import deque, OrderedDict
 from os.path import join
-from typing import Dict, Iterable, Tuple, List
+from typing import Dict, Tuple, List
 
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -18,7 +18,6 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
 from sample_factory.utils.wandb_utils import init_wandb
-
 
 StatusCode = int
 
