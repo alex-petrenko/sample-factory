@@ -1,6 +1,9 @@
 import multiprocessing
+import os
+import pickle
 import sys
 from dataclasses import dataclass
+from os.path import join
 
 import gym
 import torch
@@ -12,13 +15,15 @@ from sample_factory.algo.runners.runner_sync import SyncRunner
 from sample_factory.algo.samplers.sampler_sync import SyncSampler
 from sample_factory.algo.utils.communication_broker import SyncCommBroker
 from sample_factory.algo.utils.context import sf_global_context, set_global_context
+from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algorithms.appo.appo_utils import make_env_func, make_env_func_v2
 from sample_factory.algorithms.appo.model import _ActorCriticBase, create_actor_critic
 from sample_factory.algorithms.utils.arguments import parse_args
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
+from sample_factory.signal_slot.signal_slot import EventLoopProcess
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import AttrDict, log, experiment_dir
 
 
 # TODO: remove the other version in actor_worker.py
@@ -82,6 +87,12 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
 
 
 def obtain_env_info_in_a_separate_process(cfg: AttrDict):
+    cache_filename = join(experiment_dir(cfg=cfg), f'env_info_{cfg.env}')
+    if os.path.isfile(cache_filename):
+        with open(cache_filename, 'rb') as fobj:
+            env_info = pickle.load(fobj)
+            return env_info
+
     sf_context = sf_global_context()
 
     ctx = multiprocessing.get_context('spawn')
@@ -91,6 +102,9 @@ def obtain_env_info_in_a_separate_process(cfg: AttrDict):
 
     env_info = q.get()
     p.join()
+
+    with open(cache_filename, 'wb') as fobj:
+        pickle.dump(env_info, fobj)
 
     return env_info
 
@@ -126,28 +140,53 @@ def make_model(cfg: AttrDict, env_info: EnvInfo, device: torch.device, timing: T
 
 
 def run_rl(cfg):
-    # TODO: temporarily use stubs to figure out the interfaces
-    # once everything stub components can communicate, we're ready to start development of actual components
-
     env_info = obtain_env_info_in_a_separate_process(cfg)
     device = init_device(cfg)
-    actor_critic = make_model(cfg, env_info, device)
+
     buffer_mgr = BufferMgr(cfg, env_info, device)
 
     runner = SyncRunner(cfg)
     evt_loop = runner.event_loop
     # evt_loop.verbose = True
 
-    sampler = SyncSampler(evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, runner.timing)
-    sampler.init()
-
+    learner = Learner(evt_loop, cfg, env_info, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
     batcher = SequentialBatcher(evt_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
 
-    learner = Learner(evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
-    learner.init()
+    sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr, runner.timing)
 
     runner.init(sampler, batcher, learner)
     status = runner.run()
+    return status
+
+
+def run_rl_async(cfg):
+    env_info = obtain_env_info_in_a_separate_process(cfg)
+    device = init_device(cfg)
+    actor_critic = make_model(cfg, env_info, device)
+    actor_critic.share_memory()
+
+    buffer_mgr = BufferMgr(cfg, env_info, device)
+
+    runner = SyncRunner(cfg)
+    evt_loop = runner.event_loop
+    # evt_loop.verbose = True
+
+    sampler = SyncSampler(evt_loop, cfg, env_info, actor_critic, buffer_mgr, runner.timing)
+    sampler.init()
+
+    ctx = multiprocessing.get_context('spawn')
+    learner_proc = EventLoopProcess('learner_proc', ctx)
+    batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
+    learner = Learner(learner_proc.event_loop, cfg, env_info, actor_critic, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
+
+    runner.init(sampler, batcher, learner)
+
+    learner_proc.start()
+
+    status = runner.run()
+
+    learner_proc.join()
+
     return status
 
 

@@ -1,4 +1,5 @@
 import datetime
+import multiprocessing
 from unittest import TestCase
 
 from sample_factory.signal_slot.signal_slot import EventLoopObject, process_name, EventLoop, EventLoopProcess, Timer, \
@@ -114,24 +115,37 @@ class TestSignalSlot(TestCase):
         p.join()
         p2.join()
 
+    class C3(EventLoopObject):
+        @signal
+        def s1(self): pass
+
+    class C4(EventLoopObject):
+        def on_start(self):
+            log.debug(f'{self.on_start.__name__} start')
+
+        def on_s1(self, arg1, arg2):
+            log.info(f'{self.on_s1.__name__} {arg1=} {arg2=}')
+
     def test_multiarg(self):
+        ctx = multiprocessing.get_context('spawn')
+        p = EventLoopProcess('_p1', ctx)
+
         event_loop = EventLoop('multiarg_loop')
-        stop_timer = Timer(event_loop, 0.1, single_shot=True)
+        stop_timer = Timer(event_loop, 0.5, single_shot=True)
         stop_timer.timeout.connect(event_loop.stop)
 
-        class C3(EventLoopObject):
-            @signal
-            def s1(self): pass
+        o1 = self.C3(p.event_loop, 'o1_')
+        o2 = self.C4(p.event_loop, 'o2_')
 
-        class C4(EventLoopObject):
-            def on_s1(self, arg1, arg2):
-                print(f'{self.on_s1.__name__} {arg1=} {arg2=}')
-
-        o1 = C3(event_loop, 'o1_')
-        o2 = C4(event_loop, 'o2_')
+        p.event_loop.start.connect(o2.on_start)
 
         o1.s1.connect(o2.on_s1)
         o1.s1.emit(dict(a=1, b=2, c=3), 42)
         o1.s1.emit_many([(dict(a=1, b=2, c=3), 42), (dict(a=11, b=22, c=33), 422)])
 
+        event_loop.terminate.connect(p.stop)
+
+        p.start()
+        log.debug(f'Starting event loop {event_loop}')
         event_loop.exec()
+        p.join()

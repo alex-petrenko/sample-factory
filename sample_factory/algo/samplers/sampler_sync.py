@@ -3,6 +3,7 @@ from typing import Dict, Any
 import torch
 from torch import Tensor
 
+from sample_factory.algo.utils.model_sharing import make_parameter_client
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
@@ -31,7 +32,7 @@ class Sampler(Configurable):
 
 
 class SyncSampler(EventLoopObject, Sampler):
-    def __init__(self, evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, timing):
+    def __init__(self, evt_loop, cfg, env_info, param_server, buffer_mgr, timing):
         Sampler.__init__(self, cfg, env_info)
 
         self.curr_policy_id = 0  # sync sampler does not support multi-policy learning as of now
@@ -40,8 +41,8 @@ class SyncSampler(EventLoopObject, Sampler):
 
         self.timing = timing
 
-        self.actor_critic = actor_critic
-        self.device = device
+        self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info)
+        self.actor_critic = None
 
         self.traj_tensors = None
 
@@ -58,12 +59,19 @@ class SyncSampler(EventLoopObject, Sampler):
         self.curr_episode_reward = self.curr_episode_len = None
 
     @signal
+    def initialized(self): pass
+
+    @signal
     def report_msg(self): pass
 
     @signal
     def new_trajectories(self): pass
 
-    def init(self):
+    def init(self, initial_model_state):
+        state_dict, device, policy_version = initial_model_state
+        self.param_client.on_weights_initialized(state_dict, device, policy_version)
+        self.actor_critic = self.param_client.actor_critic
+
         # with sync sampler there aren't any workers, hence 0/0/0 should suffice
         env_config = AttrDict(worker_index=0, vector_index=0, env_id=0)
 
@@ -76,6 +84,8 @@ class SyncSampler(EventLoopObject, Sampler):
 
         self.curr_episode_reward = torch.zeros(self.env_info.num_agents)
         self.curr_episode_len = torch.zeros(self.env_info.num_agents, dtype=torch.int32)
+
+        self.initialized.emit()
 
     def process_rewards(self, rewards_orig: Tensor, infos: Dict[Any, Any], values: Tensor):
         rewards = rewards_orig * self.cfg.reward_scale
@@ -145,6 +155,9 @@ class SyncSampler(EventLoopObject, Sampler):
                 # save observations and RNN states in a trajectory
                 curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
 
+                with self.timing.add_time('update_model'):
+                    self.param_client.ensure_weights_updated()
+
                 with self.timing.add_time('norm'):
                     normalized_obs = self.actor_critic.normalizer(curr_step['obs'])
 
@@ -163,7 +176,7 @@ class SyncSampler(EventLoopObject, Sampler):
                         curr_step[key][:] = value
 
                     curr_step[:] = policy_outputs
-                    curr_step['policy_version'].fill_(self.buffer_mgr.policy_versions[self.curr_policy_id])
+                    curr_step['policy_version'].fill_(self.param_client.latest_policy_version)
 
                     actions = preprocess_actions(self.env_info, policy_outputs['actions'])
 

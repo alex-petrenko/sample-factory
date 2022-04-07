@@ -84,6 +84,7 @@ class APPO(ReinforcementLearningAlgorithm):
                  '(see function finalize_trajectory in actor_worker.py)',
         )
 
+        arg('--serial_mode', default=False, type=str2bool, help='Enable serial mode: run everything completely synchronously in the same process')
         arg('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
         arg(

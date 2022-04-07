@@ -1,5 +1,6 @@
 import glob
 import os
+import pickle
 import time
 from abc import ABC, abstractmethod
 from os.path import join
@@ -9,10 +10,12 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
 from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
+from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.pytorch_utils import to_scalar
 from sample_factory.cfg.configurable import Configurable
@@ -87,7 +90,7 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
 
 
 class Learner(EventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, actor_critic, device, buffer_mgr, policy_id, timing):
+    def __init__(self, evt_loop, cfg, env_info, device, buffer_mgr, policy_id, timing):
         Configurable.__init__(self, cfg)
 
         unique_name = f'{Learner.__name__}_{policy_id}'
@@ -98,8 +101,10 @@ class Learner(EventLoopObject, Configurable):
         self.policy_id = policy_id
 
         self.env_info = env_info
-        self.actor_critic = actor_critic
-        self.device = device
+        self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions)
+
+        self.device = device  # TODO: we shouldn't init device in ctor?
+        self.actor_critic = None
 
         self.optimizer = None
 
@@ -144,6 +149,9 @@ class Learner(EventLoopObject, Configurable):
             self.kl_loss_func = self._kl_loss
 
     @signal
+    def model_initialized(self): pass
+
+    @signal
     def report_msg(self): pass
 
     @signal
@@ -157,6 +165,11 @@ class Learner(EventLoopObject, Configurable):
             log.info('Setting fixed seed %d', self.cfg.seed)
             torch.manual_seed(self.cfg.seed)
             np.random.seed(self.cfg.seed)
+
+        self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
+        self.actor_critic.model_to_device(self.device)
+        self.actor_critic.share_memory()
+        self.actor_critic.train()
 
         params = list(self.actor_critic.parameters())
 
@@ -181,6 +194,13 @@ class Learner(EventLoopObject, Configurable):
         self.lr_scheduler = get_lr_scheduler(self.cfg)
 
         self.load_from_checkpoint(self.policy_id)
+        self.param_server.init(self.actor_critic, self.train_step)
+
+        # in serial mode we will just use the same actor_critic directly
+        state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
+        model_state = (state_dict, self.device, self.train_step)
+        # signal other components that the model is ready
+        self.model_initialized.emit(model_state)
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):

@@ -4,15 +4,15 @@ _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
 ])
 
-_version = 28
+_version = 30
 _vstr = f'v{_version:03d}'
 _cli = 'python -m sample_factory_examples.train_isaacgym ' \
        '--algo=APPO --env=isaacgym_ant --actor_worker_gpus 0 --train_for_env_steps=100000000 --env_agents=4096 ' \
-       '--batch_size=32768 --env_headless=True --use_rnn=False --with_wandb=True ' \
-       '--wandb_group=isaacgym_ant_sf2 --wandb_tags ant sync'
+       '--batch_size=32768 --env_headless=True --use_rnn=False --with_vtrace=False --recurrence=1 --with_wandb=True ' \
+       f'--wandb_group=isaacgym_ant_sf2 --wandb_tags ant sync {_vstr}'
 
 _experiments = [
-    Experiment(f'ant_{_vstr}', _cli + ' --with_vtrace=False --recurrence=1', _params.generate_params(False)),
+    Experiment(f'ant_{_vstr}_serial', _cli + ' --serial_mode=True', _params.generate_params(False)),
 ]
 
 RUN_DESCRIPTION = RunDescription(f'ant_{_vstr}', experiments=_experiments)

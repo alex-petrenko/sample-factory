@@ -205,7 +205,7 @@ class EventLoopObject:
         for q in queues:
             # we just push messages into each receiver event loop queue
             # event loops themselves will redistribute the signals to all receivers living on that loop
-            q.put_many(signals_to_emit, block=True, timeout=1.0)
+            q.put_many(signals_to_emit, block=True, timeout=0.1)
 
     def detach(self):
         """Detach the object from it's current event loop."""
@@ -232,7 +232,7 @@ class EventLoop(EventLoopObject):
         # when event loop is created it just lives on the current process
         self.process: Union[psutil.Process, EventLoopProcess] = psutil.Process(os.getpid())
 
-        self.signal_queue = get_mp_queue()
+        self.signal_queue = get_mp_queue(buffer_size_bytes=5_000_000)
 
         # Separate container to keep track of timers living on this thread. Start with one default timer.
         self.timers: List[Timer] = []
@@ -249,6 +249,9 @@ class EventLoop(EventLoopObject):
 
         # connect to our own termination signal
         self.terminate.connect(self._terminate)
+
+    @signal
+    def start(self): pass
 
     @signal
     def terminate(self): pass
@@ -332,6 +335,8 @@ class EventLoop(EventLoopObject):
         self.default_timer.start()  # this will add timer to the loop's list of timers
 
         try:
+            self.start.emit()
+
             while not self.should_terminate:
                 closest_timer = self._calculate_timeout()
 
@@ -412,27 +417,68 @@ class Timer(EventLoopObject):
         return f'{Timer.__name__}_{super()._default_obj_id()}'
 
 
-class EventLoopProcess(multiprocessing.Process, EventLoopObject):
-    def __init__(self, unique_process_name, daemon=None):
-        multiprocessing.Process.__init__(self, target=self._target, name=unique_process_name, daemon=daemon)
-        self.event_loop = EventLoop(f'{self.name}_evt_loop')
-        EventLoopObject.__init__(self, self.event_loop, self.name)
+class EventLoopProcess(EventLoopObject):
+    def __init__(self, unique_process_name, multiprocessing_context=None, daemon=None):
+        """
+        Here we could've inherited from Process, but the actual class of process (i.e. Process vs SpawnProcess)
+        depends on the multiprocessing context and hence is not known during the generation of the class.
+
+        Instead of using inheritance we just wrap a process instance.
+        """
+        process_cls = multiprocessing.Process if multiprocessing_context is None else multiprocessing_context.Process
+
+        self._process = process_cls(target=self._target, name=unique_process_name, daemon=daemon)
+        self.event_loop = EventLoop(f'{unique_process_name}_evt_loop')
+        EventLoopObject.__init__(self, self.event_loop, unique_process_name)
 
     def _target(self):
         self.event_loop.exec()
 
     def start(self):
         self.event_loop.process = self
-        super().start()
+        self._process.start()
 
-    def stop(self) -> None:
+    def stop(self):
         self.event_loop.stop()
 
+    def terminate(self):
+        self._process.terminate()
 
-def process_name(p: Union[psutil.Process, multiprocessing.Process]):
+    def kill(self):
+        self._process.kill()
+
+    def join(self, timeout=None):
+        self._process.join(timeout)
+
+    def is_alive(self):
+        return self._process.is_alive()
+
+    def close(self):
+        return self._process.close()
+
+    @property
+    def name(self):
+        return self._process.name
+
+    @property
+    def daemon(self):
+        return self._process.daemon
+
+    @property
+    def exitcode(self):
+        return self._process.exitcode
+
+    @property
+    def ident(self):
+        return self._process.ident
+
+    pid = ident
+
+
+def process_name(p: Union[psutil.Process, EventLoopProcess]):
     if isinstance(p, psutil.Process):
         return p.name()
-    elif isinstance(p, multiprocessing.Process):
+    elif isinstance(p, EventLoopProcess):
         return p.name
     else:
         raise RuntimeError(f'Unknown process type {type(p)}')

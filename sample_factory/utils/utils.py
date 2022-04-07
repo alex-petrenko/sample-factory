@@ -9,6 +9,7 @@ import pwd
 import tempfile
 import time
 from _queue import Empty
+from inspect import isclass, getmro
 from os.path import join
 from queue import Full
 from subprocess import check_output, run, SubprocessError

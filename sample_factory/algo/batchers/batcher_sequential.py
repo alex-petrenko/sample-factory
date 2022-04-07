@@ -15,8 +15,13 @@ class SequentialBatcher(EventLoopObject):
         self.total_num_trajectories = total_num_trajectories
         self.next_batch_start = 0
 
+        self.event_loop.start.connect(self.init)
+
     @signal
     def new_batches(self): pass
+
+    def init(self):
+        pass
 
     def _add_slice(self, s):
         self.slice_starts[s.start] = s

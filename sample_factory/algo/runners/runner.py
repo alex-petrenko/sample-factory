@@ -156,9 +156,6 @@ class Runner(EventLoopObject, Configurable):
 
     # singals emitted by the runner
     @signal
-    def request_trajectories(self): pass
-
-    @signal
     def save_periodic(self): pass
 
     @signal
@@ -401,8 +398,8 @@ class Runner(EventLoopObject, Configurable):
         # TODO: multiple samplers/learners for multiple policies
 
         self.sampler = sampler
-        self.request_trajectories.connect(sampler.collect_trajectories)
         sampler.report_msg.broadcast_on(self.event_loop)  # how is this going to look like for async CPU sampler
+        sampler.initialized.connect(sampler.collect_trajectories)
         sampler.new_trajectories.connect(batcher.on_new_trajectories)
 
         self.batcher = batcher
@@ -410,6 +407,7 @@ class Runner(EventLoopObject, Configurable):
 
         self.learner = learner
         learner.report_msg.connect(self._process_msg)
+        learner.model_initialized.connect(sampler.init)  # TODO: should be actor/policy workers here
         learner.finished_training_iteration.connect(sampler.collect_trajectories)  # close the synchronous loop
         learner.finished_training_iteration.connect(self._after_training_iteration)
 
@@ -418,7 +416,7 @@ class Runner(EventLoopObject, Configurable):
         self.save_best.connect(self.learner.save_best)
 
         # kickstart the algorithm
-        self.request_trajectories.emit()
+        self.event_loop.start.connect(self.learner.init)
 
         # TODO: stop sampler, learner, etc. Implement when we have async versions
 
