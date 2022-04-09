@@ -222,12 +222,10 @@ def set_global_cuda_envvars(cfg):
 
     if CUDA_ENVVAR not in os.environ:
         os.environ[CUDA_ENVVAR] = available_gpus
-    os.environ[f'{CUDA_ENVVAR}_backup_'] = os.environ[CUDA_ENVVAR]
-    os.environ[CUDA_ENVVAR] = ''
 
 
 def get_available_gpus():
-    orig_visible_devices = os.environ[f'{CUDA_ENVVAR}_backup_']
+    orig_visible_devices = os.environ[f'{CUDA_ENVVAR}']
     available_gpus = [int(g) for g in orig_visible_devices.split(',') if g]
     return available_gpus
 

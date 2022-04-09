@@ -20,7 +20,7 @@ _NORM_EPS = 1e-5
 # noinspection PyAttributeOutsideInit
 class RunningMeanStdInPlace(nn.Module):
     def __init__(self, input_shape, epsilon=_NORM_EPS, per_channel=False, norm_only=False):
-        super(RunningMeanStdInPlace, self).__init__()
+        super().__init__()
         log.debug('RunningMeanStd input shape: %r', input_shape)
         self.input_shape: Final = input_shape
         self.epsilon: Final[float] = epsilon
@@ -42,7 +42,7 @@ class RunningMeanStdInPlace(nn.Module):
 
         self.register_buffer('running_mean', torch.zeros(shape, dtype=torch.float64))
         self.register_buffer('running_var', torch.ones(shape, dtype=torch.float64))
-        self.register_buffer('count', torch.ones((), dtype=torch.float64))
+        self.register_buffer('count', torch.ones([1], dtype=torch.float64))
 
     @staticmethod
     @torch.jit.script
@@ -60,10 +60,11 @@ class RunningMeanStdInPlace(nn.Module):
     def forward(self, x: Tensor) -> None:
         """Normalizes in-place! This means this function modifies the input tensor and returns nothing."""
         if self.training:
+            batch_count = x.size()[0]
             mean = x.mean(self.axis)  # along channel axis
             var = x.var(self.axis)
-            self.running_mean, self.running_var, self.count = self._update_mean_var_count_from_moments(
-                self.running_mean, self.running_var, self.count, mean, var, x.size()[0],
+            self.running_mean[:], self.running_var[:], self.count[:] = self._update_mean_var_count_from_moments(
+                self.running_mean, self.running_var, self.count, mean, var, batch_count,
             )
 
         # change shape

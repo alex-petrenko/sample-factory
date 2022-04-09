@@ -10,14 +10,12 @@ import torch
 from gym.spaces import Discrete, Tuple
 
 from sample_factory.algo.batchers.batcher_sequential import SequentialBatcher
-from sample_factory.algo.learners.learner import Learner
+from sample_factory.algo.learners.learner import Learner, init_learner_process
 from sample_factory.algo.runners.runner_sync import SyncRunner
 from sample_factory.algo.samplers.sampler_sync import SyncSampler
-from sample_factory.algo.utils.communication_broker import SyncCommBroker
 from sample_factory.algo.utils.context import sf_global_context, set_global_context
-from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algorithms.appo.appo_utils import make_env_func, make_env_func_v2
+from sample_factory.algorithms.appo.appo_utils import make_env_func_v2, set_global_cuda_envvars
 from sample_factory.algorithms.appo.model import _ActorCriticBase, create_actor_critic
 from sample_factory.algorithms.utils.arguments import parse_args
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
@@ -140,6 +138,15 @@ def make_model(cfg: AttrDict, env_info: EnvInfo, device: torch.device, timing: T
 
 
 def run_rl(cfg):
+    if cfg.serial_mode:
+        return run_rl_serial(cfg)
+    else:
+        return run_rl_async(cfg)
+
+
+def run_rl_serial(cfg):
+    set_global_cuda_envvars(cfg)
+
     env_info = obtain_env_info_in_a_separate_process(cfg)
     device = init_device(cfg)
 
@@ -159,7 +166,10 @@ def run_rl(cfg):
     return status
 
 
+# TODO: remove duplicate code
 def run_rl_async(cfg):
+    set_global_cuda_envvars(cfg)
+
     env_info = obtain_env_info_in_a_separate_process(cfg)
     device = init_device(cfg)
     actor_critic = make_model(cfg, env_info, device)
@@ -171,20 +181,19 @@ def run_rl_async(cfg):
     evt_loop = runner.event_loop
     # evt_loop.verbose = True
 
-    sampler = SyncSampler(evt_loop, cfg, env_info, actor_critic, buffer_mgr, runner.timing)
-    sampler.init()
-
+    policy_id = 0  # TODO: multiple policies
     ctx = multiprocessing.get_context('spawn')
-    learner_proc = EventLoopProcess('learner_proc', ctx)
+    learner_proc = EventLoopProcess('learner_proc', ctx, init_func=init_learner_process, args=(sf_global_context(), cfg, policy_id))
     batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
-    learner = Learner(learner_proc.event_loop, cfg, env_info, actor_critic, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
+    learner = Learner(learner_proc.event_loop, cfg, env_info, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
+
+    sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr, runner.timing)
 
     runner.init(sampler, batcher, learner)
+    runner.stop.connect(learner_proc.stop)
 
     learner_proc.start()
-
     status = runner.run()
-
     learner_proc.join()
 
     return status

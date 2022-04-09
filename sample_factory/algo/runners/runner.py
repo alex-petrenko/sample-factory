@@ -161,6 +161,10 @@ class Runner(EventLoopObject, Configurable):
     @signal
     def save_best(self): pass
 
+    """Emitted when we're about to stop the experiment."""
+    @signal
+    def stop(self): pass
+
     def _process_msg(self, msgs):
         if isinstance(msgs, (dict, OrderedDict)):
             msgs = (msgs, )
@@ -450,6 +454,7 @@ class Runner(EventLoopObject, Configurable):
         status = ExperimentStatus.SUCCESS
 
         if self._check_done():
+            self.stop.emit()
             return status
 
         with self.timing.timeit('main_loop'):
@@ -459,6 +464,8 @@ class Runner(EventLoopObject, Configurable):
             except Exception:
                 log.exception(f'Uncaught exception in {self.object_id} evt loop')
                 status = ExperimentStatus.FAILURE
+
+        self.stop.emit()
 
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)

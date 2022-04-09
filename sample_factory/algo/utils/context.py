@@ -31,6 +31,6 @@ def sf_global_context() -> SampleFactoryContext:
     return GLOBAL_CONTEXT
 
 
-def set_global_context(ctx):
+def set_global_context(ctx: SampleFactoryContext):
     global GLOBAL_CONTEXT
     GLOBAL_CONTEXT = ctx

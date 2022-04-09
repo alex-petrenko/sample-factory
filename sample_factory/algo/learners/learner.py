@@ -1,6 +1,5 @@
 import glob
 import os
-import pickle
 import time
 from abc import ABC, abstractmethod
 from os.path import join
@@ -10,10 +9,12 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
-from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
+from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats, cuda_envvars_for_policy, \
+    CUDA_ENVVAR
 from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
@@ -23,6 +24,27 @@ from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
+
+
+def init_learner_process(sf_context: SampleFactoryContext, cfg, policy_id):
+    set_global_context(sf_context)
+    log.info(f'LEARNER\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    import psutil
+    try:
+        psutil.Process().nice(cfg.default_niceness)
+    except psutil.AccessDenied:
+        log.error('Low niceness requires sudo!')
+
+    if cfg.device == 'gpu':
+        cuda_envvars_for_policy(policy_id, 'learner')
+
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    torch.set_num_threads(cfg.learner_main_loop_num_cores)
 
 
 class LearningRateScheduler:
@@ -127,7 +149,18 @@ class Learner(EventLoopObject, Configurable):
         self.traj_tensors = buffer_mgr.traj_tensors
         self.policy_versions = buffer_mgr.policy_versions
 
-        # TODO: code duplication!!
+        self.exploration_loss_func = self.kl_loss_func = None
+
+    @signal
+    def model_initialized(self): pass
+
+    @signal
+    def report_msg(self): pass
+
+    @signal
+    def finished_training_iteration(self): pass
+
+    def init(self):
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr, valids: 0.0
         elif self.cfg.exploration_loss == 'entropy':
@@ -148,16 +181,6 @@ class Learner(EventLoopObject, Configurable):
         else:
             self.kl_loss_func = self._kl_loss
 
-    @signal
-    def model_initialized(self): pass
-
-    @signal
-    def report_msg(self): pass
-
-    @signal
-    def finished_training_iteration(self): pass
-
-    def init(self):
         # initialize the Torch modules
         if self.cfg.seed is None:
             log.info('Starting seed is not provided')
@@ -223,6 +246,7 @@ class Learner(EventLoopObject, Configurable):
             # extra safety mechanism to recover from spurious filesystem errors
             num_attempts = 3
             for attempt in range(num_attempts):
+                # noinspection PyBroadException
                 try:
                     log.warning('Loading state from checkpoint %s...', latest_checkpoint)
                     checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
@@ -652,11 +676,8 @@ class Learner(EventLoopObject, Configurable):
 
                     curr_policy_version = self.train_step  # policy version before the weight update
 
-                    # TODO: not needed for sync learner, but will need for async
-                    # with self.policy_lock:
-                    #     self.optimizer.step()
-
-                    self.optimizer.step()
+                    with self.param_server.policy_lock:
+                        self.optimizer.step()
                     num_sgd_steps += 1
 
                 with torch.no_grad(), timing.add_time('after_optimizer'):
@@ -804,7 +825,8 @@ class Learner(EventLoopObject, Configurable):
 
             # normalize obs and record data statistics (hence the "train" mode)
             self.actor_critic.train()
-            buff['normalized_obs'] = self.actor_critic.normalizer(buff['obs'])
+            with self.param_server.policy_lock:
+                buff['normalized_obs'] = self.actor_critic.normalizer(buff['obs'])
             del buff['obs']  # we don't need the regular obs anymore
 
             return buff, experience_size

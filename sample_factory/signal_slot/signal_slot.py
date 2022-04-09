@@ -248,13 +248,19 @@ class EventLoop(EventLoopObject):
         self.verbose = False
 
         # connect to our own termination signal
-        self.terminate.connect(self._terminate)
+        self._internal_terminate.connect(self._terminate)
 
+    """Emitted right before the start of the loop."""
     @signal
     def start(self): pass
 
+    """Emitted upon loop termination."""
     @signal
     def terminate(self): pass
+
+    """Internal signal: do not connect to this."""
+    @signal
+    def _internal_terminate(self): pass
 
     def add_timer(self, t: Timer):
         self.timers.append(t)
@@ -268,11 +274,10 @@ class EventLoop(EventLoopObject):
         After this the loop does only one last iteration, if any new signals are emitted during this last iteration
         they will be ignored.
         """
-        self.terminate.emit()
+        self._internal_terminate.emit()
 
     def _terminate(self):
         """Forceful termination, some of the signals currently in the queue might remain unprocessed."""
-        log.debug(f'Event loop {self.object_id} terminating...')
         self.should_terminate = True
 
     def broadcast(self, *args):
@@ -337,7 +342,7 @@ class EventLoop(EventLoopObject):
         try:
             self.start.emit()
 
-            while not self.should_terminate:
+            while True:
                 closest_timer = self._calculate_timeout()
 
                 try:
@@ -355,6 +360,12 @@ class EventLoop(EventLoopObject):
 
                 for s in signals:
                     self._process_signal(s)
+
+                if self.should_terminate:
+                    log.debug(f'Loop {self.object_id} terminating...')
+                    self.terminate.emit()
+                    break
+
         except Exception as exc:
             log.warning(f'Unhandled exception {exc} in evt loop {self.object_id}')
             raise exc
@@ -418,7 +429,7 @@ class Timer(EventLoopObject):
 
 
 class EventLoopProcess(EventLoopObject):
-    def __init__(self, unique_process_name, multiprocessing_context=None, daemon=None):
+    def __init__(self, unique_process_name, multiprocessing_context=None, init_func=None, args=(), kwargs=None, daemon=None):
         """
         Here we could've inherited from Process, but the actual class of process (i.e. Process vs SpawnProcess)
         depends on the multiprocessing context and hence is not known during the generation of the class.
@@ -427,11 +438,17 @@ class EventLoopProcess(EventLoopObject):
         """
         process_cls = multiprocessing.Process if multiprocessing_context is None else multiprocessing_context.Process
 
+        self._init_func: Optional[Callable] = init_func
+        self._args = tuple(args)
+        self._kwargs = dict() if kwargs is None else dict(kwargs)
+
         self._process = process_cls(target=self._target, name=unique_process_name, daemon=daemon)
         self.event_loop = EventLoop(f'{unique_process_name}_evt_loop')
         EventLoopObject.__init__(self, self.event_loop, unique_process_name)
 
     def _target(self):
+        if self._init_func:
+            self._init_func(*self._args, **self._kwargs)
         self.event_loop.exec()
 
     def start(self):

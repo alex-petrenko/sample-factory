@@ -122,13 +122,12 @@ class ParameterClientAsync(ParameterClient):
 
             self.latest_policy_version = server_policy_version
 
+            self.num_policy_updates += 1
             if self.num_policy_updates % 10 == 0:
                 log.info(
-                    'Updated weights for policy %d, policy_version %d (%.5f)',
-                    self.policy_id, self.latest_policy_version, self.timing.weight_update,
+                    'Updated weights for policy %d, policy_version %d (%s)',
+                    self.policy_id, self.latest_policy_version, str(self.timing.weight_update)
                 )
-
-            self.num_policy_updates += 1
 
 
 def make_parameter_client(is_serial_mode, parameter_server, cfg, env_info):
