@@ -397,12 +397,7 @@ class LearnerWorker:
         This is leftover the from previous version of the algorithm.
         Perhaps should be re-implemented in PyTorch tensors, similar to V-trace for uniformity.
         """
-        ent_coeff = self.cfg.ppo_max_entropy_coeff
-        # rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
-        entropies = get_action_distribution(self.action_space, torch.Tensor(np.stack(buffer.action_logits))).entropy().numpy()
-        buffer.weighted_entropies = ent_coeff * entropies # TODO: use this for logging in the future
-        rewards = np.stack(buffer.rewards + ent_coeff * entropies).squeeze()  # [E, T]
-
+        rewards = buffer.rewards
         dones = np.stack(buffer.dones).squeeze()  # [E, T]
         values_arr = np.stack(buffer.values).squeeze()  # [E, T]
 
@@ -449,6 +444,14 @@ class LearnerWorker:
             for key, x in buffer.items():
                 if isinstance(x[0], (dict, OrderedDict)):
                     buffer[key] = list_of_dicts_to_dict_of_lists(x)
+
+        # Add max entropy to the rewards
+        with torch.no_grad():
+            ent_coeff = self.cfg.ppo_max_entropy_coeff
+            # rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
+            entropies = get_action_distribution(self.action_space, torch.Tensor(np.stack(buffer.action_logits))).entropy().numpy()
+            buffer.entropies = entropies # TODO: use for logging
+            buffer.rewards = buffer.rewards + np.stack(ent_coeff * entropies).squeeze()  # [E, T]
 
         if not self.cfg.with_vtrace:
             with timing.add_time('calc_gae'):
