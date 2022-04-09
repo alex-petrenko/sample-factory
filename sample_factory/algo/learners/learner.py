@@ -112,7 +112,7 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
 
 
 class Learner(EventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, device, buffer_mgr, policy_id, timing):
+    def __init__(self, evt_loop, cfg, env_info, device, buffer_mgr, policy_id, timing, mp_ctx=None):
         Configurable.__init__(self, cfg)
 
         unique_name = f'{Learner.__name__}_{policy_id}'
@@ -123,7 +123,7 @@ class Learner(EventLoopObject, Configurable):
         self.policy_id = policy_id
 
         self.env_info = env_info
-        self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions)
+        self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions, mp_ctx)
 
         self.device = device  # TODO: we shouldn't init device in ctor?
         self.actor_critic = None
@@ -678,6 +678,7 @@ class Learner(EventLoopObject, Configurable):
 
                     with self.param_server.policy_lock:
                         self.optimizer.step()
+
                     num_sgd_steps += 1
 
                 with torch.no_grad(), timing.add_time('after_optimizer'):

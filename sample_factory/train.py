@@ -185,7 +185,7 @@ def run_rl_async(cfg):
     ctx = multiprocessing.get_context('spawn')
     learner_proc = EventLoopProcess('learner_proc', ctx, init_func=init_learner_process, args=(sf_global_context(), cfg, policy_id))
     batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
-    learner = Learner(learner_proc.event_loop, cfg, env_info, device, buffer_mgr, policy_id=0, timing=runner.timing)  # currently support only single-policy learning
+    learner = Learner(learner_proc.event_loop, cfg, env_info, device, buffer_mgr, policy_id=0, timing=runner.timing, mp_ctx=ctx)  # currently support only single-policy learning
 
     sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr, runner.timing)
 

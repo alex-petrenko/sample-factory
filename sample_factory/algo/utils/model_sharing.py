@@ -1,6 +1,5 @@
 """
 Utilities for sharing model parameters between components.
-
 """
 import multiprocessing
 
@@ -12,12 +11,12 @@ from sample_factory.utils.utils import log
 
 
 class ParameterServer:
-    def __init__(self, policy_id, policy_versions: Tensor):
+    def __init__(self, policy_id, policy_versions: Tensor, mp_ctx=None):
         self.policy_id = policy_id
         self.actor_critic = None
         self.policy_versions = policy_versions
 
-        self._policy_lock = multiprocessing.Lock()
+        self._policy_lock = mp_ctx.Lock() if mp_ctx else multiprocessing.Lock()
 
     @property
     def policy_lock(self):
