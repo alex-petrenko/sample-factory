@@ -397,7 +397,7 @@ class LearnerWorker:
         This is leftover the from previous version of the algorithm.
         Perhaps should be re-implemented in PyTorch tensors, similar to V-trace for uniformity.
         """
-        rewards = buffer.rewards
+        rewards = np.stack(buffer.rewards).squeeze()
         dones = np.stack(buffer.dones).squeeze()  # [E, T]
         values_arr = np.stack(buffer.values).squeeze()  # [E, T]
 
@@ -448,10 +448,22 @@ class LearnerWorker:
         # Add max entropy to the rewards
         with torch.no_grad():
             ent_coeff = self.cfg.ppo_max_entropy_coeff
-            # rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
-            entropies = get_action_distribution(self.action_space, torch.Tensor(np.stack(buffer.action_logits))).entropy().numpy()
+            # flatten the action dist parameters in the batch
+            logits = np.array(buffer.action_logits) # [E, T, A]
+            # option 1
+            logits = logits.reshape((-1, buffer.action_logits[0][0].size)) # [T*E, A]
+            # option 2 (preferred)
+            nRollouts = len(rollouts)
+            nSteps = rollouts[0]['length'] # same num of steps in each rollout
+            nActions = buffer.action_logits[0][0].size
+            logits = logits.reshape((nRollouts * nSteps, nActions)) # [T*E, A]
+
+            # add entropy term from these dist params
+            entropies = get_action_distribution(self.action_space, torch.Tensor(logits)).entropy().numpy()
+            entropies = entropies.reshape(nRollouts, nSteps) # [E, T]
             buffer.entropies = entropies # TODO: use for logging
-            buffer.rewards = buffer.rewards + np.stack(ent_coeff * entropies).squeeze()  # [E, T]
+            buffer.rewards = np.stack(buffer.rewards).squeeze() + ent_coeff * entropies  # [E, T]
+            # buffer.rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
 
         if not self.cfg.with_vtrace:
             with timing.add_time('calc_gae'):
