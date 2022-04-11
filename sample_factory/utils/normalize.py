@@ -35,7 +35,7 @@ class Normalizer(nn.Module):
 
         self.should_sub_mean = abs(self.sub_mean) > EPS
         self.should_scale = abs(self.scale - 1.0) > EPS
-        self.should_normalize = self.should_sub_mean or self.should_scale or self.running_mean_std
+        self.should_normalize = self.should_sub_mean or self.should_scale or self.running_mean_std is not None
 
     @staticmethod
     def _clone_tensordict(obs_dict):
