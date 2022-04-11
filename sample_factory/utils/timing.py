@@ -1,12 +1,12 @@
 import collections
 import dataclasses
 import time
+import typing
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import psutil
-import typing
 
 from sample_factory.algorithms.utils.algo_utils import EPS
 from sample_factory.utils.utils import AttrDict, log
@@ -73,8 +73,10 @@ class TimingContext:
 
 
 class Timing(AttrDict):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, name='Profile', *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self._name = name
 
         self._root_context = TimingContext(self, '~')
         self._root_context.set_tree_node(TimingTreeNode())
@@ -120,13 +122,14 @@ class Timing(AttrDict):
                 s.append(f'{key}: {self._time_str(value)}')
         return ', '.join(s)
 
-    def _tree_str_func(self, node: TimingTreeNode, depth: int):
+    @classmethod
+    def _tree_str_func(cls, node: TimingTreeNode, depth: int):
         indent = ' ' * 2 * depth
 
         leaf_nodes = ((k, v) for k, v in node.timing.items() if not v.timing)
         nonleaf_nodes = ((k, v) for k, v in node.timing.items() if v.timing)
 
-        node_str = lambda k, node_: f'{k}: {self._time_str(node_.self_time)}'
+        node_str = lambda k, node_: f'{k}: {cls._time_str(node_.self_time)}'
 
         tokens = []
         for key, child_node in leaf_nodes:
@@ -138,12 +141,12 @@ class Timing(AttrDict):
 
         for key, child_node in nonleaf_nodes:
             lines.append(f'{indent}{node_str(key, child_node)}')
-            lines.extend(self._tree_str_func(child_node, depth + 1))
+            lines.extend(cls._tree_str_func(child_node, depth + 1))
 
         return lines
 
     def tree_str(self):
-        lines = ['Profiling tree view:']
+        lines = [f'{self._name} tree view:']
         lines.extend(self._tree_str_func(self._root_context.timing_tree_node, 0))
         return '\n'.join(lines)
 

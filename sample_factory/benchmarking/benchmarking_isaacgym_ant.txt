@@ -28,3 +28,28 @@ main_loop: 45.1901
     norm: 0.6982, inference: 2.9006, post_inference: 0.3601, env_step: 28.3416, post_env_step: 1.2260
   train: 9.8336
     prepare_train: 0.0252, epoch_init: 0.0055, minibatch_init: 0.0673, forward_head: 0.2091, bptt_initial: 0.0074, bptt: 0.0118, tail: 4.3844, losses: 0.5198, kl_divergence: 0.5518, update: 3.6099, after_optimizer: 0.0320
+
+V32: serial
+[2022-04-11 01:43:23,964][18725] Learner profile tree view:
+prepare_batch: 0.8708
+train: 9.9026
+  prepare_train: 0.0281, epoch_init: 0.0051, minibatch_init: 0.0634, forward_head: 0.2087, bptt_initial: 0.0074, bptt: 0.0117, tail: 4.5736, losses: 0.4968, kl_divergence: 0.5430, update: 3.5350, after_optimizer: 0.0305
+[2022-04-11 01:43:23,964][18725] Runner profile tree view:
+main_loop: 50.2899
+  sampling: 34.3149
+    update_model: 0.0277, norm: 0.6735, inference: 2.8782, post_inference: 0.3393, env_step: 28.5841, post_env_step: 1.1803
+[2022-04-11 01:43:23,964][18725] Collected {0: 10027008}, FPS: 198081.0
+
+
+V32: async
+[2022-04-11 01:46:23,983][19106] Learner profile tree view:
+prepare_batch: 0.8984
+train: 10.3077
+  prepare_train: 0.0307, epoch_init: 0.0053, minibatch_init: 0.0687, forward_head: 0.1817, bptt_initial: 0.0082, bptt: 0.0127, tail: 4.5786, losses: 0.5350, kl_divergence: 0.6819, update: 3.7481, after_optimizer: 0.0299
+[2022-04-11 01:46:23,923][18989] Runner profile tree view:
+main_loop: 54.7549
+  sampling: 35.3402
+    norm: 0.7236, inference: 2.9740, post_inference: 0.3589, env_step: 29.1849, post_env_step: 1.2290
+    update_model: 0.1627
+      weight_update: 0.0009
+[2022-04-11 01:46:23,924][18989] Collected {0: 10027008}, FPS: 181928.2

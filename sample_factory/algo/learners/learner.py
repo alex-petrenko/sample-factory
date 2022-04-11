@@ -111,13 +111,13 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
 
 
 class Learner(EventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, device, buffer_mgr, policy_id, timing, mp_ctx=None):
+    def __init__(self, evt_loop, cfg, env_info, device, buffer_mgr, policy_id, mp_ctx=None):
         Configurable.__init__(self, cfg)
 
         unique_name = f'{Learner.__name__}_{policy_id}'
         EventLoopObject.__init__(self, evt_loop, unique_name)
 
-        self.timing = timing
+        self.timing = Timing(name='Learner profile')
 
         self.policy_id = policy_id
 
@@ -145,8 +145,7 @@ class Learner(EventLoopObject, Configurable):
         # TODO: fix milestone mechanism
         self.last_milestone_time = 0
 
-        self.traj_tensors = buffer_mgr.traj_tensors
-        self.policy_versions = buffer_mgr.policy_versions
+        self.buffer_mgr = buffer_mgr
 
         self.exploration_loss_func = self.kl_loss_func = None
 
@@ -158,6 +157,9 @@ class Learner(EventLoopObject, Configurable):
 
     @signal
     def finished_training_iteration(self): pass
+
+    @signal
+    def stop(self): pass
 
     def init(self):
         if self.cfg.exploration_loss_coeff == 0.0:
@@ -699,7 +701,7 @@ class Learner(EventLoopObject, Configurable):
                 self._update_lr(self.lr_scheduler.update(self._curr_lr(), recent_kls))
 
             # this will force policy update on the inference worker (policy worker)
-            self.policy_versions[self.policy_id] = self.train_step
+            self.buffer_mgr.policy_versions[self.policy_id] = self.train_step
 
             new_epoch_actor_loss = np.mean(epoch_actor_losses)
             loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
@@ -793,7 +795,7 @@ class Learner(EventLoopObject, Configurable):
 
     def _prepare_batch(self, batch: slice):
         with torch.no_grad():
-            buff = self.traj_tensors[batch]
+            buff = self.buffer_mgr.traj_tensors[batch]
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
@@ -864,3 +866,16 @@ class Learner(EventLoopObject, Configurable):
             self.train(batch, self.timing)
 
         self.finished_training_iteration.emit()
+
+    def on_stop(self, emitter_id):
+        self.save()
+        log.debug(f'Stopping {self.object_id}...')
+
+        del self.actor_critic
+        self.stop.emit(self.object_id)
+
+        if not self.cfg.serial_mode:
+            self.event_loop.stop()
+
+        self.detach()  # remove from the current event loop
+        log.info(self.timing)

@@ -7,7 +7,7 @@ from sample_factory.algo.utils.model_sharing import make_parameter_client
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.utils import AttrDict, log
 
 
 # TODO: remove code duplication (actor_worker.py)
@@ -41,8 +41,7 @@ class SyncSampler(EventLoopObject, Sampler):
 
         self.timing = timing
 
-        self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info)
-        self.actor_critic = None
+        self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
 
         self.traj_tensors = None
 
@@ -67,10 +66,12 @@ class SyncSampler(EventLoopObject, Sampler):
     @signal
     def new_trajectories(self): pass
 
+    @signal
+    def stop(self): pass
+
     def init(self, initial_model_state):
         state_dict, device, policy_version = initial_model_state
         self.param_client.on_weights_initialized(state_dict, device, policy_version)
-        self.actor_critic = self.param_client.actor_critic
 
         # with sync sampler there aren't any workers, hence 0/0/0 should suffice
         env_config = AttrDict(worker_index=0, vector_index=0, env_id=0)
@@ -139,7 +140,8 @@ class SyncSampler(EventLoopObject, Sampler):
 
     def collect_trajectories(self):
         with torch.no_grad(), self.timing.add_time('sampling'):
-            self.actor_critic.eval()
+            actor_critic = self.param_client.actor_critic
+            actor_critic.eval()
 
             num_agents = self.env_info.num_agents
             if self.traj_start + num_agents > self.buffer_mgr.total_num_trajectories:  # TODO: need mechanism to actually allocate and clean up trajectories
@@ -159,11 +161,11 @@ class SyncSampler(EventLoopObject, Sampler):
                     self.param_client.ensure_weights_updated()
 
                 with self.timing.add_time('norm'):
-                    normalized_obs = self.actor_critic.normalizer(curr_step['obs'])
+                    normalized_obs = actor_critic.normalizer(curr_step['obs'])
 
                 # obs and rnn_states obtained from the trajectory buffers should be on the same device as the model
                 with self.timing.add_time('inference'):
-                    policy_outputs = self.actor_critic(normalized_obs, curr_step['rnn_states'])
+                    policy_outputs = actor_critic(normalized_obs, curr_step['rnn_states'])
 
                 with self.timing.add_time('post_inference'):
                     new_rnn_state = policy_outputs['rnn_states']
@@ -227,3 +229,13 @@ class SyncSampler(EventLoopObject, Sampler):
         call in actor_worker.py
         """
         pass
+
+    def on_stop(self, emitter_id):
+        log.debug(f'Stopping {self.object_id}...')
+        self.param_client.cleanup()
+        self.stop.emit(self.object_id)
+
+        if not self.cfg.serial_mode:
+            self.event_loop.stop()
+
+        self.detach()  # remove from the current event loop

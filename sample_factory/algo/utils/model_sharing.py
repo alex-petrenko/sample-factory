@@ -37,7 +37,7 @@ class ParameterServer:
 
 
 class ParameterClient:
-    def __init__(self, param_server: ParameterServer, cfg, env_info):
+    def __init__(self, param_server: ParameterServer, cfg, env_info, timing: Timing):
         self.server = param_server
         self.policy_id = param_server.policy_id
         self.policy_versions = param_server.policy_versions
@@ -49,6 +49,8 @@ class ParameterClient:
 
         self._actor_critic = None
         self._policy_lock = param_server.policy_lock
+
+        self.timing = timing
 
     @property
     def actor_critic(self):
@@ -67,6 +69,9 @@ class ParameterClient:
     def ensure_weights_updated(self):
         raise NotImplementedError()
 
+    def cleanup(self):
+        pass
+
 
 class ParameterClientSerial(ParameterClient):
     def on_weights_initialized(self, state_dict, device, policy_version):
@@ -83,11 +88,9 @@ class ParameterClientSerial(ParameterClient):
 
 
 class ParameterClientAsync(ParameterClient):
-    def __init__(self, param_server: ParameterServer, cfg, env_info):
-        super().__init__(param_server, cfg, env_info)
-        self.shared_model_weights = None
-
-        self.timing = Timing()
+    def __init__(self, param_server: ParameterServer, cfg, env_info, timing: Timing):
+        super().__init__(param_server, cfg, env_info, timing)
+        self._shared_model_weights = None
         self.num_policy_updates = 0
 
     @property
@@ -111,13 +114,13 @@ class ParameterClientAsync(ParameterClient):
 
         with self._policy_lock:
             self._actor_critic.load_state_dict(state_dict)
-            self.shared_model_weights = state_dict
+            self._shared_model_weights = state_dict
 
     def ensure_weights_updated(self):
         server_policy_version = self._get_server_policy_version()
-        if self.latest_policy_version < server_policy_version and self.shared_model_weights is not None:
+        if self.latest_policy_version < server_policy_version and self._shared_model_weights is not None:
             with self.timing.time_avg('weight_update'), self._policy_lock:
-                self._actor_critic.load_state_dict(self.shared_model_weights)
+                self._actor_critic.load_state_dict(self._shared_model_weights)
 
             self.latest_policy_version = server_policy_version
 
@@ -128,8 +131,13 @@ class ParameterClientAsync(ParameterClient):
                     self.policy_id, self.latest_policy_version, str(self.timing.weight_update)
                 )
 
+    def cleanup(self):
+        del self._actor_critic
+        del self._shared_model_weights
+        del self.policy_versions
 
-def make_parameter_client(is_serial_mode, parameter_server, cfg, env_info):
+
+def make_parameter_client(is_serial_mode, parameter_server, cfg, env_info, timing: Timing):
     """Parameter client factory."""
     cls = ParameterClientSerial if is_serial_mode else ParameterClientAsync
-    return cls(parameter_server, cfg, env_info)
+    return cls(parameter_server, cfg, env_info, timing)

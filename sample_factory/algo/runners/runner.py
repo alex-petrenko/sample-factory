@@ -77,18 +77,20 @@ StatusCode = int
 
 
 class Runner(EventLoopObject, Configurable):
-    def __init__(self, cfg, unique_name=None, timing=None):
+    def __init__(self, cfg, unique_name=None):
         Configurable.__init__(self, cfg)
 
         unique_name = Runner.__name__ if unique_name is None else unique_name
         self.event_loop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop')
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
+        self.stopped = False
+
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
         init_file_logger(experiment_dir(self.cfg))
 
-        self.timing = Timing() if timing is None else timing
+        self.timing = Timing('Runner profile')
 
         self.sampler, self.batcher, self.learner = None, None, None
 
@@ -153,6 +155,8 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
         periodic(5, self._propagate_training_info)
+
+        self.components_to_stop: List[EventLoopObject] = []
 
     # singals emitted by the runner
     @signal
@@ -422,7 +426,13 @@ class Runner(EventLoopObject, Configurable):
         # kickstart the algorithm
         self.event_loop.start.connect(self.learner.init)
 
-        # TODO: stop sampler, learner, etc. Implement when we have async versions
+        # stop everything
+        self.stop.connect(sampler.on_stop)  # we stop the sampler
+        sampler.stop.connect(learner.on_stop)  # sampler stops the learner
+        sampler.stop.connect(self._component_stopped)
+        learner.stop.connect(self._component_stopped)
+
+        self.components_to_stop = [sampler, learner]
 
     def _check_done(self):
         # TODO: I don't think this works now. Do we even need this feature?
@@ -446,7 +456,19 @@ class Runner(EventLoopObject, Configurable):
         return end
 
     def _after_training_iteration(self):
-        if self._should_end_training():
+        if self._should_end_training() and not self.stopped:
+            self.stop.emit(self.object_id)
+            self.stopped = True
+
+    def _component_stopped(self, component_obj_id):
+        for i, component in enumerate(self.components_to_stop):
+            if component.object_id == component_obj_id:
+                del self.components_to_stop[i]
+                if self.components_to_stop:
+                    log.debug(f'Waiting for {[c.object_id for c in self.components_to_stop]} to stop...')
+                break
+
+        if not self.components_to_stop:
             self.event_loop.stop()
 
     # noinspection PyBroadException
@@ -465,10 +487,7 @@ class Runner(EventLoopObject, Configurable):
                 log.exception(f'Uncaught exception in {self.object_id} evt loop')
                 status = ExperimentStatus.FAILURE
 
-        self.stop.emit()
-
+        log.info(self.timing)
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
-        log.info(self.timing)
-
         return status

@@ -2,14 +2,16 @@ import math
 
 import torch
 from gym import spaces
+from torch import Tensor
 
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.algorithms.appo.shared_buffers import TensorDict, to_torch_dtype
 from sample_factory.algorithms.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.utils.utils import log
 
 
-def init_trajectory_tensor(num_trajectories, rollout_len, tensor_type, tensor_shape, device):
+def init_trajectory_tensor(num_trajectories, rollout_len, tensor_type, tensor_shape, device, share) -> Tensor:
     if not isinstance(tensor_type, torch.dtype):
         tensor_type = to_torch_dtype(tensor_type)
 
@@ -27,11 +29,14 @@ def init_trajectory_tensor(num_trajectories, rollout_len, tensor_type, tensor_sh
         t.fill_(43)
 
     t = t.to(device)
+    if share:
+        t.share_memory_()
+
     return t
 
 
 # TODO: remove the code duplication!
-def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size, device):
+def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size, device, share):
     obs_space = env_info.obs_space
     action_space = env_info.action_space
     num_actions = calc_num_actions(action_space)
@@ -41,7 +46,7 @@ def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size
 
     # just to minimize the amount of typing
     def init_tensor(dtype_, shape_):
-        return init_trajectory_tensor(num_trajectories, rollout, dtype_, shape_, device)
+        return init_trajectory_tensor(num_trajectories, rollout, dtype_, shape_, device, share)
 
     # policy inputs
     tensors['obs'] = TensorDict()
@@ -49,8 +54,8 @@ def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size
         raise Exception('Only Dict observations spaces are supported')
 
     for space_name, space in obs_space.spaces.items():
-        tensors['obs'][space_name] = init_trajectory_tensor(num_trajectories, rollout + 1, space.dtype, space.shape, device)
-    tensors['rnn_states'] = init_trajectory_tensor(num_trajectories, rollout + 1, torch.float32, [hidden_size], device)
+        tensors['obs'][space_name] = init_trajectory_tensor(num_trajectories, rollout + 1, space.dtype, space.shape, device, share)
+    tensors['rnn_states'] = init_trajectory_tensor(num_trajectories, rollout + 1, torch.float32, [hidden_size], device, share)
 
     # policy outputs, this matches the expected output of the actor-critic
     policy_outputs = [
@@ -90,10 +95,14 @@ class BufferMgr(Configurable):
         assert math.gcd(self.trajectories_per_batch, self.env_info.num_agents), \
             'Num agents should divide the number of trajectories per batch or vice versa (for performance reasons)'
 
+        share = not cfg.serial_mode
+
         self.total_num_trajectories = max(self.env_info.num_agents, self.trajectories_per_batch)
         self.traj_tensors = allocate_trajectory_buffers(
-            self.env_info, self.total_num_trajectories, rollout, hidden_size, device,
+            self.env_info, self.total_num_trajectories, rollout, hidden_size, device, share,
         )
 
         # TODO: share memory for async algorithms?
         self.policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
+        if share:
+            self.policy_versions.share_memory_()

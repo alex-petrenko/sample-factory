@@ -299,7 +299,8 @@ class EventLoop(EventLoopObject):
         for obj_id in receiver_ids:
             obj = self.objects.get(obj_id)
             if obj is None:
-                log.warning(f'Attempting to call a slot on an object {obj_id} which is not found on this loop')
+                if self.verbose:
+                    log.warning(f'Attempting to call a slot on an object {obj_id} which is not found on this loop ({signal_=})')
                 self.receivers[emitter].remove(obj_id)
                 continue
 
