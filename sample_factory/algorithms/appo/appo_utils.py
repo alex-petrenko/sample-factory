@@ -180,7 +180,7 @@ class TensorBatcher:
     def __init__(self, batch_pool):
         self.batch_pool = batch_pool
 
-    def cat(self, dict_of_tensor_arrays, macro_batch_size, use_pinned_memory, timing):
+    def cat(self, dict_of_arrays, macro_batch_size, use_pinned_memory, timing):
         """
         Here 'macro_batch' is the overall size of experience per iteration.
         Macro-batch = mini-batch * num_batches_per_iteration
@@ -198,21 +198,22 @@ class TensorBatcher:
                 tensor_batch = None
 
         if tensor_batch is None:
-            tensor_batch = copy_dict_structure(dict_of_tensor_arrays)
+            tensor_batch = copy_dict_structure(dict_of_arrays)
             log.info('Allocating new CPU tensor batch (could not get from the pool)')
 
-            for d1, cache_d, key, tensor_arr, _ in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
-                cache_d[key] = torch.from_numpy(np.concatenate(tensor_arr, axis=0))
+            for d1, cache_d, key, arr, _ in iter_dicts_recursively(dict_of_arrays, tensor_batch):
+                cache_d[key] = torch.from_numpy(arr)
                 if use_pinned_memory:
                     cache_d[key] = cache_d[key].pin_memory()
         else:
             with timing.add_time('batcher_mem'):
-                for d1, cache_d, key, tensor_arr, cache_t in iter_dicts_recursively(dict_of_tensor_arrays, tensor_batch):
-                    offset = 0
-                    for t in tensor_arr:
-                        first_dim = t.shape[0]
-                        cache_t[offset:offset + first_dim].copy_(torch.as_tensor(t))
-                        offset += first_dim
+                # this is slower than the older version where we copied trajectories to the cached tensor one-by-one
+                # this will only affect CPU-based envs with pixel observations, and won't matter after
+                # Sample Factory 2.0 is released. Tradeoff is that the batching code is a lot more simple and
+                # easier to modify.
+                for d1, cache_d, key, arr, cache_t in iter_dicts_recursively(dict_of_arrays, tensor_batch):
+                    t = torch.as_tensor(arr)
+                    cache_t.copy_(t)
 
         return tensor_batch
 

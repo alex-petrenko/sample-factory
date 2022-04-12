@@ -22,8 +22,9 @@ if os.name == 'nt':
 else:
     from faster_fifo import Queue as MpQueue
 
-from sample_factory.algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, cuda_envvars_for_policy, \
-    TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool
+from sample_factory.algorithms.appo.appo_utils import TaskType, list_of_dicts_to_dict_of_lists, memory_stats, \
+    cuda_envvars_for_policy, \
+    TensorBatcher, iter_dicts_recursively, copy_dict_structure, ObjectPool, iterate_recursively
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.appo.aux_losses import CPCA
 from sample_factory.algorithms.appo.population_based_training import PbtTask
@@ -397,9 +398,9 @@ class LearnerWorker:
         This is leftover the from previous version of the algorithm.
         Perhaps should be re-implemented in PyTorch tensors, similar to V-trace for uniformity.
         """
-        rewards = np.stack(buffer.rewards).squeeze()
-        dones = np.stack(buffer.dones).squeeze()  # [E, T]
-        values_arr = np.stack(buffer.values).squeeze()  # [E, T]
+        rewards = np.copy(buffer.rewards)  # [E, T]
+        dones = np.copy(buffer.dones)  # [E, T]
+        values_arr = np.copy(buffer.values)  # [E, T]
 
         # calculating fake values for the last step in the rollout
         # this will make sure that advantage of the very last action is always zero
@@ -420,11 +421,6 @@ class LearnerWorker:
         # transpose tensors back to [E, T] before creating a single experience buffer
         buffer.advantages = advantages.transpose((1, 0))  # [T, E] -> [E, T]
         buffer.returns = returns.transpose((1, 0))  # [T, E] -> [E, T]
-        buffer.returns = buffer.returns[:, :, np.newaxis]  # [E, T] -> [E, T, 1]
-
-        buffer.advantages = [torch.tensor(buffer.advantages).reshape(-1)]
-        buffer.returns = [torch.tensor(buffer.returns).reshape(-1)]
-
         return buffer
 
     def _prepare_train_buffer(self, rollouts, macro_batch_size, timing):
@@ -445,31 +441,35 @@ class LearnerWorker:
                 if isinstance(x[0], (dict, OrderedDict)):
                     buffer[key] = list_of_dicts_to_dict_of_lists(x)
 
-        # Add max entropy to the rewards
-        with torch.no_grad():
-            ent_coeff = self.cfg.ppo_max_entropy_coeff
-            # flatten the action dist parameters in the batch
-            logits = np.array(buffer.action_logits) # [E, T, A]
-            # option 1
-            logits = logits.reshape((-1, buffer.action_logits[0][0].size)) # [T*E, A]
-            # option 2 (preferred)
-            nRollouts = len(rollouts)
-            nSteps = rollouts[0]['length'] # same num of steps in each rollout
-            nActions = buffer.action_logits[0][0].size
-            logits = logits.reshape((nRollouts * nSteps, nActions)) # [T*E, A]
+        with timing.add_time('buffer_stack_and_squeeze'):
+            tensors_to_squeeze = [
+                'actions', 'log_prob_actions', 'policy_version', 'policy_id', 'values', 'rewards', 'dones',
+            ]
 
-            # add entropy term from these dist params
-            entropies = get_action_distribution(self.action_space, torch.Tensor(logits)).entropy().numpy()
-            entropies = entropies.reshape(nRollouts, nSteps) # [E, T]
-            buffer.entropies = entropies # TODO: use for logging
-            buffer.rewards = np.stack(buffer.rewards).squeeze() + ent_coeff * entropies  # [E, T]
-            # buffer.rewards = np.stack(buffer.rewards + ent_coeff * buffer.log_prob_actions).squeeze()  # [E, T]
+            for d, key, arr in iterate_recursively(buffer):
+                t = np.stack(arr)  # all buffers should now be [E, T, orig_shape]
+                if key in tensors_to_squeeze:
+                    t = t.squeeze()
+                d[key] = t
+
+        # add max entropy to the rewards
+        if self.cfg.max_entropy_coeff != 0.0:
+            with timing.add_time('max_entropy'), torch.no_grad():
+                action_distr_params = buffer.action_logits.reshape((-1, buffer.action_logits.shape[-1]))  # [E*T, A]
+                entropies = get_action_distribution(self.action_space, torch.Tensor(action_distr_params)).entropy().numpy()  # [E*T]
+                entropies = entropies.reshape((-1, self.cfg.rollout))  # [E, T]
+                buffer.rewards += self.cfg.max_entropy_coeff * entropies  # [E, T]
 
         if not self.cfg.with_vtrace:
             with timing.add_time('calc_gae'):
                 buffer = self._calculate_gae(buffer)
 
         with timing.add_time('batching'):
+            for d, key, arr in iterate_recursively(buffer):
+                envs_dim, time_dim = arr.shape[0:2]
+                new_shape = (envs_dim * time_dim, ) + arr.shape[2:]
+                d[key] = arr.reshape(new_shape)
+
             # concatenate rollouts from different workers into a single batch efficiently
             # that is, if we already have memory for the buffers allocated, we can just copy the data into
             # existing cached tensors instead of creating new ones. This is a performance optimization.
@@ -481,15 +481,6 @@ class LearnerWorker:
 
         with timing.add_time('tensors_gpu_float'):
             device_buffer = self._copy_train_data_to_device(buffer)
-
-        with timing.add_time('squeeze'):
-            # will squeeze actions only in simple categorical case
-            tensors_to_squeeze = [
-                'actions', 'log_prob_actions', 'policy_version', 'policy_id', 'values',
-                'rewards', 'dones', 'rewards_cpu', 'dones_cpu',
-            ]
-            for tensor_name in tensors_to_squeeze:
-                device_buffer[tensor_name].squeeze_()
 
         # we no longer need the cached buffer, and can put it back into the pool
         self.tensor_batch_pool.put(buffer)
