@@ -41,7 +41,12 @@ codebase for other types of async RL algorithms.
 
 ## Recent releases
 
-##### v1.122.0 (not yet on PyPI)
+##### v1.123.0
+
+* Added max entropy objective (disabled by default). To turn it on, use `--max_entropy_coeff`. Adds action distribution
+entropies to rewards (similar to SAC) thus encouraging exploration. See [this paper](https://arxiv.org/abs/1805.00909).
+
+##### v1.122.0
 
 * Added adaptive learning rate scheduler
 * Added default PyTorch model tensor initialization 
