@@ -84,6 +84,15 @@ class APPO(ReinforcementLearningAlgorithm):
                  '(see function finalize_trajectory in actor_worker.py)',
         )
 
+        arg(
+            '--async_rl', default=True, type=str2bool,
+            help='Collect experience asynchronously while learning on the previous batch. '
+                 'This is semantically different from standard synchronous actor-critic (or PPO) because '
+                 'not all of the experience will be collected by the latest policy thus increasing policy lag. '
+                 'Negative effects of using async_rl can range from negligible (just grants you throughput boost) '
+                 'to quite serious where you can consider switching it off. It all depends how sensitive your experiment is to policy lag. '
+                 'Envs with complex action spaces and RNN policies tend to be particularly sensitive. ',
+        )
         arg('--serial_mode', default=False, type=str2bool, help='Enable serial mode: run everything completely synchronously in the same process')
         arg('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 

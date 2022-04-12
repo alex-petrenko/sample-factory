@@ -140,13 +140,11 @@ def run_rl_serial(cfg):
     buffer_mgr = BufferMgr(cfg, env_info)
 
     runner = SyncRunner(cfg)
-    evt_loop = runner.event_loop
     # evt_loop.verbose = True
 
-    learner = Learner(evt_loop, cfg, env_info, buffer_mgr, policy_id=0)  # currently support only single-policy learning
-    batcher = SequentialBatcher(evt_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
-
-    sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr)
+    learner = Learner(runner.event_loop, cfg, env_info, buffer_mgr, policy_id=0)  # currently support only single-policy learning
+    batcher = SequentialBatcher(runner.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories, env_info)
+    sampler = SyncSampler(runner.event_loop, cfg, env_info, learner.param_server, buffer_mgr, batcher.sampling_batches_queue)
 
     runner.init(sampler, batcher, learner)
     status = runner.run()
@@ -166,11 +164,11 @@ def run_rl_async(cfg):
     policy_id = 0  # TODO: multiple policies
     ctx = multiprocessing.get_context('spawn')
     learner_proc = EventLoopProcess('learner_proc', ctx, init_func=init_learner_process, args=(sf_global_context(), cfg, policy_id))
-    batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
+    batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories, env_info)
     learner = Learner(learner_proc.event_loop, cfg, env_info, buffer_mgr, policy_id=0, mp_ctx=ctx)  # currently support only single-policy learning
 
     sampler_proc = EventLoopProcess('sampler_proc', ctx, init_func=init_sampler_process, args=(sf_global_context(), cfg, policy_id))
-    sampler = SyncSampler(sampler_proc.event_loop, cfg, env_info, learner.param_server, buffer_mgr)
+    sampler = SyncSampler(sampler_proc.event_loop, cfg, env_info, learner.param_server, buffer_mgr, batcher.sampling_batches_queue)
 
     runner.init(sampler, batcher, learner)
 

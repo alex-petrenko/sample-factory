@@ -289,7 +289,7 @@ class EventLoop(EventLoopObject):
 
     def _process_signal(self, signal_):
         if self.verbose:
-            log.debug(f'Processing {signal_=}...')
+            log.debug(f'{self} received {signal_=}...')
 
         emitter_object_id, signal_name, args = signal_
         emitter = Emitter(emitter_object_id, signal_name)
@@ -300,33 +300,33 @@ class EventLoop(EventLoopObject):
             obj = self.objects.get(obj_id)
             if obj is None:
                 if self.verbose:
-                    log.warning(f'Attempting to call a slot on an object {obj_id} which is not found on this loop ({signal_=})')
+                    log.warning(f'{self} attempting to call a slot on an object {obj_id} which is not found on this loop ({signal_=})')
                 self.receivers[emitter].remove(obj_id)
                 continue
 
             slot = obj.connections.get(emitter)
             if obj is None:
-                log.warning(f'{emitter=} does not appear to be connected to {obj_id=}')
+                log.warning(f'{self} {emitter=} does not appear to be connected to {obj_id=}')
                 continue
 
             if not hasattr(obj, slot):
-                log.warning(f'{slot=} not found in object {obj_id}')
+                log.warning(f'{self} {slot=} not found in object {obj_id}')
                 continue
 
             slot_callable = getattr(obj, slot)
             if not isinstance(slot_callable, Callable):
-                log.warning(f'{slot=} of {obj_id=} is not callable')
+                log.warning(f'{self} {slot=} of {obj_id=} is not callable')
                 continue
 
             self.curr_emitter = emitter
             if self.verbose:
-                log.debug(f'Calling slot {obj_id}:{slot}')
+                log.debug(f'{self} calling slot {obj_id}:{slot}')
 
             # noinspection PyBroadException
             try:
                 slot_callable(*args)
             except Exception as exc:
-                log.exception(f'Unhandled exception in {slot=} connected to {emitter=}')
+                log.exception(f'{self} unhandled exception in {slot=} connected to {emitter=}')
                 raise exc
 
     def _calculate_timeout(self) -> Timer:
@@ -377,7 +377,7 @@ class EventLoop(EventLoopObject):
         return status
 
     def __str__(self):
-        return f'EvtLoop {process_name(self.process)}'
+        return f'EvtLoop [{self.object_id}, process={process_name(self.process)}]'
 
 
 class Timer(EventLoopObject):

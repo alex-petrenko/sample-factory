@@ -102,7 +102,12 @@ class BufferMgr(Configurable):
 
         share = not cfg.serial_mode
 
-        self.total_num_trajectories = max(self.env_info.num_agents, self.trajectories_per_batch)
+        sampling_trajectories = self.env_info.num_agents
+        if self.cfg.async_rl:
+            sampling_trajectories *= 2  # TODO
+
+        self.total_num_trajectories = max(sampling_trajectories, self.trajectories_per_batch)
+
         self.traj_tensors = allocate_trajectory_buffers(
             self.env_info, self.total_num_trajectories, rollout, hidden_size, self.device, share,
         )

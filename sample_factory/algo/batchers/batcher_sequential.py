@@ -1,27 +1,22 @@
 from typing import Iterable, Dict, Optional
 
+from sample_factory.algo.utils.queues import get_mp_queue
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
 
 
-class SequentialBatcher(EventLoopObject):
-    def __init__(self, evt_loop: EventLoop, trajectories_per_batch: int, total_num_trajectories: int):
-        unique_name = f'{SequentialBatcher.__name__}'
-        EventLoopObject.__init__(self, evt_loop, unique_name)
+# TODO: this whole class should go
+# We only really need two things:
+# Async batcher that batches together and copies trajectories into training batches
+# Sync batcher which reuses the same trajectories on sampler and learner in order to avoid copying (and I'm not sure we even need it)
+# Sync batcher can really be just a circular buffer. And async batcher needs an entirely different logic anyway.
+# WTF did I even write all of that
+from sample_factory.utils.utils import log
 
+
+class SliceMerger:
+    def __init__(self):
         self.slice_starts: Dict[int, slice] = dict()
         self.slice_stops: Dict[int, slice] = dict()
-
-        self.trajectories_per_batch = trajectories_per_batch
-        self.total_num_trajectories = total_num_trajectories
-        self.next_batch_start = 0
-
-        self.event_loop.start.connect(self.init)
-
-    @signal
-    def new_batches(self): pass
-
-    def init(self):
-        pass
 
     def _add_slice(self, s):
         self.slice_starts[s.start] = s
@@ -31,7 +26,7 @@ class SequentialBatcher(EventLoopObject):
         del self.slice_starts[s.start]
         del self.slice_stops[s.stop]
 
-    def _merge_slices(self, trajectory_slice: slice):
+    def merge_slices(self, trajectory_slice: slice):
         new_slice = None
 
         if prev_slice := self.slice_stops.get(trajectory_slice.start):
@@ -46,46 +41,78 @@ class SequentialBatcher(EventLoopObject):
 
         if new_slice:
             # successfully merged some slices, keep going
-            self._merge_slices(new_slice)
+            self.merge_slices(new_slice)
         else:
             # nothing to merge, just add a new slice
             self._add_slice(trajectory_slice)
 
-    def batch_trajectories(self, trajectory_slices: Iterable[slice]):
-        for trajectory_slice in trajectory_slices:
-            self._merge_slices(trajectory_slice)
-
-    def get_batch_sync(self) -> Optional[slice]:
+    def get_batch(self, batch_size) -> Optional[slice]:
         """
         At this point, all trajectory slices that share a boundary should have been merged into longer slices.
         If there's a slice that is at least trajectories_per_batch long starting where the previous returned slice
         ends - we found our batch.
         :return: a slice of trajectory buffer that will be a training batch on the learner
         """
-        if batch_slice := self.slice_starts.get(self.next_batch_start):
+        for slice_start, batch_slice in self.slice_starts.items():
             slice_len = batch_slice.stop - batch_slice.start
-            if slice_len >= self.trajectories_per_batch:
+            if slice_len >= batch_size:
                 self._del_slice(batch_slice)
-                if slice_len > self.trajectories_per_batch:
+                if slice_len > batch_size:
                     # we have even more trajectories than we need, keep them for later use
-                    remaining_slice = slice(batch_slice.start + self.trajectories_per_batch, batch_slice.stop)
+                    remaining_slice = slice(batch_slice.start + batch_size, batch_slice.stop)
                     self._add_slice(remaining_slice)
-                    batch_slice = slice(batch_slice.start, batch_slice.start + self.trajectories_per_batch)
-
-                self.next_batch_start = batch_slice.stop % self.total_num_trajectories
-                assert self.total_num_trajectories - self.next_batch_start >= self.trajectories_per_batch, \
-                    'A whole number of batches should be allocated. Logic error.'
+                    batch_slice = slice(batch_slice.start, batch_slice.start + batch_size)
 
                 return batch_slice
 
         return None
 
+
+class SequentialBatcher(EventLoopObject):
+    def __init__(self, evt_loop: EventLoop, trajectories_per_batch: int, total_num_trajectories: int, env_info):
+        unique_name = f'{SequentialBatcher.__name__}'
+        EventLoopObject.__init__(self, evt_loop, unique_name)
+
+        self.trajectories_per_training_batch = trajectories_per_batch
+        self.trajectories_per_sampling_batch = env_info.num_agents  # TODO: this logic should be changed
+        self.total_num_trajectories = total_num_trajectories
+        self.next_batch_start = 0
+
+        self.training_batches = SliceMerger()
+        self.sampling_batches = SliceMerger()
+
+        self.sampling_batches_queue = get_mp_queue()
+
+    @signal
+    def trajectory_buffers_available(self): pass
+
+    @signal
+    def training_batches_available(self): pass
+
+    def init(self):
+        # we should put all initial batches into the sampler queue
+        for i in range(self.total_num_trajectories):
+            self.on_training_batch_released(slice(i, i + 1))
+
     def on_new_trajectories(self, trajectory_slices: Iterable[slice]):
-        self.batch_trajectories(trajectory_slices)
+        # log.debug(f'{self.object_id} new trajectories available! {trajectory_slices}')
 
-        new_batches = []
-        while (experience_batch := self.get_batch_sync()) is not None:
-            new_batches.append(experience_batch)
+        for trajectory_slice in trajectory_slices:
+            self.training_batches.merge_slices(trajectory_slice)
 
-        if new_batches:
-            self.new_batches.emit(new_batches)
+        new_training_batches = []
+        while (training_batch := self.training_batches.get_batch(self.trajectories_per_training_batch)) is not None:
+            new_training_batches.append(training_batch)
+
+        if new_training_batches:
+            self.training_batches_available.emit(new_training_batches)
+
+    def on_training_batch_released(self, batch: slice):
+        self.sampling_batches.merge_slices(batch)
+        new_sampling_batches = []
+        while (sampling_batch := self.sampling_batches.get_batch(self.trajectories_per_sampling_batch)) is not None:
+            new_sampling_batches.append(sampling_batch)
+
+        if new_sampling_batches:
+            self.sampling_batches_queue.put_many(new_sampling_batches)
+            self.trajectory_buffers_available.emit()

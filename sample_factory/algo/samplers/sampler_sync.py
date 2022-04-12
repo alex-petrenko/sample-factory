@@ -1,4 +1,5 @@
 import os
+from queue import Empty
 from typing import Dict, Any
 
 import psutil
@@ -55,7 +56,7 @@ class Sampler(Configurable):
 
 
 class SyncSampler(EventLoopObject, Sampler):
-    def __init__(self, evt_loop, cfg, env_info, param_server, buffer_mgr):
+    def __init__(self, evt_loop, cfg, env_info, param_server, buffer_mgr, sampling_batches_queue):
         Sampler.__init__(self, cfg, env_info)
 
         self.curr_policy_id = 0  # TODO: sync sampler does not support multi-policy learning as of now
@@ -64,9 +65,12 @@ class SyncSampler(EventLoopObject, Sampler):
 
         self.timing = Timing(name=f'Sampler {self.curr_policy_id} profile')
 
+        self.new_trajectories_requested = False
+
         self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
 
         self.traj_tensors = None
+        self.sampling_batches_queue = sampling_batches_queue
 
         self.vec_env = None
         self.last_obs = None
@@ -75,8 +79,6 @@ class SyncSampler(EventLoopObject, Sampler):
 
         self.buffer_mgr = buffer_mgr
         self.traj_tensors = buffer_mgr.traj_tensors
-
-        self.traj_start = 0
 
         self.curr_episode_reward = self.curr_episode_len = None
 
@@ -161,17 +163,34 @@ class SyncSampler(EventLoopObject, Sampler):
         self.curr_episode_len[finished_episodes] = 0
         return reports
 
+    def _get_trajectory_buffer(self):
+        try:
+            return self.sampling_batches_queue.get(block=False)
+        except Empty:
+            return None
+
     def collect_trajectories(self):
+        if not self.new_trajectories_requested:
+            return
+
+        traj_slice = self._get_trajectory_buffer()
+        if traj_slice is None:
+            # log.debug(f'No free trajectory buffers on {self.object_id}!')
+            return
+        else:
+            # log.debug(f'{self.object_id} using trajectory slice {traj_slice}')
+            pass
+
+        self.new_trajectories_requested = False
+
         with inference_context(self.cfg.serial_mode), self.timing.add_time('sampling'):
             actor_critic = self.param_client.actor_critic
             actor_critic.eval()
 
             num_agents = self.env_info.num_agents
-            if self.traj_start + num_agents > self.buffer_mgr.total_num_trajectories:  # TODO: need mechanism to actually allocate and clean up trajectories
-                self.traj_start = 0
 
             # subset of trajectory buffers we're going to populate in the current iteration
-            curr_traj = self.traj_tensors[self.traj_start:self.traj_start + num_agents]
+            curr_traj = self.traj_tensors[traj_slice]
 
             episodic_stats = []
             for step in range(self.cfg.rollout):
@@ -237,14 +256,24 @@ class SyncSampler(EventLoopObject, Sampler):
             curr_traj['rnn_states'][:, self.cfg.rollout] = self.last_rnn_state
 
             # returning the slice of the trajectory buffer we managed to populate
-            traj_slice = slice(self.traj_start, self.traj_start + num_agents)
-            self.traj_start += num_agents
             self.new_trajectories.emit([traj_slice])
+            # log.debug(f'{self.object_id} collected trajectory slice {traj_slice}')
 
             samples_since_last_report = num_agents * self.cfg.rollout
             report = [dict(samples_collected=samples_since_last_report, policy_id=self.curr_policy_id)]
             report.extend(episodic_stats)
             self.report_msg.emit(report)
+
+    def should_collect_trajectories(self, *args):
+        self.new_trajectories_requested = True
+        # log.debug(f'{self.object_id} new trajectories requested! {self.event_loop.signal_queue.qsize()}')
+        self.collect_trajectories()
+
+    def on_trajectory_buffers_available(self):
+        """
+        This is just used to wake up the sampler.
+        """
+        self.collect_trajectories()
 
     def update_training_info(self, env_steps, stats, avg_stats, policy_avg_stats):
         """

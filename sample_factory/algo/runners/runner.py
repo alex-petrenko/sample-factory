@@ -405,32 +405,49 @@ class Runner(EventLoopObject, Configurable):
     def init(self, sampler, batcher, learner):
         # TODO: multiple samplers/learners for multiple policies
 
+        # initialize components
         self.sampler = sampler
-        sampler.report_msg.broadcast_on(self.event_loop)  # how is this going to look like for async CPU sampler
-        sampler.initialized.connect(sampler.collect_trajectories)
-        sampler.new_trajectories.connect(batcher.on_new_trajectories)
-
         self.batcher = batcher
-        batcher.new_batches.connect(learner.on_new_batches)
-
         self.learner = learner
-        learner.report_msg.connect(self._process_msg)
-        learner.model_initialized.connect(sampler.init)  # TODO: should be actor/policy workers here
-        learner.finished_training_iteration.connect(sampler.collect_trajectories)  # close the synchronous loop
-        learner.finished_training_iteration.connect(self._after_training_iteration)
 
-        # auxiliary connections
+        self.event_loop.start.connect(learner.init)  # when runner is ready to go we initialize the learner first
+        # once learner is ready (model loaded), we initialize the sampler
+        learner.model_initialized.connect(sampler.init)  # TODO: should be actor/policy workers here
+        # after the sampler we initialize the batcher
+        sampler.initialized.connect(batcher.init)
+        # but also we kickstart experience collection on the sampler
+        sampler.initialized.connect(sampler.should_collect_trajectories)
+
+        # sampler sends new trajectories to the batcher
+        sampler.new_trajectories.connect(batcher.on_new_trajectories)
+        # batcher gives learner batches of trajectories ready for learning
+        batcher.training_batches_available.connect(learner.on_new_training_batches)
+        # and it gives the sampler access to free trajectory buffers which are used for experience collection
+        batcher.trajectory_buffers_available.connect(sampler.on_trajectory_buffers_available)
+
+        # once learner is done with a training batch, it is given back to the batcher
+        learner.training_batch_released.connect(batcher.on_training_batch_released)
+
+        if self.cfg.async_rl:
+            # in async mode we immediately want to start collecting a new trajectory
+            sampler.new_trajectories.connect(sampler.should_collect_trajectories)
+        else:
+            # in synchronous mode we wait for the learner to finish first
+            learner.finished_training_iteration.connect(sampler.should_collect_trajectories)  # close the synchronous loop
+
+        # auxiliary connections, such as summary reporting
+        learner.finished_training_iteration.connect(self._after_training_iteration)
+        sampler.report_msg.broadcast_on(self.event_loop)  # how is this going to look like for async CPU sampler
+        learner.report_msg.connect(self._process_msg)
         self.save_periodic.connect(self.learner.save)
         self.save_best.connect(self.learner.save_best)
-
-        # kickstart the algorithm
-        self.event_loop.start.connect(self.learner.init)
 
         # stop everything
         self.stop.connect(sampler.on_stop)  # we stop the sampler
         sampler.stop.connect(learner.on_stop)  # sampler stops the learner
         sampler.stop.connect(self._component_stopped)
         learner.stop.connect(self._component_stopped)
+        # TODO: stop the batcher separately?
 
         self.components_to_stop = [sampler, learner]
 
@@ -483,6 +500,7 @@ class Runner(EventLoopObject, Configurable):
             try:
                 evt_loop_status = self.event_loop.exec()
                 status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
+                self.stop.emit(self.object_id)
             except Exception:
                 log.exception(f'Uncaught exception in {self.object_id} evt loop')
                 status = ExperimentStatus.FAILURE

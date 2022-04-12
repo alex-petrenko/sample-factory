@@ -3,7 +3,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from os.path import join
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import numpy as np
 import torch
@@ -155,6 +155,9 @@ class Learner(EventLoopObject, Configurable):
 
     @signal
     def report_msg(self): pass
+
+    @signal
+    def training_batch_released(self): pass
 
     @signal
     def finished_training_iteration(self): pass
@@ -841,7 +844,7 @@ class Learner(EventLoopObject, Configurable):
 
             return buff, experience_size
 
-    def train(self, batch: slice, timing: Timing):
+    def train(self, batch: slice, timing: Timing) -> Dict:
         with timing.add_time('prepare_batch'):
             buff, experience_size = self._prepare_batch(batch)
 
@@ -867,11 +870,16 @@ class Learner(EventLoopObject, Configurable):
 
             stats['stats'] = memory_stats('learner', self.device)
 
-        self.report_msg.emit(stats)
+        return stats
 
-    def on_new_batches(self, batches):
+    def on_new_training_batches(self, batches):
+        # log.debug(f'{self.object_id} new training batches! {batches}')
+
         for batch in batches:
-            self.train(batch, self.timing)
+            stats = self.train(batch, self.timing)
+            # log.debug(f'Batch {batch} is free on the learner!')
+            self.training_batch_released.emit(batch)
+            self.report_msg.emit(stats)
 
         self.finished_training_iteration.emit()
 
