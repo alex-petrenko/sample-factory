@@ -127,36 +127,43 @@ class APPO(ReinforcementLearningAlgorithm):
                        help='Coefficient for the exploration component of the loss function.')
         arg('--value_loss_coeff', default=0.5, type=float, help='Coefficient for the critic loss')
         arg('--kl_loss_coeff', default=0.0, type=float,
-                       help='Coefficient for fixed KL loss (as used by Schulman et al. in https://arxiv.org/pdf/1707.06347.pdf). '
-                            'Highly recommended for environments with continuous action spaces.',
-                       )
+            help='Coefficient for fixed KL loss (as used by Schulman et al. in https://arxiv.org/pdf/1707.06347.pdf). '
+                 'Highly recommended for environments with continuous action spaces.',
+        )
         arg('--exploration_loss', default='entropy', type=str, choices=['entropy', 'symmetric_kl'],
-                       help='Usually the exploration loss is based on maximizing the entropy of the probability'
-                            ' distribution. Note that mathematically maximizing entropy of the categorical probability '
-                            'distribution is exactly the same as minimizing the (regular) KL-divergence between'
-                            ' this distribution and a uniform prior. The downside of using the entropy term '
-                            '(or regular asymmetric KL-divergence) is the fact that penalty does not increase as '
-                            'probabilities of some actions approach zero. I.e. numerically, there is almost '
-                            'no difference between an action distribution with a probability epsilon > 0 for '
-                            'some action and an action distribution with a probability = zero for this action.'
-                            ' For many tasks the first (epsilon) distribution is preferrable because we keep some '
-                            '(albeit small) amount of exploration, while the second distribution will never explore '
-                            'this action ever again.'
-                            'Unlike the entropy term, symmetric KL divergence between the action distribution '
-                            'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
-                            ' so it can prevent the pathological situations where the agent stops exploring. '
-                            'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
-                       )
+            help='Usually the exploration loss is based on maximizing the entropy of the probability'
+                 ' distribution. Note that mathematically maximizing entropy of the categorical probability '
+                 'distribution is exactly the same as minimizing the (regular) KL-divergence between'
+                 ' this distribution and a uniform prior. The downside of using the entropy term '
+                 '(or regular asymmetric KL-divergence) is the fact that penalty does not increase as '
+                 'probabilities of some actions approach zero. I.e. numerically, there is almost '
+                 'no difference between an action distribution with a probability epsilon > 0 for '
+                 'some action and an action distribution with a probability = zero for this action.'
+                 ' For many tasks the first (epsilon) distribution is preferrable because we keep some '
+                 '(albeit small) amount of exploration, while the second distribution will never explore '
+                 'this action ever again.'
+                 'Unlike the entropy term, symmetric KL divergence between the action distribution '
+                 'and a uniform prior approaches infinity when entropy of the distribution approaches zero,'
+                 ' so it can prevent the pathological situations where the agent stops exploring. '
+                 'Empirically, symmetric KL-divergence yielded slightly better results on some problems.',
+        )
+
+        # Max entropy objective
+        arg(
+            '--max_entropy_coeff', default=0.0, type=float,
+            help='Coefficient for max entropy term added directly to rewards. 0 means no max entropy term to env rewards. '
+                 'Note that this is different from exploration loss (see https://arxiv.org/abs/1805.00909)'
+        )
 
         # APPO-specific
         arg(
             '--num_envs_per_worker', default=2, type=int,
-            help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-30 range for Atari/VizDoom'
+            help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-30 range for Atari/VizDoom '
                  'Must be even for double-buffered sampling!',
         )
         arg(
             '--worker_num_splits', default=2, type=int,
-            help='Typically we split a vector of envs into two parts for "double buffered" experience collection'
+            help='Typically we split a vector of envs into two parts for "double buffered" experience collection. '
                  'Set this to 1 to disable double buffering. Set this to 3 for triple buffering!',
         )
 
