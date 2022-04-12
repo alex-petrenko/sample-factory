@@ -1,13 +1,36 @@
+import os
 from typing import Dict, Any
 
+import psutil
 import torch
 from torch import Tensor
 
+from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.model_sharing import make_parameter_client
-from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
+from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
+from sample_factory.algorithms.appo.appo_utils import make_env_func_v2, cuda_envvars_for_policy
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
+from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoopProcess
+from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, log
+
+
+def init_sampler_process(sf_context: SampleFactoryContext, cfg, policy_id):
+    set_global_context(sf_context)
+    log.info(f'POLICY worker {policy_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    try:
+        psutil.Process().nice(min(cfg.default_niceness + 2, 20))
+    except psutil.AccessDenied:
+        log.error('Low niceness requires sudo!')
+
+    if cfg.device == 'gpu':
+        cuda_envvars_for_policy(policy_id, 'inference')
+    init_torch_runtime(cfg)
 
 
 # TODO: remove code duplication (actor_worker.py)
@@ -32,14 +55,14 @@ class Sampler(Configurable):
 
 
 class SyncSampler(EventLoopObject, Sampler):
-    def __init__(self, evt_loop, cfg, env_info, param_server, buffer_mgr, timing):
+    def __init__(self, evt_loop, cfg, env_info, param_server, buffer_mgr):
         Sampler.__init__(self, cfg, env_info)
 
-        self.curr_policy_id = 0  # sync sampler does not support multi-policy learning as of now
+        self.curr_policy_id = 0  # TODO: sync sampler does not support multi-policy learning as of now
         unique_name = f'{SyncSampler.__name__}_{self.curr_policy_id}'
         EventLoopObject.__init__(self, evt_loop, unique_name)
 
-        self.timing = timing
+        self.timing = Timing(name=f'Sampler {self.curr_policy_id} profile')
 
         self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
 
@@ -139,7 +162,7 @@ class SyncSampler(EventLoopObject, Sampler):
         return reports
 
     def collect_trajectories(self):
-        with torch.no_grad(), self.timing.add_time('sampling'):
+        with inference_context(self.cfg.serial_mode), self.timing.add_time('sampling'):
             actor_critic = self.param_client.actor_critic
             actor_critic.eval()
 
@@ -235,7 +258,9 @@ class SyncSampler(EventLoopObject, Sampler):
         self.param_client.cleanup()
         self.stop.emit(self.object_id)
 
-        if not self.cfg.serial_mode:
+        # this means we're running in a separate process
+        if isinstance(self.event_loop.process, EventLoopProcess):
             self.event_loop.stop()
 
-        self.detach()  # remove from the current event loop
+        self.detach()  # remove from the current event loop so we receive no more signals
+        log.info(self.timing)

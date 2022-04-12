@@ -27,7 +27,7 @@ def dict_of_lists_append(dict_of_lists, new_data, index):
 class PolicyWorker:
     def __init__(
         self, worker_idx, policy_id, cfg, obs_space, action_space, shared_buffers, policy_queue, actor_queues,
-        report_queue, task_queue, policy_lock, resume_experience_collection_cv
+        report_queue, task_queue, policy_lock, resume_experience_collection_cv,
     ):
         log.info('Initializing policy worker %d for policy %d', worker_idx, policy_id)
 

@@ -53,3 +53,18 @@ main_loop: 54.7549
     update_model: 0.1627
       weight_update: 0.0009
 [2022-04-11 01:46:23,924][18989] Collected {0: 10027008}, FPS: 181928.2
+
+
+V34: sampler and learner in separate processes
+[2022-04-12 00:26:50,731][197453] Sampler 0 profile tree view:
+sampling: 34.3587
+  norm: 0.6877, inference: 2.8764, post_inference: 0.3548, env_step: 28.4133, post_env_step: 1.2128
+  update_model: 0.1366
+    weight_update: 0.0007
+[2022-04-12 00:26:50,804][197454] Learner 0 profile tree view:
+prepare_batch: 0.9221
+train: 10.0057
+  prepare_train: 0.0318, epoch_init: 0.0050, minibatch_init: 0.0672, forward_head: 0.1731, bptt_initial: 0.0071, bptt: 0.0119, tail: 4.5950, losses: 0.5061, kl_divergence: 0.6507, update: 3.5271, after_optimizer: 0.0316
+[2022-04-12 00:26:50,805][197298] Runner profile tree view:
+main_loop: 53.5740
+[2022-04-12 00:26:50,805][197298] Collected {0: 10092544}, FPS: 187161.9

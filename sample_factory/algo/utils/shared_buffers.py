@@ -82,9 +82,14 @@ def allocate_trajectory_buffers(env_info, num_trajectories, rollout, hidden_size
 
 
 class BufferMgr(Configurable):
-    def __init__(self, cfg, env_info, device):
+    def __init__(self, cfg, env_info):
         super().__init__(cfg)
         self.env_info = env_info
+
+        # TODO: do not initialize CUDA in the main process if we can?
+        policy_id = 0  # TODO: multi-policy case
+        device_idx = policy_id % torch.cuda.device_count()
+        self.device = torch.device('cuda', index=device_idx)
 
         hidden_size = get_hidden_size(self.cfg)  # in case we have RNNs
 
@@ -99,7 +104,7 @@ class BufferMgr(Configurable):
 
         self.total_num_trajectories = max(self.env_info.num_agents, self.trajectories_per_batch)
         self.traj_tensors = allocate_trajectory_buffers(
-            self.env_info, self.total_num_trajectories, rollout, hidden_size, device, share,
+            self.env_info, self.total_num_trajectories, rollout, hidden_size, self.device, share,
         )
 
         # TODO: share memory for async algorithms?

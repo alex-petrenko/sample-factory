@@ -13,13 +13,14 @@ from sample_factory.algo.utils.context import SampleFactoryContext, set_global_c
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
+from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats, cuda_envvars_for_policy
 from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.pytorch_utils import to_scalar
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
+from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoopProcess
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
@@ -43,7 +44,7 @@ def init_learner_process(sf_context: SampleFactoryContext, cfg, policy_id):
         cuda_envvars_for_policy(policy_id, 'learner')
 
     torch.multiprocessing.set_sharing_strategy('file_system')
-    torch.set_num_threads(cfg.learner_main_loop_num_cores)
+    init_torch_runtime(cfg)
 
 
 class LearningRateScheduler:
@@ -111,20 +112,20 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
 
 
 class Learner(EventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, device, buffer_mgr, policy_id, mp_ctx=None):
+    def __init__(self, evt_loop, cfg, env_info, buffer_mgr, policy_id, mp_ctx=None):
         Configurable.__init__(self, cfg)
 
         unique_name = f'{Learner.__name__}_{policy_id}'
         EventLoopObject.__init__(self, evt_loop, unique_name)
 
-        self.timing = Timing(name='Learner profile')
+        self.timing = Timing(name=f'Learner {policy_id} profile')
 
         self.policy_id = policy_id
 
         self.env_info = env_info
         self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions, mp_ctx)
 
-        self.device = device  # TODO: we shouldn't init device in ctor?
+        self.device = None
         self.actor_critic = None
 
         self.optimizer = None
@@ -189,6 +190,13 @@ class Learner(EventLoopObject, Configurable):
             log.info('Setting fixed seed %d', self.cfg.seed)
             torch.manual_seed(self.cfg.seed)
             np.random.seed(self.cfg.seed)
+
+        # initialize device
+        if self.cfg.device == 'gpu':
+
+            self.device = torch.device('cuda', index=0)
+        else:
+            self.device = torch.device('cpu')
 
         self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
         self.actor_critic.model_to_device(self.device)
@@ -874,7 +882,8 @@ class Learner(EventLoopObject, Configurable):
         del self.actor_critic
         self.stop.emit(self.object_id)
 
-        if not self.cfg.serial_mode:
+        # this means we're running in a separate process
+        if isinstance(self.event_loop.process, EventLoopProcess):
             self.event_loop.stop()
 
         self.detach()  # remove from the current event loop

@@ -12,9 +12,10 @@ from gym.spaces import Discrete, Tuple
 from sample_factory.algo.batchers.batcher_sequential import SequentialBatcher
 from sample_factory.algo.learners.learner import Learner, init_learner_process
 from sample_factory.algo.runners.runner_sync import SyncRunner
-from sample_factory.algo.samplers.sampler_sync import SyncSampler
+from sample_factory.algo.samplers.sampler_sync import SyncSampler, init_sampler_process
 from sample_factory.algo.utils.context import sf_global_context, set_global_context
 from sample_factory.algo.utils.shared_buffers import BufferMgr
+from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2, set_global_cuda_envvars
 from sample_factory.algorithms.appo.model import _ActorCriticBase, create_actor_critic
 from sample_factory.algorithms.utils.arguments import parse_args
@@ -107,20 +108,6 @@ def obtain_env_info_in_a_separate_process(cfg: AttrDict):
     return env_info
 
 
-# TODO: all components should use the same function
-def init_device(cfg: AttrDict) -> torch.device:
-    if cfg.device == 'gpu':
-        torch.backends.cudnn.benchmark = True  # TODO: this probably shouldn't be here
-
-        # we should already see only one CUDA device, because of env vars
-        assert torch.cuda.device_count() == 1
-        device = torch.device('cuda', index=0)  # TODO: other devices? add to cfg?
-    else:
-        device = torch.device('cpu')
-
-    return device
-
-
 # TODO: refactor this - all algorithms should use the same function
 def make_model(cfg: AttrDict, env_info: EnvInfo, device: torch.device, timing: Timing = None) -> _ActorCriticBase:
     actor_critic = create_actor_critic(cfg, env_info.obs_space, env_info.action_space, timing)
@@ -146,20 +133,20 @@ def run_rl(cfg):
 
 def run_rl_serial(cfg):
     set_global_cuda_envvars(cfg)
+    init_torch_runtime(cfg)  # in serial mode everything will be happening in the main process, so we need to initialize cuda
 
     env_info = obtain_env_info_in_a_separate_process(cfg)
-    device = init_device(cfg)
 
-    buffer_mgr = BufferMgr(cfg, env_info, device)
+    buffer_mgr = BufferMgr(cfg, env_info)
 
     runner = SyncRunner(cfg)
     evt_loop = runner.event_loop
     # evt_loop.verbose = True
 
-    learner = Learner(evt_loop, cfg, env_info, device, buffer_mgr, policy_id=0)  # currently support only single-policy learning
+    learner = Learner(evt_loop, cfg, env_info, buffer_mgr, policy_id=0)  # currently support only single-policy learning
     batcher = SequentialBatcher(evt_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
 
-    sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr, runner.timing)
+    sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr)
 
     runner.init(sampler, batcher, learner)
     status = runner.run()
@@ -171,29 +158,27 @@ def run_rl_async(cfg):
     set_global_cuda_envvars(cfg)
 
     env_info = obtain_env_info_in_a_separate_process(cfg)
-    device = init_device(cfg)
-    actor_critic = make_model(cfg, env_info, device)
-    actor_critic.share_memory()
 
-    buffer_mgr = BufferMgr(cfg, env_info, device)
+    buffer_mgr = BufferMgr(cfg, env_info)
 
     runner = SyncRunner(cfg)
-    evt_loop = runner.event_loop
-    # evt_loop.verbose = True
 
     policy_id = 0  # TODO: multiple policies
     ctx = multiprocessing.get_context('spawn')
     learner_proc = EventLoopProcess('learner_proc', ctx, init_func=init_learner_process, args=(sf_global_context(), cfg, policy_id))
     batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories)
-    learner = Learner(learner_proc.event_loop, cfg, env_info, device, buffer_mgr, policy_id=0, mp_ctx=ctx)  # currently support only single-policy learning
+    learner = Learner(learner_proc.event_loop, cfg, env_info, buffer_mgr, policy_id=0, mp_ctx=ctx)  # currently support only single-policy learning
 
-    sampler = SyncSampler(evt_loop, cfg, env_info, learner.param_server, buffer_mgr, runner.timing)
+    sampler_proc = EventLoopProcess('sampler_proc', ctx, init_func=init_sampler_process, args=(sf_global_context(), cfg, policy_id))
+    sampler = SyncSampler(sampler_proc.event_loop, cfg, env_info, learner.param_server, buffer_mgr)
 
     runner.init(sampler, batcher, learner)
 
+    sampler_proc.start()
     learner_proc.start()
     status = runner.run()
     learner_proc.join()
+    sampler_proc.join()
 
     return status
 
