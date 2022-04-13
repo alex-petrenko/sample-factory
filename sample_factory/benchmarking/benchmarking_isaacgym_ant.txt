@@ -68,3 +68,18 @@ train: 10.0057
 [2022-04-12 00:26:50,805][197298] Runner profile tree view:
 main_loop: 53.5740
 [2022-04-12 00:26:50,805][197298] Collected {0: 10092544}, FPS: 187161.9
+
+
+V35: async
+[2022-04-13 08:56:14,247][654483] Sampler 0 profile tree view:
+sampling: 39.9410
+  norm: 0.6651, inference: 4.3195, post_inference: 0.3141, env_step: 32.3745, post_env_step: 1.2054
+  update_model: 0.4335
+    weight_update: 0.0007
+[2022-04-13 08:56:14,320][654487] Learner 0 profile tree view:
+prepare_batch: 1.0170
+train: 14.8677
+  prepare_train: 0.0307, epoch_init: 0.0061, minibatch_init: 0.0779, forward_head: 0.1899, bptt_initial: 0.0076, bptt: 0.0135, tail: 7.6801, losses: 0.8741, kl_divergence: 1.4890, update: 3.8281, after_optimizer: 0.0485
+main_loop: 48.5318
+[2022-04-13 08:56:14,321][654331] Collected {0: 10092544}, FPS: 206607.0
+
