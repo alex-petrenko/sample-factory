@@ -39,7 +39,7 @@ class CustomMultiEnv(gym.Env):
         self.num_agents = 2
         self.is_multiagent = True
 
-        self.inactive_steps = [0] * self.num_agents
+        self.inactive_steps = 0
 
     def _obs(self):
         return [np.float32(np.random.rand(self.channels, self.res, self.res)) for _ in range(self.num_agents)]
@@ -51,20 +51,21 @@ class CustomMultiEnv(gym.Env):
     def step(self, actions):
         infos = [dict() for _ in range(self.num_agents)]
 
-        # random actions for inactive agents
+        # fixed actions for inactive agents
         for agent_idx in range(self.num_agents):
-            if self.inactive_steps[agent_idx] > 0:
-                actions[agent_idx] = random.randint(0, 1)
+            if self.inactive_steps > 0:
+                actions[agent_idx] = 0
 
-        # "deactivate" agents randomly, mostly to test inactive agent masking functionality
+        # "deactivate" both agents randomly, mostly to test inactive agent masking functionality
+        if self.inactive_steps > 0:
+            self.inactive_steps -= 1
+        else:
+            if random.random() < self.cfg.inactive_segment_prob:
+                self.inactive_steps = random.randint(self.cfg.inactive_segment_min_len, self.cfg.inactive_segment_max_len)
+
+        # fixed actions for inactive agents
         for agent_idx in range(self.num_agents):
-            if self.inactive_steps[agent_idx] > 0:
-                self.inactive_steps[agent_idx] -= 1
-            else:
-                if random.random() < 0.005:
-                    self.inactive_steps[agent_idx] = random.randint(1, 48)
-
-            infos[agent_idx]['is_active'] = self.inactive_steps[agent_idx] <= 0
+            infos[agent_idx]['is_active'] = self.inactive_steps == 0
 
         self.curr_episode_steps += 1
 
@@ -73,9 +74,7 @@ class CustomMultiEnv(gym.Env):
             [(-0.2, -0.25), (-0.1, -0.1)],  # make it asymmetric for easy learning, this is only a test after all
         ]
 
-        # action = 0 to stay silent, 1 to betray
-        rewards = payout_matrix[actions[0]][actions[1]]
-
+        rewards = list(payout_matrix[actions[0]][actions[1]])
         done = self.curr_episode_steps >= self.cfg.custom_env_episode_len
         dones = [done] * self.num_agents
 
@@ -101,6 +100,9 @@ def add_extra_params_func(env, parser):
     """
     p = parser
     p.add_argument('--custom_env_episode_len', default=10, type=int, help='Number of steps in the episode')
+    p.add_argument('--inactive_segment_prob', default=0.02, type=float, help='Probability of inactive segment')
+    p.add_argument('--inactive_segment_min_len', default=1, type=int, help='Inactive segment min len')
+    p.add_argument('--inactive_segment_max_len', default=40, type=int, help='Inactive segment max len')
 
 
 def register_custom_components():
