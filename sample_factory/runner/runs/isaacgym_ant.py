@@ -1,4 +1,5 @@
 from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
+from sample_factory.runner.runs.isaacgym_runs import vstr, base_cli
 
 _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
@@ -6,19 +7,15 @@ _params = ParamGrid([
     ('async_rl', [True, False]),
 ])
 
-_version = 36
-_vstr = f'v{_version:03d}'
-_cli = f'python -m sample_factory_examples.train_isaacgym ' \
-       f'--algo=APPO --env=isaacgym_ant --actor_worker_gpus 0 --train_for_env_steps=100000000 --env_agents=4096 ' \
-       f'--batch_size=32768 --env_headless=True --with_vtrace=False --use_rnn=False --recurrence=1 --with_wandb=True ' \
-       f'--wandb_group=isaacgym_ant_sf2 --wandb_tags {_vstr}'
+ant_cli = f' --env=isaacgym_ant --train_for_env_steps=100000000 --wandb_group=isaacgym_ant_sf2 --wandb_tags ant brain {vstr}'
+cli = base_cli + ant_cli
 
 _experiments = [
-    Experiment(f'ant_{_vstr}_async', _cli, _params.generate_params(False)),
-    Experiment(f'ant_{_vstr}_async_rnn', _cli + ' --use_rnn=True --recurrence=16', _params.generate_params(False)),
+    Experiment(f'ant_{vstr}_async', cli, _params.generate_params(False)),
+    # Experiment(f'ant_{_vstr}_async_rnn', _cli + ' --use_rnn=True --recurrence=16', _params.generate_params(False)),
 ]
 
-RUN_DESCRIPTION = RunDescription(f'ant_{_vstr}', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription(f'ant_{vstr}', experiments=_experiments)
 
 
 # Run locally: python -m sample_factory.runner.run --run=sample_factory.runner.runs.isaacgym_ant --runner=processes --max_parallel=2 --experiments_per_gpu=2 --num_gpus=1

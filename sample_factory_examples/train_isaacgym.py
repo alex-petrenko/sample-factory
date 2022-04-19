@@ -1,6 +1,8 @@
 import sys
 
 # this is here just to guarantee that isaacgym is imported before PyTorch
+from typing import List
+
 import isaacgym
 import torch
 from torch import nn, Tensor
@@ -14,20 +16,18 @@ from sample_factory.utils.utils import str2bool
 
 
 class _IsaacGymMlpEncoderImlp(nn.Module):
-    def __init__(self, obs_space):
+    def __init__(self, obs_space, mlp_layers: List[int]):
         super().__init__()
 
         obs_shape = get_obs_shape(obs_space)
         assert len(obs_shape.obs) == 1
 
-        encoder_layers = [
-            nn.Linear(obs_shape.obs[0], 256),  # TODO: use configuration yaml?
-            nn.ELU(inplace=True),  # TODO: is it safe to do inplace?
-            nn.Linear(256, 128),
-            nn.ELU(inplace=True),
-            nn.Linear(128, 64),
-            nn.ELU(inplace=True),
-        ]
+        layer_input_width = obs_shape.obs[0]
+        encoder_layers = []
+        for layer_width in mlp_layers:
+            encoder_layers.append(nn.Linear(layer_input_width, layer_width))
+            layer_input_width = layer_width
+            encoder_layers.append(nn.ELU(inplace=True))
 
         self.mlp_head = nn.Sequential(*encoder_layers)
 
@@ -40,9 +40,9 @@ class IsaacGymMlpEncoder(EncoderBase):
     def __init__(self, cfg, obs_space, timing):
         super().__init__(cfg, timing)
 
-        self._impl = _IsaacGymMlpEncoderImlp(obs_space)
+        self._impl = _IsaacGymMlpEncoderImlp(obs_space, cfg.mlp_layers)
         self._impl = torch.jit.script(self._impl)
-        self.encoder_out_size = 64  # TODO: we should make this an abstract method
+        self.encoder_out_size = cfg.mlp_layers[-1]  # TODO: we should make this an abstract method
 
     def forward(self, obs_dict):
         x = self._impl(obs_dict['obs'])
@@ -56,6 +56,7 @@ def add_extra_params_func(env, parser):
     p = parser
     p.add_argument('--env_agents', default=4096, type=int, help='Num agents in each env')
     p.add_argument('--env_headless', default=True, type=str2bool, help='Headless == no rendering')
+    p.add_argument('--mlp_layers', default=[256, 128, 64], type=int, nargs='*', help='MLP layers to use with isaacgym envs')
     pass
 
 

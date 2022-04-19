@@ -1,16 +1,15 @@
 import os.path
 from os.path import join
-from typing import Optional, Union, Tuple
 
 import gym
 import yaml
-from gym.core import ObsType, ActType
 
 from sample_factory.envs.isaacgym.isaacgymenvs.tasks.ant import AntRun
+from sample_factory.envs.isaacgym.isaacgymenvs.tasks.humanoid import HumanoidRun
 
 isaacgym_task_map = {
     "AntRunSF": AntRun,
-    # "HumanoidRun": HumanoidRun,
+    "HumanoidRunSF": HumanoidRun,
     # "ShadowHand": ShadowHand,
     # "AllegroHand": AllegroHand,
     # "AllegroKuka": resolve_allegro_kuka,
