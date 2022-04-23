@@ -9,7 +9,7 @@ from torch import Tensor
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.model_sharing import make_parameter_client
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
-from sample_factory.algorithms.appo.appo_utils import make_env_func_v2, cuda_envvars_for_policy
+from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoopProcess
 from sample_factory.utils.timing import Timing
@@ -96,7 +96,7 @@ class SyncSampler(EventLoopObject, Sampler):
 
     def init(self, initial_model_state):
         state_dict, device, policy_version = initial_model_state
-        self.param_client.on_weights_initialized(state_dict, device, policy_version)
+        self.param_client.on_weights_initialized(state_dict, device, policy_version)  # TODO: inference worker
 
         # with sync sampler there aren't any workers, hence 0/0/0 should suffice
         env_config = AttrDict(worker_index=0, vector_index=0, env_id=0)
@@ -216,12 +216,8 @@ class SyncSampler(EventLoopObject, Sampler):
                     # they should be saved to the next step
                     del policy_outputs['rnn_states']
 
-                    for key, value in policy_outputs.items():
-                        curr_step[key][:] = value
-
                     curr_step[:] = policy_outputs
                     curr_step['policy_version'].fill_(self.param_client.latest_policy_version)
-
                     actions = preprocess_actions(self.env_info, policy_outputs['actions'])
 
                 with self.timing.add_time('env_step'):

@@ -47,7 +47,7 @@ class TestUtils(TestCase):
             for i in range(4):
                 with t.time_avg('t3'):
                     time.sleep(i % 2)
-                    with t.add_time('t3.1'):
+                    with t.time_avg('t3.1'):
                         pass
 
         log.debug(t.flat_str())

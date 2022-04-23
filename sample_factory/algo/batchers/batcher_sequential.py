@@ -10,6 +10,7 @@ from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, Even
 # Sync batcher which reuses the same trajectories on sampler and learner in order to avoid copying (and I'm not sure we even need it)
 # Sync batcher can really be just a circular buffer. And async batcher needs an entirely different logic anyway.
 # WTF did I even write all of that
+from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import log
 
 
@@ -68,10 +69,16 @@ class SliceMerger:
         return None
 
 
-class SequentialBatcher(EventLoopObject):
-    def __init__(self, evt_loop: EventLoop, trajectories_per_batch: int, total_num_trajectories: int, env_info):
-        unique_name = f'{SequentialBatcher.__name__}'
+class Batcher(EventLoopObject):
+    def __init__(self, evt_loop: EventLoop, policy_id: PolicyID, unique_name):
         EventLoopObject.__init__(self, evt_loop, unique_name)
+        self.policy_id = policy_id
+
+
+class SequentialBatcher(Batcher):
+    def __init__(self, evt_loop: EventLoop, trajectories_per_batch: int, total_num_trajectories: int, env_info, policy_id: PolicyID):
+        unique_name = f'{SequentialBatcher.__name__}_{policy_id}'
+        Batcher.__init__(self, evt_loop, policy_id, unique_name)
 
         self.trajectories_per_training_batch = trajectories_per_batch
         self.trajectories_per_sampling_batch = env_info.num_agents  # TODO: this logic should be changed

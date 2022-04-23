@@ -1,51 +1,24 @@
 import os
 import threading
 from collections import OrderedDict, deque
-from typing import Iterable, Callable
+from typing import Iterable, Callable, List, Any, Dict
 
 import gym
 import numpy as np
 import torch
 from gym import spaces, Wrapper
+from torch import Tensor
 
 from sample_factory.algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from sample_factory.envs.create_env import create_env
 from sample_factory.utils.get_available_gpus import get_gpus_without_triggering_pytorch_cuda_initialization
 from sample_factory.utils.utils import log, memory_consumption_mb
 
+
 CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
 
 
-class TaskType:
-    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, INIT_MODEL, PBT, UPDATE_ENV_STEPS, EMPTY = range(10)
-
-
 class DictObservationsWrapper(Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        self.num_agents = env.num_agents
-        self.observation_space = gym.spaces.Dict(dict(obs=self.observation_space))
-
-    def reset(self, **kwargs):
-        obs = self.env.reset(**kwargs)
-        return [dict(obs=o) for o in obs]
-
-    def step(self, action):
-        obs, rew, done, info = self.env.step(action)
-        return [dict(obs=o) for o in obs], rew, done, info
-
-
-def make_env_func(cfg, env_config):
-    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
-    if not is_multiagent_env(env):
-        env = MultiAgentWrapper(env)
-    if not isinstance(env.observation_space, spaces.Dict):
-        env = DictObservationsWrapper(env)
-    return env
-
-
-# TODO: remove code duplication!
-class DictObservationsWrapperV2(Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.num_agents = env.num_agents
@@ -121,8 +94,49 @@ class TensorWrapper(Wrapper):
         return obs, rew, dones, infos
 
 
-# TODO: remove code duplication!
-def make_env_func_v2(cfg, env_config):
+class SequentialVectorizeWrapper(Wrapper):
+    """Vector interface for multiple environments simulated sequentially on one worker."""
+
+    def __init__(self, envs):
+        super().__init__(envs[0])
+        assert all(e.num_agents == envs[0].num_agents for e in envs), \
+            f'Expect all envs to have the same number of agents {envs[0].num_agents}'
+
+        self.envs = envs
+        self.num_agents = envs[0].num_agents
+
+        self.obs = None
+        self.rew = None
+        self.dones = None
+        self.infos = None
+
+    def reset(self, **kwargs):
+        obs = [e.reset(**kwargs) for e in self.envs]
+        self.obs = torch.cat(obs)
+        return self.obs
+
+    def step(self, actions: Tensor):
+        infos = []
+        ofs = 0
+        for i, e in enumerate(self.envs):
+            env_actions = actions[ofs:ofs + self.num_agents]
+            self.obs[ofs:ofs + self.num_agents], rew, dones, info = e.step(env_actions)
+
+            if self.rew is None:
+                self.rew = rew.repeat(len(self.envs))
+                self.dones = dones.repeat(len(self.envs))
+
+            self.rew[ofs:ofs + self.num_agents] = rew
+            self.dones[ofs:ofs + self.num_agents] = dones
+
+            infos.extend(info)
+
+            ofs += self.num_agents
+
+        return self.obs, self.rew, self.dones, infos
+
+
+def make_env_func(cfg, env_config):
     """
     This should yield an environment that always returns a dict of PyTorch tensors (CPU- or GPU-side) or
     a dict of numpy arrays or a dict of lists (depending on what the environment returns in the first place).
@@ -132,7 +146,7 @@ def make_env_func_v2(cfg, env_config):
     if not is_multiagent_env(env):
         env = MultiAgentWrapper(env)
     if not isinstance(env.observation_space, spaces.Dict):
-        env = DictObservationsWrapperV2(env)
+        env = DictObservationsWrapper(env)
 
     # At this point we can be sure that our environment outputs a dictionary of lists (or numpy arrays or tensors)
     # containing obs, rewards, etc. for each agent in the environment. If it wasn't true to begin with, we guaranteed
@@ -142,7 +156,6 @@ def make_env_func_v2(cfg, env_config):
     # timesteps.
 
     env = TensorWrapper(env)
-
     return env
 
 

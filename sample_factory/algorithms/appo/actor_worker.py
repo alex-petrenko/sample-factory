@@ -721,7 +721,7 @@ class ActorWorker:
 
         log.info('Initializing envs for env runner %d...', self.worker_idx)
 
-        if self.cfg.force_envs_single_thread:
+        if self.cfg.force_envs_single_thread:  # TODO: probably set to FALSE by default
             from threadpoolctl import threadpool_limits
             threadpool_limits(limits=1, user_api=None)
 

@@ -9,12 +9,20 @@ from typing import Dict, Tuple, List
 import numpy as np
 from tensorboardX import SummaryWriter
 
-from sample_factory.algorithms.appo.appo_utils import iterate_recursively
+from sample_factory.algo.batchers.batcher_sequential import SequentialBatcher, Batcher
+from sample_factory.algo.inference_worker import InferenceWorker
+from sample_factory.algo.learner import Learner
+from sample_factory.algo.rollout_worker import RolloutWorker
+from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process
+from sample_factory.algo.utils.queues import get_mp_queue
+from sample_factory.algo.utils.shared_buffers import BufferMgr
+from sample_factory.algorithms.appo.appo_utils import iterate_recursively, set_global_cuda_envvars
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_EPISODIC_STATS_PROCESSING, \
     EXTRA_PER_POLICY_SUMMARIES
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer, signal
 from sample_factory.utils.timing import Timing
+from sample_factory.utils.typing import PolicyID, MpQueue
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
 from sample_factory.utils.wandb_utils import init_wandb
@@ -86,13 +94,21 @@ class Runner(EventLoopObject, Configurable):
 
         self.stopped = False
 
+        self.env_info = None
+        self.buffer_mgr = None
+
+        self.inference_queues: Dict[PolicyID, MpQueue] = {p: get_mp_queue() for p in range(self.cfg.num_policies)}
+
+        self.learners: Dict[PolicyID, Learner] = dict()
+        self.batchers: Dict[PolicyID, Batcher] = dict()
+        self.inference_workers: Dict[PolicyID, List[InferenceWorker]] = dict()
+        self.rollout_workers: List[RolloutWorker] = []
+
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
         init_file_logger(experiment_dir(self.cfg))
 
         self.timing = Timing('Runner profile')
-
-        self.sampler, self.batcher, self.learner = None, None, None
 
         # env_steps counts total number of simulation steps per policy (including frameskipped)
         self.env_steps = dict()
@@ -401,8 +417,28 @@ class Runner(EventLoopObject, Configurable):
         with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
+    def _make_learner(self, event_loop, policy_id: PolicyID):
+        return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, policy_id=policy_id)
+
+    def _make_batcher(self, event_loop, policy_id: PolicyID):
+        return SequentialBatcher(event_loop, self.buffer_mgr.trajectories_per_batch, self.buffer_mgr.total_num_trajectories, self.env_info, policy_id)
+
+    def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int):
+        return InferenceWorker(event_loop, policy_id, worker_idx, self.cfg)
+
+    def _make_rollout_worker(self, event_loop, worker_idx: int):
+        return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.env_info, self.cfg)
+
+    def init(self):
+        set_global_cuda_envvars(self.cfg)
+        self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
+        self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
+
+        self.inference_queues = get_mp_queue()
+
+
     # TODO: type hints
-    def init(self, sampler, batcher, learner):
+    def init_todo___(self, sampler, batcher, learner):
         # TODO: multiple samplers/learners for multiple policies
 
         # initialize components

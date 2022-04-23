@@ -94,6 +94,7 @@ class APPO(ReinforcementLearningAlgorithm):
                  'Envs with complex action spaces and RNN policies tend to be particularly sensitive. ',
         )
         arg('--serial_mode', default=False, type=str2bool, help='Enable serial mode: run everything completely synchronously in the same process')
+        arg('--sampler', default='sync', choices=['sync', 'async'], type=str, help='Type of sampler to use')  # TODO: probably just one async sampler is enough
         arg('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
         arg(

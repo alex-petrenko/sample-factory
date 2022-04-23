@@ -236,7 +236,7 @@ class EventLoop(EventLoopObject):
 
         # Separate container to keep track of timers living on this thread. Start with one default timer.
         self.timers: List[Timer] = []
-        self.default_timer = Timer(self, 0.1, object_id=f'{self.object_id}_timer')
+        self.default_timer = Timer(self, 0.05, object_id=f'{self.object_id}_timer')
 
         self.receivers: Dict[Emitter, Set[ObjectID]] = dict()
 
@@ -412,8 +412,11 @@ class Timer(EventLoopObject):
 
         self._next_timeout = time.time() + self._interval_sec
 
-    def fire(self):
+    def _emit(self):
         self.timeout.emit()
+
+    def fire(self):
+        self._emit()
         if self._single_shot:
             self.stop()
         else:
@@ -427,6 +430,17 @@ class Timer(EventLoopObject):
 
     def _default_obj_id(self):
         return f'{Timer.__name__}_{super()._default_obj_id()}'
+
+
+class TightLoop(Timer):
+    def __init__(self, event_loop: EventLoop, object_id=None):
+        super().__init__(event_loop, 0.0, object_id)
+
+    @signal
+    def iteration(self): pass
+
+    def _emit(self):
+        self.iteration.emit()
 
 
 class EventLoopProcess(EventLoopObject):

@@ -16,14 +16,6 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, log, join_or_kill
 
 
-def dict_of_lists_append(dict_of_lists, new_data, index):
-    for key, x in new_data.items():
-        if key in dict_of_lists:
-            dict_of_lists[key].append(x[index])
-        else:
-            dict_of_lists[key] = [x[index]]
-
-
 class PolicyWorker:
     def __init__(
         self, worker_idx, policy_id, cfg, obs_space, action_space, shared_buffers, policy_queue, actor_queues,
@@ -90,7 +82,7 @@ class PolicyWorker:
                         self.total_num_samples += 1
 
                 indices = tuple(np.array(indices).T)
-                observations = self.traj_tensors['obs'].index(indices)
+                observations = self.traj_tensors['obs'].index(indices)  # TODO: rewrite using tensordicts
                 rnn_states = self.traj_tensors['rnn_states'][indices]
 
             with timing.add_time('stack'):
