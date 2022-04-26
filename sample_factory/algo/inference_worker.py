@@ -4,6 +4,7 @@ from collections import deque
 from queue import Empty
 from typing import Dict, Any, List, Optional
 
+import numpy as np
 import psutil
 import torch
 
@@ -11,9 +12,9 @@ from sample_factory.algo.utils.context import SampleFactoryContext, set_global_c
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.model_sharing import make_parameter_client, ParameterServer
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
-from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy
+from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoopObject, Timer, TightLoop
+from sample_factory.signal_slot.signal_slot import EventLoopObject, Timer, TightLoop, signal
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, MpQueue
 from sample_factory.utils.utils import log
@@ -56,6 +57,8 @@ class InferenceWorker(EventLoopObject, Configurable):
 
         self.timing = Timing(name=f'{self.object_id} profile')
 
+        self.policy_id = policy_id
+
         self.buffer_mgr = buffer_mgr
         self.traj_tensors = buffer_mgr.traj_tensors
         self.obs_tensors, self.rnn_state_tensors = self.traj_tensors['obs'], self.traj_tensors['rnn_states']
@@ -79,10 +82,18 @@ class InferenceWorker(EventLoopObject, Configurable):
         log.info(f'{self.object_id}: min num requests: %d', self.min_num_requests)
 
         self.requests = []
-        self.total_num_samples = 0
+        self.total_num_samples = self.last_report_samples = 0
 
         self.initialized = False
         TightLoop(self.event_loop).iteration.connect(self._run)
+        Timer(self.event_loop, 3.0).timeout.connect(self._report_stats)
+
+        self.cache_cleanup_timer = Timer(self.event_loop, 0.01)
+        if not self.cfg.benchmark:
+            self.cache_cleanup_timer.timeout.connect(self._cache_cleanup)
+
+    @signal
+    def report_msg(self): pass
 
     def init(self, initial_model_state):
         state_dict, self.device, policy_version = initial_model_state
@@ -91,8 +102,7 @@ class InferenceWorker(EventLoopObject, Configurable):
 
     def _handle_policy_steps(self, timing):
         # TODO: batch requests together. Two cases 1) numpy indices 2) torch tensor slices
-        # TODO: for now just using one batch (should be enough for isaacgym)
-        # (self.worker_idx, split_idx, requests)
+        # (self.worker_idx, split_idx, requests)/
         # (self.curr_traj_slice, self.rollout_step)
 
         with inference_context(self.cfg.serial_mode):
@@ -110,6 +120,8 @@ class InferenceWorker(EventLoopObject, Configurable):
                 for obs_key, tensor_list in obs.items():
                     obs[obs_key] = torch.cat(tensor_list)
                 rnn_states = torch.cat(rnn_states)
+                num_samples = rnn_states.shape[0]
+                self.total_num_samples += num_samples
 
             with timing.add_time('obs_to_device'):
                 actor_critic = self.param_client.actor_critic
@@ -126,80 +138,66 @@ class InferenceWorker(EventLoopObject, Configurable):
             with timing.add_time('forward'):
                 policy_outputs = actor_critic(normalized_obs, rnn_states)
 
-            # TODO: batched mode - do nothing, just emit a message
-            
+            with timing.add_time('format_outputs'):
+                policy_outputs.policy_version = torch.empty([num_samples]).fill_(self.param_client.policy_version)
 
+            with timing.add_time('send_messages'):
+                for actor_idx, split_idx, request_data in self.requests:
+                    self.emit(f'advance{actor_idx}', (split_idx, self.policy_id))  # TODO: connect to this signal
+
+                self.requests = []
+            
     def _run(self):
         # TODO: termination
 
         assert self.initialized  # TODO: remove
 
-        try:
-            # TODO: implement this or a replacement mechanism (probably just emit a signal on the learner?)
-            # while self.shared_buffers.stop_experience_collection[self.policy_id]:
-            #     with self.resume_experience_collection_cv:
-            #         self.resume_experience_collection_cv.wait(timeout=0.05)
+        # TODO: implement this or a replacement mechanism (probably just emit a signal on the learner?)
+        # while self.shared_buffers.stop_experience_collection[self.policy_id]:
+        #     with self.resume_experience_collection_cv:
+        #         self.resume_experience_collection_cv.wait(timeout=0.05)
 
-            # Very conservative timer. Only wait a little bit, then continue with what we've got.
-            wait_for_min_requests = 0.025
+        # Very conservative timer. Only wait a little bit, then continue with what we've got.
+        wait_for_min_requests = 0.025
 
-            waiting_started = time.time()
-            while len(self.requests) < self.min_num_requests and time.time() - waiting_started < wait_for_min_requests:
-                try:
-                    with self.timing.timeit('wait_policy'), self.timing.add_time('wait_policy_total'):
-                        policy_requests = self.inference_queue.get_many(timeout=0.005)
-                    self.requests.extend(policy_requests)
-                except Empty:
-                    pass
-
-            with self.timing.add_time('update_model'):
-                self.param_client.ensure_weights_updated()
-
-            with self.timing.timeit('one_step'), self.timing.add_time('handle_policy_step'):
-                if len(self.requests) > 0:
-                    self.request_count.append(len(self.requests))  # TODO: count requests properly when we use slices
-                    self._handle_policy_steps(self.timing)
-
+        waiting_started = time.time()
+        while len(self.requests) < self.min_num_requests and time.time() - waiting_started < wait_for_min_requests:
             try:
-                task_type, data = self.task_queue.get_nowait()
-
-                # task from the task_queue
-                if task_type == TaskType.INIT:
-                    self._init()
-                elif task_type == TaskType.TERMINATE:
-                    self.terminate = True
-                    break
-                elif task_type == TaskType.INIT_MODEL:
-                    self._init_model(data)
-
-                self.task_queue.task_done()
+                with self.timing.timeit('wait_policy'), self.timing.add_time('wait_policy_total'):
+                    policy_requests = self.inference_queue.get_many(timeout=0.005)
+                self.requests.extend(policy_requests)
             except Empty:
                 pass
 
-            if time.time() - last_report > 3.0 and 'one_step' in timing:
-                timing_stats = dict(wait_policy=timing.wait_policy, step_policy=timing.one_step)
-                samples_since_last_report = self.total_num_samples - last_report_samples
+        with self.timing.add_time('update_model'):
+            self.param_client.ensure_weights_updated()
 
-                stats = memory_stats('policy_worker', self.device)
-                if len(request_count) > 0:
-                    stats['avg_request_count'] = np.mean(request_count)
+        with self.timing.timeit('one_step'), self.timing.add_time('handle_policy_step'):
+            if len(self.requests) > 0:
+                self.request_count.append(len(self.requests))  # TODO: count requests properly when we use slices
+                self._handle_policy_steps(self.timing)
 
-                self.report_queue.put(dict(
-                    timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
-                ))
-                last_report = time.time()
-                last_report_samples = self.total_num_samples
+    def _report_stats(self):
+        if 'one_step' not in self.timing:
+            return
 
-            if time.time() - last_cache_cleanup > 300.0 or (not self.cfg.benchmark and self.total_num_samples < 1000):
-                if self.cfg.device == 'gpu':
-                    torch.cuda.empty_cache()
-                last_cache_cleanup = time.time()
+        timing_stats = dict(wait_policy=self.timing.wait_policy, step_policy=self.timing.one_step)
+        samples_since_last_report = self.total_num_samples - self.last_report_samples
 
-        except KeyboardInterrupt:
-            log.warning('Keyboard interrupt detected on worker %d-%d', self.policy_id, self.worker_idx)
-            self.terminate = True
-        except:
-            log.exception('Unknown exception on policy worker')
-            self.terminate = True
+        stats = memory_stats('policy_worker', self.device)
+        if len(self.request_count) > 0:
+            stats['avg_request_count'] = np.mean(self.request_count)
 
+        self.report_msg.emit()
 
+        self.report_msg.emit(dict(
+            timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
+        ))
+
+    def _cache_cleanup(self):
+        if self.cfg.device == 'gpu':
+            torch.cuda.empty_cache()
+
+        # initially we clean cache very frequently, later on do it every few minutes
+        if self.total_num_samples > 1000:
+            self.cache_cleanup_timer.set_interval(300.0)
