@@ -9,13 +9,13 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats, cuda_envvars_for_policy
-from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.pytorch_utils import to_scalar
@@ -236,6 +236,8 @@ class Learner(EventLoopObject, Configurable):
         model_state = (state_dict, self.device, self.train_step)
         # signal other components that the model is ready
         self.model_initialized.emit(model_state)
+
+        log.debug(f'{self.object_id} finished initialization!')
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -610,11 +612,10 @@ class Learner(EventLoopObject, Configurable):
                         targets = mb.returns
 
                     # TODO: this should take validity masks into account!
-                    adv_mean = adv.mean()
-                    adv_std = adv.std()
+                    adv_std, adv_mean = torch.std_mean(adv, dim=-1)
 
-                    adv = (adv - adv_mean) / max(1e-7, adv_std)  # normalize advantage
-                    adv = adv.to(self.device)
+                    adv = (adv - adv_mean) / max(1e-7, adv_std.item())  # normalize advantage
+                    adv = adv.to(self.device)  #TODO: is this redundant now?
 
                 with timing.add_time('losses'):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)

@@ -9,7 +9,7 @@ import gym
 from gym.spaces import Discrete
 
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
-from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
+from sample_factory.algorithms.appo.appo_utils import make_env_func
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
 from sample_factory.utils.utils import log, AttrDict, experiment_dir
 
@@ -64,7 +64,7 @@ def extract_env_info(env, cfg):
 def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     set_global_context(sf_context)
 
-    tmp_env = make_env_func_v2(cfg, env_config=None)  # TODO v2?
+    tmp_env = make_env_func(cfg, env_config=None)
     env_info = extract_env_info(tmp_env, cfg)
     tmp_env.close()
     del tmp_env

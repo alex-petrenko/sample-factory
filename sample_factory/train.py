@@ -1,16 +1,8 @@
-import multiprocessing
 import sys
 
-from sample_factory.algo.batchers.batcher_sequential import SequentialBatcher
-from sample_factory.algo.learner import Learner, init_learner_process
 from sample_factory.algo.runners.runner_async import AsyncRunner
 from sample_factory.algo.runners.runner_serial import SerialRunner
-from sample_factory.algo.samplers.sampler_sync import SyncSampler, init_sampler_process
-from sample_factory.algo.utils.context import sf_global_context
-from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algorithms.appo.appo_utils import set_global_cuda_envvars
 from sample_factory.algorithms.utils.arguments import parse_args
-from sample_factory.signal_slot.signal_slot import EventLoopProcess
 
 
 def run_rl(cfg):
@@ -26,25 +18,25 @@ def run_rl(cfg):
 
 
 # TODO: remove duplicate code
-def run_rl_async(cfg):
-    policy_id = 0  # TODO: multiple policies
-    ctx = multiprocessing.get_context('spawn')
-    learner_proc = EventLoopProcess('learner_proc', ctx, init_func=init_learner_process, args=(sf_global_context(), cfg, policy_id))
-    batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories, env_info)
-    learner = Learner(learner_proc.event_loop, cfg, env_info, buffer_mgr, policy_id=0, mp_ctx=ctx)  # currently support only single-policy learning
-
-    sampler_proc = EventLoopProcess('sampler_proc', ctx, init_func=init_sampler_process, args=(sf_global_context(), cfg, policy_id))
-    sampler = SyncSampler(sampler_proc.event_loop, cfg, env_info, learner.param_server, buffer_mgr, batcher.sampling_batches_queue)
-
-    runner.init(sampler, batcher, learner)
-
-    sampler_proc.start()
-    learner_proc.start()
-    status = runner.run()
-    learner_proc.join()
-    sampler_proc.join()
-
-    return status
+# def run_rl_async(cfg):
+#     policy_id = 0  # TODO: multiple policies
+#     ctx = multiprocessing.get_context('spawn')
+#     learner_proc = EventLoopProcess('learner_proc', ctx, init_func=init_learner_process, args=(sf_global_context(), cfg, policy_id))
+#     batcher = SequentialBatcher(learner_proc.event_loop, buffer_mgr.trajectories_per_batch, buffer_mgr.total_num_trajectories, env_info)
+#     learner = Learner(learner_proc.event_loop, cfg, env_info, buffer_mgr, policy_id=0, mp_ctx=ctx)  # currently support only single-policy learning
+#
+#     sampler_proc = EventLoopProcess('sampler_proc', ctx, init_func=init_sampler_process, args=(sf_global_context(), cfg, policy_id))
+#     sampler = SyncSampler(sampler_proc.event_loop, cfg, env_info, learner.param_server, buffer_mgr, batcher.sampling_batches_queue)
+#
+#     runner.init(sampler, batcher, learner)
+#
+#     sampler_proc.start()
+#     learner_proc.start()
+#     status = runner.run()
+#     learner_proc.join()
+#     sampler_proc.join()
+#
+#     return status
 
 
 def main():

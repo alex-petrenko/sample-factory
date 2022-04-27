@@ -11,14 +11,16 @@ import torch
 from gym.spaces import Discrete, Tuple
 from torch.multiprocessing import Process as TorchProcess
 
-from sample_factory.algorithms.appo.appo_utils import TaskType, make_env_func, set_gpus_for_process
+from sample_factory.algorithms.appo.appo_utils import make_env_func, set_gpus_for_process
 from sample_factory.algorithms.appo.policy_manager import PolicyManager
-from sample_factory.algorithms.appo.population_based_training import PbtTask
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
 from sample_factory.envs.env_utils import set_reward_shaping, find_training_info_interface, set_training_info
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, AttrDict, memory_consumption_mb, join_or_kill, set_process_cpu_affinity, \
     set_attr_if_exists, safe_put, safe_put_many
+
+
+# TODO: rewrite this entire file: we only need the vector sampler
 
 
 def transform_dict_observations(observations):

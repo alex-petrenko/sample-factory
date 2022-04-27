@@ -49,7 +49,7 @@ def dict_of_lists_append(d: Dict[Any, List], new_data, index):
 class InferenceWorker(EventLoopObject, Configurable):
     def __init__(
             self, event_loop, policy_id: PolicyID, worker_idx: int, buffer_mgr,
-            param_server: ParameterServer, inference_queue: MpQueue, cfg, env_info: EnvInfo
+            param_server: ParameterServer, inference_queue: MpQueue, cfg, env_info: EnvInfo,
     ):
         Configurable.__init__(self, cfg)
         unique_name = f'{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}'
@@ -85,10 +85,13 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.total_num_samples = self.last_report_samples = 0
 
         self.initialized = False
-        TightLoop(self.event_loop).iteration.connect(self._run)
+
+        self._get_inference_requests_func = self._get_inference_requests_serial if cfg.serial_mode else self._get_inference_requests_serial
+
+        TightLoop(self.event_loop).iteration.connect(self._run)  # TODO: comments
         Timer(self.event_loop, 3.0).timeout.connect(self._report_stats)
 
-        self.cache_cleanup_timer = Timer(self.event_loop, 0.01)
+        self.cache_cleanup_timer = Timer(self.event_loop, 0.1)
         if not self.cfg.benchmark:
             self.cache_cleanup_timer.timeout.connect(self._cache_cleanup)
 
@@ -101,6 +104,8 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.initialized = True
 
     def _handle_policy_steps(self, timing):
+        assert self.initialized  # TODO: remove
+
         # TODO: batch requests together. Two cases 1) numpy indices 2) torch tensor slices
         # (self.worker_idx, split_idx, requests)/
         # (self.curr_traj_slice, self.rollout_step)
@@ -146,17 +151,14 @@ class InferenceWorker(EventLoopObject, Configurable):
                     self.emit(f'advance{actor_idx}', (split_idx, self.policy_id))  # TODO: connect to this signal
 
                 self.requests = []
-            
-    def _run(self):
-        # TODO: termination
 
-        assert self.initialized  # TODO: remove
+    def _get_inference_requests_serial(self):
+        try:
+            self.requests.extend(self.inference_queue.get_many(block=False))
+        except Empty:
+            pass
 
-        # TODO: implement this or a replacement mechanism (probably just emit a signal on the learner?)
-        # while self.shared_buffers.stop_experience_collection[self.policy_id]:
-        #     with self.resume_experience_collection_cv:
-        #         self.resume_experience_collection_cv.wait(timeout=0.05)
-
+    def _get_inference_requests_async(self):
         # Very conservative timer. Only wait a little bit, then continue with what we've got.
         wait_for_min_requests = 0.025
 
@@ -169,13 +171,24 @@ class InferenceWorker(EventLoopObject, Configurable):
             except Empty:
                 pass
 
+    def _run(self):
+        # TODO: termination
+
+        # TODO: implement this or a replacement mechanism (probably just emit a signal on the learner?)
+        # while self.shared_buffers.stop_experience_collection[self.policy_id]:
+        #     with self.resume_experience_collection_cv:
+        #         self.resume_experience_collection_cv.wait(timeout=0.05)
+
+        self._get_inference_requests_func()
+        if not self.requests:
+            return
+
         with self.timing.add_time('update_model'):
             self.param_client.ensure_weights_updated()
 
         with self.timing.timeit('one_step'), self.timing.add_time('handle_policy_step'):
-            if len(self.requests) > 0:
-                self.request_count.append(len(self.requests))  # TODO: count requests properly when we use slices
-                self._handle_policy_steps(self.timing)
+            self.request_count.append(len(self.requests))  # TODO: count requests properly when we use slices
+            self._handle_policy_steps(self.timing)
 
     def _report_stats(self):
         if 'one_step' not in self.timing:

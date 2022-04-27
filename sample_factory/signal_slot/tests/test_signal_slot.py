@@ -149,3 +149,25 @@ class TestSignalSlot(TestCase):
         log.debug(f'Starting event loop {event_loop}')
         event_loop.exec()
         p.join()
+
+    def test_process_given_evt_loop(self):
+        main_loop = EventLoop('__main_loop')
+        p_loop = EventLoop('__p1_loop')
+
+        stop_timer = Timer(main_loop, 0.5, single_shot=True)
+        stop_timer.timeout.connect(main_loop.stop)
+
+        o1 = self.C3(p_loop, 'o1_')
+        o2 = self.C4(p_loop, 'o2_')
+
+        o1.s1.connect(o2.on_s1)
+        o1.s1.emit(dict(a=1, b=2, c=3), 42)
+
+        p = EventLoopProcess('__p1', p_loop)
+        main_loop.terminate.connect(p.stop)
+
+        p.start()
+        log.debug(f'Starting event loop {main_loop}')
+        main_loop.exec()
+        p.join()
+

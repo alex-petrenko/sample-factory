@@ -67,8 +67,6 @@ class TimingContext:
     def __exit__(self, type_, value, traceback):
         time_passed = max(time.time() - self._time_enter, EPS)  # EPS to prevent div by zero
         self._record_measurement(self._key, time_passed)
-
-        assert self._timing._open_contexts_stack[-1] is self
         self._timing._open_contexts_stack.pop()
 
 

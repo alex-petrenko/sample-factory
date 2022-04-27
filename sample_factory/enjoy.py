@@ -5,7 +5,7 @@ from collections import deque
 import numpy as np
 import torch
 
-from sample_factory.algo.learner import Learner
+from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.samplers.sampler_sync import preprocess_actions
 from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
 from sample_factory.algorithms.appo.model import create_actor_critic

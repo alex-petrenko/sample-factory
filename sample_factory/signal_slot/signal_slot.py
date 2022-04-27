@@ -458,6 +458,7 @@ class EventLoopProcess(EventLoopObject):
         self._kwargs = dict() if kwargs is None else dict(kwargs)
 
         self._process = process_cls(target=self._target, name=unique_process_name, daemon=daemon)
+
         self.event_loop = EventLoop(f'{unique_process_name}_evt_loop')
         EventLoopObject.__init__(self, self.event_loop, unique_process_name)
 
