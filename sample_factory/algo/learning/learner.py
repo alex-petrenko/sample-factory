@@ -181,7 +181,6 @@ class Learner(EventLoopObject, Configurable):
                     'WARNING! It is generally recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks to avoid potential numerical issues. '
                     'I.e. set --kl_loss_coeff=0.1'
                 )
-                time.sleep(3.0)
             self.kl_loss_func = lambda action_space, action_logits, distribution, valids: (None, 0.0)
         else:
             self.kl_loss_func = self._kl_loss

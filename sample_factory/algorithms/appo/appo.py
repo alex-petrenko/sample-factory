@@ -120,7 +120,7 @@ class APPO(ReinforcementLearningAlgorithm):
         arg(
             '--shuffle_minibatches', default=True, type=str2bool,
             help='Whether to randomize and shuffle minibatches between iterations'
-                 '(disabling this slightly increases learner throughput when training with many epochs/minibatches)'
+                 '(this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)'
         )
         arg(
             '--num_minibatches_to_accumulate', default=-1, type=int,
