@@ -73,12 +73,12 @@ def enjoy(cfg, max_num_frames=1e9):
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
             normalized_obs = actor_critic.normalizer(obs)
-            policy_outputs = actor_critic(normalized_obs, rnn_states, with_action_distribution=True)
+            policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
             actions = policy_outputs.actions
 
-            action_distribution = policy_outputs.action_distribution
+            action_distribution = actor_critic.get_action_distribution()
             if isinstance(action_distribution, ContinuousActionDistribution):
                 if not cfg.continuous_actions_sample:  # TODO: add similar option for discrete actions
                     actions = action_distribution.means

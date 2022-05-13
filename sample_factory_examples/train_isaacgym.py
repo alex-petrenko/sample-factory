@@ -68,6 +68,11 @@ def override_default_params_func(env, parser):
 
     """
     parser.set_defaults(
+        # we're using a single very vectorized env, no need to parallelize it further
+        num_workers=1,
+        num_envs_per_worker=1,
+        worker_num_splits=1,
+
         encoder_custom='isaac_gym_mlp_encoder',
         use_rnn=False,
         adaptive_stddev=False,

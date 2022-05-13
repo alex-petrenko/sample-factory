@@ -1,15 +1,17 @@
 import math
-from typing import List
+from typing import List, Dict
 
 import torch
 from gym import spaces
 from torch import Tensor
 
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.queues import get_mp_queue
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.algorithms.appo.shared_buffers import TensorDict, to_torch_dtype
 from sample_factory.algorithms.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.utils.typing import PolicyID, MpQueue
 from sample_factory.utils.utils import log
 
 
@@ -122,6 +124,8 @@ class BufferMgr(Configurable):
         super().__init__(cfg)
         self.env_info = env_info
 
+        self.traj_buffer_queues: Dict[PolicyID, MpQueue] = {p: get_mp_queue() for p in range(cfg.num_policies)}
+
         # TODO: do not initialize CUDA in the main process if we can?
         policy_id = 0  # TODO: multi-policy case
         device_idx = policy_id % torch.cuda.device_count()
@@ -133,7 +137,7 @@ class BufferMgr(Configurable):
         self.trajectories_per_minibatch = self.cfg.batch_size // rollout
         self.trajectories_per_batch = self.cfg.num_batches_per_iteration * self.trajectories_per_minibatch
 
-        assert math.gcd(self.trajectories_per_batch, self.env_info.num_agents), \
+        assert math.gcd(self.trajectories_per_batch, self.env_info.num_agents) == min(self.trajectories_per_batch, self.env_info.num_agents), \
             'Num agents should divide the number of trajectories per batch or vice versa (for performance reasons)'
 
         share = not cfg.serial_mode

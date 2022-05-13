@@ -195,7 +195,6 @@ class Learner(EventLoopObject, Configurable):
 
         # initialize device
         if self.cfg.device == 'gpu':
-
             self.device = torch.device('cuda', index=0)
         else:
             self.device = torch.device('cpu')
@@ -553,16 +552,15 @@ class Learner(EventLoopObject, Configurable):
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
                     # calculate policy tail outside of recurrent loop
-                    result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
-
-                    action_distribution = result.action_distribution
+                    result = self.actor_critic.forward_tail(core_outputs)
+                    action_distribution = self.actor_critic.get_action_distribution()
                     log_prob_actions = action_distribution.log_prob(mb.actions)
                     ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
                     # super large/small values can cause numerical problems and are probably noise anyway
                     ratio = torch.clamp(ratio, 0.05, 20.0)
 
-                    values = result.values.squeeze()
+                    values = result['values'].squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
                     # ignore experience from other agents (i.e. on episode boundary) and from inactive agents
@@ -750,7 +748,7 @@ class Learner(EventLoopObject, Configurable):
         ) ** 0.5
         stats.grad_norm = grad_norm
         stats.loss = var.loss
-        stats.value = var.result.values.mean()
+        stats.value = var.result['values'].mean()
         stats.entropy = var.action_distribution.entropy().mean()
         stats.policy_loss = var.policy_loss
         stats.kl_loss = var.kl_loss
@@ -811,7 +809,7 @@ class Learner(EventLoopObject, Configurable):
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
             normalized_last_obs = self.actor_critic.normalizer(buff['obs'][:, -1])
-            next_values = self.actor_critic(normalized_last_obs, buff['rnn_states'][:, -1], values_only=True)
+            next_values = self.actor_critic(normalized_last_obs, buff['rnn_states'][:, -1], values_only=True)['values']
 
             # remove next step obs and rnn_states from the batch, we don't need them anymore
             buff['obs'] = buff['obs'][:, :-1]

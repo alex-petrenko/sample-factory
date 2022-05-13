@@ -74,7 +74,7 @@ def enjoy(cfg, max_num_frames=1e9):
             for key, x in obs_torch.items():
                 obs_torch[key] = torch.from_numpy(x).to(device).float()
 
-            policy_outputs = actor_critic(obs_torch, rnn_states, with_action_distribution=True)
+            policy_outputs = actor_critic(obs_torch, rnn_states)
 
             # sample actions from the distribution by default
             actions = policy_outputs.actions

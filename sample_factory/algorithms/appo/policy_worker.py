@@ -109,7 +109,7 @@ class PolicyWorker:
 
                 # concat all tensors into a single tensor for performance
                 output_tensors = []
-                for policy_output in self.shared_buffers.policy_outputs:
+                for policy_output in self.shared_buffers.policy_output_tensors:
                     tensor_name = policy_output.name
                     output_value = policy_outputs[tensor_name].float()
                     if len(output_value.shape) == 1:

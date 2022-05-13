@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import torch
-from torch import nn
+from torch import nn, Tensor
 
 from sample_factory.algorithms.appo.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
     ActionParameterizationDefault
+from sample_factory.algorithms.appo.shared_buffers import TensorDict
 from sample_factory.algorithms.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
 from sample_factory.utils.normalize import Normalizer
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.utils import AttrDict
 
 
 class _ActorCriticBase(nn.Module):
@@ -20,6 +22,8 @@ class _ActorCriticBase(nn.Module):
         self.cores = []
 
         self.normalizer = Normalizer(obs_space, cfg)
+
+        self.last_action_distribution = None  # to be populated after each forward step
 
     def get_action_parameterization(self, core_output_size):
         if not self.cfg.adaptive_stddev and is_continuous_action_space(self.action_space):
@@ -67,6 +71,9 @@ class _ActorCriticBase(nn.Module):
     def summaries(self):
         return self.normalizer.summaries()  # Can add more summaries here, like weights statistics
 
+    def get_action_distribution(self):
+        return self.last_action_distribution
+
 
 class _ActorCriticSharedWeights(_ActorCriticBase):
     def __init__(self, make_encoder, make_core, obs_space, action_space, cfg, timing):
@@ -98,35 +105,32 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         values = self.critic_linear(core_output).squeeze()
         return values
 
-    def forward_tail(self, core_output, with_action_distribution=False):
+    def forward_tail(self, core_output) -> TensorDict:
         values = self.calc_value(core_output)
 
-        action_distribution_params, action_distribution = self.action_parameterization(core_output)
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(core_output)
 
         # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(action_distribution)
+        actions, log_prob_actions = sample_actions_log_probs(self.last_action_distribution)
 
-        result = AttrDict(dict(
+        result = TensorDict(
             actions=actions,
             action_logits=action_distribution_params,  # TODO! `action_logits` is not the best name here since we now support continuous actions
             log_prob_actions=log_prob_actions,
             values=values,
-        ))
-
-        if with_action_distribution:
-            result.action_distribution = action_distribution
+        )
 
         return result
 
-    def forward(self, normalized_obs_dict, rnn_states, with_action_distribution=False, values_only=False):
+    def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
         x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
 
         if values_only:
-            return self.calc_value(x)
+            return TensorDict(values=self.calc_value(x))
         else:
-            result = self.forward_tail(x, with_action_distribution=with_action_distribution)
-            result.rnn_states = new_rnn_states
+            result = self.forward_tail(x)
+            result['new_rnn_states'] = new_rnn_states
             return result
 
 
@@ -186,30 +190,27 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
     def forward_core(self, head_output, rnn_states):
         return self.core_func(head_output, rnn_states)
 
-    def forward_tail(self, core_output, with_action_distribution=False):
+    def forward_tail(self, core_output) -> TensorDict:
         core_outputs = core_output.chunk(len(self.cores), dim=1)
 
         # first core output corresponds to the actor
-        action_distribution_params, action_distribution = self.action_parameterization(core_outputs[0])
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(core_outputs[0])
         # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(action_distribution)
+        actions, log_prob_actions = sample_actions_log_probs(self.last_action_distribution)
 
         # second core output corresponds to the critic
         values = self.critic_linear(core_outputs[1]).squeeze()
 
-        result = AttrDict(dict(
+        result = TensorDict(
             actions=actions,
             action_logits=action_distribution_params,
             log_prob_actions=log_prob_actions,
             values=values,
-        ))
-
-        if with_action_distribution:
-            result.action_distribution = action_distribution
+        )
 
         return result
 
-    def forward(self, normalized_obs_dict, rnn_states, with_action_distribution=False, values_only=False):
+    def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
         x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
 
@@ -219,10 +220,10 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
             core_outputs = x.chunk(len(self.cores), dim=1)
             # second core output corresponds to the critic
             values = self.critic_linear(core_outputs[1]).squeeze()
-            return values
+            return TensorDict(values=values)
         else:
-            result = self.forward_tail(x, with_action_distribution=with_action_distribution)
-            result.rnn_states = new_rnn_states
+            result = self.forward_tail(x)
+            result['new_rnn_states'] = new_rnn_states
             return result
 
 

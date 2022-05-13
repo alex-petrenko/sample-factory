@@ -598,7 +598,7 @@ class LearnerWorker:
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
                     # calculate policy tail outside of recurrent loop
-                    result = self.actor_critic.forward_tail(core_outputs, with_action_distribution=True)
+                    result = self.actor_critic.forward_tail(core_outputs)
 
                     action_distribution = result.action_distribution
                     log_prob_actions = action_distribution.log_prob(mb.actions)

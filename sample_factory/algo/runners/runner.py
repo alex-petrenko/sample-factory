@@ -4,7 +4,7 @@ import os
 import time
 from collections import deque, OrderedDict
 from os.path import join
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -13,7 +13,7 @@ from sample_factory.algo.learning.batcher_sequential import SequentialBatcher, B
 from sample_factory.algo.inference_worker import InferenceWorker
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.rollout_worker import RolloutWorker
-from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process
+from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.queues import get_mp_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
@@ -95,7 +95,7 @@ class Runner(EventLoopObject, Configurable):
 
         self.stopped = False
 
-        self.env_info = None
+        self.env_info: Optional[EnvInfo] = None
         self.buffer_mgr = None
 
         self.inference_queues: Dict[PolicyID, MpQueue] = {p: get_mp_queue() for p in range(self.cfg.num_policies)}
@@ -160,8 +160,6 @@ class Runner(EventLoopObject, Configurable):
             samples_collected=[self._samples_stats_handler],
         )
 
-        self.subscribe('report_msg', self._process_msg)
-
         def periodic(period, cb):
             return Timer(self.event_loop, period).timeout.connect(cb)
 
@@ -176,6 +174,9 @@ class Runner(EventLoopObject, Configurable):
         self.components_to_stop: List[EventLoopObject] = []
 
     # singals emitted by the runner
+    @signal
+    def inference_workers_initialized(self): pass
+
     @signal
     def save_periodic(self): pass
 
@@ -423,8 +424,10 @@ class Runner(EventLoopObject, Configurable):
         return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, policy_id=policy_id)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
+        # TODO: other types of batchers
         return SequentialBatcher(
-            event_loop, self.buffer_mgr.trajectories_per_batch, self.buffer_mgr.total_num_trajectories, self.env_info, policy_id
+            event_loop, self.buffer_mgr.trajectories_per_batch, self.buffer_mgr.total_num_trajectories,
+            self.env_info, policy_id, self.buffer_mgr.traj_buffer_queues[policy_id],
         )
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
@@ -443,7 +446,59 @@ class Runner(EventLoopObject, Configurable):
     def connect_components(self):
         for policy_id in range(self.cfg.num_policies):
             # when runner is ready we initialize the learner first
-            self.event_loop.start.connect(self.learners[policy_id].init)
+            learner = self.learners[policy_id]
+            batcher = self.batchers[policy_id]
+            self.event_loop.start.connect(batcher.init)  # TODO: base class with init()
+            batcher.initialized.connect(learner.init)
+
+            for i in range(self.cfg.policy_workers_per_policy):
+                # once learner is initialized and the model is ready, we initialize inference workers
+                learner.model_initialized.connect(self.inference_workers[policy_id][i].init)
+
+                # inference workers signal when their initialization is complete
+                self.inference_workers[policy_id][i].initialized.connect(self.inference_worker_ready)
+
+            # batcher gives learner batches of trajectories ready for learning
+            batcher.training_batches_available.connect(learner.on_new_training_batches)
+            # once learner is done with a training batch, it is given back to the batcher
+            learner.training_batch_released.connect(batcher.on_training_batch_released)
+
+            # auxiliary connections, such as summary reporting and checkpointing
+            learner.finished_training_iteration.connect(self._after_training_iteration)
+            learner.report_msg.connect(self._process_msg)
+            self.save_periodic.connect(learner.save)
+            self.save_best.connect(learner.save_best)
+
+        for rollout_worker_idx in range(self.cfg.num_workers):
+            # once all learners and inference workers are initialized, we can initialize rollout workers
+            rollout_worker = self.rollout_workers[rollout_worker_idx]
+            self.inference_workers_initialized.connect(rollout_worker.init)
+
+            # inference worker signals to advance rollouts when actions are ready
+            for policy_id in range(self.cfg.num_policies):
+                for inference_worker_idx in range(self.cfg.policy_workers_per_policy):
+                    self.inference_workers[policy_id][inference_worker_idx].connect(f'advance{rollout_worker_idx}', rollout_worker.advance_rollouts)
+
+                # rollout workers send new trajectories to batchers
+                rollout_worker.connect(f'p{policy_id}_trajectories', self.batchers[policy_id].on_new_trajectories)
+                # wake up rollout workers when trajectory buffers are released
+                self.batchers[policy_id].trajectory_buffers_available.connect(rollout_worker.on_trajectory_buffers_available)
+
+            rollout_worker.report_msg.connect(self._process_msg)
+
+    def inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
+        assert not self.inference_workers[policy_id][worker_idx].is_ready
+        log.info(f'Inference worker {policy_id}-{worker_idx} is ready!')
+        self.inference_workers[policy_id][worker_idx].is_ready = True
+
+        # check if all workers for all policies are ready
+        all_ready = True
+        for policy_id in range(self.cfg.num_policies):
+            all_ready &= all(w.is_ready for w in self.inference_workers[policy_id])
+
+        if all_ready:
+            log.info('All inference workers are ready! Signal rollout workers to start!')
+            self.inference_workers_initialized.emit()
 
     # # TODO: type hints
     # def init_todo___(self, sampler, batcher, learner):

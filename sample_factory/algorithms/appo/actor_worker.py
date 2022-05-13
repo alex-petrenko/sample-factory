@@ -66,7 +66,7 @@ class ActorState:
         self.curr_traj_buffer_idx = self.curr_traj_buffer = None
         self.update_traj_buffer(shared_buffers.get_trajectory_buffers(num_buffers=1)[0])
 
-        policy_outputs_info = shared_buffers.policy_outputs
+        policy_outputs_info = shared_buffers.policy_output_tensors
         self.policy_output_names = [p.name for p in policy_outputs_info]
         self.policy_output_sizes = [p.size for p in policy_outputs_info]
         self.policy_output_indices = np.cumsum(self.policy_output_sizes)

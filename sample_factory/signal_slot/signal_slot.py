@@ -125,7 +125,7 @@ class EventLoopObject:
         assert slot is not None
         return obj, slot
 
-    def connect(self, signal_: str, other: Union[EventLoopObject, BoundMethod], slot: str = None):
+    def connect(self, signal_: str, other: EventLoopObject | BoundMethod, slot: str = None):
         other, slot = self._bound_method_to_obj_slot(other, slot)
 
         self._throw_if_different_processes(self, other)
@@ -144,7 +144,7 @@ class EventLoopObject:
 
         other.connections[emitter] = slot
 
-    def disconnect(self, signal_, other: Union[EventLoopObject, BoundMethod], slot: str = None):
+    def disconnect(self, signal_, other: EventLoopObject | BoundMethod, slot: str = None):
         other, slot = self._bound_method_to_obj_slot(other, slot)
 
         self._throw_if_different_processes(self, other)
