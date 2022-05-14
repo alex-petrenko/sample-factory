@@ -3,8 +3,8 @@ from sample_factory.runner.runs.isaacgym_runs import vstr, base_cli
 
 _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
-    ('serial_mode', [True, False]),
-    ('async_rl', [True]),
+    ('serial_mode', [True]),
+    ('async_rl', [False]),
 ])
 
 humanoid_cli = f' --env=isaacgym_humanoid --train_for_env_steps=131000000 ' \
@@ -15,7 +15,8 @@ humanoid_cli = f' --env=isaacgym_humanoid --train_for_env_steps=131000000 ' \
 cli = base_cli + humanoid_cli
 
 _experiments = [
-    Experiment(f'humanoid_{vstr}_async', cli, _params.generate_params(False)),
+    Experiment(f'humanoid_{vstr}', cli, _params.generate_params(False)),
+    Experiment(f'humanoid_{vstr}_rnn', cli + ' --use_rnn=True --recurrence=32', _params.generate_params(False)),
 ]
 
 RUN_DESCRIPTION = RunDescription(f'humanoid_{vstr}', experiments=_experiments)
