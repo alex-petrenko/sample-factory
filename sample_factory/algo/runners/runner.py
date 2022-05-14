@@ -131,7 +131,7 @@ class Runner(EventLoopObject, Configurable):
         self.summaries_interval_sec = self.cfg.experiment_summaries_interval  # sec
 
         self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
-        self.throughput_stats = [deque([], maxlen=5) for _ in range(self.cfg.num_policies)]
+        self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
 
         self.stats = dict()  # regular (non-averaged) stats
         self.avg_stats = dict()
@@ -475,6 +475,8 @@ class Runner(EventLoopObject, Configurable):
             learner.training_batch_released.connect(batcher.on_training_batch_released)
 
             # auxiliary connections, such as summary reporting and checkpointing
+            for i in range(self.cfg.policy_workers_per_policy):
+                self.inference_workers[policy_id][i].report_msg.connect(self._process_msg)
             learner.finished_training_iteration.connect(self._after_training_iteration)
             learner.report_msg.connect(self._process_msg)
             self.save_periodic.connect(learner.save)

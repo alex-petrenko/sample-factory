@@ -226,15 +226,14 @@ class InferenceWorker(EventLoopObject, Configurable):
 
         timing_stats = dict(wait_policy=self.timing.get('wait_policy', 0), step_policy=self.timing.one_step)
         samples_since_last_report = self.total_num_samples - self.last_report_samples
+        self.last_report_samples = self.total_num_samples
 
         stats = memory_stats('policy_worker', self.device)
         if len(self.request_count) > 0:
             stats['avg_request_count'] = np.mean(self.request_count)
 
-        self.report_msg.emit()
-
         self.report_msg.emit(dict(
-            timing=timing_stats, samples=samples_since_last_report, policy_id=self.policy_id, stats=stats,
+            timing=timing_stats, samples_collected=samples_since_last_report, policy_id=self.policy_id, stats=stats,
         ))
 
     def _cache_cleanup(self):
