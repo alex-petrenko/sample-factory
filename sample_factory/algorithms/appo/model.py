@@ -71,7 +71,7 @@ class _ActorCriticBase(nn.Module):
     def summaries(self):
         return self.normalizer.summaries()  # Can add more summaries here, like weights statistics
 
-    def get_action_distribution(self):
+    def action_distribution(self):
         return self.last_action_distribution
 
 
@@ -105,20 +105,20 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         values = self.critic_linear(core_output).squeeze()
         return values
 
-    def forward_tail(self, core_output) -> TensorDict:
+    def forward_tail(self, core_output, sample_actions=True) -> TensorDict:
         values = self.calc_value(core_output)
 
         action_distribution_params, self.last_action_distribution = self.action_parameterization(core_output)
 
-        # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(self.last_action_distribution)
-
         result = TensorDict(
-            actions=actions,
-            action_logits=action_distribution_params,  # TODO! `action_logits` is not the best name here since we now support continuous actions
-            log_prob_actions=log_prob_actions,
+            action_logits=action_distribution_params,
+            # TODO! `action_logits` is not the best name here since we now support continuous actions
             values=values,
         )
+
+        if sample_actions:
+            # for non-trivial action spaces it is faster to do these together
+            result['actions'], result['log_prob_actions'] = sample_actions_log_probs(self.last_action_distribution)
 
         return result
 
@@ -190,23 +190,23 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
     def forward_core(self, head_output, rnn_states):
         return self.core_func(head_output, rnn_states)
 
-    def forward_tail(self, core_output) -> TensorDict:
+    def forward_tail(self, core_output, sample_actions=True) -> TensorDict:
         core_outputs = core_output.chunk(len(self.cores), dim=1)
 
         # first core output corresponds to the actor
         action_distribution_params, self.last_action_distribution = self.action_parameterization(core_outputs[0])
-        # for non-trivial action spaces it is faster to do these together
-        actions, log_prob_actions = sample_actions_log_probs(self.last_action_distribution)
 
         # second core output corresponds to the critic
         values = self.critic_linear(core_outputs[1]).squeeze()
 
         result = TensorDict(
-            actions=actions,
             action_logits=action_distribution_params,
-            log_prob_actions=log_prob_actions,
             values=values,
         )
+
+        if sample_actions:
+            # for non-trivial action spaces it is faster to do these together
+            result['actions'], result['log_prob_actions'] = sample_actions_log_probs(self.last_action_distribution)
 
         return result
 

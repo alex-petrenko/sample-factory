@@ -96,10 +96,13 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.is_ready = False
 
     @signal
+    def initialized(self): pass
+
+    @signal
     def report_msg(self): pass
 
     @signal
-    def initialized(self): pass
+    def stop(self): pass
 
     def init(self, initial_model_state):
         state_dict, self.device, policy_version = initial_model_state
@@ -134,15 +137,22 @@ class InferenceWorker(EventLoopObject, Configurable):
 
             with timing.add_time('stack'):
                 # TODO: do we need an extra case where it is just one big batch? So we don't need to call cat
-                for obs_key, tensor_list in obs.items():
-                    obs[obs_key] = torch.cat(tensor_list)
-                rnn_states = torch.cat(rnn_states)
+                if len(rnn_states) == 1:
+                    for obs_key, tensor_list in obs.items():
+                        obs[obs_key] = tensor_list[0]
+                    rnn_states = rnn_states[0]
+                else:
+                    for obs_key, tensor_list in obs.items():
+                        obs[obs_key] = torch.cat(tensor_list)
+                    rnn_states = torch.cat(rnn_states)
+
                 num_samples = rnn_states.shape[0]
                 self.total_num_samples += num_samples
 
             with timing.add_time('obs_to_device'):
                 actor_critic = self.param_client.actor_critic
-                actor_critic.eval()  # need to call this because we can be in serial mode
+                with timing.add_time('model_eval'):
+                    actor_critic.eval()  # need to call this because we can be in serial mode
 
                 for key, x in obs.items():
                     device, dtype = actor_critic.device_and_type_for_input_tensor(key)
@@ -234,3 +244,14 @@ class InferenceWorker(EventLoopObject, Configurable):
         # initially we clean cache very frequently, later on do it every few minutes
         if self.total_num_samples > 1000:
             self.cache_cleanup_timer.set_interval(300.0)
+
+    def on_stop(self, emitter_id):
+        log.debug(f'Stopping {self.object_id}...')
+
+        self.stop.emit(self.object_id)
+
+        if self.event_loop.owner is self:
+            self.event_loop.stop()
+
+        self.detach()  # remove from the current event loop
+        log.info(self.timing)

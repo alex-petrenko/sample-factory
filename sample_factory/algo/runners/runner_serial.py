@@ -1,4 +1,3 @@
-from sample_factory.algo.rollout_worker import RolloutWorker
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
 

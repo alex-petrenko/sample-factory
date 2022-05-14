@@ -1,9 +1,7 @@
 from typing import Iterable, Dict, Optional
 
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.queues import get_mp_queue
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
-
 
 # TODO: this whole class should go
 # We only really need two things:
@@ -12,7 +10,6 @@ from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, Even
 # Sync batcher can really be just a circular buffer. And async batcher needs an entirely different logic anyway.
 # WTF did I even write all of that
 from sample_factory.utils.typing import PolicyID, MpQueue
-from sample_factory.utils.utils import log
 
 
 class SliceMerger:
@@ -106,6 +103,9 @@ class SequentialBatcher(Batcher):
     @signal
     def training_batches_available(self): pass
 
+    @signal
+    def stop(self): pass
+
     def init(self):
         # we should put all initial batches into the sampler queue
         for i in range(self.total_num_trajectories):
@@ -135,3 +135,9 @@ class SequentialBatcher(Batcher):
         if new_sampling_batches:
             self.traj_buffer_queue.put_many(new_sampling_batches)
             self.trajectory_buffers_available.emit()
+
+    def on_stop(self, emitter_id):
+        self.stop.emit(self.object_id)
+        if self.event_loop.owner is self:
+            self.event_loop.stop()
+        self.detach()  # remove from the current event loop

@@ -11,7 +11,7 @@ from typing import Dict, Any, Set, Callable, Union, List, Optional, Iterable, Tu
 
 import psutil
 
-from sample_factory.algo.utils.queues import get_mp_queue
+from sample_factory.algo.utils.queues import get_queue
 from sample_factory.utils.utils import log
 
 # type aliases for clarity
@@ -223,16 +223,19 @@ class EventLoopStatus:
 
 
 class EventLoop(EventLoopObject):
-    def __init__(self, unique_loop_name):
+    def __init__(self, unique_loop_name, serial_mode=False):
         # objects living on this loop
         self.objects: Dict[ObjectID, EventLoopObject] = dict()
 
         super().__init__(self, unique_loop_name)
 
+        # object responsible for stopping the loop (if any)
+        self.owner: Optional[EventLoopObject] = None
+
         # when event loop is created it just lives on the current process
         self.process: Union[psutil.Process, EventLoopProcess] = psutil.Process(os.getpid())
 
-        self.signal_queue = get_mp_queue(buffer_size_bytes=5_000_000)
+        self.signal_queue = get_queue(serial=serial_mode, buffer_size_bytes=5_000_000)
 
         # Separate container to keep track of timers living on this thread. Start with one default timer.
         self.timers: List[Timer] = []

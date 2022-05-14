@@ -246,8 +246,8 @@ class ContinuousActionDistribution(Independent):
 
     def __init__(self, params):
         self.means, self.log_std, self.stddevs = self._init_impl(params, self.stddev_min, self.stddev_max)
-        normal_dist = Normal(self.means, self.stddevs)
-        super().__init__(normal_dist, 1)
+        normal_dist = Normal(self.means, self.stddevs, validate_args=False)
+        super().__init__(normal_dist, 1, validate_args=False)
 
     @staticmethod
     @torch.jit.script

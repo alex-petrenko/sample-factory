@@ -35,18 +35,18 @@ def init_sampler_process(sf_context: SampleFactoryContext, cfg, policy_id):
 
 
 # TODO: remove code duplication (actor_worker.py)
-def preprocess_actions(env_info, actions):
-    if env_info.integer_actions:
-        actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
-
-    if not env_info.gpu_actions:
-        actions = actions.cpu().numpy()
-
-    # TODO: do we need this? actions are a tensor of size [batch_size, action_shape] (or just [batch_size] if it is a single action per env)
-    # if len(actions) == 1:
-    #     actions = actions.item()
-
-    return actions
+# def preprocess_actions(env_info, actions):
+#     if env_info.integer_actions:
+#         actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
+#
+#     if not env_info.gpu_actions:
+#         actions = actions.cpu().numpy()
+#
+#     # TODO: do we need this? actions are a tensor of size [batch_size, action_shape] (or just [batch_size] if it is a single action per env)
+#     # if len(actions) == 1:
+#     #     actions = actions.item()
+#
+#     return actions
 
 
 class Sampler(Configurable):

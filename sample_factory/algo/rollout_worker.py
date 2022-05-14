@@ -362,6 +362,9 @@ class RolloutWorker(EventLoopObject, Configurable):
     @signal
     def report_msg(self): pass
 
+    @signal
+    def stop(self): pass
+
     def init(self):
         policy_id = self.worker_idx % self.cfg.num_policies
         log.debug(f'Worker {self.object_id} uses policy {policy_id}')  # don't print this for non-batched runners
@@ -471,3 +474,15 @@ class RolloutWorker(EventLoopObject, Configurable):
         # request a new trajectory (since they're now available), and finally send observations to the inference worker
         for split_idx in range(self.num_splits):
             self._maybe_send_policy_request(self.env_runners[split_idx])
+
+    # TODO: base class for this to avoid repeating this code everywhere
+    def on_stop(self, emitter_id):
+        log.debug(f'Stopping {self.object_id}...')
+
+        self.stop.emit(self.object_id)
+
+        if self.event_loop.owner is self:
+            self.event_loop.stop()
+
+        self.detach()  # remove from the current event loop
+        log.info(self.timing)

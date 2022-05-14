@@ -6,13 +6,12 @@ from gym import spaces
 from torch import Tensor
 
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.queues import get_mp_queue
+from sample_factory.algo.utils.queues import get_queue
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.algorithms.appo.shared_buffers import TensorDict, to_torch_dtype
 from sample_factory.algorithms.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.typing import PolicyID, MpQueue
-from sample_factory.utils.utils import log
 
 
 def init_tensor(leading_dimensions: List, tensor_type, tensor_shape, device: torch.device, share: bool) -> Tensor:
@@ -124,7 +123,7 @@ class BufferMgr(Configurable):
         super().__init__(cfg)
         self.env_info = env_info
 
-        self.traj_buffer_queues: Dict[PolicyID, MpQueue] = {p: get_mp_queue() for p in range(cfg.num_policies)}
+        self.traj_buffer_queues: Dict[PolicyID, MpQueue] = {p: get_queue(cfg.serial_mode) for p in range(cfg.num_policies)}
 
         # TODO: do not initialize CUDA in the main process if we can?
         policy_id = 0  # TODO: multi-policy case

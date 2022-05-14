@@ -9,13 +9,13 @@ from typing import Dict, Tuple, List, Optional
 import numpy as np
 from tensorboardX import SummaryWriter
 
-from sample_factory.algo.learning.batcher_sequential import SequentialBatcher, Batcher
 from sample_factory.algo.inference_worker import InferenceWorker
+from sample_factory.algo.learning.batcher_sequential import SequentialBatcher, Batcher
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.rollout_worker import RolloutWorker
 from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
 from sample_factory.algo.utils.model_sharing import ParameterServer
-from sample_factory.algo.utils.queues import get_mp_queue
+from sample_factory.algo.utils.queues import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, set_global_cuda_envvars
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_EPISODIC_STATS_PROCESSING, \
@@ -90,7 +90,8 @@ class Runner(EventLoopObject, Configurable):
         Configurable.__init__(self, cfg)
 
         unique_name = Runner.__name__ if unique_name is None else unique_name
-        self.event_loop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop')
+        self.event_loop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop', serial_mode=cfg.serial_mode)
+        self.event_loop.owner = self
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
         self.stopped = False
@@ -98,7 +99,7 @@ class Runner(EventLoopObject, Configurable):
         self.env_info: Optional[EnvInfo] = None
         self.buffer_mgr = None
 
-        self.inference_queues: Dict[PolicyID, MpQueue] = {p: get_mp_queue() for p in range(self.cfg.num_policies)}
+        self.inference_queues: Dict[PolicyID, MpQueue] = {p: get_queue(cfg.serial_mode) for p in range(self.cfg.num_policies)}
 
         self.learners: Dict[PolicyID, Learner] = dict()
         self.batchers: Dict[PolicyID, Batcher] = dict()
@@ -443,6 +444,16 @@ class Runner(EventLoopObject, Configurable):
         self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 
+    def _setup_component_heartbeat(self):
+        # TODO!!!
+        pass
+
+    # noinspection PyUnresolvedReferences
+    def _setup_component_termination(self, stop_trigger_obj: EventLoopObject, component_to_stop: EventLoopObject):
+        stop_trigger_obj.stop.connect(component_to_stop.on_stop)
+        self.components_to_stop.append(component_to_stop)
+        component_to_stop.stop.connect(self._component_stopped)
+
     def connect_components(self):
         for policy_id in range(self.cfg.num_policies):
             # when runner is ready we initialize the learner first
@@ -469,6 +480,12 @@ class Runner(EventLoopObject, Configurable):
             self.save_periodic.connect(learner.save)
             self.save_best.connect(learner.save_best)
 
+            # stop components when needed
+            self._setup_component_termination(self, batcher)
+            self._setup_component_termination(batcher, learner)
+            for i in range(self.cfg.policy_workers_per_policy):
+                self._setup_component_termination(learner, self.inference_workers[policy_id][i])
+
         for rollout_worker_idx in range(self.cfg.num_workers):
             # once all learners and inference workers are initialized, we can initialize rollout workers
             rollout_worker = self.rollout_workers[rollout_worker_idx]
@@ -485,6 +502,9 @@ class Runner(EventLoopObject, Configurable):
                 self.batchers[policy_id].trajectory_buffers_available.connect(rollout_worker.on_trajectory_buffers_available)
 
             rollout_worker.report_msg.connect(self._process_msg)
+
+            # stop rollout workers
+            self._setup_component_termination(self, rollout_worker)
 
     def inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
         assert not self.inference_workers[policy_id][worker_idx].is_ready
@@ -585,6 +605,7 @@ class Runner(EventLoopObject, Configurable):
                 break
 
         if not self.components_to_stop:
+            assert self.event_loop.owner is self
             self.event_loop.stop()
 
     # noinspection PyBroadException

@@ -6,15 +6,15 @@ import numpy as np
 import torch
 
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.samplers.sampler_sync import preprocess_actions
-from sample_factory.algorithms.appo.appo_utils import make_env_func_v2
+from sample_factory.algo.rollout_worker import preprocess_actions
+from sample_factory.algo.utils.env_info import extract_env_info
+from sample_factory.algorithms.appo.appo_utils import make_env_func
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.algorithms.utils.action_distributions import ContinuousActionDistribution
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus
 from sample_factory.algorithms.utils.arguments import parse_args, load_from_checkpoint
 from sample_factory.algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
-from sample_factory.train import extract_env_info
 from sample_factory.utils.utils import log, AttrDict
 
 
@@ -30,7 +30,7 @@ def enjoy(cfg, max_num_frames=1e9):
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
 
-    env = make_env_func_v2(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+    env = make_env_func(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
     # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 
@@ -76,16 +76,16 @@ def enjoy(cfg, max_num_frames=1e9):
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
-            actions = policy_outputs.actions
+            actions = policy_outputs['actions']
 
-            action_distribution = actor_critic.get_action_distribution()
+            action_distribution = actor_critic.action_distribution()
             if isinstance(action_distribution, ContinuousActionDistribution):
                 if not cfg.continuous_actions_sample:  # TODO: add similar option for discrete actions
                     actions = action_distribution.means
 
             actions = preprocess_actions(env_info, actions)  # TODO: move this to some utils module
 
-            rnn_states = policy_outputs.rnn_states
+            rnn_states = policy_outputs['new_rnn_states']
 
             for _ in range(render_action_repeat):
                 if not cfg.no_render:

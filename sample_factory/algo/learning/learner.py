@@ -552,8 +552,8 @@ class Learner(EventLoopObject, Configurable):
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
                     # calculate policy tail outside of recurrent loop
-                    result = self.actor_critic.forward_tail(core_outputs)
-                    action_distribution = self.actor_critic.get_action_distribution()
+                    result = self.actor_critic.forward_tail(core_outputs, sample_actions=False)
+                    action_distribution = self.actor_critic.action_distribution()
                     log_prob_actions = action_distribution.log_prob(mb.actions)
                     ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
@@ -885,12 +885,11 @@ class Learner(EventLoopObject, Configurable):
         self.save()
         log.debug(f'Stopping {self.object_id}...')
 
-        del self.actor_critic
         self.stop.emit(self.object_id)
 
-        # this means we're running in a separate process
-        if isinstance(self.event_loop.process, EventLoopProcess):
+        if self.event_loop.owner is self:
             self.event_loop.stop()
+            del self.actor_critic
 
         self.detach()  # remove from the current event loop
         log.info(self.timing)
