@@ -1,4 +1,4 @@
-version = 37
+version = 38
 vstr = f'v{version:03d}'
 
 base_cli = f'python -m sample_factory_examples.train_isaacgym ' \
