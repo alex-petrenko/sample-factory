@@ -152,7 +152,8 @@ class InferenceWorker(EventLoopObject, Configurable):
             with timing.add_time('obs_to_device'):
                 actor_critic = self.param_client.actor_critic
                 with timing.add_time('model_eval'):
-                    actor_critic.eval()  # need to call this because we can be in serial mode
+                    if actor_critic.training:
+                        actor_critic.eval()  # need to call this because we can be in serial mode
 
                 for key, x in obs.items():
                     device, dtype = actor_critic.device_and_type_for_input_tensor(key)

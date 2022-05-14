@@ -504,7 +504,7 @@ class Learner(EventLoopObject, Configurable):
                 summaries_epoch = self.cfg.ppo_epochs - 1
                 summaries_batch = self.cfg.num_batches_per_iteration - 1
 
-            self.actor_critic.train()
+            assert self.actor_critic.training
 
         for epoch in range(self.cfg.ppo_epochs):
             with timing.add_time('epoch_init'):
