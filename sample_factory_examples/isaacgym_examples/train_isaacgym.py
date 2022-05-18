@@ -1,6 +1,6 @@
 import sys
 
-# this is here just to guarantee that isaacgym is imported before PyTorch
+# this is here just to guarantee that isaacgym_examples is imported before PyTorch
 from typing import List
 
 import isaacgym
@@ -56,7 +56,7 @@ def add_extra_params_func(env, parser):
     p = parser
     p.add_argument('--env_agents', default=4096, type=int, help='Num agents in each env')
     p.add_argument('--env_headless', default=True, type=str2bool, help='Headless == no rendering')
-    p.add_argument('--mlp_layers', default=[256, 128, 64], type=int, nargs='*', help='MLP layers to use with isaacgym envs')
+    p.add_argument('--mlp_layers', default=[256, 128, 64], type=int, nargs='*', help='MLP layers to use with isaacgym_examples envs')
     pass
 
 
@@ -69,6 +69,7 @@ def override_default_params_func(env, parser):
     """
     parser.set_defaults(
         # we're using a single very vectorized env, no need to parallelize it further
+        batched_sampling=True,
         num_workers=1,
         num_envs_per_worker=1,
         worker_num_splits=1,

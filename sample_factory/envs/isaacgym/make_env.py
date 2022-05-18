@@ -27,7 +27,7 @@ class IsaacGymVecEnv(gym.Env):
 
         self.action_space = self.env.action_space
 
-        # isaacgym environments actually return dicts
+        # isaacgym_examples environments actually return dicts
         self.observation_space = gym.spaces.Dict(dict(obs=self.env.observation_space))
 
     def reset(self, *args, **kwargs):

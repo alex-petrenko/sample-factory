@@ -49,6 +49,7 @@ def register_custom_doom_env(custom_timeout):
 
 def main():
     """Script entry point."""
+    # TODO: check if this works
     cfg = custom_parse_args()
     register_custom_doom_env(custom_timeout=cfg.my_custom_doom_arg)
     status = run_algorithm(cfg)

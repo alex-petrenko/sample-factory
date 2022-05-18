@@ -1,6 +1,8 @@
 from typing import Iterable, Dict, Optional
 
-from sample_factory.algo.utils.env_info import EnvInfo
+import torch
+
+from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
 
 # TODO: this whole class should go
@@ -10,6 +12,7 @@ from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, Even
 # Sync batcher can really be just a circular buffer. And async batcher needs an entirely different logic anyway.
 # WTF did I even write all of that
 from sample_factory.utils.typing import PolicyID, MpQueue
+from sample_factory.utils.utils import AttrDict
 
 
 class SliceMerger:
@@ -75,9 +78,8 @@ class Batcher(EventLoopObject):
 
 class SequentialBatcher(Batcher):
     def __init__(
-            self, evt_loop: EventLoop, trajectories_per_batch: int, total_num_trajectories: int,
-            env_info: EnvInfo, policy_id: PolicyID,
-            traj_buffer_queue: MpQueue,
+            self, evt_loop: EventLoop, trajectories_per_batch: int, worker_samples_per_iteration: int,
+            policy_id: PolicyID, traj_buffer_queues: Dict[str, MpQueue], cfg: AttrDict,
     ):
         unique_name = f'{SequentialBatcher.__name__}_{policy_id}'
         Batcher.__init__(self, evt_loop, policy_id, unique_name)
@@ -85,14 +87,14 @@ class SequentialBatcher(Batcher):
         self.policy_id = policy_id
 
         self.trajectories_per_training_batch = trajectories_per_batch
-        self.trajectories_per_sampling_batch = env_info.num_agents  # TODO: this logic should be changed
-        self.total_num_trajectories = total_num_trajectories
+        self.trajectories_per_sampling_batch = worker_samples_per_iteration
         self.next_batch_start = 0
 
         self.training_batches = SliceMerger()
         self.sampling_batches = SliceMerger()
 
-        self.traj_buffer_queue = traj_buffer_queue
+        self.traj_buffer_queues = traj_buffer_queues
+        self.device: torch.device = policy_device(cfg, policy_id)
 
     @signal
     def initialized(self): pass
@@ -107,21 +109,24 @@ class SequentialBatcher(Batcher):
     def stop(self): pass
 
     def init(self):
-        # we should put all initial batches into the sampler queue
-        for i in range(self.total_num_trajectories):
-            self.on_training_batch_released(slice(i, i + 1))
-
+        # there's nothing to do really
         self.initialized.emit()
 
-    def on_new_trajectories(self, trajectory_dicts: Iterable[Dict]):
+    def on_new_trajectories(self, trajectory_dicts: Iterable[Dict], device: str):
+        assert device == str(self.device)  # TODO: support different device
+
         for trajectory_dict in trajectory_dicts:
             assert trajectory_dict['policy_id'] == self.policy_id
             trajectory_slice = trajectory_dict['traj_buffer_idx']
+            assert isinstance(trajectory_slice, slice)  # TODO: support individual trajectories!
             self.training_batches.merge_slices(trajectory_slice)
 
         new_training_batches = []
         while (training_batch := self.training_batches.get_batch(self.trajectories_per_training_batch)) is not None:
             new_training_batches.append(training_batch)
+
+        # TODO: if we're copying and in sync mode, we should remember to release the trajectories later when we
+        # are done training
 
         if new_training_batches:
             self.training_batches_available.emit(new_training_batches)
@@ -133,8 +138,10 @@ class SequentialBatcher(Batcher):
             new_sampling_batches.append(sampling_batch)
 
         if new_sampling_batches:
-            self.traj_buffer_queue.put_many(new_sampling_batches)
+            self.traj_buffer_queues[str(self.device)].put_many(new_sampling_batches)
             self.trajectory_buffers_available.emit()
+
+        # TODO: if we're copying and in sync mode, release sampling buffers here!
 
     def on_stop(self, emitter_id):
         self.stop.emit(self.object_id)

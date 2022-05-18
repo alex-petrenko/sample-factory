@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import torch
-from torch import nn, Tensor
+from torch import nn
 
+from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algorithms.appo.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
     ActionParameterizationDefault
-from sample_factory.algorithms.appo.shared_buffers import TensorDict
 from sample_factory.algorithms.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
 from sample_factory.utils.normalize import Normalizer
 from sample_factory.utils.timing import Timing

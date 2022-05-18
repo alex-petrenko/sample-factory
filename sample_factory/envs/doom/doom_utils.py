@@ -9,7 +9,6 @@ from sample_factory.envs.doom.action_space import doom_action_space, \
     doom_action_space_extended, doom_turn_and_attack_only
 from sample_factory.envs.doom.doom_gym import VizdoomEnv
 
-from sample_factory.envs.doom.doom_model import register_models
 from sample_factory.envs.doom.wrappers.additional_input import DoomAdditionalInput
 from sample_factory.envs.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from sample_factory.envs.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
@@ -20,9 +19,6 @@ from sample_factory.envs.doom.wrappers.scenario_wrappers.gathering_reward_shapin
 from sample_factory.envs.env_wrappers import ResizeWrapper, RewardScalingWrapper, TimeLimitWrapper, RecordingWrapper, \
     PixelFormatChwWrapper
 from sample_factory.utils.utils import log
-
-
-VIZDOOM_INITIALIZED = False
 
 
 class DoomSpec:
@@ -308,8 +304,6 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
 
 
 def make_doom_env(env_name, cfg, **kwargs):
-    ensure_initialized()
-
     spec = doom_env_by_name(env_name)
 
     if 'record_to' in cfg and cfg.record_to:
@@ -325,13 +319,3 @@ def make_doom_env(env_name, cfg, **kwargs):
         return make_doom_multiplayer_env(spec, cfg=cfg, **kwargs)
     else:
         return make_doom_env_impl(spec, cfg=cfg, **kwargs)
-
-
-def ensure_initialized():
-    global VIZDOOM_INITIALIZED
-    if VIZDOOM_INITIALIZED:
-        return
-
-    register_models()
-
-    VIZDOOM_INITIALIZED = True

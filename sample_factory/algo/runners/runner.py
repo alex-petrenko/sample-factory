@@ -427,13 +427,13 @@ class Runner(EventLoopObject, Configurable):
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         # TODO: other types of batchers
         return SequentialBatcher(
-            event_loop, self.buffer_mgr.trajectories_per_batch, self.buffer_mgr.total_num_trajectories,
-            self.env_info, policy_id, self.buffer_mgr.traj_buffer_queues[policy_id],
+            event_loop, self.buffer_mgr.trajectories_per_batch, self.buffer_mgr.worker_samples_per_iteration,
+            policy_id, self.buffer_mgr.traj_buffer_queues, self.cfg,
         )
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
         return InferenceWorker(
-            event_loop, policy_id, worker_idx, self.buffer_mgr, param_server, self.inference_queues[policy_id], self.cfg, self.env_info
+            event_loop, policy_id, worker_idx, self.buffer_mgr, param_server, self.inference_queues[policy_id], self.cfg, self.env_info,
         )
 
     def _make_rollout_worker(self, event_loop, worker_idx: int):

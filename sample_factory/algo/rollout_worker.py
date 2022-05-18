@@ -11,9 +11,10 @@ from torch import Tensor
 
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algorithms.appo.appo_utils import make_env_func, SequentialVectorizeWrapper, set_gpus_for_process
+from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algorithms.appo.appo_utils import make_env_func, SequentialVectorizeWrapper, set_gpus_for_process, \
+    gpus_for_process
 from sample_factory.algorithms.appo.policy_manager import PolicyManager
-from sample_factory.algorithms.appo.shared_buffers import TensorDict
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
 from sample_factory.utils.timing import Timing
@@ -41,6 +42,7 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     # TODO: for envs like IsaacGym we probably don't want to decrease the process priority
     psutil.Process().nice(min(cfg.default_niceness + 10, 20))
 
+    # TODO: don't do this!
     if cfg.actor_worker_gpus:
         worker_gpus = set_gpus_for_process(
             worker.worker_idx,
@@ -66,6 +68,13 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor):
     return actions
 
 
+def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
+    gpus_to_use = gpus_for_process(worker_idx, num_gpus_per_process=1, gpu_mask=cfg.actor_worker_gpus)
+    assert len(gpus_to_use) <= 1
+    sampling_device = torch.device('cuda', index=gpus_to_use[0]) if gpus_to_use else torch.device('cpu')
+    return sampling_device
+
+
 class BatchedVectorEnvRunner:
     # TODO: comment
     """
@@ -87,7 +96,7 @@ class BatchedVectorEnvRunner:
 
     def __init__(
             self, cfg, env_info, num_envs, worker_idx, split_idx, policy_id: PolicyID,
-            buffer_mgr, pbt_reward_shaping,  #TODO pbt reward
+            buffer_mgr, sampling_device: str, pbt_reward_shaping,  #TODO pbt reward
     ):
         # TODO: comment
         """
@@ -119,11 +128,12 @@ class BatchedVectorEnvRunner:
         self.policy_id_buffer = None
 
         self.buffer_mgr = buffer_mgr
-        self.traj_tensors = buffer_mgr.traj_tensors
-        env_idx = 0  # in batched mode we're running a single vectorized env per split
-        self.policy_output_tensors = buffer_mgr.policy_output_tensors[self.worker_idx, self.split_idx, env_idx]
 
-        self.traj_buffer_queue = buffer_mgr.traj_buffer_queues[self.policy_id]
+        self.traj_tensors = buffer_mgr.traj_tensors[sampling_device]
+        env_idx = 0  # in batched mode we're running a single vectorized env per split
+        self.policy_output_tensors = buffer_mgr.policy_output_tensors[sampling_device][self.worker_idx, self.split_idx, env_idx]
+
+        self.traj_buffer_queue = buffer_mgr.traj_buffer_queues[sampling_device]
 
         self.curr_traj: Optional[TensorDict] = None
         self.curr_step: Optional[TensorDict] = None
@@ -263,7 +273,7 @@ class BatchedVectorEnvRunner:
         with timing.add_time('post_env_step'):
             self.policy_id_buffer.fill_(self.policy_id)
 
-            # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym), or a list of dictionaries (i.e. swarm_rl quadrotors)
+            # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym_examples), or a list of dictionaries (i.e. swarm_rl quadrotors)
             # Need an adapter class so it's consistent, i.e. always a dict of tensors.
             # this should yield indices of inactive agents
             #
@@ -347,11 +357,14 @@ class RolloutWorker(EventLoopObject, Configurable):
 
         self.env_info = env_info
         self.worker_idx = worker_idx
+        self.sampling_device = str(rollout_worker_device(self.worker_idx, self.cfg))
 
         self.vector_size = cfg.num_envs_per_worker
         self.num_splits = cfg.worker_num_splits
         assert self.vector_size >= self.num_splits
         assert self.vector_size % self.num_splits == 0, 'Vector size should be divisible by num_splits'
+
+        self.env_runners = []
 
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
@@ -369,12 +382,11 @@ class RolloutWorker(EventLoopObject, Configurable):
         policy_id = self.worker_idx % self.cfg.num_policies
         log.debug(f'Worker {self.object_id} uses policy {policy_id}')  # don't print this for non-batched runners
 
-        self.env_runners = []
         for split_idx in range(self.num_splits):
             # TODO: logic for batched vs non-batched runner
             env_runner = BatchedVectorEnvRunner(
                 self.cfg, self.env_info, self.vector_size // self.num_splits,
-                self.worker_idx, split_idx, policy_id, self.buffer_mgr, self.reward_shaping,
+                self.worker_idx, split_idx, policy_id, self.buffer_mgr, self.sampling_device, self.reward_shaping,
             )
 
             policy_request = env_runner.init(self.timing)
@@ -405,7 +417,7 @@ class RolloutWorker(EventLoopObject, Configurable):
         """Distribute action requests to their corresponding queues."""
 
         for policy_id, requests in policy_inputs.items():
-            policy_request = (self.worker_idx, split_idx, requests)
+            policy_request = (self.worker_idx, split_idx, requests, self.sampling_device)
             self.inference_queues[policy_id].put(policy_request)
 
         if not policy_inputs:
@@ -428,7 +440,7 @@ class RolloutWorker(EventLoopObject, Configurable):
             rollouts_per_policy[policy_id].append(rollout)
 
         for policy_id, rollouts in rollouts_per_policy.items():
-            self.emit(f'p{policy_id}_trajectories', rollouts)
+            self.emit(f'p{policy_id}_trajectories', rollouts, self.sampling_device)
 
     # TODO: this should be connected to a signal from the inference worker
     def advance_rollouts(self, data: Tuple):

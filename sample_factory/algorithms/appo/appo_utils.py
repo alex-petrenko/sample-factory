@@ -243,23 +243,31 @@ def get_available_gpus():
     return available_gpus
 
 
-def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_mask=None):
+def gpus_for_process(process_idx, num_gpus_per_process, gpu_mask=None):
     available_gpus = get_available_gpus()
     if gpu_mask is not None:
         assert len(available_gpus) >= len(available_gpus)
         available_gpus = [available_gpus[g] for g in gpu_mask]
     num_gpus = len(available_gpus)
-    gpus_to_use = []
 
+    gpus_to_use = []
     if num_gpus == 0:
+        return gpus_to_use
+
+    first_gpu_idx = process_idx * num_gpus_per_process
+    for i in range(num_gpus_per_process):
+        index_mod_num_gpus = (first_gpu_idx + i) % num_gpus
+        gpus_to_use.append(available_gpus[index_mod_num_gpus])
+    return gpus_to_use
+
+
+def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_mask=None):
+    gpus_to_use = gpus_for_process(process_idx, num_gpus_per_process, gpu_mask)
+
+    if not gpus_to_use:
         os.environ[CUDA_ENVVAR] = ''
         log.debug('Not using GPUs for %s process %d', process_type, process_idx)
     else:
-        first_gpu_idx = process_idx * num_gpus_per_process
-        for i in range(num_gpus_per_process):
-            index_mod_num_gpus = (first_gpu_idx + i) % num_gpus
-            gpus_to_use.append(available_gpus[index_mod_num_gpus])
-
         os.environ[CUDA_ENVVAR] = ','.join([str(g) for g in gpus_to_use])
         log.info(
             'Set environment var %s to %r for %s process %d',

@@ -165,6 +165,13 @@ class APPO(ReinforcementLearningAlgorithm):
 
         # APPO-specific
         arg(
+            '--batched_sampling', default=True, type=str2bool,
+            help='Batched sampling allows the data to be processed in big batches on the rollout worker.'
+                 'This is especially important for GPU-accelerated vectorized environments such as Megaverse or IsaacGym. '
+                 'As a downside, in batched mode we do not support some of the features, such as population-based self-play '
+                 'or inactive agents. Each sampler (rollout worker) process only collects data for a single policy.',
+        )
+        arg(
             '--num_envs_per_worker', default=2, type=int,
             help='Number of envs on a single CPU actor, in high-throughput configurations this should be in 10-30 range for Atari/VizDoom'
                  'Must be even for double-buffered sampling!',
@@ -181,11 +188,6 @@ class APPO(ReinforcementLearningAlgorithm):
             '--max_policy_lag', default=10000, type=int,
             help='Max policy lag in policy versions. Discard all experience that is older than this. This should be increased for configurations with multiple epochs of SGD because naturally'
                  'policy-lag may exceed this value.',
-        )
-        arg(
-            '--traj_buffers_excess_ratio', default=1.3, type=float,
-            help='Increase this value to make sure the system always has enough free trajectory buffers (can be useful when i.e. a lot of inactive agents in multi-agent envs)'
-                 'Decrease this to 1.0 to save as much RAM as possible.',
         )
         arg(
             '--decorrelate_experience_max_seconds', default=10, type=int,

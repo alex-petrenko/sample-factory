@@ -14,13 +14,15 @@ from sample_factory.algo.utils.context import SampleFactoryContext, set_global_c
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
+from sample_factory.algo.utils.shared_buffers import policy_device
+from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
-from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats, cuda_envvars_for_policy
+from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.pytorch_utils import to_scalar
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoopProcess
+from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
@@ -39,9 +41,6 @@ def init_learner_process(sf_context: SampleFactoryContext, cfg, policy_id):
         psutil.Process().nice(cfg.default_niceness)
     except psutil.AccessDenied:
         log.error('Low niceness requires sudo!')
-
-    if cfg.device == 'gpu':
-        cuda_envvars_for_policy(policy_id, 'learner')
 
     torch.multiprocessing.set_sharing_strategy('file_system')
     init_torch_runtime(cfg)
@@ -147,6 +146,7 @@ class Learner(EventLoopObject, Configurable):
         self.last_milestone_time = 0
 
         self.buffer_mgr = buffer_mgr
+        self.traj_tensors: Optional[TensorDict] = None
 
         self.exploration_loss_func = self.kl_loss_func = None
 
@@ -194,11 +194,12 @@ class Learner(EventLoopObject, Configurable):
             np.random.seed(self.cfg.seed)
 
         # initialize device
-        if self.cfg.device == 'gpu':
-            self.device = torch.device('cuda', index=0)
-        else:
-            self.device = torch.device('cpu')
+        self.device = policy_device(self.cfg, self.policy_id)
 
+        # trajectory buffers
+        self.traj_tensors = self.buffer_mgr.traj_tensors[str(self.device)]
+
+        # trainable torch module
         self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
         self.actor_critic.model_to_device(self.device)
         self.actor_critic.share_memory()
@@ -804,7 +805,14 @@ class Learner(EventLoopObject, Configurable):
 
     def _prepare_batch(self, batch: slice):
         with torch.no_grad():
-            buff = self.buffer_mgr.traj_tensors[batch]
+            buff = self.buffer_mgr.traj_tensors[str(self.device)][batch]
+
+            # TODO:remove
+            with self.timing.add_time('__add_copy_batch'):
+                from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensordict
+                cloned_ = clone_tensordict(buff)
+
+            # TODO: how about device_and_type_for_input_tensor
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()

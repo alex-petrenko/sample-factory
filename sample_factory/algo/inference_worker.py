@@ -11,13 +11,14 @@ import torch
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.model_sharing import make_parameter_client, ParameterServer
+from sample_factory.algo.utils.shared_buffers import policy_device
+from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
 from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats
-from sample_factory.algorithms.appo.shared_buffers import TensorDict
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, Timer, TightLoop, signal
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, MpQueue
+from sample_factory.utils.typing import PolicyID, MpQueue, Device
 from sample_factory.utils.utils import log
 
 
@@ -35,7 +36,7 @@ def init_sampler_process(sf_context: SampleFactoryContext, cfg, policy_id):
         log.error('Low niceness requires sudo!')
 
     if cfg.device == 'gpu':
-        cuda_envvars_for_policy(policy_id, 'inference')
+        cuda_envvars_for_policy(policy_id, 'inference')  # TODO: should not do this
     init_torch_runtime(cfg)
 
 
@@ -62,11 +63,11 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.worker_idx: int = worker_idx
 
         self.buffer_mgr = buffer_mgr
-        self.traj_tensors = buffer_mgr.traj_tensors
-        self.obs_tensors, self.rnn_state_tensors = self.traj_tensors['obs'], self.traj_tensors['rnn_states']
-        self.policy_output_tensors = buffer_mgr.policy_output_tensors
+        self.traj_tensors: Dict[Device, TensorDict] = buffer_mgr.traj_tensors
+        self.policy_output_tensors: Dict[Device, TensorDict] = buffer_mgr.policy_output_tensors
+        # self.obs_tensors, self.rnn_state_tensors = self.traj_tensors['obs'], self.traj_tensors['rnn_states']  # TODO: can't use this
 
-        self.device: Optional[torch.device] = None
+        self.device: torch.device = policy_device(cfg, policy_id)
         self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
         self.inference_queue = inference_queue
 
@@ -123,25 +124,25 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.initialized.emit(self.policy_id, self.worker_idx)
 
     def _handle_policy_steps(self, timing):
-        # TODO: batch requests together. Two cases 1) numpy indices 2) torch tensor slices
-        # (self.worker_idx, split_idx, requests)/
-        # (self.curr_traj_slice, self.rollout_step)
-
         with inference_context(self.cfg.serial_mode):
             with timing.add_time('deserialize'):
                 obs = dict()
                 rnn_states = []
-                for actor_idx, split_idx, traj_idx in self.requests:
-                    dict_of_lists_append(obs, self.obs_tensors, traj_idx)
-                    rnn_states.append(self.rnn_state_tensors[traj_idx])
+                for actor_idx, split_idx, traj_idx, device in self.requests:
+                    traj_tensors = self.traj_tensors[device]
+                    dict_of_lists_append(obs, traj_tensors['obs'], traj_idx)
+                    rnn_states.append(traj_tensors['rnn_states'][traj_idx])
 
             with timing.add_time('stack'):
-                # TODO: do we need an extra case where it is just one big batch? So we don't need to call cat
                 if len(rnn_states) == 1:
                     for obs_key, tensor_list in obs.items():
                         obs[obs_key] = tensor_list[0]
                     rnn_states = rnn_states[0]
                 else:
+                    # cat() will fail if samples are on different devices
+                    # should we handle a situation where experience comes from multiple devices?
+                    # i.e. we use multiple GPUs for sampling but inference/learning is on a single GPU
+
                     for obs_key, tensor_list in obs.items():
                         obs[obs_key] = torch.cat(tensor_list)
                     rnn_states = torch.cat(rnn_states)
@@ -169,16 +170,20 @@ class InferenceWorker(EventLoopObject, Configurable):
             with timing.add_time('save_outputs'):
                 policy_outputs['policy_version'] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
 
+                for policy_output in policy_outputs.values():
+                    if not policy_output.shape:
+                        policy_output.unsqueeze_(-1)
+
                 # assuming all workers provide the same number of samples
                 samples_per_request = num_samples // len(self.requests)
                 ofs = 0
                 env_idx = 0  # with batched sampling we only have one vector env per "split"
-                for actor_idx, split_idx, _ in self.requests:
-                    self.policy_output_tensors[actor_idx, split_idx, env_idx] = policy_outputs[ofs:ofs + samples_per_request]
+                for actor_idx, split_idx, _, device in self.requests:
+                    self.policy_output_tensors[device][actor_idx, split_idx, env_idx] = policy_outputs[ofs:ofs + samples_per_request]
                     ofs += samples_per_request
 
             with timing.add_time('send_messages'):
-                for actor_idx, split_idx, _ in self.requests:
+                for actor_idx, split_idx, _, _ in self.requests:
                     self.emit(f'advance{actor_idx}', (split_idx, self.policy_id))
 
                 self.requests = []

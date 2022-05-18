@@ -226,7 +226,7 @@ class SyncSampler(EventLoopObject, Sampler):
                 with self.timing.add_time('post_env_step'):
                     self.policy_id_buffer.fill_(self.curr_policy_id)
 
-                    # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym), or a list of dictionaries (i.e. swarm_rl quadrotors)
+                    # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym_examples), or a list of dictionaries (i.e. swarm_rl quadrotors)
                     # Need an adapter class so it's consistent, i.e. always a dict of tensors.
                     # this should yield indices of inactive agents
                     #

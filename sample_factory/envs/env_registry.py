@@ -86,12 +86,6 @@ class EnvRegistry:
         raise RuntimeError(msg)
 
 
-def doom_funcs():
-    from sample_factory.envs.doom.doom_utils import make_doom_env
-    from sample_factory.envs.doom.doom_params import add_doom_env_args, doom_override_defaults
-    return make_doom_env, add_doom_env_args, doom_override_defaults
-
-
 def atari_funcs():
     from sample_factory.envs.atari.atari_utils import make_atari_env
     from sample_factory.envs.atari.atari_params import atari_override_defaults
@@ -124,8 +118,9 @@ def register_default_envs(env_registry):
 
     """
 
+    # TODO: get rid of this and move this to examples
+
     default_envs = {
-        'doom_': doom_funcs,
         'atari_': atari_funcs,
         'dmlab_': dmlab_funcs,
         'mujoco_': mujoco_funcs,
