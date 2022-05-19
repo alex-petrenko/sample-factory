@@ -185,32 +185,10 @@ class BufferMgr(Configurable):
             # and they are not released until the learner finishes learning from them
             pass
 
-        max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
-        if max_minibatches_to_accumulate == -1:
-            # default value
-            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
-
-        if not cfg.async_rl:
-            max_minibatches_to_accumulate = 1
-
-        # make sure we have enough trajectories for sufficient number of training batches to be stored
-        for policy_id in range(cfg.num_policies):
-            device = str(policy_device(self.cfg, policy_id))
-
-            # If we're sampling and learning on the same device, this will allow us to reuse the same
-            # buffers for sampling and learning (zero-copy).
-            # If we're sampling on CPU and learning on a GPU, this will allocate the necessary buffers for that
-            self.buffers_per_device[device] = max(
-                self.buffers_per_device.get(device, 0), self.trajectories_per_batch * max_minibatches_to_accumulate,
-            )
-            # TODO: in async mode should we add self.trajectories_per_batch * max_minibatches_to_accumulate to num_trajectories?
-
+        # allocate trajectory buffers for sampling
         self.traj_buffer_queues: Dict[Device, MpQueue] = dict()
         self.traj_tensors = dict()
         self.policy_output_tensors = dict()
-
-        # TODO: in batched sampling mode we reuse the same trajectories to achieve zero-copy
-        # in non-batched sampling, trajectory buffers come as individual trajectories and training batches need to come in slices
 
         for device, num_buffers in self.buffers_per_device.items():
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
@@ -230,6 +208,27 @@ class BufferMgr(Configurable):
                 # individual trajectories for more flexible non-batched sampling
                 for i in range(num_buffers):
                     self.traj_buffer_queues[device].put(i)
+
+        max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
+        if max_minibatches_to_accumulate == -1:
+            # default value
+            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
+
+        if not cfg.async_rl:
+            max_minibatches_to_accumulate = 1
+
+        self.training_batches: Dict[PolicyID, List[TensorDict]] = dict()
+
+        for policy_id in range(cfg.num_policies):
+            device = str(policy_device(self.cfg, policy_id))
+
+            # we can also just initialize these in the batcher, but this way we keep all similar code in one place
+            self.training_batches[policy_id] = []
+            for i in range(max_minibatches_to_accumulate):
+                training_batch = allocate_trajectory_tensors(
+                    self.env_info, self.trajectories_per_batch, rollout, hidden_size, device, share,
+                )
+                self.training_batches[policy_id].append(training_batch)
 
         # TODO: numpy tensor stuff
         # TODO: for non-contiguous sampler we should do the batched policy outputs trick

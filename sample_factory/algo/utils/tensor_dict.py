@@ -31,9 +31,6 @@ class TensorDict(dict):
         else:
             self._set_data_func(self, key, value)
 
-    def set_data(self, index, new_data):
-        self._set_data_func(self, index, new_data)
-
     def _set_data_func(self, x, index, new_data):
         if isinstance(new_data, (dict, TensorDict)):
             for new_data_key, new_data_value in new_data.items():

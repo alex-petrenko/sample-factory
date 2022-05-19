@@ -426,10 +426,7 @@ class Runner(EventLoopObject, Configurable):
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         # TODO: other types of batchers
-        return SequentialBatcher(
-            event_loop, self.buffer_mgr.trajectories_per_batch, self.buffer_mgr.worker_samples_per_iteration,
-            policy_id, self.buffer_mgr.traj_buffer_queues, self.cfg,
-        )
+        return SequentialBatcher(event_loop, policy_id, self.buffer_mgr, self.cfg)
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
         return InferenceWorker(
@@ -470,7 +467,7 @@ class Runner(EventLoopObject, Configurable):
                 self.inference_workers[policy_id][i].initialized.connect(self.inference_worker_ready)
 
             # batcher gives learner batches of trajectories ready for learning
-            batcher.training_batches_available.connect(learner.on_new_training_batches)
+            batcher.training_batches_available.connect(learner.on_new_training_batch)
             # once learner is done with a training batch, it is given back to the batcher
             learner.training_batch_released.connect(batcher.on_training_batch_released)
 

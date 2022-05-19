@@ -1,3 +1,4 @@
+import copy
 import glob
 import os
 import time
@@ -803,14 +804,11 @@ class Learner(EventLoopObject, Configurable):
 
         return stats
 
-    def _prepare_batch(self, batch: slice):
+    def _prepare_batch(self, batch_idx: int):
         with torch.no_grad():
-            buff = self.buffer_mgr.traj_tensors[str(self.device)][batch]
-
-            # TODO:remove
-            with self.timing.add_time('__add_copy_batch'):
-                from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensordict
-                cloned_ = clone_tensordict(buff)
+            # create a shallow copy so we can modify the dictionary
+            # we still reference the same shared buffers though
+            buff = copy.copy(self.buffer_mgr.training_batches[self.policy_id][batch_idx])
 
             # TODO: how about device_and_type_for_input_tensor
 
@@ -850,9 +848,9 @@ class Learner(EventLoopObject, Configurable):
 
             return buff, experience_size
 
-    def train(self, batch: slice, timing: Timing) -> Dict:
+    def train(self, batch_idx: int, timing: Timing) -> Dict:
         with timing.add_time('prepare_batch'):
-            buff, experience_size = self._prepare_batch(batch)
+            buff, experience_size = self._prepare_batch(batch_idx)
 
         with timing.add_time('train'):
             train_stats = self._train(buff, self.cfg.batch_size, experience_size, timing)
@@ -878,14 +876,13 @@ class Learner(EventLoopObject, Configurable):
 
         return stats
 
-    def on_new_training_batches(self, batches):
+    def on_new_training_batch(self, batch_idx: int):
         # log.debug(f'{self.object_id} new training batches! {batches}')
 
-        for batch in batches:
-            stats = self.train(batch, self.timing)
-            # log.debug(f'Batch {batch} is free on the learner!')
-            self.training_batch_released.emit(batch)
-            self.report_msg.emit(stats)
+        stats = self.train(batch_idx, self.timing)
+        # log.debug(f'Batch {batch} is free on the learner!')
+        self.training_batch_released.emit(batch_idx)
+        self.report_msg.emit(stats)
 
         self.finished_training_iteration.emit()
 
