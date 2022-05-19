@@ -97,11 +97,11 @@ class CategoricalActionDistribution:
         return sample
 
     def sample(self):
-        samples = torch.multinomial(self.probs, 1, True).squeeze(dim=-1)
+        samples = torch.multinomial(self.probs, 1, True)
         return samples
 
     def log_prob(self, value):
-        value = value.long().unsqueeze(-1)
+        value = value.long()
         log_probs = torch.gather(self.log_probs, -1, value).view(-1)
         return log_probs
 

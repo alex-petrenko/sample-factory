@@ -147,7 +147,6 @@ class Learner(EventLoopObject, Configurable):
         self.last_milestone_time = 0
 
         self.buffer_mgr = buffer_mgr
-        self.traj_tensors: Optional[TensorDict] = None
 
         self.exploration_loss_func = self.kl_loss_func = None
 
@@ -196,9 +195,6 @@ class Learner(EventLoopObject, Configurable):
 
         # initialize device
         self.device = policy_device(self.cfg, self.policy_id)
-
-        # trajectory buffers
-        self.traj_tensors = self.buffer_mgr.traj_tensors[str(self.device)]
 
         # trainable torch module
         self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
@@ -836,9 +832,9 @@ class Learner(EventLoopObject, Configurable):
             buff['dones_cpu'] = buff['dones'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
             buff['rewards_cpu'] = buff['rewards'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
 
-            # will squeeze actions only in simple categorical case
-            for tensor_name in ['actions']:
-                buff[tensor_name].squeeze_()
+            # # will squeeze actions only in simple categorical case
+            # for tensor_name in ['actions']:
+            #     buff[tensor_name].squeeze_()
 
             # normalize obs and record data statistics (hence the "train" mode)
             self.actor_critic.train()

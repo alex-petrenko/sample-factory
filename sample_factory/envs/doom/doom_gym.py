@@ -397,7 +397,7 @@ class VizdoomEnv(gym.Env):
             game_variables = self._game_variables_dict(state)
             info.update(self.get_info(game_variables))
             self._update_histogram(info)
-            self._prev_info = copy.deepcopy(info)
+            self._prev_info = copy.copy(info)
         else:
             observation = self._black_screen()
 

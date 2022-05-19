@@ -460,11 +460,17 @@ class Runner(EventLoopObject, Configurable):
             batcher.initialized.connect(learner.init)
 
             for i in range(self.cfg.policy_workers_per_policy):
+                inference_worker = self.inference_workers[policy_id][i]
+
                 # once learner is initialized and the model is ready, we initialize inference workers
-                learner.model_initialized.connect(self.inference_workers[policy_id][i].init)
+                learner.model_initialized.connect(inference_worker.init)
 
                 # inference workers signal when their initialization is complete
-                self.inference_workers[policy_id][i].initialized.connect(self.inference_worker_ready)
+                inference_worker.initialized.connect(self.inference_worker_ready)
+
+                # stop and start experience collection to throttle sampling speed if it is faster than learning
+                batcher.stop_experience_collection.connect(inference_worker.should_stop_experience_collection)
+                batcher.resume_experience_collection.connect(inference_worker.should_resume_experience_collection)
 
             # batcher gives learner batches of trajectories ready for learning
             batcher.training_batches_available.connect(learner.on_new_training_batch)

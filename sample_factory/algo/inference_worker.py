@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import os
 import time
 from collections import deque
 from queue import Empty
-from typing import Dict, Any, List, Optional
+from typing import Dict, Optional
 
 import numpy as np
 import psutil
@@ -14,7 +16,8 @@ from sample_factory.algo.utils.model_sharing import make_parameter_client, Param
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
-from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats
+from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats, dict_of_lists_append_idx, \
+    dict_of_lists_cat
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, Timer, TightLoop, signal
 from sample_factory.utils.timing import Timing
@@ -38,14 +41,6 @@ def init_sampler_process(sf_context: SampleFactoryContext, cfg, policy_id):
     if cfg.device == 'gpu':
         cuda_envvars_for_policy(policy_id, 'inference')  # TODO: should not do this
     init_torch_runtime(cfg)
-
-
-def dict_of_lists_append(d: Dict[Any, List], new_data, index):
-    for key, x in new_data.items():
-        if key in d:
-            d[key].append(x[index])
-        else:
-            d[key] = [x[index]]
 
 
 class InferenceWorker(EventLoopObject, Configurable):
@@ -123,6 +118,12 @@ class InferenceWorker(EventLoopObject, Configurable):
         # singal to main process (runner) that we're ready
         self.initialized.emit(self.policy_id, self.worker_idx)
 
+    def should_stop_experience_collection(self):
+        self.inference_loop.stop()
+
+    def should_resume_experience_collection(self):
+        self.inference_loop.start()
+
     def _handle_policy_steps(self, timing):
         with inference_context(self.cfg.serial_mode):
             with timing.add_time('deserialize'):
@@ -130,7 +131,7 @@ class InferenceWorker(EventLoopObject, Configurable):
                 rnn_states = []
                 for actor_idx, split_idx, traj_idx, device in self.requests:
                     traj_tensors = self.traj_tensors[device]
-                    dict_of_lists_append(obs, traj_tensors['obs'], traj_idx)
+                    dict_of_lists_append_idx(obs, traj_tensors['obs'], traj_idx)
                     rnn_states.append(traj_tensors['rnn_states'][traj_idx])
 
             with timing.add_time('stack'):
@@ -142,9 +143,7 @@ class InferenceWorker(EventLoopObject, Configurable):
                     # cat() will fail if samples are on different devices
                     # should we handle a situation where experience comes from multiple devices?
                     # i.e. we use multiple GPUs for sampling but inference/learning is on a single GPU
-
-                    for obs_key, tensor_list in obs.items():
-                        obs[obs_key] = torch.cat(tensor_list)
+                    dict_of_lists_cat(obs)
                     rnn_states = torch.cat(rnn_states)
 
                 num_samples = rnn_states.shape[0]
@@ -177,9 +176,8 @@ class InferenceWorker(EventLoopObject, Configurable):
                 # assuming all workers provide the same number of samples
                 samples_per_request = num_samples // len(self.requests)
                 ofs = 0
-                env_idx = 0  # with batched sampling we only have one vector env per "split"
                 for actor_idx, split_idx, _, device in self.requests:
-                    self.policy_output_tensors[device][actor_idx, split_idx, env_idx] = policy_outputs[ofs:ofs + samples_per_request]
+                    self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[ofs:ofs + samples_per_request]
                     ofs += samples_per_request
 
             with timing.add_time('send_messages'):
@@ -208,13 +206,6 @@ class InferenceWorker(EventLoopObject, Configurable):
                 pass
 
     def _run(self):
-        # TODO: termination
-
-        # TODO: implement this or a replacement mechanism (probably just emit a signal on the learner?)
-        # while self.shared_buffers.stop_experience_collection[self.policy_id]:
-        #     with self.resume_experience_collection_cv:
-        #         self.resume_experience_collection_cv.wait(timeout=0.05)
-
         self._get_inference_requests_func()
         if not self.requests:
             return

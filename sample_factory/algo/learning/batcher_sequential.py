@@ -12,7 +12,7 @@ from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, Even
 # Sync batcher can really be just a circular buffer. And async batcher needs an entirely different logic anyway.
 # WTF did I even write all of that
 from sample_factory.utils.typing import PolicyID, MpQueue, Device
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.utils import AttrDict, log
 
 
 class SliceMerger:
@@ -111,6 +111,12 @@ class SequentialBatcher(Batcher):
     def training_batches_available(self): pass
 
     @signal
+    def stop_experience_collection(self): pass
+
+    @signal
+    def resume_experience_collection(self): pass
+
+    @signal
     def stop(self): pass
 
     def init(self):
@@ -129,34 +135,38 @@ class SequentialBatcher(Batcher):
         self._maybe_enqueue_new_training_batches(device)
 
     def _maybe_enqueue_new_training_batches(self, device: str):
-        while self.available_batches:
-            training_batch_slice = self.training_slices[device].get_batch(self.trajectories_per_training_batch)
-            if training_batch_slice is None:
-                break
+        with torch.no_grad():
+            while self.available_batches:
+                training_batch_slice = self.training_slices[device].get_batch(self.trajectories_per_training_batch)
+                if training_batch_slice is None:
+                    break
 
-            # obtain the index of the available batch buffer
-            batch_idx = self.available_batches[-1]
-            del self.available_batches[-1]
+                # obtain the index of the available batch buffer
+                batch_idx = self.available_batches[-1]
+                del self.available_batches[-1]
 
-            # copy data into the training buffer
-            self.training_batches[batch_idx][:] = self.traj_tensors[device][training_batch_slice]
+                # copy data into the training buffer
+                self.training_batches[batch_idx][:] = self.traj_tensors[device][training_batch_slice]
 
-            # signal the learner that we have a new training batch
-            self.training_batches_available.emit(batch_idx)
+                # signal the learner that we have a new training batch
+                self.training_batches_available.emit(batch_idx)
 
-            if self.cfg.async_rl:
-                self._release_traj_tensors(device, training_batch_slice)
-            else:
-                self.traj_tensors_to_release[batch_idx] = (device, training_batch_slice)
-
-        if not self.available_batches:
-            # TODO: signal the inference worker to stop collecting experience - we accumulated enough training batches
-            pass
+                if self.cfg.async_rl:
+                    self._release_traj_tensors(device, training_batch_slice)
+                    if not self.available_batches:
+                        log.debug('Signal inference workers to stop experience collection...')
+                        self.stop_experience_collection.emit()
+                else:
+                    self.traj_tensors_to_release[batch_idx] = (device, training_batch_slice)
 
     def on_training_batch_released(self, batch_idx: int):
         if self.traj_tensors_to_release[batch_idx] is not None:
             device, training_batch_slice = self.traj_tensors_to_release[batch_idx]
             self._release_traj_tensors(device, training_batch_slice)
+
+        if not self.available_batches and self.cfg.async_rl:
+            log.debug('Signal inference workers to resume experience collection...')
+            self.resume_experience_collection.emit()
 
         self.available_batches.append(batch_idx)
 

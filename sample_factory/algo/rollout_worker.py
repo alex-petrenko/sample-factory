@@ -130,8 +130,7 @@ class BatchedVectorEnvRunner:
         self.buffer_mgr = buffer_mgr
 
         self.traj_tensors = buffer_mgr.traj_tensors[sampling_device]
-        env_idx = 0  # in batched mode we're running a single vectorized env per split
-        self.policy_output_tensors = buffer_mgr.policy_output_tensors[sampling_device][self.worker_idx, self.split_idx, env_idx]
+        self.policy_output_tensors = buffer_mgr.policy_output_tensors[sampling_device][self.worker_idx, self.split_idx]
 
         self.traj_buffer_queue = buffer_mgr.traj_buffer_queues[sampling_device]
 
@@ -177,14 +176,14 @@ class BatchedVectorEnvRunner:
         assert self.curr_traj is not None and self.curr_traj_slice is not None
 
         self.last_obs = self.vec_env.reset()
-        self.last_rnn_state = self.traj_tensors['rnn_states'][0:self.env_info.num_agents, 0].clone().fill_(0.0)
+        self.last_rnn_state = self.traj_tensors['rnn_states'][0:self.vec_env.num_agents, 0].clone().fill_(0.0)
         self.env_step_ready = True
         assert self.rollout_step == 0
 
-        self.policy_id_buffer = self.traj_tensors['policy_id'][0:self.env_info.num_agents, 0].clone().fill_(self.policy_id)
+        self.policy_id_buffer = self.traj_tensors['policy_id'][0:self.vec_env.num_agents, 0].clone().fill_(self.policy_id)
 
-        self.curr_episode_reward = torch.zeros(self.env_info.num_agents)
-        self.curr_episode_len = torch.zeros(self.env_info.num_agents, dtype=torch.int32)
+        self.curr_episode_reward = torch.zeros(self.vec_env.num_agents)
+        self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
 
         policy_request = self.generate_policy_request(timing)
         assert policy_request is not None

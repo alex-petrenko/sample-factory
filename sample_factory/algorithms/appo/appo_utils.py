@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import os
 import threading
 from collections import OrderedDict, deque
-from typing import Iterable, Callable, List, Any, Dict
+from typing import Callable, List, Any, Dict
 
 import gym
 import numpy as np
@@ -14,8 +16,28 @@ from sample_factory.envs.create_env import create_env
 from sample_factory.utils.get_available_gpus import get_gpus_without_triggering_pytorch_cuda_initialization
 from sample_factory.utils.utils import log, memory_consumption_mb
 
-
 CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
+
+
+def dict_of_lists_append(d: Dict[Any, List], new_data):
+    for key, x in new_data.items():
+        if key in d:
+            d[key].append(x)
+        else:
+            d[key] = [x]
+
+
+def dict_of_lists_append_idx(d: Dict[Any, List], new_data, index):
+    for key, x in new_data.items():
+        if key in d:
+            d[key].append(x[index])
+        else:
+            d[key] = [x[index]]
+
+
+def dict_of_lists_cat(d: Dict[Any, List | Tensor]):
+    for key, x in d.items():
+        d[key] = torch.cat(x)
 
 
 class DictObservationsWrapper(Wrapper):
@@ -99,11 +121,12 @@ class SequentialVectorizeWrapper(Wrapper):
 
     def __init__(self, envs):
         super().__init__(envs[0])
-        assert all(e.num_agents == envs[0].num_agents for e in envs), \
-            f'Expect all envs to have the same number of agents {envs[0].num_agents}'
+        self.single_env_agents = envs[0].num_agents
+        assert all(e.num_agents == self.single_env_agents for e in envs), \
+            f'Expect all envs to have the same number of agents {self.single_env_agents}'
 
         self.envs = envs
-        self.num_agents = envs[0].num_agents
+        self.num_agents = self.single_env_agents * len(envs)
 
         self.obs = None
         self.rew = None
@@ -111,27 +134,37 @@ class SequentialVectorizeWrapper(Wrapper):
         self.infos = None
 
     def reset(self, **kwargs):
-        obs = [e.reset(**kwargs) for e in self.envs]
-        self.obs = torch.cat(obs)
+        self.obs = dict()
+        for e in self.envs:
+            dict_of_lists_append(self.obs, e.reset(**kwargs))
+
+        dict_of_lists_cat(self.obs)
         return self.obs
 
     def step(self, actions: Tensor):
         infos = []
         ofs = 0
+        next_ofs = self.single_env_agents
         for i, e in enumerate(self.envs):
-            env_actions = actions[ofs:ofs + self.num_agents]
-            self.obs[ofs:ofs + self.num_agents], rew, dones, info = e.step(env_actions)
+            idx = ofs if self.single_env_agents == 1 else slice(ofs, next_ofs)
+            env_actions = actions[idx]
+            obs, rew, dones, info = e.step(env_actions)
+
+            # TODO: test if this works for multi-agent envs
+            for key, x in obs.items():
+                self.obs[key][idx] = x
 
             if self.rew is None:
                 self.rew = rew.repeat(len(self.envs))
                 self.dones = dones.repeat(len(self.envs))
 
-            self.rew[ofs:ofs + self.num_agents] = rew
-            self.dones[ofs:ofs + self.num_agents] = dones
+            self.rew[idx] = rew
+            self.dones[idx] = dones
 
             infos.extend(info)
 
-            ofs += self.num_agents
+            ofs += self.single_env_agents
+            next_ofs += self.single_env_agents
 
         return self.obs, self.rew, self.dones, infos
 

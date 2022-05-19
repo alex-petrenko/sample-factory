@@ -129,12 +129,11 @@ def allocate_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, 
     # self.policy_output_tensors = self._policy_output_tensors.numpy()
 
     # TODO: this only currently works with contiguous sampling
-    policy_outputs_shape = [
-        cfg.num_workers,
-        cfg.worker_num_splits,
-        envs_per_split,
-        num_agents,
-    ]
+    policy_outputs_shape = [cfg.num_workers, cfg.worker_num_splits]
+    if cfg.batched_sampling:
+        policy_outputs_shape += [envs_per_split * num_agents]
+    else:
+        policy_outputs_shape += [envs_per_split, num_agents]
 
     num_actions, num_action_distribution_parameters = action_info(env_info)
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
@@ -169,7 +168,7 @@ class BufferMgr(Configurable):
         self.trajectories_per_minibatch = self.cfg.batch_size // rollout
         self.trajectories_per_batch = self.cfg.num_batches_per_iteration * self.trajectories_per_minibatch
 
-        worker_samples_per_iteration = env_info.num_agents * cfg.num_envs_per_worker
+        worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
         assert math.gcd(self.trajectories_per_batch, worker_samples_per_iteration) == min(self.trajectories_per_batch, worker_samples_per_iteration), \
             f'{worker_samples_per_iteration=} should divide the {self.trajectories_per_batch=} or vice versa'
         self.worker_samples_per_iteration = worker_samples_per_iteration
@@ -185,12 +184,24 @@ class BufferMgr(Configurable):
             # and they are not released until the learner finishes learning from them
             pass
 
+        # determine the number of minibatches we're allowed to accumulate before experience collection is halted
+        max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
+        if max_minibatches_to_accumulate == -1:
+            # default value
+            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
+
+        if not cfg.async_rl:
+            max_minibatches_to_accumulate = self.cfg.num_batches_per_iteration
+
         # allocate trajectory buffers for sampling
         self.traj_buffer_queues: Dict[Device, MpQueue] = dict()
         self.traj_tensors = dict()
         self.policy_output_tensors = dict()
 
         for device, num_buffers in self.buffers_per_device.items():
+            # make sure that at the very least we have enough buffers to feed the learner
+            num_buffers = max(num_buffers, max_minibatches_to_accumulate * self.trajectories_per_minibatch * self.cfg.num_policies)
+
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
 
             self.traj_tensors[device] = allocate_trajectory_tensors(
@@ -208,14 +219,6 @@ class BufferMgr(Configurable):
                 # individual trajectories for more flexible non-batched sampling
                 for i in range(num_buffers):
                     self.traj_buffer_queues[device].put(i)
-
-        max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
-        if max_minibatches_to_accumulate == -1:
-            # default value
-            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
-
-        if not cfg.async_rl:
-            max_minibatches_to_accumulate = 1
 
         self.training_batches: Dict[PolicyID, List[TensorDict]] = dict()
 
