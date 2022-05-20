@@ -40,12 +40,15 @@ def dict_of_lists_cat(d: Dict[Any, List | Tensor]):
         d[key] = torch.cat(x)
 
 
-class DictObservationsWrapper(Wrapper):
+class _DictObservationsWrapper(Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.num_agents = env.num_agents
         self.observation_space = gym.spaces.Dict(dict(obs=self.observation_space))
 
+
+class BatchedDictObservationsWrapper(_DictObservationsWrapper):
+    """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)
         return dict(obs=obs)
@@ -53,6 +56,17 @@ class DictObservationsWrapper(Wrapper):
     def step(self, action):
         obs, rew, done, info = self.env.step(action)
         return dict(obs=obs), rew, done, info
+
+
+class NonBatchedDictObservationsWrapper(_DictObservationsWrapper):
+    """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
+    def reset(self, **kwargs):
+        obs = self.env.reset(**kwargs)
+        return [dict(obs=o) for o in obs]
+
+    def step(self, action):
+        obs, rew, done, info = self.env.step(action)
+        return [dict(obs=o) for o in obs], rew, done, info
 
 
 class TensorWrapper(Wrapper):
@@ -168,18 +182,26 @@ class SequentialVectorizeWrapper(Wrapper):
 
         return self.obs, self.rew, self.dones, infos
 
+    def close(self):
+        for e in self.envs:
+            e.close()
 
-def make_env_func(cfg, env_config):
-    """
-    This should yield an environment that always returns a dict of PyTorch tensors (CPU- or GPU-side) or
-    a dict of numpy arrays or a dict of lists (depending on what the environment returns in the first place).
-    In case
-    """
+
+def _make_env_func(cfg, env_config) -> gym.Env:
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
     if not is_multiagent_env(env):
         env = MultiAgentWrapper(env)
+    return env
+
+
+def make_env_func_batched(cfg, env_config) -> gym.Env:
+    """
+    This should yield an environment that always returns a dict of PyTorch tensors (CPU- or GPU-side) or
+    a dict of numpy arrays or a dict of lists (depending on what the environment returns in the first place).
+    """
+    env = _make_env_func(cfg, env_config)
     if not isinstance(env.observation_space, spaces.Dict):
-        env = DictObservationsWrapper(env)
+        env = BatchedDictObservationsWrapper(env)
 
     # At this point we can be sure that our environment outputs a dictionary of lists (or numpy arrays or tensors)
     # containing obs, rewards, etc. for each agent in the environment. If it wasn't true to begin with, we guaranteed
@@ -187,8 +209,21 @@ def make_env_func(cfg, env_config):
     # Now we just want the environment to return a tensor dict for observations and tensors for rewards and dones.
     # We leave infos intact for now, because format of infos isn't really specified and can be inconsistent between
     # timesteps.
-
     env = TensorWrapper(env)
+    return env
+
+
+def make_env_func_non_batched(cfg, env_config) -> gym.Env:
+    """
+    This should yield an environment that always returns a list of everything (list of dict observations, rewards,
+    dones, etc.)
+    This is for the non-batched sampler which processes each agent's data independently without any vectorization
+    attempts (and therefore enables more sophisticated configurations where agents in the same env can be controlled
+    by different policies).
+    """
+    env = _make_env_func(cfg, env_config)
+    if not isinstance(env.observation_space, spaces.Dict):
+        env = NonBatchedDictObservationsWrapper(env)
     return env
 
 

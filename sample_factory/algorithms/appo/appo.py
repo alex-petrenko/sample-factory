@@ -27,7 +27,7 @@ from torch.multiprocessing import JoinableQueue as TorchJoinableQueue
 
 from sample_factory.algorithms.algorithm import ReinforcementLearningAlgorithm
 from sample_factory.algorithms.appo.actor_worker import ActorWorker
-from sample_factory.algorithms.appo.appo_utils import make_env_func, iterate_recursively, set_global_cuda_envvars
+from sample_factory.algorithms.appo.appo_utils import iterate_recursively, set_global_cuda_envvars
 from sample_factory.algorithms.appo.learner import LearnerWorker
 from sample_factory.algorithms.appo.policy_worker import PolicyWorker
 from sample_factory.algorithms.appo.shared_buffers import SharedBuffers

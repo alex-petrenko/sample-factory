@@ -5,7 +5,7 @@ import torch
 from gym import spaces
 from torch import Tensor
 
-from sample_factory.algo.rollout_worker import rollout_worker_device
+from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.queues import get_queue
 from sample_factory.algo.utils.tensor_dict import TensorDict
@@ -56,7 +56,7 @@ def action_info(env_info: EnvInfo) -> Tuple[int, int]:
     return num_actions, num_action_distribution_parameters
 
 
-def policy_output_shapes(num_actions, num_action_distribution_parameters):
+def policy_output_shapes(num_actions, num_action_distribution_parameters) -> List[Tuple[str, List]]:
     # policy outputs, this matches the expected output of the actor-critic
     policy_outputs = [
         ('actions', [num_actions]),
@@ -110,25 +110,6 @@ def allocate_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, 
     num_agents = env_info.num_agents
     envs_per_split = cfg.num_envs_per_worker // cfg.worker_num_splits
 
-    # TODO: implement this
-    # copying small policy outputs (e.g. individual value predictions & action logits) to shared memory is a
-    # bottleneck on the policy worker. For optimization purposes we create additional tensors to hold
-    # just concatenated policy outputs. Rollout workers parse the data and add it to the trajectory buffers
-    # in a proper format
-    # policy_outputs_combined_size = sum(po.size for po in policy_outputs)
-    # policy_outputs_shape = [
-    #     self.cfg.num_workers,
-    #     self.cfg.worker_num_splits,
-    #     self.envs_per_split,
-    #     self.num_agents,
-    #     policy_outputs_combined_size,
-    # ]
-    # self.policy_outputs = policy_outputs
-    # self._policy_output_tensors = torch.zeros(policy_outputs_shape, dtype=torch.float32)
-    # self._policy_output_tensors.share_memory_()
-    # self.policy_output_tensors = self._policy_output_tensors.numpy()
-
-    # TODO: this only currently works with contiguous sampling
     policy_outputs_shape = [cfg.num_workers, cfg.worker_num_splits]
     if cfg.batched_sampling:
         policy_outputs_shape += [envs_per_split * num_agents]
@@ -139,12 +120,24 @@ def allocate_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, 
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
     policy_outputs += [('new_rnn_states', [hidden_size])]  # different name so we don't override current step rnn_state
 
-    # TODO: version for non-contiguous sampler
-    policy_output_tensors = TensorDict()
-    for name, shape in policy_outputs:
-        policy_output_tensors[name] = init_tensor(policy_outputs_shape, torch.float32, shape, device, share)
+    output_names, output_shapes = list(zip(*policy_outputs))
+    output_sizes = [shape[0] if shape else 1 for shape in output_shapes]
 
-    return policy_output_tensors
+    if cfg.batched_sampling:
+        policy_output_tensors = TensorDict()
+        for name, shape in policy_outputs:
+            policy_output_tensors[name] = init_tensor(policy_outputs_shape, torch.float32, shape, device, share)
+    else:
+        # copying small policy outputs (e.g. individual value predictions & action logits) to shared memory is a
+        # bottleneck on the policy worker. For optimization purposes we create additional tensors to hold
+        # just concatenated policy outputs. Rollout workers parse the data and add it to the trajectory buffers
+        # in a proper format
+        outputs_combined_size = sum(output_sizes)
+        policy_output_tensors = init_tensor(policy_outputs_shape, torch.float32, [outputs_combined_size], device, share)
+        # self.policy_output_tensors = self._policy_output_tensors.numpy()
+        # TODO: do the numpy stuff here
+
+    return policy_output_tensors, output_names, output_sizes
 
 
 class BufferMgr(Configurable):
@@ -155,6 +148,8 @@ class BufferMgr(Configurable):
         self.buffers_per_device: Dict[Device, int] = dict()
 
         for i in range(cfg.num_workers):
+            # TODO: this should take into account whether we just need a GPU for sampling, or we actually receive observations on the GPU
+            # otherwise it will not work for things like Megaverse or GPU-rendered DMLab
             sampling_device = str(rollout_worker_device(i, cfg))
             log.debug(f'Rollout worker {i} uses device {sampling_device}')
 
@@ -207,7 +202,7 @@ class BufferMgr(Configurable):
             self.traj_tensors[device] = allocate_trajectory_tensors(
                 self.env_info, num_buffers, rollout, hidden_size, device, share,
             )
-            self.policy_output_tensors[device] = allocate_policy_output_tensors(
+            self.policy_output_tensors[device], self.output_names, self.output_sizes = allocate_policy_output_tensors(
                 self.cfg, self.env_info, hidden_size, device, share,
             )
 

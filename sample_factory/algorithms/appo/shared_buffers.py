@@ -190,6 +190,7 @@ class SharedBuffers:
             assert isinstance(d2[key], np.ndarray)
         return numpy_dict
 
+    # TODO: remove
     def get_trajectory_buffers(self, num_buffers: int, timing: Optional = None):
         """
         :param num_buffers: number of free buffer indices to obtain

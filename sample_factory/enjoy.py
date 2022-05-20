@@ -6,9 +6,9 @@ import numpy as np
 import torch
 
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.rollout_worker import preprocess_actions
+from sample_factory.algo.sampling.rollout_worker import preprocess_actions
 from sample_factory.algo.utils.env_info import extract_env_info
-from sample_factory.algorithms.appo.appo_utils import make_env_func
+from sample_factory.algorithms.appo.appo_utils import make_env_func, make_env_func_batched
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.algorithms.utils.action_distributions import ContinuousActionDistribution
@@ -30,7 +30,7 @@ def enjoy(cfg, max_num_frames=1e9):
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
 
-    env = make_env_func(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+    env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
     # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 

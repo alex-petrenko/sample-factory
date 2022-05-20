@@ -12,7 +12,7 @@ from tensorboardX import SummaryWriter
 from sample_factory.algo.inference_worker import InferenceWorker
 from sample_factory.algo.learning.batcher_sequential import SequentialBatcher, Batcher
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.rollout_worker import RolloutWorker
+from sample_factory.algo.sampling.rollout_worker import RolloutWorker
 from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.queues import get_queue

@@ -4,7 +4,7 @@ import os
 import time
 from collections import deque
 from queue import Empty
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 import numpy as np
 import psutil
@@ -60,7 +60,6 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.buffer_mgr = buffer_mgr
         self.traj_tensors: Dict[Device, TensorDict] = buffer_mgr.traj_tensors
         self.policy_output_tensors: Dict[Device, TensorDict] = buffer_mgr.policy_output_tensors
-        # self.obs_tensors, self.rnn_state_tensors = self.traj_tensors['obs'], self.traj_tensors['rnn_states']  # TODO: can't use this
 
         self.device: torch.device = policy_device(cfg, policy_id)
         self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
@@ -90,6 +89,14 @@ class InferenceWorker(EventLoopObject, Configurable):
 
         # flag used by the runner to determine when the worker is ready
         self.is_ready = False
+
+        # behavior configuration depending on whether we're in batched or non-batched sampling regime
+        if cfg.batched_sampling:
+            self._batch_func = self._batch_slices
+            self._store_and_enqueue_policy_outputs_func = self._store_and_enqueue_policy_outputs_batched
+        else:
+            self._batch_func = self._batch_individual_steps
+            self._store_and_enqueue_policy_outputs_func = self._store_and_enqueue_policy_outputs_non_batched
 
     @signal
     def initialized(self): pass
@@ -124,30 +131,115 @@ class InferenceWorker(EventLoopObject, Configurable):
     def should_resume_experience_collection(self):
         self.inference_loop.start()
 
+    def _batch_slices(self, timing):
+        with timing.add_time('deserialize'):
+            obs = dict()
+            rnn_states = []
+            for actor_idx, split_idx, traj_idx, device in self.requests:
+                # TODO: what should we do with data sampled on different devices
+                traj_tensors = self.traj_tensors[device]
+                dict_of_lists_append_idx(obs, traj_tensors['obs'], traj_idx)
+                rnn_states.append(traj_tensors['rnn_states'][traj_idx])
+
+        with timing.add_time('stack'):
+            if len(rnn_states) == 1:
+                for obs_key, tensor_list in obs.items():
+                    obs[obs_key] = tensor_list[0]
+                rnn_states = rnn_states[0]
+            else:
+                # cat() will fail if samples are on different devices
+                # should we handle a situation where experience comes from multiple devices?
+                # i.e. we use multiple GPUs for sampling but inference/learning is on a single GPU
+                dict_of_lists_cat(obs)
+                rnn_states = torch.cat(rnn_states)
+
+        return obs, rnn_states
+
+    def _batch_individual_steps(self, timing):
+        with timing.add_time('deserialize'):
+            indices = []
+            for request in self.requests:
+                # TODO: what should we do with data sampled on different devices
+                actor_idx, split_idx, request_data, device = request
+                for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
+                    index = [traj_buffer_idx, rollout_step]
+                    indices.append(index)
+                    self.total_num_samples += 1
+
+            indices = tuple(np.array(indices).T)
+            traj_tensors = self.traj_tensors[device]  # TODO: multiple sampling devices?
+            observations = traj_tensors['obs'][indices]
+            rnn_states = traj_tensors['rnn_states'][indices]
+
+        with timing.add_time('stack'):
+            pass
+            # for key, x in observations.items():
+            #     observations[key] = torch.from_numpy(x)
+            # rnn_states = torch.from_numpy(rnn_states)  # TODO: numpy stuff?
+
+        return observations, rnn_states
+
+    @staticmethod
+    def _unsqueeze_0dim_tensors(d: TensorDict):
+        for policy_output in d.values():
+            if not policy_output.shape:
+                policy_output.unsqueeze_(-1)
+
+    def _store_and_enqueue_policy_outputs_batched(self, num_samples, policy_outputs, requests, timing) -> Set:
+        with timing.add_time('save_outputs'):
+            # gotta unsqueeze some 0-dim tensors
+            if num_samples <= 1:
+                self._unsqueeze_0dim_tensors(policy_outputs)
+
+            # assuming all workers provide the same number of samples
+            samples_per_request = num_samples // len(requests)
+            ofs = 0
+            for actor_idx, split_idx, _, device in requests:
+                self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[ofs:ofs + samples_per_request]
+                ofs += samples_per_request
+
+        outputs_ready = set((actor_idx, split_idx) for actor_idx, split_idx, _, _ in requests)
+        return outputs_ready
+
+    def _store_and_enqueue_policy_outputs_non_batched(self, num_samples, policy_outputs, requests, timing):
+        # TODO: respect sampling device instead of just dumping everything on cpu
+        device = 'cpu'
+
+        with timing.add_time('to_cpu'):
+            for key, output_value in policy_outputs.items():
+                policy_outputs[key] = output_value.to(device)
+
+        with timing.add_time('save_outputs'):
+            # concat all tensors into a single tensor for performance
+            output_tensors = []
+            for name in self.buffer_mgr.output_names:
+                output_value = policy_outputs[name].float()
+                if len(output_value.shape) == 1:
+                    output_value.unsqueeze_(dim=1)
+                output_tensors.append(output_value)
+
+            output_tensors = torch.cat(output_tensors, dim=1)
+
+            outputs_ready = set()
+            output_indices = []
+            for request in requests:
+                actor_idx, split_idx, request_data, device = request
+                for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
+                    output_indices.append([actor_idx, split_idx, env_idx, agent_idx])
+
+                outputs_ready.add((actor_idx, split_idx))
+
+            output_indices = tuple(np.array(output_indices).T)
+            self.policy_output_tensors[device][output_indices] = output_tensors
+            # self.policy_outputs[output_indices] = output_tensors.numpy() # TODO: numpy acceleration?
+
+        return outputs_ready
+
     def _handle_policy_steps(self, timing):
         with inference_context(self.cfg.serial_mode):
-            with timing.add_time('deserialize'):
-                obs = dict()
-                rnn_states = []
-                for actor_idx, split_idx, traj_idx, device in self.requests:
-                    traj_tensors = self.traj_tensors[device]
-                    dict_of_lists_append_idx(obs, traj_tensors['obs'], traj_idx)
-                    rnn_states.append(traj_tensors['rnn_states'][traj_idx])
-
-            with timing.add_time('stack'):
-                if len(rnn_states) == 1:
-                    for obs_key, tensor_list in obs.items():
-                        obs[obs_key] = tensor_list[0]
-                    rnn_states = rnn_states[0]
-                else:
-                    # cat() will fail if samples are on different devices
-                    # should we handle a situation where experience comes from multiple devices?
-                    # i.e. we use multiple GPUs for sampling but inference/learning is on a single GPU
-                    dict_of_lists_cat(obs)
-                    rnn_states = torch.cat(rnn_states)
-
-                num_samples = rnn_states.shape[0]
-                self.total_num_samples += num_samples
+            obs, rnn_states = self._batch_func(timing)
+            num_samples = rnn_states.shape[0]
+            self.total_num_samples += num_samples
 
             with timing.add_time('obs_to_device'):
                 actor_critic = self.param_client.actor_critic
@@ -165,26 +257,15 @@ class InferenceWorker(EventLoopObject, Configurable):
 
             with timing.add_time('forward'):
                 policy_outputs = actor_critic(normalized_obs, rnn_states)
-
-            with timing.add_time('save_outputs'):
                 policy_outputs['policy_version'] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
 
-                for policy_output in policy_outputs.values():
-                    if not policy_output.shape:
-                        policy_output.unsqueeze_(-1)
-
-                # assuming all workers provide the same number of samples
-                samples_per_request = num_samples // len(self.requests)
-                ofs = 0
-                for actor_idx, split_idx, _, device in self.requests:
-                    self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[ofs:ofs + samples_per_request]
-                    ofs += samples_per_request
+            outputs_ready = self._store_and_enqueue_policy_outputs_func(num_samples, policy_outputs, self.requests, timing)
 
             with timing.add_time('send_messages'):
-                for actor_idx, split_idx, _, _ in self.requests:
+                for actor_idx, split_idx in outputs_ready:
                     self.emit(f'advance{actor_idx}', (split_idx, self.policy_id))
 
-                self.requests = []
+            self.requests = []
 
     def _get_inference_requests_serial(self):
         try:
