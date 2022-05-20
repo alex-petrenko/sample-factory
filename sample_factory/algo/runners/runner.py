@@ -10,7 +10,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.inference_worker import InferenceWorker
-from sample_factory.algo.learning.batcher_sequential import SequentialBatcher, Batcher
+from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker
 from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
@@ -425,8 +425,7 @@ class Runner(EventLoopObject, Configurable):
         return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, policy_id=policy_id)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
-        # TODO: other types of batchers
-        return SequentialBatcher(event_loop, policy_id, self.buffer_mgr, self.cfg)
+        return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg)
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
         return InferenceWorker(
@@ -524,56 +523,6 @@ class Runner(EventLoopObject, Configurable):
         if all_ready:
             log.info('All inference workers are ready! Signal rollout workers to start!')
             self.inference_workers_initialized.emit()
-
-    # # TODO: type hints
-    # def init_todo___(self, sampler, batcher, learner):
-    #     # TODO: multiple samplers/learners for multiple policies
-    #
-    #     # initialize components
-    #     self.sampler = sampler
-    #     self.batcher = batcher
-    #     self.learner = learner
-    #
-    #     self.event_loop.start.connect(learner.init)  # when runner is ready to go we initialize the learner first
-    #     # once learner is ready (model loaded), we initialize the sampler
-    #     learner.model_initialized.connect(sampler.init)  # TODO: should be actor/policy workers here
-    #     # after the sampler we initialize the batcher
-    #     sampler.initialized.connect(batcher.init)
-    #     # but also we kickstart experience collection on the sampler
-    #     sampler.initialized.connect(sampler.should_collect_trajectories)
-    #
-    #     # sampler sends new trajectories to the batcher
-    #     sampler.new_trajectories.connect(batcher.on_new_trajectories)
-    #     # batcher gives learner batches of trajectories ready for learning
-    #     batcher.training_batches_available.connect(learner.on_new_training_batches)
-    #     # and it gives the sampler access to free trajectory buffers which are used for experience collection
-    #     batcher.trajectory_buffers_available.connect(sampler.on_trajectory_buffers_available)
-    #
-    #     # once learner is done with a training batch, it is given back to the batcher
-    #     learner.training_batch_released.connect(batcher.on_training_batch_released)
-    #
-    #     if self.cfg.async_rl:
-    #         # in async mode we immediately want to start collecting a new trajectory
-    #         sampler.new_trajectories.connect(sampler.should_collect_trajectories)
-    #     else:
-    #         # in synchronous mode we wait for the learner to finish first
-    #         learner.finished_training_iteration.connect(sampler.should_collect_trajectories)  # close the synchronous loop
-    #
-    #     # auxiliary connections, such as summary reporting
-    #     learner.finished_training_iteration.connect(self._after_training_iteration)
-    #     sampler.report_msg.broadcast_on(self.event_loop)  # how is this going to look like for async CPU sampler
-    #     learner.report_msg.connect(self._process_msg)
-    #     self.save_periodic.connect(self.learner.save)
-    #     self.save_best.connect(self.learner.save_best)
-    #
-    #     # stop everything
-    #     self.stop.connect(sampler.on_stop)  # we stop the sampler
-    #     sampler.stop.connect(learner.on_stop)  # sampler stops the learner
-    #     sampler.stop.connect(self._component_stopped)
-    #     learner.stop.connect(self._component_stopped)
-    #     # TODO: stop the batcher separately?
-    #
-    #     self.components_to_stop = [sampler, learner]
 
     def _check_done(self):
         # TODO: I don't think this works now. Do we even need this feature?

@@ -1,3 +1,4 @@
+import random
 from typing import Iterable, Dict, Optional, List, Tuple
 
 import torch
@@ -15,18 +16,25 @@ from sample_factory.utils.typing import PolicyID, MpQueue, Device
 from sample_factory.utils.utils import AttrDict, log
 
 
+def slice_len(s: slice) -> int:
+    return s.stop - s.start
+
+
 class SliceMerger:
     def __init__(self):
         self.slice_starts: Dict[int, slice] = dict()
         self.slice_stops: Dict[int, slice] = dict()
+        self.total_num = 0
 
     def _add_slice(self, s):
         self.slice_starts[s.start] = s
         self.slice_stops[s.stop] = s
+        self.total_num += slice_len(s)
 
     def _del_slice(self, s: slice):
         del self.slice_starts[s.start]
         del self.slice_stops[s.stop]
+        self.total_num -= slice_len(s)
 
     def merge_slices(self, trajectory_slice: slice):
         new_slice = None
@@ -48,38 +56,41 @@ class SliceMerger:
             # nothing to merge, just add a new slice
             self._add_slice(trajectory_slice)
 
-    def get_batch(self, batch_size) -> Optional[slice]:
+    def _extract_at_most(self, s: slice, batch_size: int) -> slice:
+        n = slice_len(s)
+        self._del_slice(s)
+        if n > batch_size:
+            remaining_slice = slice(s.start + batch_size, s.stop)
+            self._add_slice(remaining_slice)
+            s = slice(s.start, s.start + batch_size)
+
+        return s
+
+    def get_at_most(self, batch_size) -> Optional[slice]:
+        for s in self.slice_starts.values():
+            return self._extract_at_most(s, batch_size)
+
+        return None
+
+    def get_exactly(self, batch_size: int) -> Optional[slice]:
         """
         At this point, all trajectory slices that share a boundary should have been merged into longer slices.
         If there's a slice that is at least trajectories_per_batch long starting where the previous returned slice
         ends - we found our batch.
         :return: a slice of trajectory buffer that will be a training batch on the learner
         """
-        for slice_start, batch_slice in self.slice_starts.items():
-            slice_len = batch_slice.stop - batch_slice.start
-            if slice_len >= batch_size:
-                self._del_slice(batch_slice)
-                if slice_len > batch_size:
-                    # we have even more trajectories than we need, keep them for later use
-                    remaining_slice = slice(batch_slice.start + batch_size, batch_slice.stop)
-                    self._add_slice(remaining_slice)
-                    batch_slice = slice(batch_slice.start, batch_slice.start + batch_size)
-
-                return batch_slice
+        for slice_start, s in self.slice_starts.items():
+            n = slice_len(s)
+            if n >= batch_size:
+                return self._extract_at_most(s, batch_size)
 
         return None
 
 
 class Batcher(EventLoopObject):
-    def __init__(self, evt_loop: EventLoop, policy_id: PolicyID, unique_name):
-        EventLoopObject.__init__(self, evt_loop, unique_name)
-        self.policy_id = policy_id
-
-
-class SequentialBatcher(Batcher):
     def __init__(self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr, cfg: AttrDict):
-        unique_name = f'{SequentialBatcher.__name__}_{policy_id}'
-        Batcher.__init__(self, evt_loop, policy_id, unique_name)
+        unique_name = f'{Batcher.__name__}_{policy_id}'
+        super().__init__(evt_loop, unique_name)
 
         self.cfg = cfg
         self.policy_id = policy_id
@@ -87,19 +98,17 @@ class SequentialBatcher(Batcher):
         self.trajectories_per_training_batch = buffer_mgr.trajectories_per_batch
         self.trajectories_per_sampling_batch = buffer_mgr.worker_samples_per_iteration
 
-        self.next_batch_start = 0
-
-        self.training_slices: Dict[Device, SliceMerger] = dict()
-        self.sampling_slices: Dict[Device, SliceMerger] = dict()
+        self.slices_for_training: Dict[Device, SliceMerger] = dict()
+        self.slices_for_sampling: Dict[Device, SliceMerger] = dict()
         for device in buffer_mgr.traj_tensors.keys():
-            self.training_slices[device] = SliceMerger()
-            self.sampling_slices[device] = SliceMerger()
+            self.slices_for_training[device] = SliceMerger()
+            self.slices_for_sampling[device] = SliceMerger()
 
         self.traj_buffer_queues = buffer_mgr.traj_buffer_queues
         self.traj_tensors = buffer_mgr.traj_tensors
         self.training_batches = buffer_mgr.training_batches[policy_id]
         self.available_batches = list(range(len(self.training_batches)))
-        self.traj_tensors_to_release: List[Optional[Tuple[Device, slice]]] = [None] * len(self.available_batches)
+        self.traj_tensors_to_release: List[List[Tuple[Device, slice]]] = [[] for _ in range(len(self.available_batches))]
 
     @signal
     def initialized(self): pass
@@ -127,42 +136,62 @@ class SequentialBatcher(Batcher):
         for trajectory_dict in trajectory_dicts:
             assert trajectory_dict['policy_id'] == self.policy_id
             trajectory_slice = trajectory_dict['traj_buffer_idx']
-            assert isinstance(trajectory_slice, slice)  # TODO: support individual trajectories!
-            self.training_slices[device].merge_slices(trajectory_slice)
+            if not isinstance(trajectory_slice, slice):
+                trajectory_slice = slice(trajectory_slice, trajectory_slice + 1)  # slice of len 1
+            self.slices_for_training[device].merge_slices(trajectory_slice)
 
-        # TODO: if we're copying and in sync mode, we should remember to release the trajectories later when we are done training
+        self._maybe_enqueue_new_training_batches()
 
-        self._maybe_enqueue_new_training_batches(device)
-
-    def _maybe_enqueue_new_training_batches(self, device: str):
+    def _maybe_enqueue_new_training_batches(self):
         with torch.no_grad():
             while self.available_batches:
-                training_batch_slice = self.training_slices[device].get_batch(self.trajectories_per_training_batch)
-                if training_batch_slice is None:
+                total_num_trajectories = 0
+                for slices in self.slices_for_training.values():
+                    total_num_trajectories += slices.total_num
+
+                if total_num_trajectories < self.trajectories_per_training_batch:
+                    # not enough experience yet to start training
                     break
 
                 # obtain the index of the available batch buffer
                 batch_idx = self.available_batches[-1]
                 del self.available_batches[-1]
+                assert len(self.traj_tensors_to_release[batch_idx]) == 0
 
-                # copy data into the training buffer
-                self.training_batches[batch_idx][:] = self.traj_tensors[device][training_batch_slice]
+                # extract slices of trajectories and copy them to the training batch
+                devices = list(self.slices_for_training.keys())
+                random.shuffle(devices)  # so that no sampling device is preferred
+
+                trajectories_copied = 0
+                remaining = self.trajectories_per_training_batch - trajectories_copied
+                for device in devices:
+                    traj_tensors = self.traj_tensors[device]
+                    slices = self.slices_for_training[device]
+                    while remaining > 0 and (traj_slice := slices.get_at_most(remaining)):
+                        # copy data into the training buffer
+                        start = trajectories_copied
+                        stop = start + slice_len(traj_slice)
+                        self.training_batches[batch_idx][start:stop] = traj_tensors[traj_slice]
+
+                        # remember that we need to release these trajectories
+                        self.traj_tensors_to_release[batch_idx].append((device, traj_slice))
+
+                        trajectories_copied += slice_len(traj_slice)
+                        remaining = self.trajectories_per_training_batch - trajectories_copied
+
+                assert trajectories_copied == self.trajectories_per_training_batch and remaining == 0
 
                 # signal the learner that we have a new training batch
                 self.training_batches_available.emit(batch_idx)
 
                 if self.cfg.async_rl:
-                    self._release_traj_tensors(device, training_batch_slice)
+                    self._release_traj_tensors(batch_idx)
                     if not self.available_batches:
                         log.debug('Signal inference workers to stop experience collection...')
                         self.stop_experience_collection.emit()
-                else:
-                    self.traj_tensors_to_release[batch_idx] = (device, training_batch_slice)
 
     def on_training_batch_released(self, batch_idx: int):
-        if self.traj_tensors_to_release[batch_idx] is not None:
-            device, training_batch_slice = self.traj_tensors_to_release[batch_idx]
-            self._release_traj_tensors(device, training_batch_slice)
+        self._release_traj_tensors(batch_idx)
 
         if not self.available_batches and self.cfg.async_rl:
             log.debug('Signal inference workers to resume experience collection...')
@@ -170,16 +199,30 @@ class SequentialBatcher(Batcher):
 
         self.available_batches.append(batch_idx)
 
-    def _release_traj_tensors(self, device: str, traj_slice: slice):
-        self.sampling_slices[device].merge_slices(traj_slice)
+    def _release_traj_tensors(self, batch_idx: int):
+        new_sampling_batches = dict()
 
-        new_sampling_batches = []
-        while (sampling_batch := self.sampling_slices[device].get_batch(self.trajectories_per_sampling_batch)) is not None:
-            new_sampling_batches.append(sampling_batch)
+        if self.cfg.batched_sampling:
+            for device, traj_slice in self.traj_tensors_to_release[batch_idx]:
+                self.slices_for_sampling[device].merge_slices(traj_slice)
 
-        if new_sampling_batches:
-            self.traj_buffer_queues[device].put_many(new_sampling_batches)
-            self.trajectory_buffers_available.emit()
+            for device, slices in self.slices_for_sampling.items():
+                new_sampling_batches[device] = []
+                while (sampling_batch := self.slices_for_sampling[device].get_exactly(self.trajectories_per_sampling_batch)) is not None:
+                    new_sampling_batches[device].append(sampling_batch)
+        else:
+            for device, traj_slice in self.traj_tensors_to_release[batch_idx]:
+                if device not in new_sampling_batches:
+                    new_sampling_batches[device] = []
+
+                for i in range(traj_slice.start, traj_slice.stop):
+                    new_sampling_batches[device].append(i)
+
+        self.traj_tensors_to_release[batch_idx] = []
+
+        for device, batches in new_sampling_batches.items():
+            self.traj_buffer_queues[device].put_many(batches)
+        self.trajectory_buffers_available.emit()
 
     def on_stop(self, emitter_id):
         self.stop.emit(self.object_id)

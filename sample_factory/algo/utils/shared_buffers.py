@@ -163,10 +163,13 @@ class BufferMgr(Configurable):
         self.trajectories_per_minibatch = self.cfg.batch_size // rollout
         self.trajectories_per_batch = self.cfg.num_batches_per_iteration * self.trajectories_per_minibatch
 
-        worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
-        assert math.gcd(self.trajectories_per_batch, worker_samples_per_iteration) == min(self.trajectories_per_batch, worker_samples_per_iteration), \
-            f'{worker_samples_per_iteration=} should divide the {self.trajectories_per_batch=} or vice versa'
-        self.worker_samples_per_iteration = worker_samples_per_iteration
+        if cfg.batched_sampling:
+            worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
+            assert math.gcd(self.trajectories_per_batch, worker_samples_per_iteration) == min(self.trajectories_per_batch, worker_samples_per_iteration), \
+                f'{worker_samples_per_iteration=} should divide the {self.trajectories_per_batch=} or vice versa'
+            self.worker_samples_per_iteration = worker_samples_per_iteration
+        else:
+            self.worker_samples_per_iteration = -1
 
         share = not cfg.serial_mode
 
