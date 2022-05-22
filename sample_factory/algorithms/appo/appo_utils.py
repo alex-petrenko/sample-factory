@@ -346,6 +346,7 @@ def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_ma
     return gpus_to_use
 
 
+# TODO: do we need this func?
 def cuda_envvars_for_policy(policy_id, process_type):
     set_gpus_for_process(policy_id, 1, process_type)
 

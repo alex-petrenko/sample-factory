@@ -16,7 +16,6 @@ from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
 from sample_factory.algorithms.appo.model import create_actor_critic
@@ -27,24 +26,6 @@ from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
-
-
-def init_learner_process(sf_context: SampleFactoryContext, cfg, policy_id):
-    set_global_context(sf_context)
-    log.info(f'LEARNER\tpid {os.getpid()}\tparent {os.getppid()}')
-
-    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
-    import signal as os_signal
-    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
-
-    import psutil
-    try:
-        psutil.Process().nice(cfg.default_niceness)
-    except psutil.AccessDenied:
-        log.error('Low niceness requires sudo!')
-
-    torch.multiprocessing.set_sharing_strategy('file_system')
-    init_torch_runtime(cfg)
 
 
 class LearningRateScheduler:
@@ -894,3 +875,22 @@ class Learner(EventLoopObject, Configurable):
 
         self.detach()  # remove from the current event loop
         log.info(self.timing)
+
+
+def init_learner_process(sf_context: SampleFactoryContext, learner: Learner):
+    set_global_context(sf_context)
+    log.info(f'{learner.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    cfg = learner.cfg
+
+    import psutil
+    try:
+        psutil.Process().nice(cfg.default_niceness)
+    except psutil.AccessDenied:
+        log.error('Low niceness requires sudo!')
+
+    init_torch_runtime(cfg)

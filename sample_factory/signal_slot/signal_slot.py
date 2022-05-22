@@ -456,14 +456,19 @@ class EventLoopProcess(EventLoopObject):
         """
         process_cls = multiprocessing.Process if multiprocessing_context is None else multiprocessing_context.Process
 
-        self._init_func: Optional[Callable] = init_func
-        self._args = tuple(args)
-        self._kwargs = dict() if kwargs is None else dict(kwargs)
-
         self._process = process_cls(target=self._target, name=unique_process_name, daemon=daemon)
+
+        self._init_func: Optional[Callable] = init_func
+        self._args = self._kwargs = None
+        self.set_init_func_args(args, kwargs)
 
         self.event_loop = EventLoop(f'{unique_process_name}_evt_loop')
         EventLoopObject.__init__(self, self.event_loop, unique_process_name)
+
+    def set_init_func_args(self, args=(), kwargs=None):
+        assert not self._process.is_alive()
+        self._args = tuple(args)
+        self._kwargs = dict() if kwargs is None else dict(kwargs)
 
     def _target(self):
         if self._init_func:

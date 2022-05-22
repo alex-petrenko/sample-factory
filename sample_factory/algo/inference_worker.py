@@ -25,24 +25,6 @@ from sample_factory.utils.typing import PolicyID, MpQueue, Device
 from sample_factory.utils.utils import log
 
 
-def init_sampler_process(sf_context: SampleFactoryContext, cfg, policy_id):
-    set_global_context(sf_context)
-    log.info(f'INFERENCE worker {policy_id}\tpid {os.getpid()}\tparent {os.getppid()}')
-
-    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
-    import signal as os_signal
-    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
-
-    try:
-        psutil.Process().nice(min(cfg.default_niceness + 2, 20))
-    except psutil.AccessDenied:
-        log.error('Low niceness requires sudo!')
-
-    if cfg.device == 'gpu':
-        cuda_envvars_for_policy(policy_id, 'inference')  # TODO: should not do this
-    init_torch_runtime(cfg)
-
-
 class InferenceWorker(EventLoopObject, Configurable):
     def __init__(
             self, event_loop, policy_id: PolicyID, worker_idx: int, buffer_mgr,
@@ -332,3 +314,23 @@ class InferenceWorker(EventLoopObject, Configurable):
 
         self.detach()  # remove from the current event loop
         log.info(self.timing)
+
+
+def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWorker):
+    set_global_context(sf_context)
+    log.info(f'{worker.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    cfg = worker.cfg
+
+    try:
+        psutil.Process().nice(min(cfg.default_niceness + 2, 20))
+    except psutil.AccessDenied:
+        log.error('Low niceness requires sudo!')
+
+    # if cfg.device == 'gpu':
+    #     cuda_envvars_for_policy(policy_id, 'inference')  # should not do this?
+    init_torch_runtime(cfg)

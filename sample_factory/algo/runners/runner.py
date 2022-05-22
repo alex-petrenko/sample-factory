@@ -188,6 +188,9 @@ class Runner(EventLoopObject, Configurable):
     @signal
     def stop(self): pass
 
+    @signal
+    def all_components_stopped(self): pass
+
     def _process_msg(self, msgs):
         if isinstance(msgs, (dict, OrderedDict)):
             msgs = (msgs, )
@@ -440,6 +443,9 @@ class Runner(EventLoopObject, Configurable):
         self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 
+    def _on_start(self):
+        pass
+
     def _setup_component_heartbeat(self):
         # TODO!!!
         pass
@@ -451,6 +457,9 @@ class Runner(EventLoopObject, Configurable):
         component_to_stop.stop.connect(self._component_stopped)
 
     def connect_components(self):
+        # runner initialization
+        self.event_loop.start.connect(self._on_start)
+
         for policy_id in range(self.cfg.num_policies):
             # when runner is ready we initialize the learner first
             learner = self.learners[policy_id]
@@ -510,6 +519,9 @@ class Runner(EventLoopObject, Configurable):
             # stop rollout workers
             self._setup_component_termination(self, rollout_worker)
 
+        # final cleanup
+        self.all_components_stopped.connect(self._on_everything_stopped)
+
     def inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
         assert not self.inference_workers[policy_id][worker_idx].is_ready
         log.info(f'Inference worker {policy_id}-{worker_idx} is ready!')
@@ -559,8 +571,13 @@ class Runner(EventLoopObject, Configurable):
                 break
 
         if not self.components_to_stop:
-            assert self.event_loop.owner is self
-            self.event_loop.stop()
+            self.all_components_stopped.emit()
+
+    def _on_everything_stopped(self):
+        # TODO: print profiles
+
+        assert self.event_loop.owner is self
+        self.event_loop.stop()
 
     # noinspection PyBroadException
     def run(self) -> StatusCode:

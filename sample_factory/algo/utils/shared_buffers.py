@@ -211,8 +211,8 @@ class BufferMgr(Configurable):
 
             if cfg.batched_sampling:
                 # big trajectory batches (slices) for batched sampling
-                for i in range(0, num_buffers, worker_samples_per_iteration):
-                    self.traj_buffer_queues[device].put(slice(i, i + worker_samples_per_iteration))
+                for i in range(0, num_buffers, self.worker_samples_per_iteration):
+                    self.traj_buffer_queues[device].put(slice(i, i + self.worker_samples_per_iteration))
             else:
                 # individual trajectories for more flexible non-batched sampling
                 for i in range(num_buffers):

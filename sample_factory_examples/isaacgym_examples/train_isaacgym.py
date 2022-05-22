@@ -1,8 +1,9 @@
-import sys
+import ololo
 
-# this is here just to guarantee that isaacgym_examples is imported before PyTorch
+import sys
 from typing import List
 
+# this is here just to guarantee that isaacgym_examples is imported before PyTorch
 import isaacgym
 import torch
 from torch import nn, Tensor

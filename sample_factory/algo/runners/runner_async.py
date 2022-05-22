@@ -1,48 +1,68 @@
 import multiprocessing
-from typing import Dict
+import time
+from typing import List
 
+from sample_factory.algo.inference_worker import init_inference_process
 from sample_factory.algo.learning.learner import init_learner_process
 from sample_factory.algo.runners.runner import Runner
+from sample_factory.algo.sampling.rollout_worker import init_rollout_worker_process
 from sample_factory.algo.utils.context import sf_global_context
-from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopProcess
-from sample_factory.utils.typing import PolicyID
+from sample_factory.signal_slot.signal_slot import EventLoopProcess
+from sample_factory.utils.utils import log
 
 
 class AsyncRunner(Runner):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        self.learner_processes: Dict[PolicyID, EventLoopProcess] = dict()
+        self.processes: List[EventLoopProcess] = []
+
+        # self.rollout_processes: List[EventLoopProcess] = []
+        # self.learner_processes: Dict[PolicyID, EventLoopProcess] = dict()
+        # self.inference_processes: Dict[PolicyID, List[EventLoopProcess]] = dict()
 
     def init(self):
         super().init()
         ctx = multiprocessing.get_context('spawn')
 
         for policy_id in range(self.cfg.num_policies):
-            learner_proc = EventLoopProcess(
-                f'learner_proc{policy_id}', ctx, init_func=init_learner_process,
-                args=(sf_global_context(), self.cfg, policy_id)
-            )
-            self.learner_processes[policy_id] = learner_proc
+            learner_proc = EventLoopProcess(f'learner_proc{policy_id}', ctx, init_func=init_learner_process)
+            self.processes.append(learner_proc)
             self.learners[policy_id] = self._make_learner(learner_proc.event_loop, policy_id)
 
-            # batcher_evt_loop = learner_evt_loop
-            # if self.cfg.train_in_background_thread:
-            #     batcher_evt_loop = EventLoop(f'Batcher_{policy_id}_EvtLoop')
-            # self.batchers[policy_id] = self._make_batcher(batcher_evt_loop, policy_id)  # TODO: batcher should be a part of the learner
+            # TODO: batcher separate thread!
+            self.batchers[policy_id] = self._make_batcher(learner_proc.event_loop, policy_id)
+            learner_proc.set_init_func_args((sf_global_context(), self.learners[policy_id]))
 
             self.inference_workers[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
-                inference_worker_evt_loop = EventLoop(f'InferenceWorker_p{policy_id}-w{i}_EvtLoop')
-                inference_worker = self._make_inference_worker(inference_worker_evt_loop, policy_id, i, self.learners[policy_id].param_server)
+                inference_proc = EventLoopProcess(f'inference_proc{policy_id}-{i}', ctx, init_func=init_inference_process)
+                self.processes.append(inference_proc)
+                inference_worker = self._make_inference_worker(inference_proc.event_loop, policy_id, i, self.learners[policy_id].param_server)
+                inference_proc.set_init_func_args((sf_global_context(), inference_worker))
                 self.inference_workers[policy_id].append(inference_worker)
 
         for i in range(self.cfg.num_workers):
-            rollout_worker_evt_loop = EventLoop(f'RolloutWorker_{i}_EvtLoop')
-            rollout_worker = self._make_rollout_worker(rollout_worker_evt_loop, i)
+            rollout_proc = EventLoopProcess(f'rollout_proc{i}', ctx, init_func=init_rollout_worker_process)
+            self.processes.append(rollout_proc)
+            rollout_worker = self._make_rollout_worker(rollout_proc.event_loop, i)
+            rollout_proc.set_init_func_args((sf_global_context(), rollout_worker))
             self.rollout_workers.append(rollout_worker)
 
         self.connect_components()
 
-        for p in self.learner_processes.values():
+    def _on_start(self):
+        self._start_processes()
+
+    def _start_processes(self):
+        log.debug('Starting all processes...')
+        for p in self.processes:
+            log.debug(f'Starting process {p.name}')
             p.start()
+            time.sleep(5)
+
+    def _on_everything_stopped(self):
+        for p in self.processes:
+            p.join()
+
+        super()._on_everything_stopped()
