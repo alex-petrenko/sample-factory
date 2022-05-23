@@ -1,5 +1,6 @@
 import json
 import math
+import multiprocessing
 import os
 import time
 from collections import deque, OrderedDict
@@ -15,7 +16,7 @@ from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker
 from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
 from sample_factory.algo.utils.model_sharing import ParameterServer
-from sample_factory.algo.utils.queues import get_queue
+from sample_factory.algo.utils.multiprocessing_utils import get_queue, get_lock
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algorithms.appo.appo_utils import iterate_recursively, set_global_cuda_envvars
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_EPISODIC_STATS_PROCESSING, \
@@ -23,7 +24,7 @@ from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_E
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer, signal
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, MpQueue
+from sample_factory.utils.typing import PolicyID, MpQueue, MpLock
 from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
 from sample_factory.utils.wandb_utils import init_wandb
@@ -98,6 +99,8 @@ class Runner(EventLoopObject, Configurable):
 
         self.env_info: Optional[EnvInfo] = None
         self.buffer_mgr = None
+
+        self.mp_ctx = self.multiprocessing_context()
 
         self.inference_queues: Dict[PolicyID, MpQueue] = {p: get_queue(cfg.serial_mode) for p in range(self.cfg.num_policies)}
 
@@ -190,6 +193,9 @@ class Runner(EventLoopObject, Configurable):
 
     @signal
     def all_components_stopped(self): pass
+
+    def multiprocessing_context(self) -> Optional[multiprocessing.context.BaseContext]:
+        raise NotImplementedError()
 
     def _process_msg(self, msgs):
         if isinstance(msgs, (dict, OrderedDict)):
@@ -425,7 +431,7 @@ class Runner(EventLoopObject, Configurable):
             json.dump(cfg_dict, json_file, indent=2)
 
     def _make_learner(self, event_loop, policy_id: PolicyID):
-        return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, policy_id=policy_id)
+        return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, policy_id=policy_id, mp_ctx=self.mp_ctx)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg)

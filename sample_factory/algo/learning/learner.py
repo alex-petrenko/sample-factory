@@ -17,7 +17,7 @@ from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages_returns
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
-from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats
+from sample_factory.algorithms.appo.appo_utils import iterate_recursively, memory_stats, cuda_envvars_for_policy
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.algorithms.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algorithms.utils.pytorch_utils import to_scalar
@@ -25,6 +25,7 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
+from sample_factory.utils.typing import MpLock
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
 
 
@@ -93,7 +94,7 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
 
 
 class Learner(EventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, buffer_mgr, policy_id, mp_ctx=None):
+    def __init__(self, evt_loop, cfg, env_info, buffer_mgr, policy_id, mp_ctx):
         Configurable.__init__(self, cfg)
 
         unique_name = f'{Learner.__name__}_{policy_id}'
@@ -104,7 +105,7 @@ class Learner(EventLoopObject, Configurable):
         self.policy_id = policy_id
 
         self.env_info = env_info
-        self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions, mp_ctx)
+        self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions, cfg.serial_mode, mp_ctx)
 
         self.device = None
         self.actor_critic = None
@@ -130,6 +131,8 @@ class Learner(EventLoopObject, Configurable):
         self.buffer_mgr = buffer_mgr
 
         self.exploration_loss_func = self.kl_loss_func = None
+
+        self.initialized = False
 
     @signal
     def model_initialized(self): pass
@@ -177,43 +180,46 @@ class Learner(EventLoopObject, Configurable):
         # initialize device
         self.device = policy_device(self.cfg, self.policy_id)
 
-        # trainable torch module
-        self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
-        self.actor_critic.model_to_device(self.device)
-        self.actor_critic.share_memory()
-        self.actor_critic.train()
+        log.debug('Initializing actor-critic model on device %s', self.device)
+        with self.param_server.policy_lock:
+            # trainable torch module
+            self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
+            self.actor_critic.model_to_device(self.device)
+            self.actor_critic.share_memory()
+            self.actor_critic.train()
 
-        params = list(self.actor_critic.parameters())
+            params = list(self.actor_critic.parameters())
 
-        # TODO: aux modules
-        # if self.aux_loss_module is not None:
-        #     params += list(self.aux_loss_module.parameters())
+            # TODO: aux modules
+            # if self.aux_loss_module is not None:
+            #     params += list(self.aux_loss_module.parameters())
 
-        optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
-        if self.cfg.optimizer not in optimizer_cls:
-            raise RuntimeError(f'Unknown optimizer {self.cfg.optimizer}')
+            optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+            if self.cfg.optimizer not in optimizer_cls:
+                raise RuntimeError(f'Unknown optimizer {self.cfg.optimizer}')
 
-        optimizer_cls = optimizer_cls[self.cfg.optimizer]
-        log.debug(f'Using optimizer {optimizer_cls}')
+            optimizer_cls = optimizer_cls[self.cfg.optimizer]
+            log.debug(f'Using optimizer {optimizer_cls}')
 
-        self.optimizer = optimizer_cls(
-            params,
-            lr=self.cfg.learning_rate,
-            betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
-            eps=self.cfg.adam_eps,
-        )
+            self.optimizer = optimizer_cls(
+                params,
+                lr=self.cfg.learning_rate,
+                betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+                eps=self.cfg.adam_eps,
+            )
 
-        self.lr_scheduler = get_lr_scheduler(self.cfg)
+            self.lr_scheduler = get_lr_scheduler(self.cfg)
 
-        self.load_from_checkpoint(self.policy_id)
-        self.param_server.init(self.actor_critic, self.train_step)
+            self.load_from_checkpoint(self.policy_id)
+            self.param_server.init(self.actor_critic, self.train_step)
 
-        # in serial mode we will just use the same actor_critic directly
-        state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
-        model_state = (state_dict, self.device, self.train_step)
-        # signal other components that the model is ready
-        self.model_initialized.emit(model_state)
+            # in serial mode we will just use the same actor_critic directly
+            state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
+            model_state = (state_dict, self.device, self.train_step)
+            # signal other components that the model is ready
+            self.model_initialized.emit(model_state)
 
+        self.initialized = True
         log.debug(f'{self.object_id} finished initialization!')
 
     @staticmethod
@@ -299,6 +305,9 @@ class Learner(EventLoopObject, Configurable):
         return checkpoint
 
     def _save_impl(self, name_prefix, name_suffix, keep_checkpoints, verbose=True):
+        if not self.initialized:
+            return
+
         checkpoint = self._get_checkpoint_dict()
         assert checkpoint is not None
 
@@ -892,5 +901,8 @@ def init_learner_process(sf_context: SampleFactoryContext, learner: Learner):
         psutil.Process().nice(cfg.default_niceness)
     except psutil.AccessDenied:
         log.error('Low niceness requires sudo!')
+
+    if cfg.device == 'gpu':
+        cuda_envvars_for_policy(learner.policy_id, 'learning')
 
     init_torch_runtime(cfg)

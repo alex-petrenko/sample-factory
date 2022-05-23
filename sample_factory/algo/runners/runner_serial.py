@@ -1,3 +1,6 @@
+import multiprocessing
+from typing import Optional
+
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
 
@@ -5,8 +8,10 @@ from sample_factory.algo.utils.torch_utils import init_torch_runtime
 class SerialRunner(Runner):
     def __init__(self, cfg):
         super().__init__(cfg)
-
         self.trajectories_per_batch = self.cfg.batch_size // self.cfg.rollout
+
+    def multiprocessing_context(self) -> Optional[multiprocessing.context.BaseContext]:
+        return None
 
     def init(self):
         init_torch_runtime(self.cfg)  # in serial mode everything will be happening in the main process, so we need to initialize cuda

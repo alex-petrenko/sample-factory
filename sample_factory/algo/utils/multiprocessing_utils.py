@@ -1,6 +1,7 @@
+import multiprocessing
 import os
 import time
-from queue import Queue, Empty, Full
+from queue import Queue, Empty
 
 
 def get_queue(serial=False, buffer_size_bytes=1_000_000):
@@ -54,3 +55,29 @@ class QueueWrapper(Queue):
 
     def put_many_nowait(self, xs):
         self.put_many(xs, block=False)
+
+
+def get_lock(serial=False, mp_ctx=None):
+    if serial:
+        return FakeLock()
+    else:
+        return get_mp_lock(mp_ctx)
+
+
+def get_mp_lock(mp_ctx=None):
+    lock_cls = multiprocessing.Lock if mp_ctx is None else mp_ctx.Lock
+    return lock_cls()
+
+
+class FakeLock:
+    def acquire(self, *args, **kwargs):
+        pass
+
+    def release(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, *args):
+        pass

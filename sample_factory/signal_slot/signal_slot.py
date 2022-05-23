@@ -11,7 +11,7 @@ from typing import Dict, Any, Set, Callable, Union, List, Optional, Iterable, Tu
 
 import psutil
 
-from sample_factory.algo.utils.queues import get_queue
+from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.utils.utils import log
 
 # type aliases for clarity

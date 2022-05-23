@@ -331,6 +331,6 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     except psutil.AccessDenied:
         log.error('Low niceness requires sudo!')
 
-    # if cfg.device == 'gpu':
-    #     cuda_envvars_for_policy(policy_id, 'inference')  # should not do this?
+    if cfg.device == 'gpu':
+        cuda_envvars_for_policy(worker.policy_id, 'inference')
     init_torch_runtime(cfg)

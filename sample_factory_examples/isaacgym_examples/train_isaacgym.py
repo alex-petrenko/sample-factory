@@ -1,5 +1,3 @@
-import ololo
-
 import sys
 from typing import List
 

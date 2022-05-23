@@ -1,22 +1,22 @@
 """
 Utilities for sharing model parameters between components.
 """
-import multiprocessing
 
 from torch import Tensor
 
+from sample_factory.algo.utils.multiprocessing_utils import get_lock
 from sample_factory.algorithms.appo.model import create_actor_critic
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
 
 class ParameterServer:
-    def __init__(self, policy_id, policy_versions: Tensor, mp_ctx=None):
+    def __init__(self, policy_id, policy_versions: Tensor, serial_mode: bool, mp_ctx):
         self.policy_id = policy_id
         self.actor_critic = None
         self.policy_versions = policy_versions
 
-        self._policy_lock = mp_ctx.Lock() if mp_ctx else multiprocessing.Lock()
+        self._policy_lock = get_lock(serial_mode, mp_ctx)
 
     @property
     def policy_lock(self):

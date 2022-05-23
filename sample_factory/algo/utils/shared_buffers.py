@@ -7,7 +7,7 @@ from torch import Tensor
 
 from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.queues import get_queue
+from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algorithms.appo.appo_utils import gpus_for_process
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
