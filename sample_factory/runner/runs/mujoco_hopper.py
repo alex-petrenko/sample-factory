@@ -9,7 +9,7 @@ _params = ParamGrid([
     ('max_grad_norm', [100.0]),
     ('use_rnn', ['False']),
     ('recurrence', [1]),
-    ('num_minibatches_to_accumulate', [0]),
+    ('num_batches_to_accumulate', [1]),
     ('device', ['gpu']),
     ('actor_critic_share_weights', ['False']),
     ('max_policy_lag', [1000000]),

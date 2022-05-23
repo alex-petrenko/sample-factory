@@ -123,17 +123,13 @@ class APPO(ReinforcementLearningAlgorithm):
                  '(this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)'
         )
         arg(
-            '--num_minibatches_to_accumulate', default=-1, type=int,
-            help='This parameter governs the maximum number of minibatches the learner can accumulate before further experience collection is stopped.'
-                 'The default value (-1) will set this to 2 * num_batches_per_iteration, so if the experience collection is faster than the training,'
+            '--num_batches_to_accumulate', default=2, type=int,
+            help='This parameter governs the maximum number of training batches the learner can accumulate before further experience collection is stopped.'
+                 'The default value will set this to 2, so if the experience collection is faster than the training,'
                  'the learner will accumulate enough minibatches for 2 iterations of training (but no more). This is a good balance between policy-lag and throughput.'
                  'When the limit is reached, the learner will notify the actor workers that they ought to stop the experience collection until accumulated minibatches'
-                 'are processed. Set this parameter to 1 * num_batches_per_iteration to further reduce policy-lag.' 
+                 'are processed. Set this parameter to 1 to further reduce policy-lag.' 
                  'If the experience collection is very non-uniform, increasing this parameter can increase overall throughput, at the cost of increased policy-lag.'
-                 'A value of 0 is treated specially. This means the experience accumulation is turned off, and all experience collection will be halted during training.'
-                 'This is the regime with potentially lowest policy-lag.'
-                 'When this parameter is 0 and num_workers * num_envs_per_worker * rollout == num_batches_per_iteration * batch_size, the algorithm is similar to'
-                 'regular synchronous PPO.',
         )
 
         arg('--max_grad_norm', default=4.0, type=float, help='Max L2 norm of the gradient vector')

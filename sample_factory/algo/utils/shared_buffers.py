@@ -183,13 +183,10 @@ class BufferMgr(Configurable):
             pass
 
         # determine the number of minibatches we're allowed to accumulate before experience collection is halted
-        max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
-        if max_minibatches_to_accumulate == -1:
-            # default value
-            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
-
-        if not cfg.async_rl:
-            max_minibatches_to_accumulate = self.cfg.num_batches_per_iteration
+        self.max_batches_to_accumulate = self.cfg.num_batches_to_accumulate
+        if not cfg.async_rl and self.max_batches_to_accumulate != 1:
+            log.debug('In synchronous mode, we only accumulate one batch. Setting num_batches_to_accumulate to 1')
+            self.max_batches_to_accumulate = 1
 
         # allocate trajectory buffers for sampling
         self.traj_buffer_queues: Dict[Device, MpQueue] = dict()
@@ -198,7 +195,7 @@ class BufferMgr(Configurable):
 
         for device, num_buffers in self.buffers_per_device.items():
             # make sure that at the very least we have enough buffers to feed the learner
-            num_buffers = max(num_buffers, max_minibatches_to_accumulate * self.trajectories_per_minibatch * self.cfg.num_policies)
+            num_buffers = max(num_buffers, self.max_batches_to_accumulate * self.trajectories_per_batch * self.cfg.num_policies)
 
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
 
@@ -217,19 +214,6 @@ class BufferMgr(Configurable):
                 # individual trajectories for more flexible non-batched sampling
                 for i in range(num_buffers):
                     self.traj_buffer_queues[device].put(i)
-
-        self.training_batches: Dict[PolicyID, List[TensorDict]] = dict()
-
-        for policy_id in range(cfg.num_policies):
-            device = str(policy_device(self.cfg, policy_id))
-
-            # we can also just initialize these in the batcher, but this way we keep all similar code in one place
-            self.training_batches[policy_id] = []
-            for i in range(max_minibatches_to_accumulate):
-                training_batch = allocate_trajectory_tensors(
-                    self.env_info, self.trajectories_per_batch, rollout, hidden_size, device, share,
-                )
-                self.training_batches[policy_id].append(training_batch)
 
         # TODO: numpy tensor stuff
         # TODO: for non-contiguous sampler we should do the batched policy outputs trick

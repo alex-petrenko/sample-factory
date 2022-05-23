@@ -1,6 +1,6 @@
 import sys
 
-from sample_factory.algo.runners.runner_async import AsyncRunner
+from sample_factory.algo.runners.runner_parallel import ParallelRunner
 from sample_factory.algo.runners.runner_serial import SerialRunner
 from sample_factory.algorithms.utils.arguments import parse_args
 
@@ -9,7 +9,7 @@ def run_rl(cfg):
     if cfg.serial_mode:
         runner_cls = SerialRunner
     else:
-        runner_cls = AsyncRunner
+        runner_cls = ParallelRunner
 
     runner = runner_cls(cfg)
     runner.init()

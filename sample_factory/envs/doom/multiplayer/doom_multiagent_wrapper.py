@@ -29,7 +29,7 @@ def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_res
                 except exception_class as e:
                     # This accesses the self instance variable
                     multiagent_wrapper_obj = args[0]
-                    multiagent_wrapper_obj.initialized = False
+                    multiagent_wrapper_obj.is_initialized = False
                     multiagent_wrapper_obj.close()
 
                     # This is done to reset if it is in the step function

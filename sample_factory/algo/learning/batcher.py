@@ -3,16 +3,12 @@ from typing import Iterable, Dict, Optional, List, Tuple
 
 import torch
 
-from sample_factory.algo.utils.shared_buffers import policy_device
+from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.shared_buffers import policy_device, allocate_trajectory_tensors
+from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
-
-# TODO: this whole class should go
-# We only really need two things:
-# Async batcher that batches together and copies trajectories into training batches
-# Sync batcher which reuses the same trajectories on sampler and learner in order to avoid copying (and I'm not sure we even need it)
-# Sync batcher can really be just a circular buffer. And async batcher needs an entirely different logic anyway.
-# WTF did I even write all of that
-from sample_factory.utils.typing import PolicyID, MpQueue, Device
+from sample_factory.utils.typing import PolicyID, Device
 from sample_factory.utils.utils import AttrDict, log
 
 
@@ -88,11 +84,12 @@ class SliceMerger:
 
 
 class Batcher(EventLoopObject):
-    def __init__(self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr, cfg: AttrDict):
+    def __init__(self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr, cfg: AttrDict, env_info: EnvInfo):
         unique_name = f'{Batcher.__name__}_{policy_id}'
         super().__init__(evt_loop, unique_name)
 
         self.cfg = cfg
+        self.env_info: EnvInfo = env_info
         self.policy_id = policy_id
 
         self.trajectories_per_training_batch = buffer_mgr.trajectories_per_batch
@@ -106,9 +103,11 @@ class Batcher(EventLoopObject):
 
         self.traj_buffer_queues = buffer_mgr.traj_buffer_queues
         self.traj_tensors = buffer_mgr.traj_tensors
-        self.training_batches = buffer_mgr.training_batches[policy_id]
-        self.available_batches = list(range(len(self.training_batches)))
-        self.traj_tensors_to_release: List[List[Tuple[Device, slice]]] = [[] for _ in range(len(self.available_batches))]
+        self.training_batches: List[TensorDict] = []
+
+        self.max_batches_to_accumulate = buffer_mgr.max_batches_to_accumulate
+        self.available_batches = list(range(self.max_batches_to_accumulate))
+        self.traj_tensors_to_release: List[List[Tuple[Device, slice]]] = [[] for _ in range(self.max_batches_to_accumulate)]
 
     @signal
     def initialized(self): pass
@@ -129,7 +128,14 @@ class Batcher(EventLoopObject):
     def stop(self): pass
 
     def init(self):
-        # there's nothing to do really
+        device = policy_device(self.cfg, self.policy_id)
+        for i in range(self.max_batches_to_accumulate):
+            hidden_size = get_hidden_size(self.cfg)
+            training_batch = allocate_trajectory_tensors(
+                self.env_info, self.trajectories_per_training_batch, self.cfg.rollout, hidden_size, device, False,
+            )
+            self.training_batches.append(training_batch)
+
         self.initialized.emit()
 
     def on_new_trajectories(self, trajectory_dicts: Iterable[Dict], device: str):
@@ -171,6 +177,7 @@ class Batcher(EventLoopObject):
                         # copy data into the training buffer
                         start = trajectories_copied
                         stop = start + slice_len(traj_slice)
+                        log.debug(f'Copying {slice_len(traj_slice)} trajectories from {device} to batch {batch_idx}')
                         self.training_batches[batch_idx][start:stop] = traj_tensors[traj_slice]
 
                         # remember that we need to release these trajectories
@@ -198,6 +205,7 @@ class Batcher(EventLoopObject):
             self.resume_experience_collection.emit()
 
         self.available_batches.append(batch_idx)
+        log.debug(f'Training batch {batch_idx} released. Available batches: {self.available_batches}')
 
     def _release_traj_tensors(self, batch_idx: int):
         new_sampling_batches = dict()

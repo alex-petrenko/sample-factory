@@ -22,6 +22,39 @@ from sample_factory.utils.typing import PolicyID, MpQueue
 from sample_factory.utils.utils import log, set_process_cpu_affinity, AttrDict, cores_for_worker_process
 
 
+def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
+    set_global_context(sf_context)
+    log.info(f'ROLLOUT worker {worker.worker_idx}\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    cfg = worker.cfg
+
+    curr_process = psutil.Process()
+    available_cores = curr_process.cpu_affinity()
+    desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, len(available_cores))
+    if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=1, user_api=None)
+
+    if cfg.set_workers_cpu_affinity:
+        set_process_cpu_affinity(worker.worker_idx, cfg.num_workers)
+
+    if cfg.num_workers > 1:
+        psutil.Process().nice(min(cfg.default_niceness + 10, 20))
+
+    if cfg.actor_worker_gpus:
+        worker_gpus = set_gpus_for_process(
+            worker.worker_idx,
+            num_gpus_per_process=1, process_type='actor', gpu_mask=cfg.actor_worker_gpus,
+        )
+        assert len(worker_gpus) == 1
+
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
+
 def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
     # TODO: this should correspond to whichever device we have observations on, not just whether we use this device at all
     # TODO: test with Megaverse on a multi-GPU system
@@ -188,36 +221,3 @@ class RolloutWorker(EventLoopObject, Configurable):
 
         self.detach()  # remove from the current event loop
         log.info(self.timing)
-
-
-def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
-    set_global_context(sf_context)
-    log.info(f'ROLLOUT worker {worker.worker_idx}\tpid {os.getpid()}\tparent {os.getppid()}')
-
-    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
-    import signal as os_signal
-    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
-
-    cfg = worker.cfg
-
-    curr_process = psutil.Process()
-    available_cores = curr_process.cpu_affinity()
-    desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, len(available_cores))
-    if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
-        from threadpoolctl import threadpool_limits
-        threadpool_limits(limits=1, user_api=None)
-
-    if cfg.set_workers_cpu_affinity:
-        set_process_cpu_affinity(worker.worker_idx, cfg.num_workers)
-
-    if cfg.num_workers > 1:
-        psutil.Process().nice(min(cfg.default_niceness + 10, 20))
-
-    if cfg.actor_worker_gpus:
-        worker_gpus = set_gpus_for_process(
-            worker.worker_idx,
-            num_gpus_per_process=1, process_type='actor', gpu_mask=cfg.actor_worker_gpus,
-        )
-        assert len(worker_gpus) == 1
-
-    torch.multiprocessing.set_sharing_strategy('file_system')

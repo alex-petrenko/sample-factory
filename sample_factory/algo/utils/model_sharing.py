@@ -1,6 +1,7 @@
 """
 Utilities for sharing model parameters between components.
 """
+import sys
 
 from torch import Tensor
 
@@ -132,9 +133,15 @@ class ParameterClientAsync(ParameterClient):
                 )
 
     def cleanup(self):
+        # TODO: fix termination problems related to shared CUDA tensors (they are harmless but annoying)
+        weights = self._shared_model_weights
         del self._actor_critic
         del self._shared_model_weights
         del self.policy_versions
+
+        import gc
+        weights_referrers = gc.get_referrers(weights)
+        log.debug(f'Weights refcount: {sys.getrefcount(weights)} {len(weights_referrers)}')
 
 
 def make_parameter_client(is_serial_mode, parameter_server, cfg, env_info, timing: Timing):

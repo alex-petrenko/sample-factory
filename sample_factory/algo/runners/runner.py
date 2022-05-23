@@ -430,11 +430,11 @@ class Runner(EventLoopObject, Configurable):
         with open(cfg_file(self.cfg), 'w') as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
-    def _make_learner(self, event_loop, policy_id: PolicyID):
-        return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, policy_id=policy_id, mp_ctx=self.mp_ctx)
-
     def _make_batcher(self, event_loop, policy_id: PolicyID):
-        return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg)
+        return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
+
+    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
+        return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, batcher, policy_id=policy_id, mp_ctx=self.mp_ctx)
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
         return InferenceWorker(
@@ -569,6 +569,7 @@ class Runner(EventLoopObject, Configurable):
             self.stopped = True
 
     def _component_stopped(self, component_obj_id):
+        log.debug(f'Component {component_obj_id} stopped!')
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
                 del self.components_to_stop[i]

@@ -18,8 +18,8 @@ class SerialRunner(Runner):
         super().init()
 
         for policy_id in range(self.cfg.num_policies):
-            self.learners[policy_id] = self._make_learner(self.event_loop, policy_id)
             self.batchers[policy_id] = self._make_batcher(self.event_loop, policy_id)
+            self.learners[policy_id] = self._make_learner(self.event_loop, policy_id, self.batchers[policy_id])
 
             self.inference_workers[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):

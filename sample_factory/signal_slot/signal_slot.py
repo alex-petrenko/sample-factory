@@ -215,7 +215,8 @@ class EventLoopObject:
 
     def __del__(self):
         self.detach()
-        self._obj_ids.remove(self.object_id)
+        if self.object_id in self._obj_ids:
+            self._obj_ids.remove(self.object_id)
 
 
 class EventLoopStatus:

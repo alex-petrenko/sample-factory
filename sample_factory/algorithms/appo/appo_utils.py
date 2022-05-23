@@ -296,12 +296,8 @@ def extend_array_by(x, extra_len):
 
 
 def set_global_cuda_envvars(cfg):
-    if cfg.device == 'cpu':
-        available_gpus = ''
-    else:
-        available_gpus = get_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
-
     if CUDA_ENVVAR not in os.environ:
+        available_gpus = get_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
         os.environ[CUDA_ENVVAR] = available_gpus
 
 

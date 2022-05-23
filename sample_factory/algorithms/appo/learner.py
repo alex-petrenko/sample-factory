@@ -1,4 +1,3 @@
-from typing import Tuple
 import glob
 import os
 import shutil
@@ -13,7 +12,6 @@ from threading import Thread
 import numpy as np
 import psutil
 import torch
-from torch.nn.utils.rnn import PackedSequence, invert_permutation
 from torch.multiprocessing import Process, Event as MultiprocessingEvent
 
 if os.name == 'nt':

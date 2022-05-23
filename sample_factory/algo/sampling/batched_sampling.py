@@ -267,7 +267,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
     def generate_policy_request(self, timing) -> Optional[Dict]:
         if not self.env_step_ready:
             # we haven't actually simulated the environment yet
-            log.debug('Cannot generate policy request because we have not finished the env simulation step yet!')
             return None
 
         if self.curr_traj is None:

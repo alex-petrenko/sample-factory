@@ -25,6 +25,27 @@ from sample_factory.utils.typing import PolicyID, MpQueue, Device
 from sample_factory.utils.utils import log
 
 
+def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWorker):
+    set_global_context(sf_context)
+    log.info(f'{worker.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    cfg = worker.cfg
+
+    try:
+        if cfg.num_workers > 1:
+            psutil.Process().nice(min(cfg.default_niceness + 2, 20))
+    except psutil.AccessDenied:
+        log.error('Low niceness requires sudo!')
+
+    if cfg.device == 'gpu':
+        cuda_envvars_for_policy(worker.policy_id, 'inference')
+    init_torch_runtime(cfg)
+
+
 class InferenceWorker(EventLoopObject, Configurable):
     def __init__(
             self, event_loop, policy_id: PolicyID, worker_idx: int, buffer_mgr,
@@ -63,7 +84,7 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.requests = []
         self.total_num_samples = self.last_report_samples = 0
 
-        self._get_inference_requests_func = self._get_inference_requests_serial if cfg.serial_mode else self._get_inference_requests_serial
+        self._get_inference_requests_func = self._get_inference_requests_serial if cfg.serial_mode else self._get_inference_requests_async
 
         self.inference_loop: Optional[Timer] = None  # zero delay timer
         self.report_timer: Optional[Timer] = None
@@ -79,6 +100,8 @@ class InferenceWorker(EventLoopObject, Configurable):
         else:
             self._batch_func = self._batch_individual_steps
             self._store_and_enqueue_policy_outputs_func = self._store_and_enqueue_policy_outputs_non_batched
+
+        self.is_initialized = False
 
     @signal
     def initialized(self): pass
@@ -107,10 +130,14 @@ class InferenceWorker(EventLoopObject, Configurable):
         # singal to main process (runner) that we're ready
         self.initialized.emit(self.policy_id, self.worker_idx)
 
+        self.is_initialized = True
+
     def should_stop_experience_collection(self):
+        log.debug(f'{self.object_id}: stopping experience collection')
         self.inference_loop.stop()
 
     def should_resume_experience_collection(self):
+        log.debug(f'{self.object_id}: resuming experience collection')
         self.inference_loop.start()
 
     def _batch_slices(self, timing):
@@ -305,6 +332,10 @@ class InferenceWorker(EventLoopObject, Configurable):
             self.cache_cleanup_timer.set_interval(300.0)
 
     def on_stop(self, emitter_id):
+        if self.is_initialized:
+            self.param_client.cleanup()
+            del self.param_client
+
         log.debug(f'Stopping {self.object_id}...')
 
         self.stop.emit(self.object_id)
@@ -314,23 +345,3 @@ class InferenceWorker(EventLoopObject, Configurable):
 
         self.detach()  # remove from the current event loop
         log.info(self.timing)
-
-
-def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWorker):
-    set_global_context(sf_context)
-    log.info(f'{worker.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
-
-    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
-    import signal as os_signal
-    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
-
-    cfg = worker.cfg
-
-    try:
-        psutil.Process().nice(min(cfg.default_niceness + 2, 20))
-    except psutil.AccessDenied:
-        log.error('Low niceness requires sudo!')
-
-    if cfg.device == 'gpu':
-        cuda_envvars_for_policy(worker.policy_id, 'inference')
-    init_torch_runtime(cfg)

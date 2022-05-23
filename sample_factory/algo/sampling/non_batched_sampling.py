@@ -588,14 +588,18 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             with timing.add_time('wait_for_trajectories'):
                 try:
                     buffers = self.traj_buffer_queue.get_many(block=False, max_messages_to_get=self.need_trajectory_buffers)
+                    i = 0
                     for env_i in range(self.num_envs):
                         for agent_i in range(self.num_agents):
+                            if i >= len(buffers):
+                                break
+
                             actor_state = self.actor_states[env_i][agent_i]
                             if actor_state.needs_buffer:
-                                i = len(buffers) - self.need_trajectory_buffers
                                 buffer_idx = buffers[i]
                                 actor_state.update_traj_buffer(buffer_idx)
                                 self.need_trajectory_buffers -= 1
+                                i += 1
                 except Empty:
                     return False
 

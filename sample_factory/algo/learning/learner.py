@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import glob
 import os
@@ -10,6 +12,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.model_sharing import ParameterServer
@@ -25,8 +28,30 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import MpLock
+from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
+
+
+def init_learner_process(sf_context: SampleFactoryContext, learner: Learner):
+    set_global_context(sf_context)
+    log.info(f'{learner.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+
+    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
+    import signal as os_signal
+    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
+
+    cfg = learner.cfg
+
+    import psutil
+    try:
+        psutil.Process().nice(cfg.default_niceness)
+    except psutil.AccessDenied:
+        log.error('Low niceness requires sudo!')
+
+    if cfg.device == 'gpu':
+        cuda_envvars_for_policy(learner.policy_id, 'learning')
+
+    init_torch_runtime(cfg)
 
 
 class LearningRateScheduler:
@@ -94,10 +119,10 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
 
 
 class Learner(EventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, buffer_mgr, policy_id, mp_ctx):
+    def __init__(self, evt_loop, cfg, env_info, buffer_mgr, batcher: Batcher, policy_id: PolicyID, mp_ctx):
         Configurable.__init__(self, cfg)
 
-        unique_name = f'{Learner.__name__}_{policy_id}'
+        unique_name = f'{Learner.__name__}_p{policy_id}'
         EventLoopObject.__init__(self, evt_loop, unique_name)
 
         self.timing = Timing(name=f'Learner {policy_id} profile')
@@ -129,10 +154,11 @@ class Learner(EventLoopObject, Configurable):
         self.last_milestone_time = 0
 
         self.buffer_mgr = buffer_mgr
+        self.batcher: Batcher = batcher
 
         self.exploration_loss_func = self.kl_loss_func = None
 
-        self.initialized = False
+        self.is_initialized = False
 
     @signal
     def model_initialized(self): pass
@@ -215,11 +241,11 @@ class Learner(EventLoopObject, Configurable):
 
             # in serial mode we will just use the same actor_critic directly
             state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
-            model_state = (state_dict, self.device, self.train_step)
+            model_state = (state_dict, self.device, self.train_step)  # TODO: probably should not send device since we set CUDA vars to only have one device visible
             # signal other components that the model is ready
             self.model_initialized.emit(model_state)
 
-        self.initialized = True
+        self.is_initialized = True
         log.debug(f'{self.object_id} finished initialization!')
 
     @staticmethod
@@ -305,7 +331,7 @@ class Learner(EventLoopObject, Configurable):
         return checkpoint
 
     def _save_impl(self, name_prefix, name_suffix, keep_checkpoints, verbose=True):
-        if not self.initialized:
+        if not self.is_initialized:
             return
 
         checkpoint = self._get_checkpoint_dict()
@@ -793,8 +819,8 @@ class Learner(EventLoopObject, Configurable):
     def _prepare_batch(self, batch_idx: int):
         with torch.no_grad():
             # create a shallow copy so we can modify the dictionary
-            # we still reference the same shared buffers though
-            buff = copy.copy(self.buffer_mgr.training_batches[self.policy_id][batch_idx])
+            # we still reference the same buffers though
+            buff = copy.copy(self.batcher.training_batches[batch_idx])
 
             # TODO: how about device_and_type_for_input_tensor
 
@@ -863,10 +889,7 @@ class Learner(EventLoopObject, Configurable):
         return stats
 
     def on_new_training_batch(self, batch_idx: int):
-        # log.debug(f'{self.object_id} new training batches! {batches}')
-
         stats = self.train(batch_idx, self.timing)
-        # log.debug(f'Batch {batch} is free on the learner!')
         self.training_batch_released.emit(batch_idx)
         self.report_msg.emit(stats)
 
@@ -883,26 +906,5 @@ class Learner(EventLoopObject, Configurable):
             del self.actor_critic
 
         self.detach()  # remove from the current event loop
+
         log.info(self.timing)
-
-
-def init_learner_process(sf_context: SampleFactoryContext, learner: Learner):
-    set_global_context(sf_context)
-    log.info(f'{learner.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
-
-    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
-    import signal as os_signal
-    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
-
-    cfg = learner.cfg
-
-    import psutil
-    try:
-        psutil.Process().nice(cfg.default_niceness)
-    except psutil.AccessDenied:
-        log.error('Low niceness requires sudo!')
-
-    if cfg.device == 'gpu':
-        cuda_envvars_for_policy(learner.policy_id, 'learning')
-
-    init_torch_runtime(cfg)
