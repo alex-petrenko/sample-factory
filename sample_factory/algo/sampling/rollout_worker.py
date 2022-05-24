@@ -40,6 +40,7 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
         from threadpoolctl import threadpool_limits
         threadpool_limits(limits=1, user_api=None)
+        torch.set_num_threads(1)
 
     if cfg.set_workers_cpu_affinity:
         set_process_cpu_affinity(worker.worker_idx, cfg.num_workers)
@@ -216,7 +217,7 @@ class RolloutWorker(EventLoopObject, Configurable):
         for env_runner in self.env_runners:
             env_runner.close()
 
-        timing = self.timing if self.worker_idx <= 1 else None
+        timing = self.timing if self.worker_idx in [0, self.cfg.num_workers - 1] else None
         self.stop.emit(self.object_id, timing)
 
         if self.event_loop.owner is self:

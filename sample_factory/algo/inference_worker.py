@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import time
 from collections import deque
@@ -14,7 +15,7 @@ from sample_factory.algo.utils.context import SampleFactoryContext, set_global_c
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.model_sharing import make_parameter_client, ParameterServer
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_dict import TensorDict, ensure_torch_tensor, to_numpy
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
 from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats, dict_of_lists_append_idx, \
     dict_of_lists_cat
@@ -61,8 +62,10 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.worker_idx: int = worker_idx
 
         self.buffer_mgr = buffer_mgr
-        self.traj_tensors: Dict[Device, TensorDict] = buffer_mgr.traj_tensors
-        self.policy_output_tensors: Dict[Device, TensorDict] = buffer_mgr.policy_output_tensors
+
+        # shallow copy
+        self.traj_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.traj_tensors_torch)
+        self.policy_output_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.policy_output_tensors_torch)
 
         self.device: torch.device = policy_device(cfg, policy_id)
         self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
@@ -113,6 +116,10 @@ class InferenceWorker(EventLoopObject, Configurable):
     def stop(self): pass
 
     def init(self, initial_model_state):
+        if 'cpu' in self.traj_tensors:
+            self.traj_tensors['cpu'] = to_numpy(self.traj_tensors['cpu'])
+            self.policy_output_tensors['cpu'] = to_numpy(self.policy_output_tensors['cpu'])
+
         state_dict, self.device, policy_version = initial_model_state
         self.param_client.on_weights_initialized(state_dict, self.device, policy_version)
 
@@ -181,10 +188,9 @@ class InferenceWorker(EventLoopObject, Configurable):
             rnn_states = traj_tensors['rnn_states'][indices]
 
         with timing.add_time('stack'):
-            pass
-            # for key, x in observations.items():
-            #     observations[key] = torch.from_numpy(x)
-            # rnn_states = torch.from_numpy(rnn_states)  # TODO: numpy stuff?
+            for key, x in observations.items():
+                observations[key] = ensure_torch_tensor(x)
+            rnn_states = ensure_torch_tensor(rnn_states)
 
         return observations, rnn_states
 
@@ -239,8 +245,7 @@ class InferenceWorker(EventLoopObject, Configurable):
                 outputs_ready.add((actor_idx, split_idx))
 
             output_indices = tuple(np.array(output_indices).T)
-            self.policy_output_tensors[device][output_indices] = output_tensors
-            # self.policy_outputs[output_indices] = output_tensors.numpy() # TODO: numpy acceleration?
+            self.policy_output_tensors[device][output_indices] = output_tensors.numpy()
 
         return outputs_ready
 

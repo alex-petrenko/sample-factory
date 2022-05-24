@@ -3,9 +3,9 @@ from queue import Empty
 from typing import Tuple, Dict, List, Optional
 
 import numpy as np
-import torch
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
+from sample_factory.algo.utils.tensor_dict import clone_tensor, ensure_numpy_array
 from sample_factory.algorithms.appo.appo_utils import make_env_func_non_batched
 from sample_factory.algorithms.appo.policy_manager import PolicyManager
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
@@ -45,6 +45,8 @@ class ActorState:
 
         self.last_actions = None
         self.last_policy_steps = None
+
+        self.last_obs = None
         self.last_rnn_state = None
         self.last_value = None
 
@@ -92,7 +94,7 @@ class ActorState:
         self.curr_policy_id = new_policy_id
 
         # policy change can only happen at the episode boundary so no need to reset rnn state (but I guess does not hurt)
-        self._reset_rnn_state()
+        self.reset_rnn_state()
 
         if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
             set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
@@ -105,7 +107,6 @@ class ActorState:
         self.curr_traj_buffer_idx = traj_buffer_idx
         self.curr_traj_buffer = self.traj_tensors[self.curr_traj_buffer_idx]
         self.needs_buffer = False
-        # TODO: numpy thing here?
 
     def set_trajectory_data(self, data: Dict, rollout_step: int):
         """
@@ -118,14 +119,14 @@ class ActorState:
 
         self.curr_traj_buffer[rollout_step] = data
 
-    def _reset_rnn_state(self):
+    def reset_rnn_state(self):
         self.last_rnn_state[:] = 0.0
 
     def curr_actions(self):
         """
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
-        actions = self.last_actions.numpy()  # TODO: should actions be numpy before that?
+        actions = ensure_numpy_array(self.last_actions)
         if self.integer_actions:
             actions = actions.astype(np.int32)
 
@@ -235,7 +236,7 @@ class ActorState:
     def update_rnn_state(self, done):
         """If we encountered an episode boundary, reset rnn states to their default values."""
         if done:
-            self._reset_rnn_state()
+            self.reset_rnn_state()
 
     def episodic_stats(self, last_episode_true_objective, last_episode_extra_stats):
         stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
@@ -331,7 +332,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
 
-        self.update_trajectory_buffers(timing)
+        self.update_trajectory_buffers(timing, block=True)
         assert self.need_trajectory_buffers == 0
 
         policy_request = self._reset(timing)
@@ -366,7 +367,8 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             for agent_i, obs in enumerate(observations):
                 actor_state = self.actor_states[env_i][agent_i]
                 actor_state.last_obs = obs
-                actor_state.last_rnn_state = self.traj_tensors['rnn_states'][actor_state.curr_traj_buffer_idx, 0].clone().fill_(0.0)
+                actor_state.last_rnn_state = clone_tensor(self.traj_tensors['rnn_states'][actor_state.curr_traj_buffer_idx, 0])
+                actor_state.reset_rnn_state()
 
         self.env_step_ready = True
         policy_request = self.generate_policy_request(timing)
@@ -548,7 +550,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         """
         Main function in VectorEnvRunner. Does one step of simulation (if all actions for all actors are available).
 
-        :param data: incoming data from policy workers (policy outputs), including new actions
+        :param policy_id:
         :param timing: this is just for profiling
         :return: same as reset(), return a set of requests for policy workers, asking them to generate actions for
         the next env step.
@@ -580,14 +582,14 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
 
-    def update_trajectory_buffers(self, timing) -> bool:
+    def update_trajectory_buffers(self, timing, block=False) -> bool:
         """
         Request free trajectory buffers to store the next rollout.
         """
         while self.need_trajectory_buffers > 0:
             with timing.add_time('wait_for_trajectories'):
                 try:
-                    buffers = self.traj_buffer_queue.get_many(block=False, max_messages_to_get=self.need_trajectory_buffers)
+                    buffers = self.traj_buffer_queue.get_many(block=block, max_messages_to_get=self.need_trajectory_buffers, timeout=1e9)
                     i = 0
                     for env_i in range(self.num_envs):
                         for agent_i in range(self.num_agents):

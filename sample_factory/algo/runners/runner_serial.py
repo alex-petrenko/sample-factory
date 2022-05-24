@@ -14,7 +14,8 @@ class SerialRunner(Runner):
         return None
 
     def init(self):
-        init_torch_runtime(self.cfg)  # in serial mode everything will be happening in the main process, so we need to initialize cuda
+        # in serial mode everything will be happening in the main process, so we need to initialize cuda
+        init_torch_runtime(self.cfg, max_num_threads=None)
         super().init()
 
         for policy_id in range(self.cfg.num_policies):

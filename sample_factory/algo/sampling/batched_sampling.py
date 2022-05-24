@@ -6,7 +6,7 @@ from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensor
 from sample_factory.algorithms.appo.appo_utils import SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
@@ -116,10 +116,13 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         assert self.curr_traj is not None and self.curr_traj_slice is not None
 
         self.last_obs = self.vec_env.reset()
-        self.last_rnn_state = self.traj_tensors['rnn_states'][0:self.vec_env.num_agents, 0].clone().fill_(0.0)
-        assert self.rollout_step == 0
+        self.last_rnn_state = clone_tensor(self.traj_tensors['rnn_states'][0:self.vec_env.num_agents, 0])
+        self.last_rnn_state[:] = 0.0
 
-        self.policy_id_buffer = self.traj_tensors['policy_id'][0:self.vec_env.num_agents, 0].clone().fill_(self.policy_id)
+        self.policy_id_buffer = clone_tensor(self.traj_tensors['policy_id'][0:self.vec_env.num_agents, 0])
+        self.policy_id_buffer[:] = self.policy_id
+
+        assert self.rollout_step == 0
 
         self.curr_episode_reward = torch.zeros(self.vec_env.num_agents)
         self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
@@ -247,16 +250,14 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
 
-    def update_trajectory_buffers(self, timing) -> bool:
+    def update_trajectory_buffers(self, timing, block=False) -> bool:
         if self.curr_traj_slice is not None and self.curr_traj is not None:
             # don't need to do anything - we have a trajectory buffer already
             return True
 
         with timing.add_time('wait_for_trajectories'):
-            # TODO some fancy logic with attempts and retries to make it clear when we don't have enough trajectories
             try:
-                # TODO: different function for sync vs async!
-                buffers = self.traj_buffer_queue.get(block=False)
+                buffers = self.traj_buffer_queue.get(block=block, timeout=1e9)
             except Empty:
                 return False
 

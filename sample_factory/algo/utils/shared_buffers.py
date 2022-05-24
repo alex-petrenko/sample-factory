@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 from typing import List, Dict, Tuple
 
@@ -69,7 +71,7 @@ def policy_output_shapes(num_actions, num_action_distribution_parameters) -> Lis
 
 
 # TODO: remove the code duplication!
-def allocate_trajectory_tensors(env_info: EnvInfo, num_trajectories, rollout, hidden_size, device, share):
+def alloc_trajectory_tensors(env_info: EnvInfo, num_trajectories, rollout, hidden_size, device, share):
     obs_space = env_info.obs_space
 
     tensors = TensorDict()
@@ -106,7 +108,7 @@ def allocate_trajectory_tensors(env_info: EnvInfo, num_trajectories, rollout, hi
     return tensors
 
 
-def allocate_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, share):
+def alloc_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, share):
     num_agents = env_info.num_agents
     envs_per_split = cfg.num_envs_per_worker // cfg.worker_num_splits
 
@@ -134,8 +136,6 @@ def allocate_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, 
         # in a proper format
         outputs_combined_size = sum(output_sizes)
         policy_output_tensors = init_tensor(policy_outputs_shape, torch.float32, [outputs_combined_size], device, share)
-        # self.policy_output_tensors = self._policy_output_tensors.numpy()
-        # TODO: do the numpy stuff here
 
     return policy_output_tensors, output_names, output_sizes
 
@@ -157,11 +157,11 @@ class BufferMgr(Configurable):
             buffers_for_device = self.buffers_per_device.get(sampling_device, 0) + num_buffers
             self.buffers_per_device[sampling_device] = buffers_for_device
 
-        hidden_size = get_hidden_size(self.cfg)  # in case we have RNNs
+        hidden_size = get_hidden_size(cfg)  # in case we have RNNs
 
-        rollout = self.cfg.rollout
-        self.trajectories_per_minibatch = self.cfg.batch_size // rollout
-        self.trajectories_per_batch = self.cfg.num_batches_per_iteration * self.trajectories_per_minibatch
+        rollout = cfg.rollout
+        self.trajectories_per_minibatch = cfg.batch_size // rollout
+        self.trajectories_per_batch = cfg.num_batches_per_iteration * self.trajectories_per_minibatch
 
         if cfg.batched_sampling:
             worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
@@ -171,9 +171,12 @@ class BufferMgr(Configurable):
         else:
             self.worker_samples_per_iteration = -1
 
+        # TODO: need extra checks for sync RL, i.e. we should have enough buffers to feed the learner
+        # i.e. 1 worker 10 envs with batch size of 32 trajectories does not work
+
         share = not cfg.serial_mode
 
-        if self.cfg.async_rl:
+        if cfg.async_rl:
             # one set of buffers to sample, one to learn from. Coefficient 2 seems appropriate here.
             for device in self.buffers_per_device:
                 self.buffers_per_device[device] *= 2
@@ -183,27 +186,27 @@ class BufferMgr(Configurable):
             pass
 
         # determine the number of minibatches we're allowed to accumulate before experience collection is halted
-        self.max_batches_to_accumulate = self.cfg.num_batches_to_accumulate
+        self.max_batches_to_accumulate = cfg.num_batches_to_accumulate
         if not cfg.async_rl and self.max_batches_to_accumulate != 1:
             log.debug('In synchronous mode, we only accumulate one batch. Setting num_batches_to_accumulate to 1')
             self.max_batches_to_accumulate = 1
 
         # allocate trajectory buffers for sampling
         self.traj_buffer_queues: Dict[Device, MpQueue] = dict()
-        self.traj_tensors = dict()
-        self.policy_output_tensors = dict()
+        self.traj_tensors_torch = dict()
+        self.policy_output_tensors_torch = dict()
 
         for device, num_buffers in self.buffers_per_device.items():
             # make sure that at the very least we have enough buffers to feed the learner
-            num_buffers = max(num_buffers, self.max_batches_to_accumulate * self.trajectories_per_batch * self.cfg.num_policies)
+            num_buffers = max(num_buffers, self.max_batches_to_accumulate * self.trajectories_per_batch * cfg.num_policies)
 
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
 
-            self.traj_tensors[device] = allocate_trajectory_tensors(
+            self.traj_tensors_torch[device] = alloc_trajectory_tensors(
                 self.env_info, num_buffers, rollout, hidden_size, device, share,
             )
-            self.policy_output_tensors[device], self.output_names, self.output_sizes = allocate_policy_output_tensors(
-                self.cfg, self.env_info, hidden_size, device, share,
+            self.policy_output_tensors_torch[device], self.output_names, self.output_sizes = alloc_policy_output_tensors(
+                cfg, self.env_info, hidden_size, device, share,
             )
 
             if cfg.batched_sampling:
@@ -215,8 +218,6 @@ class BufferMgr(Configurable):
                 for i in range(num_buffers):
                     self.traj_buffer_queues[device].put(i)
 
-        # TODO: numpy tensor stuff
-        # TODO: for non-contiguous sampler we should do the batched policy outputs trick
-        self.policy_versions = torch.zeros([self.cfg.num_policies], dtype=torch.int32)
+        self.policy_versions = torch.zeros([cfg.num_policies], dtype=torch.int32)
         if share:
             self.policy_versions.share_memory_()

@@ -1,6 +1,7 @@
 from typing import Tuple, List, Dict, Any, Optional
 
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict
@@ -18,9 +19,14 @@ class VectorEnvRunner(Configurable):
         self.env_step_ready = False
 
         self.buffer_mgr = buffer_mgr
-        self.traj_tensors = buffer_mgr.traj_tensors[sampling_device]
-        self.policy_output_tensors = buffer_mgr.policy_output_tensors[sampling_device][worker_idx, split_idx]
         self.traj_buffer_queue = buffer_mgr.traj_buffer_queues[sampling_device]
+        self.traj_tensors = buffer_mgr.traj_tensors_torch[sampling_device]
+        self.policy_output_tensors = buffer_mgr.policy_output_tensors_torch[sampling_device][worker_idx, split_idx]
+
+        if sampling_device == 'cpu':
+            # TODO: comment
+            self.traj_tensors = to_numpy(self.traj_tensors)
+            self.policy_output_tensors = to_numpy(self.policy_output_tensors)
 
     def init(self, timing) -> Dict:
         raise NotImplementedError()
@@ -28,7 +34,7 @@ class VectorEnvRunner(Configurable):
     def advance_rollouts(self, policy_id: PolicyID, timing) -> Tuple[List[Dict], List[Dict]]:
         raise NotImplementedError()
 
-    def update_trajectory_buffers(self, timing) -> bool:
+    def update_trajectory_buffers(self, timing, block=False) -> bool:
         raise NotImplementedError()
 
     def generate_policy_request(self, timing) -> Optional[Dict]:

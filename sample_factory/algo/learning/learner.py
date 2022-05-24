@@ -181,7 +181,8 @@ class Learner(EventLoopObject, Configurable):
     def stop(self): pass
 
     def init(self):
-        self.start_batcher_thread()
+        if not self.cfg.serial_mode:
+            self.start_batcher_thread()
 
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr, valids: 0.0
@@ -915,7 +916,8 @@ class Learner(EventLoopObject, Configurable):
         self.save()
         log.debug(f'Stopping {self.object_id}...')
 
-        self.join_batcher_thread()
+        if not self.cfg.serial_mode:
+            self.join_batcher_thread()
 
         self.stop.emit(self.object_id, self.timing)
 

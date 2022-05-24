@@ -190,11 +190,12 @@ class EventLoopObject:
         self.emit_many(signal_, (args, ))
 
     def emit_many(self, signal_: str, list_of_args: Iterable[Tuple]):
-        pid = process_pid(self.event_loop.process)
-        if os.getpid() != pid:
-            raise RuntimeError(
-                f'Cannot emit {signal_}: object {self.object_id} lives on a different process {pid}!'
-            )
+        # this is mostly for debugging
+        # pid = process_pid(self.event_loop.process)
+        # if os.getpid() != pid:
+        #     raise RuntimeError(
+        #         f'Cannot emit {signal_}: object {self.object_id} lives on a different process {pid}!'
+        #     )
 
         signals_to_emit = tuple((self.object_id, signal_, args) for args in list_of_args)
 
@@ -206,7 +207,7 @@ class EventLoopObject:
         for q in queues:
             # we just push messages into each receiver event loop queue
             # event loops themselves will redistribute the signals to all receivers living on that loop
-            q.put_many(signals_to_emit, block=True, timeout=0.1)
+            q.put_many(signals_to_emit, block=False)
 
     def detach(self):
         """Detach the object from it's current event loop."""

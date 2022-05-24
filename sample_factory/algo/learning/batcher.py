@@ -4,7 +4,7 @@ from typing import Iterable, Dict, Optional, List, Tuple
 import torch
 
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.shared_buffers import policy_device, allocate_trajectory_tensors
+from sample_factory.algo.utils.shared_buffers import policy_device, alloc_trajectory_tensors
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
@@ -98,14 +98,11 @@ class Batcher(EventLoopObject):
         self.trajectories_per_training_batch = buffer_mgr.trajectories_per_batch
         self.trajectories_per_sampling_batch = buffer_mgr.worker_samples_per_iteration
 
-        self.slices_for_training: Dict[Device, SliceMerger] = dict()
-        self.slices_for_sampling: Dict[Device, SliceMerger] = dict()
-        for device in buffer_mgr.traj_tensors.keys():
-            self.slices_for_training[device] = SliceMerger()
-            self.slices_for_sampling[device] = SliceMerger()
+        self.slices_for_training: Dict[Device, SliceMerger] = {device: SliceMerger() for device in buffer_mgr.traj_tensors_torch}
+        self.slices_for_sampling: Dict[Device, SliceMerger] = {device: SliceMerger() for device in buffer_mgr.traj_tensors_torch}
 
         self.traj_buffer_queues = buffer_mgr.traj_buffer_queues
-        self.traj_tensors = buffer_mgr.traj_tensors
+        self.traj_tensors = buffer_mgr.traj_tensors_torch
         self.training_batches: List[TensorDict] = []
 
         self.max_batches_to_accumulate = buffer_mgr.max_batches_to_accumulate
@@ -134,7 +131,7 @@ class Batcher(EventLoopObject):
         device = policy_device(self.cfg, self.policy_id)
         for i in range(self.max_batches_to_accumulate):
             hidden_size = get_hidden_size(self.cfg)
-            training_batch = allocate_trajectory_tensors(
+            training_batch = alloc_trajectory_tensors(
                 self.env_info, self.trajectories_per_training_batch, self.cfg.rollout, hidden_size, device, False,
             )
             self.training_batches.append(training_batch)
@@ -164,8 +161,8 @@ class Batcher(EventLoopObject):
                     break
 
                 # obtain the index of the available batch buffer
-                batch_idx = self.available_batches[-1]
-                del self.available_batches[-1]
+                batch_idx = self.available_batches[0]
+                self.available_batches.pop(0)
                 assert len(self.traj_tensors_to_release[batch_idx]) == 0
 
                 # extract slices of trajectories and copy them to the training batch
@@ -181,6 +178,8 @@ class Batcher(EventLoopObject):
                         # copy data into the training buffer
                         start = trajectories_copied
                         stop = start + slice_len(traj_slice)
+
+                        # log.debug(f'Copying {traj_slice} trajectories from {device} to {batch_idx}')
                         self.training_batches[batch_idx][start:stop] = traj_tensors[traj_slice]
 
                         # remember that we need to release these trajectories
@@ -202,13 +201,16 @@ class Batcher(EventLoopObject):
 
     def on_training_batch_released(self, batch_idx: int):
         with self.timing.add_time('releasing_batches'):
-            self._release_traj_tensors(batch_idx)
+            if not self.cfg.async_rl:
+                # in synchronous RL, we release the trajectories after they're processed by the learner
+                self._release_traj_tensors(batch_idx)
 
             if not self.available_batches and self.cfg.async_rl:
                 log.debug('Signal inference workers to resume experience collection...')
                 self.resume_experience_collection.emit()
 
             self.available_batches.append(batch_idx)
+            # log.debug(f'Finished processing batch {batch_idx}, available batches: {self.available_batches}')
 
     def _release_traj_tensors(self, batch_idx: int):
         new_sampling_batches = dict()
@@ -235,6 +237,7 @@ class Batcher(EventLoopObject):
         self.traj_tensors_to_release[batch_idx] = []
 
         for device, batches in new_sampling_batches.items():
+            # log.debug(f'Release trajectories {batches}')
             self.traj_buffer_queues[device].put_many(batches)
         self.trajectory_buffers_available.emit()
 

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
+from torch import Tensor
 
 from sample_factory.algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively
 
@@ -63,3 +66,49 @@ def clone_tensordict(d: TensorDict) -> TensorDict:
     for d1, d2, key, v1, v2 in iter_dicts_recursively(d, d_clone):
         d2[key] = v1.clone().detach()
     return d_clone
+
+
+def tensor_dict_to_numpy(d: TensorDict) -> TensorDict:
+    numpy_dict = copy_dict_structure(d)
+    for d1, d2, key, curr_t, value2 in iter_dicts_recursively(d, numpy_dict):
+        assert isinstance(curr_t, torch.Tensor)
+        assert value2 is None
+        d2[key] = curr_t.numpy()
+        assert isinstance(d2[key], np.ndarray)
+    return numpy_dict
+
+
+def to_numpy(t: Tensor | TensorDict) -> Tensor | TensorDict:
+    if isinstance(t, TensorDict):
+        return tensor_dict_to_numpy(t)
+    elif isinstance(t, Tensor):
+        return t.numpy()  # only going to work for cpu tensors
+    else:
+        raise ValueError(f'Unknown type {type(t)}')
+
+
+def clone_tensor(t: Tensor | np.ndarray) -> Tensor | np.ndarray:
+    if isinstance(t, Tensor):
+        return t.clone().detach()
+    elif isinstance(t, np.ndarray):
+        return np.copy(t)
+    else:
+        raise ValueError(f'Unknown type {type(t)}')
+
+
+def ensure_torch_tensor(t: Tensor | np.ndarray) -> Tensor:
+    if isinstance(t, Tensor):
+        return t
+    elif isinstance(t, np.ndarray):
+        return torch.from_numpy(t)
+    else:
+        raise ValueError(f'Unknown type {type(t)}')
+
+
+def ensure_numpy_array(t: Tensor | np.ndarray) -> np.ndarray:
+    if isinstance(t, Tensor):
+        return t.numpy()
+    elif isinstance(t, np.ndarray):
+        return t
+    else:
+        raise ValueError(f'Unknown type {type(t)}')
