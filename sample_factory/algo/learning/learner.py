@@ -6,6 +6,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from os.path import join
+from threading import Thread
 from typing import Optional, Tuple, Dict
 
 import numpy as np
@@ -155,10 +156,14 @@ class Learner(EventLoopObject, Configurable):
 
         self.buffer_mgr = buffer_mgr
         self.batcher: Batcher = batcher
+        self.batcher_thread: Optional[Thread] = None
 
         self.exploration_loss_func = self.kl_loss_func = None
 
         self.is_initialized = False
+
+    @signal
+    def initialized(self): pass
 
     @signal
     def model_initialized(self): pass
@@ -176,6 +181,8 @@ class Learner(EventLoopObject, Configurable):
     def stop(self): pass
 
     def init(self):
+        self.start_batcher_thread()
+
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr, valids: 0.0
         elif self.cfg.exploration_loss == 'entropy':
@@ -246,7 +253,16 @@ class Learner(EventLoopObject, Configurable):
             self.model_initialized.emit(model_state)
 
         self.is_initialized = True
+        self.initialized.emit()
         log.debug(f'{self.object_id} finished initialization!')
+
+    def start_batcher_thread(self):
+        self.batcher.event_loop.process = self.event_loop.process
+        self.batcher_thread = Thread(target=self.batcher.event_loop.exec)
+        self.batcher_thread.start()
+
+    def join_batcher_thread(self):
+        self.batcher_thread.join()
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -898,6 +914,8 @@ class Learner(EventLoopObject, Configurable):
     def on_stop(self, *_):
         self.save()
         log.debug(f'Stopping {self.object_id}...')
+
+        self.join_batcher_thread()
 
         self.stop.emit(self.object_id, self.timing)
 

@@ -7,7 +7,7 @@ from sample_factory.algo.learning.learner import init_learner_process
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.sampling.rollout_worker import init_rollout_worker_process
 from sample_factory.algo.utils.context import sf_global_context
-from sample_factory.signal_slot.signal_slot import EventLoopProcess
+from sample_factory.signal_slot.signal_slot import EventLoopProcess, EventLoop
 from sample_factory.utils.utils import log
 
 
@@ -23,11 +23,13 @@ class ParallelRunner(Runner):
         super().init()
 
         for policy_id in range(self.cfg.num_policies):
+            batcher_event_loop = EventLoop('batcher_evt_loop')
+            self.batchers[policy_id] = self._make_batcher(batcher_event_loop, policy_id)
+            batcher_event_loop.owner = self.batchers[policy_id]
+
             learner_proc = EventLoopProcess(f'learner_proc{policy_id}', self.mp_ctx, init_func=init_learner_process)
             self.processes.append(learner_proc)
 
-            # TODO: batcher separate thread!
-            self.batchers[policy_id] = self._make_batcher(learner_proc.event_loop, policy_id)
             self.learners[policy_id] = self._make_learner(learner_proc.event_loop, policy_id, self.batchers[policy_id])
             learner_proc.event_loop.owner = self.learners[policy_id]
             learner_proc.set_init_func_args((sf_global_context(), self.learners[policy_id]))

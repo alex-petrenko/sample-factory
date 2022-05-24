@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import threading
 import time
 import types
 import uuid
@@ -189,7 +190,7 @@ class EventLoopObject:
         self.emit_many(signal_, (args, ))
 
     def emit_many(self, signal_: str, list_of_args: Iterable[Tuple]):
-        pid = self.event_loop.process.pid
+        pid = process_pid(self.event_loop.process)
         if os.getpid() != pid:
             raise RuntimeError(
                 f'Cannot emit {signal_}: object {self.object_id} lives on a different process {pid}!'
@@ -233,8 +234,8 @@ class EventLoop(EventLoopObject):
         # object responsible for stopping the loop (if any)
         self.owner: Optional[EventLoopObject] = None
 
-        # when event loop is created it just lives on the current process
-        self.process: Union[psutil.Process, EventLoopProcess] = psutil.Process(os.getpid())
+        # here None means we're running on the main process, otherwise it is the process we belong to
+        self.process: Optional[EventLoopProcess] = None
 
         self.signal_queue = get_queue(serial=serial_mode, buffer_size_bytes=5_000_000)
 
@@ -523,10 +524,20 @@ class EventLoopProcess(EventLoopObject):
     pid = ident
 
 
-def process_name(p: Union[psutil.Process, EventLoopProcess]):
-    if isinstance(p, psutil.Process):
-        return p.name()
+def process_name(p: Optional[EventLoopProcess]):
+    if p is None:
+        return f'main process {os.getpid()}'
     elif isinstance(p, EventLoopProcess):
         return p.name
+    else:
+        raise RuntimeError(f'Unknown process type {type(p)}')
+
+
+def process_pid(p: Optional[EventLoopProcess]):
+    if p is None:
+        return os.getpid()
+    elif isinstance(p, EventLoopProcess):
+        # noinspection PyProtectedMember
+        return p._process.pid
     else:
         raise RuntimeError(f'Unknown process type {type(p)}')

@@ -471,8 +471,8 @@ class Runner(EventLoopObject, Configurable):
             # when runner is ready we initialize the learner first
             learner = self.learners[policy_id]
             batcher = self.batchers[policy_id]
-            self.event_loop.start.connect(batcher.init)  # TODO: base class with init()
-            batcher.initialized.connect(learner.init)
+            self.event_loop.start.connect(learner.init)  # TODO: base class with init()
+            learner.initialized.connect(batcher.init)
 
             for i in range(self.cfg.policy_workers_per_policy):
                 inference_worker = self.inference_workers[policy_id][i]
