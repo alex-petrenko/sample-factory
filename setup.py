@@ -40,7 +40,7 @@ setup(
         'psutil>=5.7.0',
         'threadpoolctl>=2.0.0',
         'colorlog',
-        'faster-fifo>=1.2.0<2.0',
+        'faster-fifo>=1.4.0<2.0',
         'filelock',
         'opencv-python',
         'wandb>=0.12.9',

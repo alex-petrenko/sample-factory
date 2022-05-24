@@ -339,6 +339,32 @@ class EventLoop(EventLoopObject):
         closest_timer = min(self.timers, key=lambda t: t.next_timeout())
         return closest_timer
 
+    def _loop_iteration(self) -> bool:
+        closest_timer = self._calculate_timeout()
+
+        try:
+            # loop over all incoming signals, see if any of the objects living on this event loop are connected
+            # to this particular signal, call slots if needed
+            signals = self.signal_queue.get_many(timeout=closest_timer.remaining_time())
+        except Empty:
+            signals = ()
+        finally:
+            if closest_timer.remaining_time() <= 0:
+                # this is inefficient if we have a lot of short timers, but should do for now
+                for t in self.timers:
+                    if t.remaining_time() <= 0:
+                        t.fire()
+
+        for s in signals:
+            self._process_signal(s)
+
+        if self.should_terminate:
+            log.debug(f'Loop {self.object_id} terminating...')
+            self.terminate.emit()
+            return False
+
+        return True
+
     def exec(self) -> StatusCode:
         status: StatusCode = EventLoopStatus.NORMAL_TERMINATION
 
@@ -346,31 +372,8 @@ class EventLoop(EventLoopObject):
 
         try:
             self.start.emit()
-
-            while True:
-                closest_timer = self._calculate_timeout()
-
-                try:
-                    # loop over all incoming signals, see if any of the objects living on this event loop are connected
-                    # to this particular signal, call slots if needed
-                    signals = self.signal_queue.get_many(timeout=closest_timer.remaining_time())
-                except Empty:
-                    signals = ()
-                finally:
-                    if closest_timer.remaining_time() <= 0:
-                        # this is inefficient if we have a lot of short timers, but should do for now
-                        for t in self.timers:
-                            if t.remaining_time() <= 0:
-                                t.fire()
-
-                for s in signals:
-                    self._process_signal(s)
-
-                if self.should_terminate:
-                    log.debug(f'Loop {self.object_id} terminating...')
-                    self.terminate.emit()
-                    break
-
+            while self._loop_iteration():
+                pass
         except Exception as exc:
             log.warning(f'Unhandled exception {exc} in evt loop {self.object_id}')
             raise exc
@@ -379,6 +382,9 @@ class EventLoop(EventLoopObject):
             status = EventLoopStatus.INTERRUPTED
 
         return status
+
+    def process_events(self):
+        self._loop_iteration()
 
     def __str__(self):
         return f'EvtLoop [{self.object_id}, process={process_name(self.process)}]'

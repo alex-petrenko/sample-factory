@@ -91,7 +91,7 @@ class Runner(EventLoopObject, Configurable):
         Configurable.__init__(self, cfg)
 
         unique_name = Runner.__name__ if unique_name is None else unique_name
-        self.event_loop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop', serial_mode=cfg.serial_mode)
+        self.event_loop: EventLoop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop', serial_mode=cfg.serial_mode)
         self.event_loop.owner = self
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
@@ -176,6 +176,7 @@ class Runner(EventLoopObject, Configurable):
         periodic(5, self._propagate_training_info)
 
         self.components_to_stop: List[EventLoopObject] = []
+        self.component_profiles: List[Tuple[str, Timing]] = []
 
     # singals emitted by the runner
     @signal
@@ -568,8 +569,9 @@ class Runner(EventLoopObject, Configurable):
             self.stop.emit(self.object_id)
             self.stopped = True
 
-    def _component_stopped(self, component_obj_id):
+    def _component_stopped(self, component_obj_id, component_profile: Timing):
         log.debug(f'Component {component_obj_id} stopped!')
+
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
                 del self.components_to_stop[i]
@@ -577,11 +579,17 @@ class Runner(EventLoopObject, Configurable):
                     log.debug(f'Waiting for {[c.object_id for c in self.components_to_stop]} to stop...')
                 break
 
+        if component_profile is not None:
+            self.component_profiles.append((component_obj_id, component_profile))
+
         if not self.components_to_stop:
             self.all_components_stopped.emit()
 
     def _on_everything_stopped(self):
-        # TODO: print profiles
+        # sort profiles by first element in the tuple
+        self.component_profiles = sorted(self.component_profiles, key=lambda x: x[0])
+        for component, profile in self.component_profiles:
+            log.info(profile)
 
         assert self.event_loop.owner is self
         self.event_loop.stop()

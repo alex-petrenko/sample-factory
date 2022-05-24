@@ -8,6 +8,7 @@ from sample_factory.algo.utils.shared_buffers import policy_device, allocate_tra
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
+from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, Device
 from sample_factory.utils.utils import AttrDict, log
 
@@ -88,6 +89,8 @@ class Batcher(EventLoopObject):
         unique_name = f'{Batcher.__name__}_{policy_id}'
         super().__init__(evt_loop, unique_name)
 
+        self.timing = Timing(name=f'Batcher {policy_id} profile')
+
         self.cfg = cfg
         self.env_info: EnvInfo = env_info
         self.policy_id = policy_id
@@ -139,14 +142,15 @@ class Batcher(EventLoopObject):
         self.initialized.emit()
 
     def on_new_trajectories(self, trajectory_dicts: Iterable[Dict], device: str):
-        for trajectory_dict in trajectory_dicts:
-            assert trajectory_dict['policy_id'] == self.policy_id
-            trajectory_slice = trajectory_dict['traj_buffer_idx']
-            if not isinstance(trajectory_slice, slice):
-                trajectory_slice = slice(trajectory_slice, trajectory_slice + 1)  # slice of len 1
-            self.slices_for_training[device].merge_slices(trajectory_slice)
+        with self.timing.add_time('batching'):
+            for trajectory_dict in trajectory_dicts:
+                assert trajectory_dict['policy_id'] == self.policy_id
+                trajectory_slice = trajectory_dict['traj_buffer_idx']
+                if not isinstance(trajectory_slice, slice):
+                    trajectory_slice = slice(trajectory_slice, trajectory_slice + 1)  # slice of len 1
+                self.slices_for_training[device].merge_slices(trajectory_slice)
 
-        self._maybe_enqueue_new_training_batches()
+            self._maybe_enqueue_new_training_batches()
 
     def _maybe_enqueue_new_training_batches(self):
         with torch.no_grad():
@@ -177,7 +181,6 @@ class Batcher(EventLoopObject):
                         # copy data into the training buffer
                         start = trajectories_copied
                         stop = start + slice_len(traj_slice)
-                        log.debug(f'Copying {slice_len(traj_slice)} trajectories from {device} to batch {batch_idx}')
                         self.training_batches[batch_idx][start:stop] = traj_tensors[traj_slice]
 
                         # remember that we need to release these trajectories
@@ -198,14 +201,14 @@ class Batcher(EventLoopObject):
                         self.stop_experience_collection.emit()
 
     def on_training_batch_released(self, batch_idx: int):
-        self._release_traj_tensors(batch_idx)
+        with self.timing.add_time('releasing_batches'):
+            self._release_traj_tensors(batch_idx)
 
-        if not self.available_batches and self.cfg.async_rl:
-            log.debug('Signal inference workers to resume experience collection...')
-            self.resume_experience_collection.emit()
+            if not self.available_batches and self.cfg.async_rl:
+                log.debug('Signal inference workers to resume experience collection...')
+                self.resume_experience_collection.emit()
 
-        self.available_batches.append(batch_idx)
-        log.debug(f'Training batch {batch_idx} released. Available batches: {self.available_batches}')
+            self.available_batches.append(batch_idx)
 
     def _release_traj_tensors(self, batch_idx: int):
         new_sampling_batches = dict()
@@ -226,14 +229,17 @@ class Batcher(EventLoopObject):
                 for i in range(traj_slice.start, traj_slice.stop):
                     new_sampling_batches[device].append(i)
 
+            for device in new_sampling_batches:
+                new_sampling_batches[device].sort()
+
         self.traj_tensors_to_release[batch_idx] = []
 
         for device, batches in new_sampling_batches.items():
             self.traj_buffer_queues[device].put_many(batches)
         self.trajectory_buffers_available.emit()
 
-    def on_stop(self, emitter_id):
-        self.stop.emit(self.object_id)
+    def on_stop(self, *_):
+        self.stop.emit(self.object_id, self.timing)
         if self.event_loop.owner is self:
             self.event_loop.stop()
         self.detach()  # remove from the current event loop

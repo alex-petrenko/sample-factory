@@ -20,7 +20,7 @@ def get_mp_queue(buffer_size_bytes=1_000_000):
         # noinspection PyUnresolvedReferences
         import faster_fifo_reduction
 
-    return MpQueue(buffer_size_bytes)
+    return MpQueue(max_size_bytes=buffer_size_bytes)
 
 
 class QueueWrapper(Queue):

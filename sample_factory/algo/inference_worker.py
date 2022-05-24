@@ -223,8 +223,8 @@ class InferenceWorker(EventLoopObject, Configurable):
             output_tensors = []
             for name in self.buffer_mgr.output_names:
                 output_value = policy_outputs[name].float()
-                if len(output_value.shape) == 1:
-                    output_value.unsqueeze_(dim=1)
+                while output_value.dim() <= 1:
+                    output_value.unsqueeze_(-1)
                 output_tensors.append(output_value)
 
             output_tensors = torch.cat(output_tensors, dim=1)
@@ -252,9 +252,8 @@ class InferenceWorker(EventLoopObject, Configurable):
 
             with timing.add_time('obs_to_device'):
                 actor_critic = self.param_client.actor_critic
-                with timing.add_time('model_eval'):
-                    if actor_critic.training:
-                        actor_critic.eval()  # need to call this because we can be in serial mode
+                if actor_critic.training:
+                    actor_critic.eval()  # need to call this because we can be in serial mode
 
                 for key, x in obs.items():
                     device, dtype = actor_critic.device_and_type_for_input_tensor(key)
@@ -331,17 +330,15 @@ class InferenceWorker(EventLoopObject, Configurable):
         if self.total_num_samples > 1000:
             self.cache_cleanup_timer.set_interval(300.0)
 
-    def on_stop(self, emitter_id):
+    def on_stop(self, *_):
         if self.is_initialized:
             self.param_client.cleanup()
             del self.param_client
 
         log.debug(f'Stopping {self.object_id}...')
-
-        self.stop.emit(self.object_id)
+        self.stop.emit(self.object_id, self.timing)
 
         if self.event_loop.owner is self:
             self.event_loop.stop()
 
         self.detach()  # remove from the current event loop
-        log.info(self.timing)

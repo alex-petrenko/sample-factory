@@ -895,16 +895,14 @@ class Learner(EventLoopObject, Configurable):
 
         self.finished_training_iteration.emit()
 
-    def on_stop(self, emitter_id):
+    def on_stop(self, *_):
         self.save()
         log.debug(f'Stopping {self.object_id}...')
 
-        self.stop.emit(self.object_id)
+        self.stop.emit(self.object_id, self.timing)
 
         if self.event_loop.owner is self:
             self.event_loop.stop()
             del self.actor_critic
 
         self.detach()  # remove from the current event loop
-
-        log.info(self.timing)

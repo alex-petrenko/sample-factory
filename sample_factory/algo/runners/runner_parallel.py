@@ -59,7 +59,7 @@ class ParallelRunner(Runner):
         for p in self.processes:
             log.debug(f'Starting process {p.name}')
             p.start()
-            time.sleep(5)
+            self.event_loop.process_events()
 
     def _on_everything_stopped(self):
         for p in self.processes:

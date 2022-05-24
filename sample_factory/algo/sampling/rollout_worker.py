@@ -23,6 +23,8 @@ from sample_factory.utils.utils import log, set_process_cpu_affinity, AttrDict, 
 
 
 def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
+    log.debug(f'Rollout worker {worker.worker_idx} starting...')
+
     set_global_context(sf_context)
     log.info(f'ROLLOUT worker {worker.worker_idx}\tpid {os.getpid()}\tparent {os.getppid()}')
 
@@ -208,16 +210,16 @@ class RolloutWorker(EventLoopObject, Configurable):
             self._maybe_send_policy_request(self.env_runners[split_idx])
 
     # TODO: base class for this to avoid repeating this code everywhere
-    def on_stop(self, emitter_id):
+    def on_stop(self, *_):
         log.debug(f'Stopping {self.object_id}...')
 
         for env_runner in self.env_runners:
             env_runner.close()
 
-        self.stop.emit(self.object_id)
+        timing = self.timing if self.worker_idx <= 1 else None
+        self.stop.emit(self.object_id, timing)
 
         if self.event_loop.owner is self:
             self.event_loop.stop()
 
         self.detach()  # remove from the current event loop
-        log.info(self.timing)
