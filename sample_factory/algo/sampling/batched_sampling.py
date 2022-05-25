@@ -188,7 +188,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.curr_traj['obs'][:, self.cfg.rollout] = self.last_obs
         self.curr_traj['rnn_states'][:, self.cfg.rollout] = self.last_rnn_state
 
-        # TODO: make this consistent with the CPU sampler
         traj_dict = dict(policy_id=self.policy_id, traj_buffer_idx=self.curr_traj_slice)
         return [traj_dict]
 

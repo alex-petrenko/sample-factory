@@ -191,6 +191,11 @@ class ActorState:
 
         self.has_rollout_data = False
 
+        # Saving obs and hidden states for the step AFTER the last step in the current rollout.
+        # We're going to need them later when we calculate next step value estimates.
+        last_step_data = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
+        self.set_trajectory_data(last_step_data, self.cfg.rollout)
+
         # We could change policy id in the middle of the rollout (i.e. on the episode boundary), in which case
         # this trajectory should be sent to two learners, one for the original policy id, one for the new one.
         # The part of the experience that belongs to a different policy will be ignored on the learner.
