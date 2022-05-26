@@ -40,13 +40,13 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
         from threadpoolctl import threadpool_limits
         threadpool_limits(limits=1, user_api=None)
-        torch.set_num_threads(1)
 
     if cfg.set_workers_cpu_affinity:
         set_process_cpu_affinity(worker.worker_idx, cfg.num_workers)
 
     if cfg.num_workers > 1:
         psutil.Process().nice(min(cfg.default_niceness + 10, 20))
+        torch.set_num_threads(1)
 
     if cfg.actor_worker_gpus:
         worker_gpus = set_gpus_for_process(

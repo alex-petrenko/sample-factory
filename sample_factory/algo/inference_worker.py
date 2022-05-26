@@ -15,7 +15,8 @@ from sample_factory.algo.utils.context import SampleFactoryContext, set_global_c
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.model_sharing import make_parameter_client, ParameterServer
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.tensor_dict import TensorDict, ensure_torch_tensor, to_numpy
+from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
+from sample_factory.algo.utils.tensor_utils import cat_tensors, ensure_torch_tensor
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
 from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats, dict_of_lists_append_idx, \
     dict_of_lists_cat
@@ -167,7 +168,7 @@ class InferenceWorker(EventLoopObject, Configurable):
                 # should we handle a situation where experience comes from multiple devices?
                 # i.e. we use multiple GPUs for sampling but inference/learning is on a single GPU
                 dict_of_lists_cat(obs)
-                rnn_states = torch.cat(rnn_states)
+                rnn_states = cat_tensors(rnn_states)
 
         return obs, rnn_states
 
@@ -262,8 +263,8 @@ class InferenceWorker(EventLoopObject, Configurable):
 
                 for key, x in obs.items():
                     device, dtype = actor_critic.device_and_type_for_input_tensor(key)
-                    obs[key] = x.to(device).type(dtype)
-                rnn_states = rnn_states.to(self.device).float()
+                    obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+                rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
 
             with self.timing.add_time('norm'):
                 normalized_obs = actor_critic.normalizer(obs)

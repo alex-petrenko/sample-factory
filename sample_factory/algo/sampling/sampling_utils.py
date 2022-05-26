@@ -1,7 +1,6 @@
-from typing import Tuple, List, Dict, Any, Optional
+from typing import Tuple, List, Dict, Optional
 
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict
@@ -22,11 +21,6 @@ class VectorEnvRunner(Configurable):
         self.traj_buffer_queue = buffer_mgr.traj_buffer_queues[sampling_device]
         self.traj_tensors = buffer_mgr.traj_tensors_torch[sampling_device]
         self.policy_output_tensors = buffer_mgr.policy_output_tensors_torch[sampling_device][worker_idx, split_idx]
-
-        if sampling_device == 'cpu':
-            # TODO: comment
-            self.traj_tensors = to_numpy(self.traj_tensors)
-            self.policy_output_tensors = to_numpy(self.policy_output_tensors)
 
     def init(self, timing) -> Dict:
         raise NotImplementedError()

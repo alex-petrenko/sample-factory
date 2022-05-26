@@ -81,34 +81,5 @@ def tensor_dict_to_numpy(d: TensorDict) -> TensorDict:
 def to_numpy(t: Tensor | TensorDict) -> Tensor | TensorDict:
     if isinstance(t, TensorDict):
         return tensor_dict_to_numpy(t)
-    elif isinstance(t, Tensor):
+    else:
         return t.numpy()  # only going to work for cpu tensors
-    else:
-        raise ValueError(f'Unknown type {type(t)}')
-
-
-def clone_tensor(t: Tensor | np.ndarray) -> Tensor | np.ndarray:
-    if isinstance(t, Tensor):
-        return t.clone().detach()
-    elif isinstance(t, np.ndarray):
-        return np.copy(t)
-    else:
-        raise ValueError(f'Unknown type {type(t)}')
-
-
-def ensure_torch_tensor(t: Tensor | np.ndarray) -> Tensor:
-    if isinstance(t, Tensor):
-        return t
-    elif isinstance(t, np.ndarray):
-        return torch.from_numpy(t)
-    else:
-        raise ValueError(f'Unknown type {type(t)}')
-
-
-def ensure_numpy_array(t: Tensor | np.ndarray) -> np.ndarray:
-    if isinstance(t, Tensor):
-        return t.numpy()
-    elif isinstance(t, np.ndarray):
-        return t
-    else:
-        raise ValueError(f'Unknown type {type(t)}')

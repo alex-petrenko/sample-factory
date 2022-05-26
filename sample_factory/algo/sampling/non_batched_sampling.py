@@ -5,7 +5,8 @@ from typing import Tuple, Dict, List, Optional
 import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
-from sample_factory.algo.utils.tensor_dict import clone_tensor, ensure_numpy_array
+from sample_factory.algo.utils.tensor_dict import to_numpy
+from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.algorithms.appo.appo_utils import make_env_func_non_batched
 from sample_factory.algorithms.appo.policy_manager import PolicyManager
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
@@ -289,6 +290,11 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         reward coefficients in environments.
         """
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
+
+        if sampling_device == 'cpu':
+            # TODO: comment
+            self.traj_tensors = to_numpy(self.traj_tensors)
+            self.policy_output_tensors = to_numpy(self.policy_output_tensors)
 
         self.num_envs = num_envs
         self.num_agents = env_info.num_agents

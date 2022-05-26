@@ -1,21 +1,25 @@
+from __future__ import annotations
+
 from queue import Empty
 from typing import Optional, Dict, List, Tuple, Any
 
+import numpy as np
 import torch
 from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensor
+from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.algorithms.appo.appo_utils import SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
 
 
 # TODO: remove code duplication (actor_worker.py)
-def preprocess_actions(env_info: EnvInfo, actions: Tensor):
+def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray):
     if env_info.integer_actions:
-        actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
+            actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
 
     if not env_info.gpu_actions:
         actions = actions.cpu().numpy()
@@ -196,12 +200,11 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         """
         Main function in VectorEnvRunner. Does one step of simulation (if all actions for all actors are available).
 
+        :param policy_id:
         :param timing: this is just for profiling
         :return: same as reset(), return a set of requests for policy workers, asking them to generate actions for
         the next env step.
         """
-        assert policy_id == self.policy_id  # TODO: remove
-
         with timing.add_time('process_policy_outputs'):
             # save actions/logits/values etc. for the current rollout step
             self.curr_step[:] = self.policy_output_tensors  # TODO: output tensors should contain the policy version
@@ -213,7 +216,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
 
         with timing.add_time('post_env_step'):
-            self.policy_id_buffer.fill_(self.policy_id)
+            self.policy_id_buffer[:] = self.policy_id
 
             # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym_examples), or a list of dictionaries (i.e. swarm_rl quadrotors)
             # Need an adapter class so it's consistent, i.e. always a dict of tensors.

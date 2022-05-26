@@ -11,6 +11,7 @@ import torch
 from gym import spaces, Wrapper
 from torch import Tensor
 
+from sample_factory.algo.utils.tensor_utils import cat_tensors
 from sample_factory.algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from sample_factory.envs.create_env import create_env
 from sample_factory.utils.get_available_gpus import get_gpus_without_triggering_pytorch_cuda_initialization
@@ -37,7 +38,7 @@ def dict_of_lists_append_idx(d: Dict[Any, List], new_data, index):
 
 def dict_of_lists_cat(d: Dict[Any, List | Tensor]):
     for key, x in d.items():
-        d[key] = torch.cat(x)
+        d[key] = cat_tensors(x)
 
 
 class _DictObservationsWrapper(Wrapper):
