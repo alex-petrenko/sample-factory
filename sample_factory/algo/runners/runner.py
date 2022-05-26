@@ -557,11 +557,6 @@ class Runner(EventLoopObject, Configurable):
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
         end |= self.total_train_seconds > self.cfg.train_for_seconds
-
-        if self.cfg.benchmark:
-            end |= self.total_env_steps_since_resume >= int(2e6)
-            end |= sum(self.samples_collected) >= int(1e6)
-
         return end
 
     def _after_training_iteration(self):

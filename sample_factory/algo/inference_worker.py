@@ -248,7 +248,7 @@ class InferenceWorker(EventLoopObject, Configurable):
             output_indices = tuple(np.array(output_indices).T)
             self.policy_output_tensors[device][output_indices] = output_tensors.numpy()
 
-        return outputs_ready
+            return outputs_ready
 
     def _handle_policy_steps(self, timing):
         with inference_context(self.cfg.serial_mode):
