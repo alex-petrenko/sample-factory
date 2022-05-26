@@ -561,6 +561,9 @@ class Runner(EventLoopObject, Configurable):
 
     def _after_training_iteration(self):
         if self._should_end_training() and not self.stopped:
+            self._save_policy()
+            self._save_best_policy()
+
             self.stop.emit(self.object_id)
             self.stopped = True
 
