@@ -96,6 +96,7 @@ class APPO(ReinforcementLearningAlgorithm):
         arg('--sampler', default='sync', choices=['sync', 'async'], type=str, help='Type of sampler to use')  # TODO: probably just one async sampler is enough
         arg('--num_workers', default=multiprocessing.cpu_count(), type=int, help='Number of parallel environment workers. Should be less than num_envs and should divide num_envs')
 
+        # TODO: force set recurrence to rollout len if we use rnns
         arg(
             '--recurrence', default=32, type=int,
             help='Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly'

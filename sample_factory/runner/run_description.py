@@ -125,7 +125,7 @@ class Experiment:
                 if len(experiment_name) > 100:
                     log.warning('Experiment name is extra long! (%d characters)', len(experiment_name))
             else:
-                experiment_name = self.base_name
+                experiment_name = f'{experiment_idx:02d}_{self.base_name}'
 
             cmd_tokens.append(f'{experiment_arg_name}={experiment_name}')
             param_str = ' '.join(cmd_tokens)

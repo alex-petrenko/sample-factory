@@ -174,6 +174,8 @@ class BufferMgr(Configurable):
         # TODO: need extra checks for sync RL, i.e. we should have enough buffers to feed the learner
         # i.e. 1 worker 10 envs with batch size of 32 trajectories does not work
 
+        # TODO: another check for sync RL: what if we collect more experience per iteration than we can process in a training batch?
+
         share = not cfg.serial_mode
 
         if cfg.async_rl:

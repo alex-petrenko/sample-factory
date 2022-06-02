@@ -56,7 +56,6 @@ def add_extra_params_func(env, parser):
     p.add_argument('--env_agents', default=4096, type=int, help='Num agents in each env')
     p.add_argument('--env_headless', default=True, type=str2bool, help='Headless == no rendering')
     p.add_argument('--mlp_layers', default=[256, 128, 64], type=int, nargs='*', help='MLP layers to use with isaacgym_examples envs')
-    pass
 
 
 def override_default_params_func(env, parser):
@@ -72,6 +71,9 @@ def override_default_params_func(env, parser):
         num_workers=1,
         num_envs_per_worker=1,
         worker_num_splits=1,
+        actor_worker_gpus=[0],  # obviously need a GPU
+
+        train_for_env_steps=10000000,
 
         encoder_custom='isaac_gym_mlp_encoder',
         use_rnn=False,
@@ -99,7 +101,43 @@ def override_default_params_func(env, parser):
         value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
         normalize_input=True,
         experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+        save_every_sec=15,
+
+        serial_mode=True,  # it makes sense to run isaacgym envs in serial mode since most of the parallelism comes from the env itself (although async mode works!)
+        async_rl=False,
     )
+
+    # environment specific overrides
+    env_name = '_'.join(env.split('_')[1:]).lower()
+    if env_name == 'ant':
+        parser.set_defaults(mlp_layers=[256, 128, 64])
+    elif env_name == 'humanoid':
+        parser.set_defaults(
+            train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
+            mlp_layers=[400, 200, 100],
+            rollout=32,
+            ppo_epochs=5,
+            value_loss_coeff=4.0,
+            max_grad_norm=1.0,
+            num_batches_per_iteration=4,
+        )
+    elif env_name == 'allegrohandlstm':
+        parser.set_defaults(
+            env_agents=16384,
+
+            train_for_env_steps=10_000_000_000,
+            mlp_layers=[512, 256, 128],
+            gamma=0.99,
+            rollout=16,
+            recurrence=16,
+            use_rnn=True,
+            learning_rate=1e-4,
+            lr_schedule_kl_threshold=0.016,
+            reward_scale=1.0,
+            ppo_epochs=4,
+            max_grad_norm=1.0,
+            num_batches_per_iteration=8,
+        )
 
 
 def register_isaacgym_custom_components():
