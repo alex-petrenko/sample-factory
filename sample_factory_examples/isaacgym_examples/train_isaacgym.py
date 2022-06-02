@@ -1,17 +1,73 @@
+import os
 import sys
+from os.path import join
 from typing import List
 
 # this is here just to guarantee that isaacgym_examples is imported before PyTorch
 import isaacgym
+
+import gym
 import torch
+from isaacgymenvs.tasks import isaacgym_task_map
+from isaacgymenvs.utils.reformat import omegaconf_to_dict
 from torch import nn, Tensor
 
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.algorithms.appo.model_utils import register_custom_encoder, EncoderBase, get_obs_shape
 from sample_factory.algorithms.utils.arguments import parse_args
-from sample_factory.envs.isaacgym.make_env import make_isaacgym_env
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import str2bool
+
+
+class IsaacGymVecEnv(gym.Env):
+    def __init__(self, isaacgym_env):
+        self.env = isaacgym_env
+        self.num_agents = self.env.num_envs  # TODO: what about vectorized multi-agent envs? should we take num_agents into account also?
+
+        self.action_space = self.env.action_space
+
+        # isaacgym_examples environments actually return dicts
+        self.observation_space = gym.spaces.Dict(dict(obs=self.env.observation_space))
+
+    def reset(self, *args, **kwargs):
+        return self.env.reset()
+
+    def step(self, actions):
+        return self.env.step(actions)
+
+    def render(self, mode='human'):
+        pass
+
+
+def make_isaacgym_env(full_env_name, cfg=None, env_config=None):
+    task_name = '_'.join(full_env_name.split('_')[1:])
+
+    from hydra import compose, initialize
+    import isaacgymenvs
+    # this will register resolvers for the hydra config
+    from isaacgymenvs import train
+
+    module_dir = isaacgymenvs.__path__[0]
+    cfg_dir = join(module_dir, 'cfg')
+    curr_file_dir = os.path.dirname(os.path.abspath(__file__))
+    cfg_dir = os.path.relpath(cfg_dir, curr_file_dir)
+    initialize(config_path=cfg_dir, job_name='sf_isaacgym')
+    ige_cfg = compose(config_name='config')
+
+    sim_device = ige_cfg.sim_device
+    graphics_device_id = ige_cfg.graphics_device_id
+
+    ige_cfg_dict = omegaconf_to_dict(ige_cfg)
+
+    env = isaacgym_task_map[task_name](
+        cfg=ige_cfg_dict['task'],
+        sim_device=sim_device,
+        graphics_device_id=graphics_device_id,
+        headless=cfg.env_headless,
+    )
+
+    env = IsaacGymVecEnv(env)
+    return env
 
 
 class _IsaacGymMlpEncoderImlp(nn.Module):
