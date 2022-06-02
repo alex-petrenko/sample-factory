@@ -7,7 +7,7 @@ _params = ParamGrid([
     ('async_rl', [False]),
 ])
 
-ant_cli = f' --env=isaacgym_ant --train_for_env_steps=100000000 --with_wandb=True --wandb_project=rlgpu-2022 --wandb_tags ant {vstr}'
+ant_cli = f' --env=isaacgym_ant --train_for_env_steps=100000000 --with_wandb=True --wandb_tags ant {vstr}'
 cli = base_cli + ant_cli
 
 _experiments = [
