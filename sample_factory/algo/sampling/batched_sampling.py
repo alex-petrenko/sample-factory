@@ -229,6 +229,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # record the results from the env step
             processed_rewards = self._process_rewards(rewards, infos, self.policy_output_tensors['values'])
+
             self.curr_step[:] = dict(rewards=processed_rewards, dones=dones, policy_id=self.policy_id_buffer)
 
             # reset next-step hidden states to zero if we encountered an episode boundary

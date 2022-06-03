@@ -7,12 +7,14 @@ _params = ParamGrid([
     ('async_rl', [False]),
 ])
 
+vstr = f'{vstr}'
+
 ant_cli = f' --env=isaacgym_Ant --train_for_env_steps=100000000 --with_wandb=True --wandb_tags ant {vstr}'
 cli = base_cli + ant_cli
 
 _experiments = [
-    Experiment(f'ant_{vstr}', cli + f' --wandb_group=isaacgym_ant_sf2_{vstr}', _params.generate_params(False)),
     Experiment(f'ant_{vstr}_rnn', cli + f' --use_rnn=True --recurrence=16 --wandb_group=isaacgym_ant_sf2_rnn_{vstr}', _params.generate_params(False)),
+    Experiment(f'ant_{vstr}', cli + f' --wandb_group=isaacgym_ant_sf2_{vstr}', _params.generate_params(False)),
 ]
 
 RUN_DESCRIPTION = RunDescription(f'ant_{vstr}', experiments=_experiments)
