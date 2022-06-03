@@ -7,14 +7,14 @@ _params = ParamGrid([
     ('async_rl', [False]),
 ])
 
-ahand_cli = f' --env=isaacgym_AllegroHandLSTM --train_for_env_steps=10000000000 --with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_project=rlgpu-2022 --wandb_tags allegrohand {vstr}'
+ahand_cli = f' --env=isaacgym_AllegroHandLSTM --train_for_env_steps=10000000000 --with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
 cli = base_cli + ahand_cli
 
 _experiments = [
     Experiment(f'allegrohand_{vstr}', cli, _params.generate_params(False)),
 ]
 
-RUN_DESCRIPTION = RunDescription(f'ant_{vstr}', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription(f'allegrohand_{vstr}', experiments=_experiments)
 
 
 # Run locally: python -m sample_factory.runner.run --run=sample_factory.runner.runs.isaacgym_allegrohand --runner=processes --max_parallel=1 --experiments_per_gpu=1 --num_gpus=1
