@@ -3,7 +3,8 @@ import sys
 from os.path import join
 from typing import List
 
-# this is here just to guarantee that isaacgym_examples is imported before PyTorch
+# this is here just to guarantee that isaacgym is imported before PyTorch
+# noinspection PyUnresolvedReferences
 import isaacgym
 
 import gym
@@ -41,10 +42,14 @@ class IsaacGymVecEnv(gym.Env):
 
 def make_isaacgym_env(full_env_name, cfg=None, env_config=None):
     task_name = '_'.join(full_env_name.split('_')[1:])
+    overrides = [f'task={task_name}']
+    if cfg.env_agents > 0:
+        overrides.append(f'num_agents={cfg.env_agents}')
 
     from hydra import compose, initialize
     import isaacgymenvs
     # this will register resolvers for the hydra config
+    # noinspection PyUnresolvedReferences
     from isaacgymenvs import train
 
     module_dir = isaacgymenvs.__path__[0]
@@ -52,15 +57,16 @@ def make_isaacgym_env(full_env_name, cfg=None, env_config=None):
     curr_file_dir = os.path.dirname(os.path.abspath(__file__))
     cfg_dir = os.path.relpath(cfg_dir, curr_file_dir)
     initialize(config_path=cfg_dir, job_name='sf_isaacgym')
-    ige_cfg = compose(config_name='config')
+    ige_cfg = compose(config_name='config', overrides=overrides)
 
     sim_device = ige_cfg.sim_device
     graphics_device_id = ige_cfg.graphics_device_id
 
     ige_cfg_dict = omegaconf_to_dict(ige_cfg)
+    task_cfg = ige_cfg_dict['task']
 
-    env = isaacgym_task_map[task_name](
-        cfg=ige_cfg_dict['task'],
+    env = isaacgym_task_map[task_cfg['name']](
+        cfg=task_cfg,
         sim_device=sim_device,
         graphics_device_id=graphics_device_id,
         headless=cfg.env_headless,
@@ -109,7 +115,7 @@ def add_extra_params_func(env, parser):
     Specify any additional command line arguments for this family of custom environments.
     """
     p = parser
-    p.add_argument('--env_agents', default=4096, type=int, help='Num agents in each env')
+    p.add_argument('--env_agents', default=-1, type=int, help='Num agents in each env (default: -1, means use default value from isaacgymenvs env yaml config file)')
     p.add_argument('--env_headless', default=True, type=str2bool, help='Headless == no rendering')
     p.add_argument('--mlp_layers', default=[256, 128, 64], type=int, nargs='*', help='MLP layers to use with isaacgym_examples envs')
 
@@ -179,8 +185,6 @@ def override_default_params_func(env, parser):
         )
     elif env_name == 'allegrohandlstm':
         parser.set_defaults(
-            env_agents=16384,
-
             train_for_env_steps=10_000_000_000,
             mlp_layers=[512, 256, 128],
             gamma=0.99,
