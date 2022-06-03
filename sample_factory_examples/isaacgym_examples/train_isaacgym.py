@@ -193,7 +193,6 @@ def override_default_params_func(env, parser):
             use_rnn=True,
             learning_rate=1e-4,
             lr_schedule_kl_threshold=0.016,
-            reward_scale=1.0,
             ppo_epochs=4,
             max_grad_norm=1.0,
             num_batches_per_iteration=8,
