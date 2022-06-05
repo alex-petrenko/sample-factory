@@ -14,7 +14,7 @@ def runner_argparser():
 
     parser.add_argument('--run', default=None, type=str, help='Name of the python module that describes the run, e.g. sample_factory.runner.runs.doom_battle_hybrid')
     parser.add_argument('--runner', default='processes', choices=['processes', 'slurm', 'ngc'], help='Runner backend, use OS multiprocessing by default')
-    parser.add_argument('--pause_between', default=10, type=int, help='Pause in seconds between processes')
+    parser.add_argument('--pause_between', default=1, type=int, help='Pause in seconds between processes')
     parser.add_argument('--num_gpus', default=1, type=int, help='How many GPUs to use')
     parser.add_argument('--max_parallel', default=4, type=int, help='Maximum simultaneous experiments')
     parser.add_argument('--experiment_suffix', default='', type=str, help='Append this to the name of the experiment dir')
