@@ -7,7 +7,9 @@ _params = ParamGrid([
     ('async_rl', [False]),
 ])
 
-ahand_cli = f' --env=isaacgym_AllegroHandLSTM --train_for_env_steps=10000000000 --with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
+# TODO: enable value_bootstrap!!!
+ahand_cli = f' --env=isaacgym_AllegroHandLSTM --train_for_env_steps=10000000000 --value_bootstrap=False' \
+            f' --with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
 cli = base_cli + ahand_cli
 
 _experiments = [

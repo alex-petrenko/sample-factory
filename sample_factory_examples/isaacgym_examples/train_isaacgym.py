@@ -44,7 +44,7 @@ def make_isaacgym_env(full_env_name, cfg=None, env_config=None):
     task_name = '_'.join(full_env_name.split('_')[1:])
     overrides = [f'task={task_name}']
     if cfg.env_agents > 0:
-        overrides.append(f'num_agents={cfg.env_agents}')
+        overrides.append(f'num_envs={cfg.env_agents}')
 
     from hydra import compose, initialize
     import isaacgymenvs

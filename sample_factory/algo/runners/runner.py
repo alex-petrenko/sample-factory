@@ -213,8 +213,9 @@ class Runner(EventLoopObject, Configurable):
             for key in msg:
                 for handler in self.msg_handlers.get(key, []):
                     handler(self, msg)
-                for handler in self.policy_msg_handlers.get(key, []):
-                    handler(self, msg, policy_id)
+                if policy_id is not None:
+                    for handler in self.policy_msg_handlers.get(key, []):
+                        handler(self, msg, policy_id)
 
     @staticmethod
     def _timing_msg_handler(runner, msg):

@@ -5,6 +5,7 @@ from typing import Optional, Dict, List, Tuple, Any
 
 import numpy as np
 import torch
+from sample_factory.algorithms.utils.pytorch_utils import to_scalar
 from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
@@ -88,6 +89,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.pbt_reward_shaping = pbt_reward_shaping  # TODO
 
+        self.min_raw_rewards = self.max_raw_rewards = self.min_processed_rewards = self.max_processed_rewards = None
+        self.num_timeouts = self.num_dones = 0
+
     def init(self, timing) -> Dict:
         """
         Actually instantiate the env instances.
@@ -130,60 +134,105 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward = torch.zeros(self.vec_env.num_agents)
         self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
+        self.min_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
+        self.max_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
+        self.min_processed_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
+        self.max_processed_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
 
         self.env_step_ready = True
         policy_request = self.generate_policy_request(timing)
         assert policy_request is not None
         return policy_request
 
-    def _process_rewards(self, rewards_orig: Tensor, infos: Dict[Any, Any], values: Tensor):
+    def _process_rewards(self, rewards_orig: Tensor, rewards_orig_cpu: Tensor, infos: Dict[Any, Any], values: Tensor, dones: Tensor):
         rewards = rewards_orig * self.cfg.reward_scale
         rewards.clamp_(-self.cfg.reward_clip, self.cfg.reward_clip)
+        rewards_cpu = rewards.cpu()
 
-        if self.cfg.value_bootstrap and 'time_outs' in infos:
-            # What we really want here is v(t+1) which we don't have, using v(t) is an approximation that
-            # requires that rew(t) can be generally ignored.
-            # TODO: if gamma is modified by PBT it should be updated here too?!
-            rewards.add_(self.cfg.gamma * values * infos['time_outs'].float())
+        self.min_raw_rewards = torch.min(self.min_raw_rewards, rewards_orig_cpu)
+        self.max_raw_rewards = torch.max(self.max_raw_rewards, rewards_orig_cpu)
+        self.min_processed_rewards = torch.min(self.min_processed_rewards, rewards_cpu)
+        self.max_processed_rewards = torch.max(self.max_processed_rewards, rewards_cpu)
+
+        time_outs = infos.get('time_outs')
+        if time_outs is not None:
+            if self.cfg.value_bootstrap:
+                # What we really want here is v(t+1) which we don't have, using v(t) is an approximation that
+                # requires that rew(t) can be generally ignored.
+                # TODO: if gamma is modified by PBT it should be updated here too?!
+                rewards.add_(self.cfg.gamma * values * time_outs.float())
+
+            time_outs = time_outs.long()
+            num_timeouts = time_outs.sum().item()
+            dones = dones.long()
+            num_dones = dones.sum().item()
+            self.num_timeouts += num_timeouts
+            self.num_dones += num_dones
+
+            # TODO: enable asserts?
+            # assert (time_outs & dones).sum().item() == num_timeouts, \
+            #     f'Every timeout should correspond to a done flag {time_outs.nonzero().squeeze()=} vs {dones.nonzero().squeeze()=}'
+            # assert num_timeouts <= num_dones, f'Timeouts should correspond to dones {num_timeouts=} vs {num_dones=}'
 
         return rewards
 
-    def _process_env_step(self, rewards_orig, dones_orig, infos):
-        rewards = rewards_orig.cpu()
+    def _process_env_step(self, rewards: Tensor, dones_orig: Tensor, infos):
         dones = dones_orig.cpu()
+        num_dones = dones.sum().item()
 
         self.curr_episode_reward += rewards
         self.curr_episode_len += 1
 
-        finished_episodes = dones.nonzero(as_tuple=True)[0]
-
-        # TODO: get rid of the loop (we can do it vectorized)
-        # TODO: remove code duplication
         reports = []
-        for i in finished_episodes:
-            agent_i = i.item()
+        if num_dones > 0:
+            finished = dones.nonzero(as_tuple=True)[0]
 
-            last_episode_reward = self.curr_episode_reward[agent_i].item()
-            last_episode_duration = self.curr_episode_len[agent_i].item()
+            # TODO: get rid of the loop (we can do it vectorized)
+            # TODO: remove code duplication
 
-            last_episode_true_objective = last_episode_reward
-            last_episode_extra_stats = None
+            last_rew = self.curr_episode_reward[finished]
+            last_dur = self.curr_episode_len[finished]
 
-            # TODO: we somehow need to deal with two cases: when infos is a dict of tensors and when it is a list of dicts
-            # this only handles the latter.
-            if isinstance(infos, (list, tuple)):
-                last_episode_true_objective = infos[agent_i].get('true_objective', last_episode_reward)
-                last_episode_extra_stats = infos[agent_i].get('episode_extra_stats', None)
+            last_min_rew = self.min_raw_rewards[finished]
+            last_max_rew = self.max_raw_rewards[finished]
+            last_min_proc_rew = self.min_processed_rewards[finished]
+            last_max_proc_rew = self.max_processed_rewards[finished]
 
-            stats = dict(reward=last_episode_reward, len=last_episode_duration, true_objective=last_episode_true_objective)
-            if last_episode_extra_stats:
-                stats['episode_extra_stats'] = last_episode_extra_stats
+            for i in range(num_dones):
+                last_episode_true_objective = last_rew[i]
+                last_episode_extra_stats = None
 
-            report = dict(episodic=stats, policy_id=self.policy_id)
-            reports.append(report)
+                # TODO: we somehow need to deal with two cases: when infos is a dict of tensors and when it is a list of dicts
+                # this only handles the latter.
+                if isinstance(infos, (list, tuple)):
+                    last_episode_true_objective = infos[finished[i]].get('true_objective', last_rew[i])
+                    last_episode_extra_stats = infos[finished[i]].get('episode_extra_stats', None)
 
-        self.curr_episode_reward[finished_episodes] = 0
-        self.curr_episode_len[finished_episodes] = 0
+                stats = dict(
+                    reward=last_rew[i],
+                    len=last_dur[i],
+                    true_objective=last_episode_true_objective,
+                    min_raw_reward=last_min_rew[i],
+                    max_raw_reward=last_max_rew[i],
+                    min_processed_reward=last_min_proc_rew[i],
+                    max_processed_reward=last_max_proc_rew[i],
+                )
+                if last_episode_extra_stats:
+                    stats['episode_extra_stats'] = last_episode_extra_stats
+
+                for k, v in stats.items():
+                    stats[k] = to_scalar(v)
+
+                report = dict(episodic=stats, policy_id=self.policy_id)
+                reports.append(report)
+
+            self.curr_episode_reward[finished] = 0
+            self.curr_episode_len[finished] = 0
+            self.min_raw_rewards[finished] = np.inf
+            self.max_raw_rewards[finished] = -np.inf
+            self.min_processed_rewards[finished] = np.inf
+            self.max_processed_rewards[finished] = -np.inf
+
         return reports
 
     def _finalize_trajectories(self) -> List[Dict]:
@@ -228,7 +277,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # TODO: batcher runner probably won't have inactive agent support for now.
 
             # record the results from the env step
-            processed_rewards = self._process_rewards(rewards, infos, self.policy_output_tensors['values'])
+            rewards_cpu = rewards.cpu()
+            processed_rewards = self._process_rewards(rewards, rewards_cpu, infos, self.policy_output_tensors['values'], dones)
 
             self.curr_step[:] = dict(rewards=processed_rewards, dones=dones, policy_id=self.policy_id_buffer)
 
@@ -237,7 +287,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             not_done = (1.0 - self.curr_step['dones'].float()).unsqueeze(-1)
             self.last_rnn_state = self.policy_output_tensors['new_rnn_states'] * not_done
 
-            stats = self._process_env_step(rewards, dones, infos)
+            with timing.add_time('process_env_step'):
+                stats = self._process_env_step(rewards_cpu, dones, infos)
             episodic_stats.extend(stats)
 
         self.rollout_step += 1
@@ -249,6 +300,14 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                 self.rollout_step = 0
                 # we will need to request a new trajectory buffer!
                 self.curr_traj_slice = self.curr_traj = None
+
+                if self.num_dones > 0:
+                    timeout_fraction = self.num_timeouts / self.num_dones
+                    # this will be processed by the regular episodic stats handler
+                    episodic_stats.append(dict(episodic=dict(timeout_fraction=timeout_fraction), policy_id=self.policy_id))
+
+                # these stats will be per rollout
+                self.num_dones = self.num_timeouts = 0
 
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
