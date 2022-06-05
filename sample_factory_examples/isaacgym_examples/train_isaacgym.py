@@ -21,26 +21,40 @@ from sample_factory.utils.utils import str2bool
 
 
 class IsaacGymVecEnv(gym.Env):
-    def __init__(self, isaacgym_env):
+    def __init__(self, isaacgym_env, obs_key):
         self.env = isaacgym_env
         self.num_agents = self.env.num_envs  # TODO: what about vectorized multi-agent envs? should we take num_agents into account also?
 
         self.action_space = self.env.action_space
 
         # isaacgym_examples environments actually return dicts
-        self.observation_space = gym.spaces.Dict(dict(obs=self.env.observation_space))
+        if obs_key == 'obs':
+            self.observation_space = gym.spaces.Dict(dict(obs=self.env.observation_space))
+            self._proc_obs_func = lambda obs_dict: obs_dict
+        elif obs_key == 'states':
+            self.observation_space = gym.spaces.Dict(dict(obs=self.env.state_space))
+            self._proc_obs_func = self._use_states_as_obs
+        else:
+            raise ValueError(f'Unknown observation key: {obs_key}')
+
+    @staticmethod
+    def _use_states_as_obs(obs_dict):
+        obs_dict['obs'] = obs_dict['states']
+        return obs_dict
 
     def reset(self, *args, **kwargs):
-        return self.env.reset()
+        obs_dict = self.env.reset()
+        return self._proc_obs_func(obs_dict)
 
     def step(self, actions):
-        return self.env.step(actions)
+        obs, rew, dones, infos = self.env.step(actions)
+        return self._proc_obs_func(obs), rew, dones, infos
 
     def render(self, mode='human'):
         pass
 
 
-def make_isaacgym_env(full_env_name, cfg=None, env_config=None):
+def make_isaacgym_env(full_env_name, cfg, env_config=None):
     task_name = '_'.join(full_env_name.split('_')[1:])
     overrides = [f'task={task_name}']
     if cfg.env_agents > 0:
@@ -72,7 +86,7 @@ def make_isaacgym_env(full_env_name, cfg=None, env_config=None):
         headless=cfg.env_headless,
     )
 
-    env = IsaacGymVecEnv(env)
+    env = IsaacGymVecEnv(env, cfg.obs_key)
     return env
 
 
@@ -118,6 +132,13 @@ def add_extra_params_func(env, parser):
     p.add_argument('--env_agents', default=-1, type=int, help='Num agents in each env (default: -1, means use default value from isaacgymenvs env yaml config file)')
     p.add_argument('--env_headless', default=True, type=str2bool, help='Headless == no rendering')
     p.add_argument('--mlp_layers', default=[256, 128, 64], type=int, nargs='*', help='MLP layers to use with isaacgym_examples envs')
+    p.add_argument(
+        '--obs_key', default='obs', type=str,
+        help='IsaacGym envs return dicts, some envs return just "obs", and some return "obs" and "states".'
+             'States key denotes the full state of the environment, and obs key corresponds to limited observations '
+             'available in real world deployment. If we use "states" here we can train will full information '
+             '(although the original idea was to use asymmetric training - critic sees full state and policy only sees obs).',
+    )
 
 
 def override_default_params_func(env, parser):
@@ -197,6 +218,8 @@ def override_default_params_func(env, parser):
             ppo_epochs=4,
             max_grad_norm=1.0,
             num_batches_per_iteration=8,
+
+            obs_key='states',
         )
 
 

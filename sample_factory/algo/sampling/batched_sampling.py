@@ -89,7 +89,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.pbt_reward_shaping = pbt_reward_shaping  # TODO
 
-        self.min_raw_rewards = self.max_raw_rewards = self.min_processed_rewards = self.max_processed_rewards = None
+        self.min_raw_rewards = self.max_raw_rewards = None
         self.num_timeouts = self.num_dones = 0
 
     def init(self, timing) -> Dict:
@@ -136,8 +136,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
         self.min_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
         self.max_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
-        self.min_processed_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
-        self.max_processed_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
 
         self.env_step_ready = True
         policy_request = self.generate_policy_request(timing)
@@ -147,12 +145,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
     def _process_rewards(self, rewards_orig: Tensor, rewards_orig_cpu: Tensor, infos: Dict[Any, Any], values: Tensor, dones: Tensor):
         rewards = rewards_orig * self.cfg.reward_scale
         rewards.clamp_(-self.cfg.reward_clip, self.cfg.reward_clip)
-        rewards_cpu = rewards.cpu()
-
         self.min_raw_rewards = torch.min(self.min_raw_rewards, rewards_orig_cpu)
         self.max_raw_rewards = torch.max(self.max_raw_rewards, rewards_orig_cpu)
-        self.min_processed_rewards = torch.min(self.min_processed_rewards, rewards_cpu)
-        self.max_processed_rewards = torch.max(self.max_processed_rewards, rewards_cpu)
 
         time_outs = infos.get('time_outs')
         if time_outs is not None:
@@ -169,10 +163,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.num_timeouts += num_timeouts
             self.num_dones += num_dones
 
-            # TODO: enable asserts?
-            # assert (time_outs & dones).sum().item() == num_timeouts, \
-            #     f'Every timeout should correspond to a done flag {time_outs.nonzero().squeeze()=} vs {dones.nonzero().squeeze()=}'
-            # assert num_timeouts <= num_dones, f'Timeouts should correspond to dones {num_timeouts=} vs {num_dones=}'
+            assert (time_outs & dones).sum().item() == num_timeouts, \
+                f'Every timeout should correspond to a done flag {time_outs.nonzero().squeeze()=} vs {dones.nonzero().squeeze()=}'
+            assert num_timeouts <= num_dones, f'Timeouts should correspond to dones {num_timeouts=} vs {num_dones=}'
 
         return rewards
 
@@ -192,11 +185,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             last_rew = self.curr_episode_reward[finished]
             last_dur = self.curr_episode_len[finished]
-
             last_min_rew = self.min_raw_rewards[finished]
             last_max_rew = self.max_raw_rewards[finished]
-            last_min_proc_rew = self.min_processed_rewards[finished]
-            last_max_proc_rew = self.max_processed_rewards[finished]
 
             for i in range(num_dones):
                 last_episode_true_objective = last_rew[i]
@@ -214,8 +204,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                     true_objective=last_episode_true_objective,
                     min_raw_reward=last_min_rew[i],
                     max_raw_reward=last_max_rew[i],
-                    min_processed_reward=last_min_proc_rew[i],
-                    max_processed_reward=last_max_proc_rew[i],
                 )
                 if last_episode_extra_stats:
                     stats['episode_extra_stats'] = last_episode_extra_stats
@@ -230,8 +218,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.curr_episode_len[finished] = 0
             self.min_raw_rewards[finished] = np.inf
             self.max_raw_rewards[finished] = -np.inf
-            self.min_processed_rewards[finished] = np.inf
-            self.max_processed_rewards[finished] = -np.inf
 
         return reports
 
