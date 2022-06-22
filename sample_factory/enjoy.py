@@ -6,13 +6,13 @@ import numpy as np
 import torch
 
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.sampling.rollout_worker import preprocess_actions
+from sample_factory.algo.sampling.batched_sampling import preprocess_actions
 from sample_factory.algo.utils.env_info import extract_env_info
-from sample_factory.algorithms.appo.appo_utils import make_env_func_batched
+from sample_factory.algo.utils.make_env import make_env_func_batched
+from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.algo.utils.action_distributions import ContinuousActionDistribution
-from sample_factory.algorithms.utils.algo_utils import ExperimentStatus
 from sample_factory.cfg.arguments import parse_args, load_from_checkpoint
 from sample_factory.algo.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from sample_factory.utils.utils import log, AttrDict

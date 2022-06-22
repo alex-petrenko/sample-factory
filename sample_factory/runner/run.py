@@ -2,7 +2,7 @@ import argparse
 import importlib
 import sys
 
-from sample_factory.algorithms.utils.algo_utils import ExperimentStatus
+from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.runner.run_ngc import add_ngc_args
 from sample_factory.runner.run_slurm import add_slurm_args
 from sample_factory.utils.utils import log
