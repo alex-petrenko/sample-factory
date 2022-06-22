@@ -20,15 +20,15 @@ clean:
 
 
 # Check that source code meets quality standards
-quality:
-	black --check --line-length 119 --target-version py36 tests src
-	isort --check-only tests src
-	flake8 tests src
+check-codestyle:
+	black --check --line-length 119 --target-version py36 sample_factory sample_factory_examples
+	isort --check-only sample_factory sample_factory_examples
+	flake8 sample_factory sample_factory_examples
 
 # Format source code automatically
-style:
-	black --line-length 119 --target-version py36 tests src
-	isort tests src
+format:
+	black --line-length 119 --target-version py36 sample_factory sample_factory_examples
+	isort sample_factory sample_factory_examples
 
 # Run tests for the library
 test:
