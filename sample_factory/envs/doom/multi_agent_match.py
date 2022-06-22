@@ -15,9 +15,9 @@ import numpy as np
 import torch
 
 from sample_factory.algorithms.appo.learner import LearnerWorker
-from sample_factory.algorithms.appo.model import create_actor_critic
-from sample_factory.algorithms.utils.arguments import parse_args, load_from_checkpoint
-from sample_factory.algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
+from sample_factory.model.model import create_actor_critic
+from sample_factory.cfg.arguments import parse_args, load_from_checkpoint
+from sample_factory.algo.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from sample_factory.envs.create_env import create_env
 from sample_factory.utils.utils import log, AttrDict
 

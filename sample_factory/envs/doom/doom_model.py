@@ -1,9 +1,9 @@
 import torch
 from torch import nn
 
-from sample_factory.algorithms.appo.model_utils import get_obs_shape, nonlinearity, create_standard_encoder, EncoderBase, \
+from sample_factory.model.model_utils import get_obs_shape, nonlinearity, create_standard_encoder, EncoderBase, \
     register_custom_encoder
-from sample_factory.algorithms.utils.pytorch_utils import calc_num_elements
+from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.utils.utils import log
 
 

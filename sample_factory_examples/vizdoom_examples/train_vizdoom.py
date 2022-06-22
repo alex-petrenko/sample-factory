@@ -1,7 +1,7 @@
 import sys
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.cfg.arguments import parse_args
 from sample_factory.train import run_rl
 
 

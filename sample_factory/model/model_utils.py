@@ -5,9 +5,8 @@ from torch import nn
 from torch.nn.utils import spectral_norm
 
 from sample_factory.algo.utils.context import global_encoder_registry
-from sample_factory.algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
-from sample_factory.algorithms.utils.algo_utils import EPS
-from sample_factory.algorithms.utils.pytorch_utils import calc_num_elements
+from sample_factory.algo.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
+from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.utils.utils import AttrDict
 from sample_factory.utils.utils import log
 

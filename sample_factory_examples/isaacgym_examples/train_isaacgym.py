@@ -14,8 +14,8 @@ from isaacgymenvs.utils.reformat import omegaconf_to_dict
 from torch import nn, Tensor
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.algorithms.appo.model_utils import register_custom_encoder, EncoderBase, get_obs_shape
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.model.model_utils import register_custom_encoder, EncoderBase, get_obs_shape
+from sample_factory.cfg.arguments import parse_args
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import str2bool
 

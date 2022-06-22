@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively
+from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
 
 
 class TensorDict(dict):

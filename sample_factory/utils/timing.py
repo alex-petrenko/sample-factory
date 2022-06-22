@@ -8,7 +8,7 @@ from typing import Any, Optional, Union
 
 import psutil
 
-from sample_factory.algorithms.utils.algo_utils import EPS
+from sample_factory.algo.utils.misc import EPS
 from sample_factory.utils.utils import AttrDict, log
 
 

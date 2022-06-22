@@ -13,7 +13,7 @@ import numpy as np
 # noinspection PyProtectedMember
 from gym import spaces, RewardWrapper, ObservationWrapper
 
-from sample_factory.algorithms.utils.algo_utils import num_env_steps
+from sample_factory.algo.utils.misc import num_env_steps
 from sample_factory.utils.utils import numpy_all_the_way, ensure_dir_exists, log
 
 

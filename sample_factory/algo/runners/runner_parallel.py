@@ -1,8 +1,7 @@
 import multiprocessing
-import time
 from typing import List, Optional
 
-from sample_factory.algo.inference_worker import init_inference_process
+from sample_factory.algo.inference.inference_worker import init_inference_process
 from sample_factory.algo.learning.learner import init_learner_process
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.sampling.rollout_worker import init_rollout_worker_process

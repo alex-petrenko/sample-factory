@@ -2,7 +2,7 @@ import sys
 
 from sample_factory.algo.runners.runner_parallel import ParallelRunner
 from sample_factory.algo.runners.runner_serial import SerialRunner
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.cfg.arguments import parse_args
 
 
 def run_rl(cfg):

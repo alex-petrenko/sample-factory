@@ -13,8 +13,8 @@ import gym
 import numpy as np
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.algorithms.appo.model_utils import register_custom_encoder
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.model.model_utils import register_custom_encoder
+from sample_factory.cfg.arguments import parse_args
 from sample_factory.run_algorithm import run_algorithm
 from sample_factory_examples.train_custom_env_custom_model import CustomEncoder, override_default_params_func
 

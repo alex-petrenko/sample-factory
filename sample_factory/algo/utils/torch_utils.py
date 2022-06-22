@@ -1,5 +1,6 @@
 from typing import Optional
 
+import numpy as np
 import torch
 
 from sample_factory.utils.utils import AttrDict
@@ -19,3 +20,24 @@ def inference_context(is_serial):
         return torch.no_grad()
     else:
         return torch.inference_mode()
+
+
+def to_torch_dtype(numpy_dtype):
+    """from_numpy automatically infers type, so we leverage that."""
+    x = np.zeros([1], dtype=numpy_dtype)
+    t = torch.from_numpy(x)
+    return t.dtype
+
+
+def calc_num_elements(module, module_input_shape):
+    shape_with_batch_dim = (1,) + module_input_shape
+    some_input = torch.rand(shape_with_batch_dim)
+    num_elements = module(some_input).numel()
+    return num_elements
+
+
+def to_scalar(value):
+    if isinstance(value, torch.Tensor):
+        return value.item()
+    else:
+        return value

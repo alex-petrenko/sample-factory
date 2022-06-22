@@ -6,7 +6,7 @@ from unittest import TestCase
 
 from sample_factory.algorithms.appo.enjoy_appo import enjoy
 from sample_factory.algorithms.utils.algo_utils import ExperimentStatus
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.cfg.arguments import parse_args
 from sample_factory.run_algorithm import run_algorithm
 from sample_factory.utils.utils import experiment_dir
 from sample_factory_examples.train_custom_multi_env import register_custom_components

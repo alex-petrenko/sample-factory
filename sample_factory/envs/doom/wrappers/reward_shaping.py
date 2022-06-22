@@ -4,7 +4,7 @@ from collections import deque
 
 import gym
 
-from sample_factory.algorithms.utils.algo_utils import EPS
+from sample_factory.algo.utils.misc import EPS
 from sample_factory.envs.env_utils import RewardShapingInterface
 from sample_factory.utils.utils import log
 

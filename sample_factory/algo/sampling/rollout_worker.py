@@ -13,10 +13,9 @@ from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.torch_utils import inference_context
-from sample_factory.algorithms.appo.appo_utils import set_gpus_for_process, \
-    gpus_for_process
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
+from sample_factory.utils.gpu_utils import set_gpus_for_process, gpus_for_process
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, MpQueue
 from sample_factory.utils.utils import log, set_process_cpu_affinity, AttrDict, cores_for_worker_process

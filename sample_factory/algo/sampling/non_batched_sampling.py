@@ -5,10 +5,10 @@ from typing import Tuple, Dict, List, Optional
 import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
+from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
-from sample_factory.algorithms.appo.appo_utils import make_env_func_non_batched
-from sample_factory.algorithms.appo.policy_manager import PolicyManager
+from sample_factory.algo.utils.policy_manager import PolicyManager
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import set_attr_if_exists, AttrDict, log
@@ -389,8 +389,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
     def _process_policy_outputs(self, policy_id, timing):
         """
         Process the latest data from the policy worker (for policy = policy_id).
-        Policy outputs currently include new RNN states, actions, values, logprobs, etc. See shared_buffers.py
-        for the full list of outputs.
+        Policy outputs currently include new RNN states, actions, values, logprobs, etc.
 
         As a performance optimization, all these tensors are squished together into a single tensor.
         This allows us to copy them to shared memory only once, which makes a difference on the policy worker.

@@ -5,14 +5,15 @@ from typing import Optional, Dict, List, Tuple, Any
 
 import numpy as np
 import torch
-from sample_factory.algorithms.utils.pytorch_utils import to_scalar
+
+from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
+from sample_factory.algo.utils.torch_utils import to_scalar
 from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
-from sample_factory.algorithms.appo.appo_utils import SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
 

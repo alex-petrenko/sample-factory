@@ -12,7 +12,7 @@ import os
 import sys
 from os.path import join
 
-from sample_factory.algorithms.utils.arguments import arg_parser, parse_args
+from sample_factory.cfg.arguments import arg_parser, parse_args
 from sample_factory.envs.doom.action_space import doom_action_space_extended
 from sample_factory.envs.doom.doom_utils import DoomSpec, register_additional_doom_env
 from sample_factory.run_algorithm import run_algorithm

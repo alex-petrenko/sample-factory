@@ -1,6 +1,6 @@
 import sys
 
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.cfg.arguments import parse_args
 from sample_factory.enjoy import enjoy
 from sample_factory_examples.isaacgym_examples.train_isaacgym import register_isaacgym_custom_components
 

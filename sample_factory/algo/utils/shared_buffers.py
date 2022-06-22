@@ -11,11 +11,11 @@ from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.tensor_dict import TensorDict
-from sample_factory.algorithms.appo.appo_utils import gpus_for_process
-from sample_factory.algorithms.appo.model_utils import get_hidden_size
-from sample_factory.algorithms.appo.shared_buffers import to_torch_dtype
-from sample_factory.algorithms.utils.action_distributions import calc_num_actions, calc_num_logits
+from sample_factory.algo.utils.torch_utils import to_torch_dtype
+from sample_factory.model.model_utils import get_hidden_size
+from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.utils.gpu_utils import gpus_for_process
 from sample_factory.utils.typing import PolicyID, MpQueue, Device
 from sample_factory.utils.utils import log, AttrDict
 

@@ -6,7 +6,7 @@ import sys
 from torch import Tensor
 
 from sample_factory.algo.utils.multiprocessing_utils import get_lock
-from sample_factory.algorithms.appo.model import create_actor_critic
+from sample_factory.model.model import create_actor_critic
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 

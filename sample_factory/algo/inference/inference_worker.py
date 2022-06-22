@@ -13,15 +13,16 @@ import torch
 
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.misc import memory_stats
 from sample_factory.algo.utils.model_sharing import make_parameter_client, ParameterServer
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
-from sample_factory.algo.utils.tensor_utils import cat_tensors, ensure_torch_tensor
+from sample_factory.algo.utils.tensor_utils import cat_tensors, ensure_torch_tensor, dict_of_lists_cat
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
-from sample_factory.algorithms.appo.appo_utils import cuda_envvars_for_policy, memory_stats, dict_of_lists_append_idx, \
-    dict_of_lists_cat
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, Timer, TightLoop, signal
+from sample_factory.utils.dicts import dict_of_lists_append_idx
+from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, MpQueue, Device
 from sample_factory.utils.utils import log
@@ -217,7 +218,7 @@ class InferenceWorker(EventLoopObject, Configurable):
         outputs_ready = set((actor_idx, split_idx) for actor_idx, split_idx, _, _ in requests)
         return outputs_ready
 
-    def _store_and_enqueue_policy_outputs_non_batched(self, num_samples, policy_outputs, requests, timing):
+    def _store_and_enqueue_policy_outputs_non_batched(self, _num_samples, policy_outputs, requests, timing):
         # TODO: respect sampling device instead of just dumping everything on cpu
         device = 'cpu'
 

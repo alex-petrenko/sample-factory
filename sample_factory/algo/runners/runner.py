@@ -1,7 +1,6 @@
 import json
 import math
 import multiprocessing
-import os
 import time
 from collections import deque, OrderedDict
 from os.path import join
@@ -10,22 +9,22 @@ from typing import Dict, Tuple, List, Optional
 import numpy as np
 from tensorboardX import SummaryWriter
 
-from sample_factory.algo.inference_worker import InferenceWorker
+from sample_factory.algo.inference.inference_worker import InferenceWorker
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker
 from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
+from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.model_sharing import ParameterServer
-from sample_factory.algo.utils.multiprocessing_utils import get_queue, get_lock
+from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algorithms.appo.appo_utils import iterate_recursively, set_global_cuda_envvars
-from sample_factory.algorithms.utils.algo_utils import ExperimentStatus, EXTRA_EPISODIC_STATS_PROCESSING, \
-    EXTRA_PER_POLICY_SUMMARIES
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer, signal
+from sample_factory.utils.dicts import iterate_recursively
+from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, MpQueue, MpLock
-from sample_factory.utils.utils import AttrDict, done_filename, ensure_dir_exists, experiment_dir, log, \
+from sample_factory.utils.typing import PolicyID, MpQueue
+from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log, \
     memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
 from sample_factory.utils.wandb_utils import init_wandb
 
@@ -246,8 +245,8 @@ class Runner(EventLoopObject, Configurable):
 
             runner.policy_avg_stats[key][policy_id].append(value)
 
-            for extra_stat_func in EXTRA_EPISODIC_STATS_PROCESSING:  # TODO: replace this with an extra handler
-                extra_stat_func(policy_id, key, value, runner.cfg)
+            # for extra_stat_func in EXTRA_EPISODIC_STATS_PROCESSING:  # TODO: replace this with an extra handler
+            #     extra_stat_func(policy_id, key, value, runner.cfg)
 
     @staticmethod
     def _train_stats_handler(runner, msg, policy_id):
@@ -382,10 +381,10 @@ class Runner(EventLoopObject, Configurable):
                         writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
                         writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 
-            for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:  # TODO: replace with extra callbacks/handlers
-                extra_summaries_func(
-                    policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg,
-                )
+            # for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:  # TODO: replace with extra callbacks/handlers
+            #     extra_summaries_func(
+            #         policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg,
+            #     )
 
         for w in self.writers.values():
             w.flush()
@@ -544,17 +543,6 @@ class Runner(EventLoopObject, Configurable):
             log.info('All inference workers are ready! Signal rollout workers to start!')
             self.inference_workers_initialized.emit()
 
-    def _check_done(self):
-        # TODO: I don't think this works now. Do we even need this feature?
-        if os.path.isfile(done_filename(self.cfg)):
-            log.warning(
-                'Existence of the "done" file in the experiment folder indicates that this training session '
-                'is finished! Remove "done" file if you wish to continue training'
-            )
-            return True
-
-        return False
-
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
         end |= self.total_train_seconds > self.cfg.train_for_seconds
@@ -596,10 +584,6 @@ class Runner(EventLoopObject, Configurable):
     # noinspection PyBroadException
     def run(self) -> StatusCode:
         status = ExperimentStatus.SUCCESS
-
-        if self._check_done():
-            self.stop.emit()
-            return status
 
         with self.timing.timeit('main_loop'):
             try:

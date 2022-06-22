@@ -14,9 +14,9 @@ import numpy as np
 from torch import nn
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.algorithms.appo.model_utils import register_custom_encoder, EncoderBase, get_obs_shape, nonlinearity
-from sample_factory.algorithms.utils.arguments import arg_parser, parse_args
-from sample_factory.algorithms.utils.pytorch_utils import calc_num_elements
+from sample_factory.model.model_utils import register_custom_encoder, EncoderBase, get_obs_shape, nonlinearity
+from sample_factory.cfg.arguments import arg_parser, parse_args
+from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.run_algorithm import run_algorithm
 
 

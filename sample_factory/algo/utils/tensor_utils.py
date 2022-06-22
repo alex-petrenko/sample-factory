@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Any, Dict
 
 import numpy as np
 import torch
@@ -19,6 +19,11 @@ def cat_tensors(lt: List[Tensor | np.ndarray]) -> Tensor | np.ndarray:
         return torch.cat(lt)
     else:
         return np.concatenate(lt)
+
+
+def dict_of_lists_cat(d: Dict[Any, List | Tensor]):
+    for key, x in d.items():
+        d[key] = cat_tensors(x)
 
 
 def ensure_torch_tensor(t: Tensor | np.ndarray) -> Tensor:

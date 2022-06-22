@@ -5,7 +5,7 @@ from os.path import join
 from unittest import TestCase
 
 from sample_factory.algorithms.utils.algo_utils import num_env_steps
-from sample_factory.algorithms.utils.arguments import default_cfg
+from sample_factory.cfg.arguments import default_cfg
 from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
 
 from sample_factory.envs.env_utils import dmlab_available, vizdoom_available

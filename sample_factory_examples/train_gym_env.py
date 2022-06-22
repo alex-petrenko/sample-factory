@@ -12,7 +12,7 @@ import sys
 import gym
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.algorithms.utils.arguments import arg_parser, parse_args
+from sample_factory.cfg.arguments import arg_parser, parse_args
 from sample_factory.run_algorithm import run_algorithm
 
 

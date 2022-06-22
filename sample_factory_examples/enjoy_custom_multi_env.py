@@ -1,7 +1,7 @@
 import sys
 
 from sample_factory.algorithms.appo.enjoy_appo import enjoy
-from sample_factory.algorithms.utils.arguments import parse_args
+from sample_factory.cfg.arguments import parse_args
 from sample_factory_examples.train_custom_multi_env import register_custom_components
 
 

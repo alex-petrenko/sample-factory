@@ -6,7 +6,7 @@ import torch
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.shared_buffers import policy_device, alloc_trajectory_tensors
 from sample_factory.algo.utils.tensor_dict import TensorDict
-from sample_factory.algorithms.appo.model_utils import get_hidden_size
+from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, Device

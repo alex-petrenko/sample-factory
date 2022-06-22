@@ -13,7 +13,7 @@ from filelock import FileLock, Timeout
 from gym.utils import seeding
 from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
 
-from sample_factory.algorithms.utils.spaces.discretized import Discretized
+from sample_factory.algo.utils.spaces.discretized import Discretized
 from sample_factory.utils.utils import log, project_tmp_dir
 
 

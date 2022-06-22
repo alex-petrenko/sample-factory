@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from sample_factory.algorithms.utils.spaces.discretized import Discretized
+from sample_factory.algo.utils.spaces.discretized import Discretized
 
 
 class TestSpaces(TestCase):

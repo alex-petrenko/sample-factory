@@ -5,8 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from sample_factory.algorithms.appo.learner import build_rnn_inputs, build_core_out_from_seq
-
 
 # noinspection PyPep8Naming
 class TestPackedSequences(TestCase):

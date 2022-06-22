@@ -399,10 +399,6 @@ def cfg_file(cfg):
     return params_file
 
 
-def done_filename(cfg):
-    return join(experiment_dir(cfg=cfg), 'done')
-
-
 def git_root():
     """:returns None if we're not in the git repo, otherwise full path to the root of the repo."""
     cwd = os.getcwd()

@@ -15,8 +15,8 @@ import torch
 from torch import nn
 
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace, running_mean_std_summaries
-from sample_factory.algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively
-from sample_factory.algorithms.utils.algo_utils import EPS
+from sample_factory.algo.utils.misc import EPS
+from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
 
 
 class Normalizer(nn.Module):

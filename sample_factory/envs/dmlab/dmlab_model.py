@@ -2,7 +2,7 @@ import torch
 
 from torch import nn
 
-from sample_factory.algorithms.appo.model_utils import create_standard_encoder, EncoderBase, register_custom_encoder
+from sample_factory.model.model_utils import create_standard_encoder, EncoderBase, register_custom_encoder
 from sample_factory.envs.dmlab.dmlab30 import DMLAB_VOCABULARY_SIZE, DMLAB_INSTRUCTIONS
 from sample_factory.utils.utils import log
 
