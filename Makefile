@@ -21,7 +21,7 @@ clean:
 
 # Check that source code meets quality standards
 check-codestyle:
-	black --check --line-length 119 --target-version py36 sample_factory sample_factory_examples
+	black --check --line-length 119 --target-version py37 sample_factory sample_factory_examples
 	isort --check-only sample_factory sample_factory_examples
 	flake8 sample_factory sample_factory_examples
 

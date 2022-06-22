@@ -43,7 +43,7 @@ If you would like to work on any of the open Issues:
 4. Set up a development environment by running the following command in a virtual environment:
 
 	```bash
-	pip install -e .
+	pip install -e .[dev]
 	```
 
    (If sample-factory was already installed in the virtual environment, remove
