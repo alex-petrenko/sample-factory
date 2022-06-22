@@ -15,10 +15,10 @@ _params = ParamGrid([
     ('max_policy_lag', [1000000]),
     ('adaptive_stddev', ['False']),
 
-    ('ppo_epochs', [20]),
+    ('num_epochs', [20]),
     ('ppo_clip_ratio', [0.3]),
     ('batch_size', [1024]),
-    ('num_batches_per_iteration', [10]),
+    ('num_batches_per_epoch', [10]),
     ('rollout', [128]),
     ('nonlinearity', ['tanh']),
     ('exploration_loss_coeff', [0.0]),

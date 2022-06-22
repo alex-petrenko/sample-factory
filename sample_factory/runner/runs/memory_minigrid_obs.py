@@ -6,7 +6,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'mem_minigrid_obs',
-    'python -m train_pytorch --algo=PPO --rollout=64 --num_envs=96 --recurrence=1 --use_rnn=False --train_for_env_steps=200000000 --prior_loss_coeff=0.005 --obs_mem=True',
+    'python -m train_pytorch --rollout=64 --num_envs=96 --recurrence=1 --use_rnn=False --train_for_env_steps=200000000 --prior_loss_coeff=0.005 --obs_mem=True',
     _params.generate_params(randomize=False),
 )
 

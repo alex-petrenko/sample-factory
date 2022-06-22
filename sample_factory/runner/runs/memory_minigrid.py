@@ -8,7 +8,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'mem_minigrid',
-    'python -m train_pytorch --algo=PPO --train_for_env_steps=300000000',
+    'python -m train_pytorch --train_for_env_steps=300000000',
     _params.generate_params(randomize=False),
 )
 

@@ -167,8 +167,8 @@ def override_default_params_func(env, parser):
         rollout=16,
         max_grad_norm=0.0,
         batch_size=32768,
-        num_batches_per_iteration=2,
-        ppo_epochs=4,
+        num_batches_per_epoch=2,
+        num_epochs=4,
         ppo_clip_ratio=0.2,
         value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
@@ -199,10 +199,10 @@ def override_default_params_func(env, parser):
             train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
             mlp_layers=[400, 200, 100],
             rollout=32,
-            ppo_epochs=5,
+            num_epochs=5,
             value_loss_coeff=4.0,
             max_grad_norm=1.0,
-            num_batches_per_iteration=4,
+            num_batches_per_epoch=4,
         )
     elif env_name == 'allegrohandlstm':
         parser.set_defaults(
@@ -215,9 +215,9 @@ def override_default_params_func(env, parser):
             learning_rate=1e-4,
             lr_schedule_kl_threshold=0.016,
             reward_scale=0.01,
-            ppo_epochs=4,
+            num_epochs=4,
             max_grad_norm=1.0,
-            num_batches_per_iteration=8,
+            num_batches_per_epoch=8,
 
             obs_key='states',
         )

@@ -260,7 +260,7 @@ class LearnerWorker:
         return device_buffer
 
     def _macro_batch_size(self, batch_size):
-        return self.cfg.num_batches_per_iteration * batch_size
+        return self.cfg.num_batches_per_epoch * batch_size
 
     def _process_macro_batch(self, rollouts, batch_size, timing):
         macro_batch_size = self._macro_batch_size(batch_size)
@@ -345,7 +345,7 @@ class LearnerWorker:
         assert self.cfg.rollout % self.cfg.recurrence == 0
         assert experience_size % batch_size == 0, f'experience size: {experience_size}, batch size: {batch_size}'
 
-        if self.cfg.num_batches_per_iteration == 1:
+        if self.cfg.num_batches_per_epoch == 1:
             return [None]  # single minibatch is actually the entire buffer, we don't need indices
 
         # indices that will start the mini-trajectories from the same episode (for bptt)
@@ -552,7 +552,7 @@ class LearnerWorker:
             if not self.with_training:
                 return stats_and_summaries
 
-        for epoch in range(self.cfg.ppo_epochs):
+        for epoch in range(self.cfg.num_epochs):
             with timing.add_time('epoch_init'):
                 if early_stop or self.terminate:
                     break
@@ -778,7 +778,7 @@ class LearnerWorker:
         if hasattr(var.action_distribution, 'summaries'):
             stats.update(var.action_distribution.summaries())
 
-        if var.epoch == self.cfg.ppo_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
+        if var.epoch == self.cfg.num_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
             # we collect these stats only for the last PPO batch, or every time if we're only doing one batch, IMPALA-style
             ratio_mean = torch.abs(1.0 - var.ratio).mean().detach()
             ratio_min = var.ratio.min().detach()
@@ -943,7 +943,7 @@ class LearnerWorker:
         self.is_training = True
 
         buffer, batch_size, samples, env_steps = data
-        assert samples == batch_size * self.cfg.num_batches_per_iteration
+        assert samples == batch_size * self.cfg.num_batches_per_epoch
 
         self.env_steps += env_steps
         experience_size = buffer.rewards.shape[0]
@@ -1066,12 +1066,12 @@ class LearnerWorker:
         max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
         if max_minibatches_to_accumulate == -1:
             # default value
-            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
+            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_epoch
 
         # allow the max batches to accumulate, plus the minibatches we're currently training on
-        max_minibatches_on_learner = max_minibatches_to_accumulate + self.cfg.num_batches_per_iteration
+        max_minibatches_on_learner = max_minibatches_to_accumulate + self.cfg.num_batches_per_epoch
 
-        minibatches_currently_training = int(self.is_training) * self.cfg.num_batches_per_iteration
+        minibatches_currently_training = int(self.is_training) * self.cfg.num_batches_per_epoch
 
         rollouts_per_minibatch = self.cfg.batch_size / self.cfg.rollout
 
@@ -1079,7 +1079,7 @@ class LearnerWorker:
         minibatches_currently_accumulated = len(rollouts) / rollouts_per_minibatch
 
         # count minibatches ready for training
-        minibatches_currently_accumulated += self.experience_buffer_queue.qsize() * self.cfg.num_batches_per_iteration
+        minibatches_currently_accumulated += self.experience_buffer_queue.qsize() * self.cfg.num_batches_per_epoch
 
         total_minibatches_on_learner = minibatches_currently_training + minibatches_currently_accumulated
 

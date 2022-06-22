@@ -1,3 +1,10 @@
+"""
+Evaluate different policies against one another in a multiplayer VizDoom match.
+
+This is an old/unsupported script, update for SF2 API if needed.
+"""
+
+
 import os
 import sys
 import time

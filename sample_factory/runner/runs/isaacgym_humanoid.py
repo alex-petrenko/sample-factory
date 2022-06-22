@@ -9,7 +9,7 @@ _params = ParamGrid([
 
 humanoid_cli = f' --env=isaacgym_Humanoid --train_for_env_steps=131000000 ' \
                f'--mlp_layers 400 200 100 --max_grad_norm=1.0 ' \
-               f'--rollout=32 --ppo_epochs=5 --value_loss_coeff=4.0 ' \
+               f'--rollout=32 --num_epochs=5 --value_loss_coeff=4.0 ' \
                f'--wandb_group=isaacgym_humanoid_sf2 --wandb_tags humanoid brain {vstr}'
 
 cli = base_cli + humanoid_cli

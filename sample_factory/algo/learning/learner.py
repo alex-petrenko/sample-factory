@@ -99,7 +99,7 @@ class KlAdaptiveSchedulerPerMinibatch(KlAdaptiveScheduler):
 class KlAdaptiveSchedulerPerEpoch(KlAdaptiveScheduler):
     def __init__(self, cfg):
         super().__init__(cfg)
-        self.num_minibatches_per_epoch = cfg.num_batches_per_iteration
+        self.num_minibatches_per_epoch = cfg.num_batches_per_epoch
 
     def num_recent_kls_to_use(self) -> int:
         return self.num_minibatches_per_epoch
@@ -456,9 +456,9 @@ class Learner(EventLoopObject, Configurable):
         """Generating minibatches for training."""
         assert self.cfg.rollout % self.cfg.recurrence == 0
         assert experience_size % batch_size == 0, f'experience size: {experience_size}, batch size: {batch_size}'
-        minibatches_per_iteration = self.cfg.num_batches_per_iteration  # TODO rename
+        minibatches_per_epoch = self.cfg.num_batches_per_epoch
 
-        if minibatches_per_iteration == 1:
+        if minibatches_per_epoch == 1:
             return [None]  # single minibatch is actually the entire buffer, we don't need indices
 
         if self.cfg.shuffle_minibatches:
@@ -475,7 +475,7 @@ class Learner(EventLoopObject, Configurable):
             num_minibatches = experience_size // batch_size
             minibatches = np.split(indices, num_minibatches)
         else:
-            minibatches = tuple(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_iteration))
+            minibatches = tuple(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_epoch))
 
         return minibatches
 
@@ -529,15 +529,15 @@ class Learner(EventLoopObject, Configurable):
             # Something to consider: maybe we should have these last-batch metrics in a separate summaries category?
             with_summaries = self._should_save_summaries()
             if np.random.rand() < 0.5:
-                summaries_epoch = np.random.randint(0, self.cfg.ppo_epochs)
-                summaries_batch = np.random.randint(0, self.cfg.num_batches_per_iteration)
+                summaries_epoch = np.random.randint(0, self.cfg.num_epochs)
+                summaries_batch = np.random.randint(0, self.cfg.num_batches_per_epoch)
             else:
-                summaries_epoch = self.cfg.ppo_epochs - 1
-                summaries_batch = self.cfg.num_batches_per_iteration - 1
+                summaries_epoch = self.cfg.num_epochs - 1
+                summaries_batch = self.cfg.num_batches_per_epoch - 1
 
             assert self.actor_critic.training
 
-        for epoch in range(self.cfg.ppo_epochs):
+        for epoch in range(self.cfg.num_epochs):
             with timing.add_time('epoch_init'):
                 if early_stop:
                     break
@@ -797,7 +797,7 @@ class Learner(EventLoopObject, Configurable):
         if hasattr(var.action_distribution, 'summaries'):
             stats.update(var.action_distribution.summaries())
 
-        if var.epoch == self.cfg.ppo_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
+        if var.epoch == self.cfg.num_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
             # we collect these stats only for the last PPO batch, or every time if we're only doing one batch, IMPALA-style
             ratio_mean = torch.abs(1.0 - var.ratio).mean().detach()
             ratio_min = var.ratio.min().detach()
@@ -854,7 +854,7 @@ class Learner(EventLoopObject, Configurable):
                 buff['rewards'], buff['dones'], buff['values'], next_values, self.cfg.gamma, self.cfg.gae_lambda,
             )
 
-            experience_size = self.cfg.batch_size * self.cfg.num_batches_per_iteration
+            experience_size = self.cfg.batch_size * self.cfg.num_batches_per_epoch
 
             for d, k, v in iterate_recursively(buff):
                 # collapse first two dimensions

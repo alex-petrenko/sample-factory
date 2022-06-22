@@ -4,24 +4,10 @@ import json
 import os
 import sys
 
-from sample_factory.algorithms.utils.evaluation_config import add_eval_args
+from sample_factory.cfg.cfg import add_basic_cli_args, add_rl_args, add_default_env_args, add_eval_args, add_model_args, \
+    add_wandb_args
 from sample_factory.envs.env_config import add_env_args, env_override_defaults
 from sample_factory.utils.utils import log, AttrDict, cfg_file, get_git_commit_hash
-
-
-def get_algo_class(algo):
-    algo_class = None
-
-    if algo == 'APPO':
-        from sample_factory.algorithms.appo.appo import APPO
-        algo_class = APPO
-    elif algo == 'DUMMY_SAMPLER':
-        from sample_factory.algorithms.dummy_sampler.sampler import DummySampler
-        algo_class = DummySampler
-    else:
-        log.warning('Algorithm %s is not supported', algo)
-
-    return algo_class
 
 
 def arg_parser(argv=None, evaluation=False):
@@ -31,36 +17,23 @@ def arg_parser(argv=None, evaluation=False):
     # noinspection PyTypeChecker
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, add_help=False)
 
-    # common args
-    parser.add_argument('--algo', type=str, default='APPO', required=True, help='Algo type to use (pass "APPO" if in doubt)')
-    parser.add_argument('--env', type=str, default=None, required=True, help='Fully-qualified environment name in the form envfamily_envname, e.g. atari_breakout or doom_battle')
-    parser.add_argument(
-        '--experiment', type=str, default='default_experiment',
-        help='Unique experiment name. This will also be the name for the experiment folder in the train dir.'
-             'If the experiment folder with this name aleady exists the experiment will be RESUMED!'
-             'Any parameters passed from command line that do not match the parameters stored in the experiment cfg.json file will be overridden.',
-    )
-    parser.add_argument(
-        '--experiments_root', type=str, default=None, required=False,
-        help='If not None, store experiment data in the specified subfolder of train_dir. Useful for groups of experiments (e.g. gridsearch)',
-    )
-    parser.add_argument('-h', '--help', action='store_true', help='Print the help message', required=False)
+    add_basic_cli_args(parser)
 
     basic_args, _ = parser.parse_known_args(argv)
-    algo = basic_args.algo
     env = basic_args.env
 
-    # algorithm-specific parameters (e.g. for APPO)
-    algo_class = get_algo_class(algo)
-    algo_class.add_cli_args(parser)
-
-    # env-specific parameters (e.g. for Doom env)
-    add_env_args(env, parser)
+    # add the rest of the arguments
+    add_rl_args(parser)
+    add_model_args(parser)
+    add_default_env_args(parser)
+    add_wandb_args(parser)
 
     if evaluation:
         add_eval_args(parser)
 
-    # env-specific default values for algo parameters (e.g. model size and convolutional head configuration)
+    # env-specific parameters (e.g. for Doom env)
+    add_env_args(env, parser)
+    # override env-specific default values for algo parameters
     env_override_defaults(env, parser)
 
     return parser

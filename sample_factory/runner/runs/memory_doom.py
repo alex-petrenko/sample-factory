@@ -8,7 +8,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'mem_doom',
-    'python -m train_pytorch --algo=PPO --train_for_env_steps=1000000000 --prior_loss_coeff=0.005 --reward_scale=0.5',
+    'python -m train_pytorch --train_for_env_steps=1000000000 --prior_loss_coeff=0.005 --reward_scale=0.5',
     _params.generate_params(randomize=False),
 )
 

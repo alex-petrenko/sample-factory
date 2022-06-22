@@ -156,7 +156,7 @@ class SharedBuffers:
         max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
         if max_minibatches_to_accumulate == -1:
             # default value
-            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
+            max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_epoch
 
         # Let each learner accumulate enough full sets of experience to pause learning
         max_experience_on_learners = max_minibatches_to_accumulate * self.cfg.batch_size * self.cfg.num_policies

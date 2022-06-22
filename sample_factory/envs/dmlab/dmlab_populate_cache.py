@@ -132,4 +132,4 @@ if __name__ == '__main__':
     sys.exit(main())
 
 
-# --algo=DUMMY_SAMPLER --env=dmlab_level_cache --env_frameskip=4 --num_workers=30 --num_envs_per_worker=1 --sample_env_frames=40000000000 --sample_env_frames_per_worker=40000000000 --set_workers_cpu_affinity=False --dmlab_use_level_cache=True --dmlab_renderer=software --experiment=dmlab_populate_cache
+# --env=dmlab_level_cache --env_frameskip=4 --num_workers=30 --num_envs_per_worker=1 --sample_env_frames=40000000000 --sample_env_frames_per_worker=40000000000 --set_workers_cpu_affinity=False --dmlab_use_level_cache=True --dmlab_renderer=software --experiment=dmlab_populate_cache

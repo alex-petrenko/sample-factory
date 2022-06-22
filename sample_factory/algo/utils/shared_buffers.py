@@ -161,7 +161,7 @@ class BufferMgr(Configurable):
 
         rollout = cfg.rollout
         self.trajectories_per_minibatch = cfg.batch_size // rollout
-        self.trajectories_per_batch = cfg.num_batches_per_iteration * self.trajectories_per_minibatch
+        self.trajectories_per_batch = cfg.num_batches_per_epoch * self.trajectories_per_minibatch
 
         if cfg.batched_sampling:
             worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits

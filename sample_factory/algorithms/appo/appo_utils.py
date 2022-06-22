@@ -371,7 +371,7 @@ class TensorBatcher:
     def cat(self, dict_of_tensor_arrays, macro_batch_size, use_pinned_memory, timing):
         """
         Here 'macro_batch' is the overall size of experience per iteration.
-        Macro-batch = mini-batch * num_batches_per_iteration
+        Macro-batch = mini-batch * num_batches_per_epoch
         """
 
         tensor_batch = self.batch_pool.get()

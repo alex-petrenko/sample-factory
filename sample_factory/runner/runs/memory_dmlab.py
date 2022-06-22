@@ -5,7 +5,7 @@ _params = ParamGrid([
     ('mem_size', [4, 0]),
 ])
 
-cmd = 'python -m train_pytorch --algo=PPO --rollout=64 --recurrence=32 --num_envs=96 --num_workers=96 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.005 '
+cmd = 'python -m train_pytorch --rollout=64 --recurrence=32 --num_envs=96 --num_workers=96 --train_for_env_steps=1000000000 --normalize_advantage=False --prior_loss_coeff=0.005 '
 
 # IMPORTANT: for DMLAB number of workers better be equal to the number of envs, otherwise spurious crashes may occur!
 _experiment_nm = Experiment(
