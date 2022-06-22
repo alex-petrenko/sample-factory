@@ -55,10 +55,13 @@ If you would like to work on any of the open Issues:
 6. Format your code. Run black and isort so that your newly added files look nice with the following command:
 
 	```bash
-	make style
+	make format
 	```
-
-7. Once you're happy with your files, add your changes and make a commit to record your changes locally:
+7. Run unittests with the following command:
+	```bash
+	make format
+	```
+8. Once you're happy with your files, add your changes and make a commit to record your changes locally:
 
 	```bash
 	git add sample-factory/<your_dataset_name>
@@ -79,4 +82,4 @@ If you would like to work on any of the open Issues:
    git push -u origin a-descriptive-name-for-my-changes
    ```
 
-8. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.
+9. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.
