@@ -44,7 +44,11 @@ setup(
         'filelock',
         'opencv-python',
         'wandb>=0.12.9',
+
     ],
+    extras_require={
+        "dev": ['black','isort']
+    },
 
     package_dir={'': './'},
     packages=setuptools.find_packages(where='./', include='sample_factory*'),

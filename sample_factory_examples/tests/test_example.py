@@ -4,11 +4,10 @@ import unittest
 from os.path import isdir
 from unittest import TestCase
 
-from sample_factory.algorithms.appo.enjoy_appo import enjoy
-
 from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.enjoy import enjoy
+from sample_factory.train import run_rl
 from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
-from sample_factory.run_algorithm import run_algorithm
 from sample_factory.utils.utils import experiment_dir
 
 
@@ -20,7 +19,7 @@ from sample_factory.utils.utils import experiment_dir
 class TestExample(TestCase):
     """
     This test does not work if other tests used PyTorch autograd before it.
-    Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248
+    Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248  # TODO: we might have fixed that by switching to multiprocessing spawn context. Need to check
     Run this test separately from other tests.
 
     """
@@ -39,7 +38,7 @@ class TestExample(TestCase):
         cfg.seed = 0
         cfg.device = 'cpu'
 
-        status = run_algorithm(cfg)
+        status = run_rl(cfg)
         self.assertEqual(status, ExperimentStatus.SUCCESS)
 
         # then test the evaluation of the saved model

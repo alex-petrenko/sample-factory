@@ -22,7 +22,7 @@ from sample_factory.utils.dicts import list_of_dicts_to_dict_of_lists
 # TODO: remove code duplication (actor_worker.py)
 def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray):
     if env_info.integer_actions:
-            actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
+        actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
 
     if not env_info.gpu_actions:
         actions = actions.cpu().numpy()
@@ -117,7 +117,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             env.seed(env_id)
             envs.append(env)
 
-        if len(envs) == 1:
+        if len(envs) == 1 and envs[0].num_agents > 1:  # TODO: fix type warnings and missing attribute warnings
+            # this is already a vectorized environment
             self.vec_env = envs[0]
         else:
             self.vec_env = SequentialVectorizeWrapper(envs)
@@ -150,9 +151,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.min_raw_rewards = torch.min(self.min_raw_rewards, rewards_orig_cpu)
         self.max_raw_rewards = torch.max(self.max_raw_rewards, rewards_orig_cpu)
 
-        # time_outs = np.array([info.get('time_out', False) for info in infos])
-        # if any(time_outs):
-        time_outs = infos.get('time_outs')
+        time_outs = None if not isinstance(infos, dict) else infos.get('time_outs')
         if time_outs is not None:
             if self.cfg.value_bootstrap:
                 # What we really want here is v(t+1) which we don't have, using v(t) is an approximation that

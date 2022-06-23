@@ -17,7 +17,7 @@ from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.model.model_utils import register_custom_encoder, EncoderBase, get_obs_shape, nonlinearity
 from sample_factory.cfg.arguments import arg_parser, parse_args
 from sample_factory.algo.utils.torch_utils import calc_num_elements
-from sample_factory.run_algorithm import run_algorithm
+from sample_factory.train import run_rl
 
 
 def custom_parse_args(argv=None, evaluation=False):
@@ -57,7 +57,7 @@ class CustomEnv(gym.Env):
 
     def step(self, action):
         # action should be an int here
-        assert isinstance(action, (int, np.int64))
+        assert isinstance(action, (int, np.int32, np.int64))
         reward = action * 0.01
 
         done = self.curr_episode_steps >= self.cfg.custom_env_episode_len
@@ -139,7 +139,7 @@ def main():
     """Script entry point."""
     register_custom_components()
     cfg = custom_parse_args()
-    status = run_algorithm(cfg)
+    status = run_rl(cfg)
     return status
 
 
