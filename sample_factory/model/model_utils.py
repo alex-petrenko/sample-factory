@@ -269,7 +269,7 @@ class MlpEncoder(EncoderBase):
         self.init_fc_blocks(fc_encoder_layer)
 
     def forward(self, obs_dict):
-        x = self.mlp_head(obs_dict['obs'].float())
+        x = self.mlp_head(obs_dict['obs'])
         x = self.forward_fc_blocks(x)
         return x
 

@@ -11,7 +11,6 @@ _params = ParamGrid([
     ('recurrence', [1]),
     ('num_batches_to_accumulate', [1]),
     ('device', ['gpu']),
-    ('actor_critic_share_weights', ['False']),
     ('max_policy_lag', [1000000]),
     ('adaptive_stddev', ['False']),
 
@@ -26,7 +25,7 @@ _params = ParamGrid([
 
 _experiment = Experiment(
     'mujoco_hopper',
-    'python -m sample_factory.run_algorithm --env=mujoco_hopper --train_for_env_steps=7000000 --algo=APPO --num_workers=16 --num_envs_per_worker=4 --benchmark=False --with_pbt=False',
+    'python -m sample_factory_examples.mujoco_examples.train_mujoco --env=mujoco_hopper --train_for_env_steps=7000000 --algo=APPO --num_workers=16 --num_envs_per_worker=4 --benchmark=False',
     _params.generate_params(randomize=False),
 )
 

@@ -44,11 +44,35 @@ def mujoco_override_defaults(env, parser):
     # environment specific overrides
     env_name = '_'.join(env.split('_')[1:]).lower()
 
+    # TODO: Hopper, Reacher, Swimmer, Walker
+    if env_name == 'hopper':
+        parser.set_defaults(
+            reward_scale=0.01,
+            rollout=128,
+            batch_size=2048,
+            lr_schedule_kl_threshold=0.008,
+        )
     if env_name == 'doublependulum':
         parser.set_defaults(
             reward_scale=0.01,
-            learning_rate=3e-4,
+            learning_rate=0.003,
             lr_schedule='constant',
+        )
+    if env_name == 'reacher':
+        parser.set_defaults(
+            reward_scale=1,
+            learning_rate=0.1,
+        )
+    if env_name == 'swimmer':
+        parser.set_defaults(
+            reward_scale=1,
+            learning_rate=0.03,
+            lr_schedule='constant',
+        )
+    if env_name == 'walker':
+        parser.set_defaults(
+            learning_rate=0.01,
+            lr_schedule_kl_threshold=0.008,
         )
 
 
