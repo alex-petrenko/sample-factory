@@ -155,9 +155,3 @@ class TestActionDistributions(TestCase):
                 log_prob = tuple_distr.log_prob(action)
                 probability = torch.exp(log_prob)[0].item()
                 self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2], delta=1e-6)
-
-
-if __name__ == "__main__":
-
-    test = TestActionDistributions()
-    test.test_tuple_distribution()
