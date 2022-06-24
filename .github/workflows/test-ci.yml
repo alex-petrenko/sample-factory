@@ -1,0 +1,38 @@
+name: Test CI
+
+on: [push, pull_request]
+
+jobs:
+  auto-testing:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 10
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.8
+    - name: Add conda to system path
+      run: |
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        echo $CONDA/bin >> $GITHUB_PATH
+    - name: Install conda env & dependencies
+      run: |
+       conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+       pip install -e .
+       conda list
+    - name: Run tests
+      run: |
+        ./all_tests.sh
+#    - name: Install codecov dependencies
+#      run: |
+#        pip install pytest
+#        pip install pytest-cov
+#    - name: Generate coverage report
+#      run: |
+#        pytest --cov=./ --cov-report=xml
+#    - name: Upload coverage to Codecov
+#      uses: codecov/codecov-action@v3
+

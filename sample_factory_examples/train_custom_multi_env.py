@@ -15,7 +15,7 @@ import numpy as np
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.cfg.arguments import parse_args
-from sample_factory.run_algorithm import run_algorithm
+from sample_factory.train import run_rl
 from sample_factory_examples.train_custom_env_custom_model import CustomEncoder, override_default_params_func
 
 
@@ -118,7 +118,7 @@ def main():
     """Script entry point."""
     register_custom_components()
     cfg = parse_args()
-    status = run_algorithm(cfg)
+    status = run_rl(cfg)
     return status
 
 
