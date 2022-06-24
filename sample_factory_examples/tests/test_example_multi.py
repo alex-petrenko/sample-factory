@@ -4,11 +4,11 @@ import unittest
 from os.path import isdir
 from unittest import TestCase
 
-from sample_factory.algorithms.appo.enjoy_appo import enjoy
+from sample_factory.enjoy import enjoy
 
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.cfg.arguments import parse_args
-from sample_factory.run_algorithm import run_algorithm
+from sample_factory.train import run_rl
 from sample_factory.utils.utils import experiment_dir
 from sample_factory_examples.train_custom_multi_env import register_custom_components
 
@@ -41,7 +41,7 @@ class TestExampleMulti(TestCase):
         cfg.device = 'cpu'
         cfg.num_policies = 2
 
-        status = run_algorithm(cfg)
+        status = run_rl(cfg)
         self.assertEqual(status, ExperimentStatus.SUCCESS)
 
         # then test the evaluation of the saved model
