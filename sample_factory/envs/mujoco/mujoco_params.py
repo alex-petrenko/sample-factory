@@ -13,7 +13,7 @@ def mujoco_override_defaults(env, parser):
         env_frameskip=1,
         nonlinearity='tanh',
         batch_size=1024,
-        # num_batches_per_epoch=10,
+        num_batches_per_epoch=32,
 
         use_rnn=False,
         adaptive_stddev=False,
@@ -33,9 +33,9 @@ def mujoco_override_defaults(env, parser):
         gae_lambda=0.95,
         with_vtrace=False,
         recurrence=1,
-        value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
+        value_bootstrap=False,
         normalize_input=True,
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+        experiment_summaries_interval=3,
         save_every_sec=15,
 
         serial_mode=False,
@@ -48,9 +48,12 @@ def mujoco_override_defaults(env, parser):
     if env_name == 'hopper':
         parser.set_defaults(
             reward_scale=0.01,
-            rollout=128,
+            rollout=64,
             batch_size=2048,
+            learning_rate=0.003,
             lr_schedule_kl_threshold=0.008,
+            # learning_rate=0.03,
+            # lr_schedule='constant',
         )
     if env_name == 'doublependulum':
         parser.set_defaults(
@@ -60,8 +63,11 @@ def mujoco_override_defaults(env, parser):
         )
     if env_name == 'reacher':
         parser.set_defaults(
-            reward_scale=1,
-            learning_rate=0.1,
+            reward_scale=0.01,
+            learning_rate=0.003,
+            rollout=64,
+            batch_size=2048,
+            # lr_schedule_kl_threshold=0.008,
         )
     if env_name == 'swimmer':
         parser.set_defaults(

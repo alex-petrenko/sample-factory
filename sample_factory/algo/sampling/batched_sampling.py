@@ -16,7 +16,6 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
-from sample_factory.utils.dicts import list_of_dicts_to_dict_of_lists
 
 
 # TODO: remove code duplication (actor_worker.py)
@@ -267,9 +266,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # record the results from the env step
             rewards_cpu = rewards.cpu()
-            
-            if isinstance(infos, list):
-                infos = list_of_dicts_to_dict_of_lists(infos)
             processed_rewards = self._process_rewards(rewards, rewards_cpu, infos, self.policy_output_tensors['values'], dones)
 
             self.curr_step[:] = dict(rewards=processed_rewards, dones=dones, policy_id=self.policy_id_buffer)
