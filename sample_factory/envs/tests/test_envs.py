@@ -4,7 +4,7 @@ import unittest
 from os.path import join
 from unittest import TestCase
 
-from sample_factory.algorithms.utils.algo_utils import num_env_steps
+from sample_factory.algo.utils.misc import num_env_steps
 from sample_factory.cfg.arguments import default_cfg
 from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
 
