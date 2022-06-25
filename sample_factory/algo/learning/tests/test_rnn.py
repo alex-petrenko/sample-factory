@@ -5,10 +5,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
 
 # noinspection PyPep8Naming
 class TestPackedSequences(TestCase):
-    def check_packed_version_matching_loopy_version(self, T, N, D, random_dones):
+    def check_packed_version_matching_loopy_version(self, T, N, D, random_dones, norm_tolerance=2e-6):
         rnn = nn.GRU(D, D, 1)
 
         for _ in range(100):
@@ -42,13 +43,20 @@ class TestPackedSequences(TestCase):
 
             norm = torch.norm(packed_out - loopy_out)
             print(norm)
-            self.assertLess(norm, 2e-6)
+            self.assertLess(norm, norm_tolerance)
             self.assertTrue(np.allclose(packed_out.detach().numpy(), loopy_out.detach().numpy(), atol=2e-6))
 
-    def test_full(self):
+    def test_full_with_larger_param(self):
         T = 37  # recurrence, bptt
         N = 64  # batch size
         D = 42  # RNN cell size (hidden state size)
+        self.check_packed_version_matching_loopy_version(T, N, D, True, 9e-6)
+        self.check_packed_version_matching_loopy_version(T, N, D, False, 9e-6)
+
+    def test_full(self):
+        T = 27  # recurrence, bptt
+        N = 64  # batch size
+        D = 10  # RNN cell size (hidden state size)
         self.check_packed_version_matching_loopy_version(T, N, D, True)
         self.check_packed_version_matching_loopy_version(T, N, D, False)
 

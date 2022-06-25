@@ -22,6 +22,7 @@ jobs:
       run: |
        conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
        pip install -e .
+       pip install "gym[atari,accept-rom-license]"
        conda list
     - name: Run tests
       run: |
