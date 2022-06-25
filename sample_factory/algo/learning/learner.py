@@ -141,11 +141,9 @@ class Learner(EventLoopObject, Configurable):
 
         self.lr_scheduler: Optional[LearningRateScheduler] = None
 
-        # TODO: get rid of env_steps on the learner, we don't really care!
         self.train_step = self.env_steps = 0
         self.best_performance = -1e9
 
-        # TODO: code duplication!!
         # decay rate at which summaries are collected
         # save summaries every 5 seconds in the beginning, but decay to every 4 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
@@ -225,10 +223,6 @@ class Learner(EventLoopObject, Configurable):
 
             params = list(self.actor_critic.parameters())
 
-            # TODO: aux modules
-            # if self.aux_loss_module is not None:
-            #     params += list(self.aux_loss_module.parameters())
-
             optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
             if self.cfg.optimizer not in optimizer_cls:
                 raise RuntimeError(f'Unknown optimizer {self.cfg.optimizer}')
@@ -303,9 +297,6 @@ class Learner(EventLoopObject, Configurable):
         self.actor_critic.load_state_dict(checkpoint_dict['model'])
         self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
 
-        # TODO: aux modules
-        # if self.aux_loss_module is not None:
-        #     self.aux_loss_module.load_state_dict(checkpoint_dict['aux_loss_module'])
         log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
 
     def load_from_checkpoint(self, policy_id):
@@ -341,11 +332,6 @@ class Learner(EventLoopObject, Configurable):
             'model': self.actor_critic.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         }
-
-        # TODO: aux losses
-        # if self.aux_loss_module is not None:
-        #     checkpoint['aux_loss_module'] = self.aux_loss_module.state_dict()
-
         return checkpoint
 
     def _save_impl(self, name_prefix, name_suffix, keep_checkpoints, verbose=True):
@@ -661,19 +647,6 @@ class Learner(EventLoopObject, Configurable):
 
                     loss = actor_loss + critic_loss
 
-                    # TODO: aux losses!
-                    # if self.aux_loss_module is not None:
-                    #     with timing.add_time('aux_loss'):
-                    #         aux_loss = self.aux_loss_module(
-                    #             mb.actions.view(num_trajectories, recurrence, -1),
-                    #             (1.0 - mb.dones).view(num_trajectories, recurrence, 1),
-                    #             valids.view(num_trajectories, recurrence, -1),
-                    #             head_outputs.view(num_trajectories, recurrence, -1),
-                    #             core_outputs.view(num_trajectories, recurrence, -1),
-                    #         )
-                    #
-                    #         loss = loss + aux_loss
-
                     high_loss = 30.0
                     if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(exploration_loss)) > high_loss or abs(to_scalar(kl_loss)) > high_loss:
                         log.warning(
@@ -701,20 +674,11 @@ class Learner(EventLoopObject, Configurable):
                     for p in self.actor_critic.parameters():
                         p.grad = None
 
-                    # TODO: aux losses
-                    # if self.aux_loss_module is not None:
-                    #     for p in self.aux_loss_module.parameters():
-                    #         p.grad = None
-
                     loss.backward()
 
                     if self.cfg.max_grad_norm > 0.0:
                         with timing.add_time('clip'):
                             torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
-
-                            # TODO: aux losses
-                            # if self.aux_loss_module is not None:
-                            #     torch.nn.utils.clip_grad_norm_(self.aux_loss_module.parameters(), self.cfg.max_grad_norm)
 
                     curr_policy_version = self.train_step  # policy version before the weight update
 
@@ -787,9 +751,6 @@ class Learner(EventLoopObject, Configurable):
         stats.value_loss = var.value_loss
         stats.exploration_loss = var.exploration_loss
 
-        # TODO: aux losses
-        # if self.aux_loss_module is not None:
-        #     stats.aux_loss = var.aux_loss
         stats.adv_min = var.adv.min()
         stats.adv_max = var.adv.max()
         stats.adv_std = var.adv_std

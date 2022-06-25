@@ -85,22 +85,7 @@ Just install from PyPI:
 
 ```pip install sample-factory```
 
-#### Advanced installation
-
-PyPI dependency resolution may result in suboptimal performance, i.e. some versions of MKL and Numpy are known to be slower.
-To guarantee the maximum throughput (~10% faster than pip version) consider using our Conda environment with exact package versions:
-
-- Clone the repo: `git clone https://github.com/alex-petrenko/sample-factory.git`
-
-- Create and activate conda env:
-
-```
-cd sample-factory
-conda env create -f environment.yml
-conda activate sample-factory
-```
-
-SF is known to also work on macOS. There is no Windows support at this time.
+SF is known to work on Linux and macOS. There is no Windows support at this time.
 
 ### Environment support
 
