@@ -18,15 +18,15 @@ jobs:
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         echo $CONDA/bin >> $GITHUB_PATH
-#    - name: Install conda env & dependencies
-#      run: |
-#       conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
-#       pip install -e .
-#       pip install "gym[atari,accept-rom-license]"
-#       conda list
-#    - name: Run tests
-#      run: |
-#        ./all_tests.sh
+    - name: Install conda env & dependencies
+      run: |
+       conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+       pip install -e .
+       pip install "gym[atari,accept-rom-license]"
+       conda list
+    - name: Run tests
+      run: |
+        ./all_tests.sh
     - name: Install codecov dependencies
       run: |
         pip install pytest
