@@ -1,4 +1,3 @@
-[//]: # ([![Build Status]&#40;https://travis-ci.com/alex-petrenko/sample-factory.svg?branch=master&#41;]&#40;https://travis-ci.com/github/alex-petrenko/sample-factory&#41;)
 [![codecov](https://codecov.io/gh/wmFrank/sample-factory/branch/master/graph/badge.svg?token=KCV67SWLXR)](https://codecov.io/gh/wmFrank/sample-factory)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/alex-petrenko/sample-factory/blob/master/LICENSE)
 [![Downloads](https://pepy.tech/badge/sample-factory)](https://pepy.tech/project/sample-factory)
