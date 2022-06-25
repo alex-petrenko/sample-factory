@@ -25,7 +25,7 @@ class TestActionDistributions(TestCase):
         simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
 
         simple_actions = simple_action_distribution.sample()
-        self.assertEqual(list(simple_actions.shape), [self.batch_size])
+        self.assertEqual(list(simple_actions.shape), [self.batch_size,1])
         self.assertTrue(all(0 <= a < simple_action_space.n for a in simple_actions))
 
     def test_gumbel_trick(self):
@@ -119,7 +119,7 @@ class TestActionDistributions(TestCase):
         tuple_entropy = tuple_distr.entropy()
         self.assertEqual(tuple_entropy, simple_distr.entropy() * num_spaces)
 
-        simple_logprob = simple_distr.log_prob(torch.ones(1))
+        simple_logprob = simple_distr.log_prob(torch.ones(1,1))
         tuple_logprob = tuple_distr.log_prob(torch.ones(1, num_spaces))
         self.assertEqual(tuple_logprob, simple_logprob * num_spaces)
 
@@ -135,8 +135,7 @@ class TestActionDistributions(TestCase):
         torch_entropy = torch_categorical.entropy()
         self.assertTrue(np.allclose(entropy.numpy(), torch_entropy))
 
-        log_probs = [categorical.log_prob(torch.tensor([action])) for action in [0, 1, 2]]
-        log_probs = torch.cat(log_probs)
+        log_probs = categorical.log_prob(torch.tensor([[0, 1, 2]]))
 
         self.assertTrue(np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy()))
 
