@@ -1,4 +1,4 @@
-[![codecov](https://codecov.io/gh/wmFrank/sample-factory/branch/master/graph/badge.svg?token=KCV67SWLXR)](https://codecov.io/gh/wmFrank/sample-factory)
+[![codecov](https://codecov.io/gh/wmFrank/sample-factory/branch/sf2-auto-test/graph/badge.svg?token=KCV67SWLXR)](https://codecov.io/gh/wmFrank/sample-factory)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/alex-petrenko/sample-factory/blob/master/LICENSE)
 [![Downloads](https://pepy.tech/badge/sample-factory)](https://pepy.tech/project/sample-factory)
 <!-- [![codecov](https://codecov.io/gh/alex-petrenko/sample-factory/branch/master/graph/badge.svg)](https://codecov.io/gh/alex-petrenko/sample-factory) -->
