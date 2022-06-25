@@ -422,7 +422,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
                         )
                     policy_outputs_dict = dict()
                     for tensor_idx, name in enumerate(actor_state.policy_output_names):
-                        policy_outputs_dict[name] = policy_outputs[tensor_idx].squeeze()
+                        policy_outputs_dict[name] = policy_outputs[tensor_idx]
 
                     # save parsed trajectory outputs directly into the trajectory buffer
                     actor_state.set_trajectory_data(policy_outputs_dict, self.rollout_step)
