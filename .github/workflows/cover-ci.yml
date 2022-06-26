@@ -32,6 +32,6 @@ jobs:
         pip install pytest-cov
     - name: Generate coverage report
       run: |
-        pytest --cov=./ --cov-report=xml
+        pytest --cov=./ --cov-report=json
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
