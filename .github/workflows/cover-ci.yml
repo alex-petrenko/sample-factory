@@ -1,9 +1,9 @@
-name: tests
+name: coverage
 
 on: [push, pull_request]
 
 jobs:
-  run-tests:
+  run-coverage:
     strategy:
       fail-fast: false
       matrix:
@@ -26,11 +26,12 @@ jobs:
        pip install -e .
        pip install "gym[atari,accept-rom-license]"
        conda list
-    - name: Run tests
+    - name: Install codecov dependencies
       run: |
-        # run all tests
-        SKIP_TESTS_THAT_REQUIRE_A_SEPARATE_PROCESS=1 python -m unittest
-        # solely run custom env
-        python -m unittest sample_factory_examples.tests.test_example
-        # solely run custom multi env
-        python -m unittest sample_factory_examples.tests.test_example_multi
+        pip install pytest
+        pip install pytest-cov
+    - name: Generate coverage report
+      run: |
+        pytest --cov=./ --cov-report=xml
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
