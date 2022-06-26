@@ -15,6 +15,7 @@ def set_global_cuda_envvars(cfg):
         else:
             available_gpus = get_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
         os.environ[CUDA_ENVVAR] = available_gpus
+    log.info(f'Environment var {CUDA_ENVVAR} is {os.environ[CUDA_ENVVAR]}')
 
 
 def get_available_gpus():
