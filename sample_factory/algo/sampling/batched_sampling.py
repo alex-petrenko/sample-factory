@@ -19,16 +19,25 @@ from sample_factory.utils.utils import AttrDict, log
 
 
 # TODO: remove code duplication (actor_worker.py)
-def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray):
+def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray:
+    """
+    We expect actions to have shape [num_envs, num_actions].
+    For environments that require only one action per step we just squeeze the second dimension,
+    because in this case the action is usually expected to be a scalar.
+
+    """
+
+    if actions.ndim > 1:
+        actions = actions.squeeze(dim=1)
+
     if env_info.integer_actions:
         actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
 
     if not env_info.gpu_actions:
         actions = actions.cpu().numpy()
 
-    # TODO: do we need this? actions are a tensor of size [batch_size, action_shape] (or just [batch_size] if it is a single action per env)
-    # if len(actions) == 1:
-    #     actions = actions.item()
+    if actions.ndim == 0:
+        actions = actions.item()
 
     return actions
 
@@ -116,8 +125,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             env.seed(env_id)
             envs.append(env)
 
-        if len(envs) == 1 and envs[0].num_agents > 1:  # TODO: fix type warnings and missing attribute warnings
-            # this is already a vectorized environment
+        if len(envs) == 1:
+            # assuming this is already a vectorized environment
+            assert envs[0].num_agents >= 1  # sanity check
             self.vec_env = envs[0]
         else:
             self.vec_env = SequentialVectorizeWrapper(envs)

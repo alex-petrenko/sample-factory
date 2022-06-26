@@ -426,7 +426,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
                     # save parsed trajectory outputs directly into the trajectory buffer
                     actor_state.set_trajectory_data(policy_outputs_dict, self.rollout_step)
-                    actor_state.last_actions = policy_outputs_dict['actions']
+                    actor_state.last_actions = policy_outputs_dict['actions'].squeeze()
 
                     # this is an rnn state for the next iteration in the rollout
                     actor_state.last_rnn_state = policy_outputs_dict['new_rnn_states']
