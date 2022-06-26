@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import multiprocessing
 import os
-import threading
 import time
 import types
 import uuid
 from dataclasses import dataclass
 from queue import Empty
 from typing import Dict, Any, Set, Callable, Union, List, Optional, Iterable, Tuple
-
-import psutil
 
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.utils.utils import log
@@ -74,15 +71,14 @@ class signal:
 
 
 class EventLoopObject:
-    _obj_ids: Set[ObjectID] = set()
-
     def __init__(self, event_loop, object_id=None):
         # the reason we can't use regular id() is because depending on the process spawn method the same objects
         # can have the same id() (in Fork method) or different id() (spawn method)
         self.object_id = object_id if object_id is not None else self._default_obj_id()
-        assert self.object_id not in self._obj_ids, f'{self.object_id=} is not unique!'
 
-        self._obj_ids.add(self.object_id)
+        # check if there is already an object with the same id on this event loop
+        if self.object_id in event_loop.objects:
+            raise ValueError(f'{self.object_id=} is already registered on {event_loop=}')
 
         self.event_loop: EventLoop = event_loop
         self.event_loop.objects[self.object_id] = self
@@ -133,6 +129,11 @@ class EventLoopObject:
 
         emitter = Emitter(self.object_id, signal_)
         receiver_id = other.object_id
+
+        # check if we already have a different object with the same name
+        if receiver_id in self.event_loop.objects:
+            if self.event_loop.objects[receiver_id] is not other:
+                raise ValueError(f'{receiver_id=} object is already registered on {self.event_loop.object_id=}')
 
         self._add_to_dict_of_sets(self.send_signals_to, signal_, receiver_id)
 
@@ -217,8 +218,6 @@ class EventLoopObject:
 
     def __del__(self):
         self.detach()
-        if self.object_id in self._obj_ids:
-            self._obj_ids.remove(self.object_id)
 
 
 class EventLoopStatus:

@@ -73,6 +73,7 @@ def make_isaacgym_env(full_env_name, cfg, env_config=None):
     initialize(config_path=cfg_dir, job_name='sf_isaacgym')
     ige_cfg = compose(config_name='config', overrides=overrides)
 
+    rl_device = ige_cfg.rl_device
     sim_device = ige_cfg.sim_device
     graphics_device_id = ige_cfg.graphics_device_id
 
@@ -82,8 +83,11 @@ def make_isaacgym_env(full_env_name, cfg, env_config=None):
     env = isaacgym_task_map[task_cfg['name']](
         cfg=task_cfg,
         sim_device=sim_device,
+        rl_device=rl_device,
         graphics_device_id=graphics_device_id,
         headless=cfg.env_headless,
+        virtual_screen_capture=False,
+        force_render=False,
     )
 
     env = IsaacGymVecEnv(env, cfg.obs_key)
@@ -203,6 +207,21 @@ def override_default_params_func(env, parser):
             value_loss_coeff=4.0,
             max_grad_norm=1.0,
             num_batches_per_epoch=4,
+        )
+    elif env_name == 'allegrohand':
+        parser.set_defaults(
+            train_for_env_steps=10_000_000_000,
+            mlp_layers=[512, 256, 128],
+            gamma=0.99,
+            rollout=16,
+            recurrence=16,
+            use_rnn=False,
+            learning_rate=1e-4,
+            lr_schedule_kl_threshold=0.02,
+            reward_scale=0.01,
+            num_epochs=5,
+            max_grad_norm=1.0,
+            num_batches_per_epoch=8,
         )
     elif env_name == 'allegrohandlstm':
         parser.set_defaults(

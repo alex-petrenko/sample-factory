@@ -7,14 +7,13 @@ import torch
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
+from sample_factory.algo.utils.action_distributions import ContinuousActionDistribution
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched, SequentialVectorizeWrapper
 from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.cfg.arguments import parse_args, load_from_checkpoint
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.algo.utils.action_distributions import ContinuousActionDistribution
-from sample_factory.cfg.arguments import parse_args, load_from_checkpoint
-from sample_factory.algo.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from sample_factory.utils.utils import log, AttrDict
 
 
@@ -31,8 +30,6 @@ def enjoy(cfg, max_num_frames=1e9):
     cfg.num_envs = 1
 
     env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
-    if env.num_agents == 1:  # TODO: fix type warnings and missing attribute warnings
-        env = SequentialVectorizeWrapper([env])
     # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 

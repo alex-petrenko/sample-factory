@@ -24,8 +24,8 @@ class TestActionDistributions(TestCase):
         simple_logits = torch.rand(self.batch_size, simple_num_logits)
         simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
 
-        simple_actions = simple_action_distribution.sample().squeeze(dim=-1)
-        self.assertEqual(list(simple_actions.shape), [self.batch_size])
+        simple_actions = simple_action_distribution.sample()
+        self.assertEqual(list(simple_actions.shape), [self.batch_size,1])
         self.assertTrue(all(0 <= a < simple_action_space.n for a in simple_actions))
 
     def test_gumbel_trick(self):
@@ -93,10 +93,10 @@ class TestActionDistributions(TestCase):
 
         action_distribution = get_action_distribution(action_space, logits)
 
-        tuple_actions = action_distribution.sample().squeeze(dim=-1)
+        tuple_actions = action_distribution.sample()
         self.assertEqual(list(tuple_actions.shape), [self.batch_size, num_spaces])
 
-        log_probs = action_distribution.log_prob(tuple_actions.unsqueeze(-1))
+        log_probs = action_distribution.log_prob(tuple_actions)
         self.assertEqual(list(log_probs.shape), [self.batch_size])
 
         entropy = action_distribution.entropy()
@@ -119,8 +119,8 @@ class TestActionDistributions(TestCase):
         tuple_entropy = tuple_distr.entropy()
         self.assertEqual(tuple_entropy, simple_distr.entropy() * num_spaces)
 
-        simple_logprob = simple_distr.log_prob(torch.ones(1).unsqueeze(-1))
-        tuple_logprob = tuple_distr.log_prob(torch.ones(1, num_spaces).unsqueeze(-1))
+        simple_logprob = simple_distr.log_prob(torch.ones(1,1))
+        tuple_logprob = tuple_distr.log_prob(torch.ones(1, num_spaces))
         self.assertEqual(tuple_logprob, simple_logprob * num_spaces)
 
     def test_sanity(self):
@@ -135,8 +135,7 @@ class TestActionDistributions(TestCase):
         torch_entropy = torch_categorical.entropy()
         self.assertTrue(np.allclose(entropy.numpy(), torch_entropy))
 
-        log_probs = [categorical.log_prob(torch.tensor([action]).unsqueeze(-1)) for action in [0, 1, 2]]
-        log_probs = torch.cat(log_probs)
+        log_probs = categorical.log_prob(torch.tensor([[0, 1, 2]]))
 
         self.assertTrue(np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy()))
 
@@ -153,6 +152,6 @@ class TestActionDistributions(TestCase):
         for a1 in [0, 1, 2]:
             for a2 in [0, 1, 2]:
                 action = torch.tensor([[a1, a2]])
-                log_prob = tuple_distr.log_prob(action.unsqueeze(-1))
+                log_prob = tuple_distr.log_prob(action)
                 probability = torch.exp(log_prob)[0].item()
                 self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2], delta=1e-6)
