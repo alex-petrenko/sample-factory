@@ -37,5 +37,5 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        file: /home/runner/work/sample-factory/sample-factory/coverage.xml
+        files: /home/runner/work/sample-factory/sample-factory/coverage.xml
         verbose: true
