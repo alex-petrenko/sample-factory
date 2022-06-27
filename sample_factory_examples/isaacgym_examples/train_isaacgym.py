@@ -216,7 +216,7 @@ def override_default_params_func(env, parser):
             rollout=16,
             recurrence=16,
             use_rnn=False,
-            learning_rate=1e-4,
+            learning_rate=5e-3,
             lr_schedule_kl_threshold=0.02,
             reward_scale=0.01,
             num_epochs=5,

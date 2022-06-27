@@ -70,7 +70,6 @@ def policy_output_shapes(num_actions, num_action_distribution_parameters) -> Lis
     return policy_outputs
 
 
-# TODO: remove the code duplication!
 def alloc_trajectory_tensors(env_info: EnvInfo, num_trajectories, rollout, hidden_size, device, share):
     obs_space = env_info.obs_space
 
