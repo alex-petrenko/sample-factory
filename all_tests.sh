@@ -16,4 +16,4 @@ echo "Your terminal might be unresponsive (caused by Doom envs manipulating the 
 echo "Unit tests status (0 = Success): $STATUS_ALL_TESTS"
 echo "Custom env status (0 = Success): $STATUS_TEST_EXAMPLE"
 echo "Custom multi env status (0 = Success): $STATUS_TEST_EXAMPLE_MULTI"
-echo "Custom env status (0 = Success): $STATUS_TEST_MUJOCO"
+echo "Mujoco status (0 = Success): $STATUS_TEST_MUJOCO"
