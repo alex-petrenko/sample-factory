@@ -243,7 +243,14 @@ class Runner(EventLoopObject, Configurable):
                     deque(maxlen=runner.cfg.stats_avg) for _ in range(runner.cfg.num_policies)
                 ]
 
-            runner.policy_avg_stats[key][policy_id].append(value)
+            if isinstance(value, np.ndarray) and value.ndim > 0:
+                if len(value) > runner.policy_avg_stats[key][policy_id].maxlen:
+                    # increase maxlen to make sure we never ignore any stats from the environments
+                    runner.policy_avg_stats[key][policy_id] = deque(maxlen=len(value))
+
+                runner.policy_avg_stats[key][policy_id].extend(value)
+            else:
+                runner.policy_avg_stats[key][policy_id].append(value)
 
             # for extra_stat_func in EXTRA_EPISODIC_STATS_PROCESSING:  # TODO: replace this with an extra handler
             #     extra_stat_func(policy_id, key, value, runner.cfg)
@@ -364,15 +371,20 @@ class Runner(EventLoopObject, Configurable):
                     stat_value = np.mean(stat[policy_id])
                     writer = self.writers[policy_id]
 
-                    # custom summaries have their own sections in tensorboard
                     if '/' in key:
+                        # custom summaries have their own sections in tensorboard
                         avg_tag = key
                         min_tag = f'{key}_min'
                         max_tag = f'{key}_max'
+                    elif key in ('reward', 'len'):
+                        # reward and length get special treatment
+                        avg_tag = f'{key}/{key}'
+                        min_tag = f'{key}/{key}_min'
+                        max_tag = f'{key}/{key}_max'
                     else:
-                        avg_tag = f'policy/avg_{key}'
-                        min_tag = f'policy/avg_{key}_min'
-                        max_tag = f'policy/avg_{key}_max'
+                        avg_tag = f'policy_stats/avg_{key}'
+                        min_tag = f'policy_stats/avg_{key}_min'
+                        max_tag = f'policy_stats/avg_{key}_max'
 
                     writer.add_scalar(avg_tag, float(stat_value), env_steps)
 
@@ -406,9 +418,18 @@ class Runner(EventLoopObject, Configurable):
         self.save_periodic.emit()
 
     def _save_best_policy(self):
+        # don't have enough statistic from the learners yet
+        if len(self.env_steps) < self.cfg.num_policies:
+            return
+
         metric = self.cfg.save_best_metric
         if metric in self.policy_avg_stats:
             for policy_id in range(self.cfg.num_policies):
+                # check if number of samples collected is greater than cfg.save_best_after
+                env_steps = self.env_steps[policy_id]
+                if env_steps < self.cfg.save_best_after:
+                    continue
+
                 stats = self.policy_avg_stats[metric][policy_id]
                 if len(stats) > 0:
                     avg_metric = np.mean(stats)
