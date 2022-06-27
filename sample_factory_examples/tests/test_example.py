@@ -4,11 +4,11 @@ import unittest
 from os.path import isdir
 from unittest import TestCase
 
-from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.algo.utils.misc import ExperimentStatus, EPS
 from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
 from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
-from sample_factory.utils.utils import experiment_dir
+from sample_factory.utils.utils import experiment_dir, log
 
 
 @unittest.skipIf(
@@ -24,19 +24,32 @@ class TestExample(TestCase):
 
     """
 
-    def test_example(self):
+    def _run_test_env(
+            self, num_actions: int = 10, num_workers: int = 8, train_steps: int = 100,
+            expected_reward_at_least: float = -EPS, batched_sampling: bool = False,
+            serial_mode: bool = False, async_rl: bool = True,
+    ):
+        log.debug(f'Testing with parameters {locals()}...')
+
         experiment_name = 'test_example'
 
         register_custom_components()
 
         # test training for a few thousand frames
         cfg = custom_parse_args(argv=['--algo=APPO', '--env=my_custom_env_v1', f'--experiment={experiment_name}'])
-        cfg.num_workers = 4
-        cfg.train_for_env_steps = 100000
+        cfg.serial_mode = serial_mode
+        cfg.async_rl = async_rl
+        cfg.batched_sampling = batched_sampling
+        cfg.custom_env_num_actions = num_actions
+        cfg.num_workers = num_workers
+        cfg.num_envs_per_worker = 2
+        cfg.train_for_env_steps = train_steps
         cfg.save_every_sec = 1
         cfg.decorrelate_experience_max_seconds = 0
+        cfg.decorrelate_envs_on_one_worker = False
         cfg.seed = 0
         cfg.device = 'cpu'
+        cfg.learning_rate = 1e-3
 
         status = run_rl(cfg)
         self.assertEqual(status, ExperimentStatus.SUCCESS)
@@ -58,4 +71,33 @@ class TestExample(TestCase):
 
         # not sure if we should check it here, it's optional
         # maybe a longer test where it actually has a chance to converge
-        self.assertGreater(avg_reward, 60)
+        self.assertGreaterEqual(avg_reward, expected_reward_at_least)
+
+    def test_sanity(self):
+        """
+        Run the test env in various configurations just to make sure nothing crashes or throws exceptions.
+        """
+        for num_actions in [1, 10]:
+            for batched_sampling in [False, True]:
+                self._run_test_env(
+                    num_actions=num_actions, num_workers=1, train_steps=50, batched_sampling=batched_sampling,
+                )
+
+        for serial_mode in [False, True]:
+            for async_rl in [False, True]:
+                self._run_test_env(
+                    num_actions=10, num_workers=1, train_steps=50, batched_sampling=False,
+                    serial_mode=serial_mode, async_rl=async_rl,
+                )
+
+    def test_full_run(self):
+        """Actually train this little env and expect some reward."""
+        self._run_test_env(
+            num_actions=10,
+            num_workers=8,
+            train_steps=100000,
+            expected_reward_at_least=80,
+            batched_sampling=False,
+            serial_mode=False,
+            async_rl=True,
+        )

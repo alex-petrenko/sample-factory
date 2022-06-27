@@ -178,7 +178,7 @@ class TupleActionDistribution:
 
     @staticmethod
     def _flatten_actions(list_of_action_batches):
-        batch_of_action_tuples = torch.stack(list_of_action_batches).transpose(0, 1)
+        batch_of_action_tuples = torch.cat(list_of_action_batches, 1)
         return batch_of_action_tuples
 
     def _calc_log_probs(self, list_of_action_batches):
@@ -206,7 +206,6 @@ class TupleActionDistribution:
     def log_prob(self, actions):
         # split into batches of actions from individual distributions
         list_of_action_batches = torch.chunk(actions, len(self.distributions), dim=1)
-        list_of_action_batches = [a.squeeze(dim=1) for a in list_of_action_batches]
 
         log_probs = self._calc_log_probs(list_of_action_batches)
         return log_probs

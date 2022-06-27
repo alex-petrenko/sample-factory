@@ -73,6 +73,7 @@ def make_isaacgym_env(full_env_name, cfg, env_config=None):
     initialize(config_path=cfg_dir, job_name='sf_isaacgym')
     ige_cfg = compose(config_name='config', overrides=overrides)
 
+    rl_device = ige_cfg.rl_device
     sim_device = ige_cfg.sim_device
     graphics_device_id = ige_cfg.graphics_device_id
 
@@ -82,8 +83,11 @@ def make_isaacgym_env(full_env_name, cfg, env_config=None):
     env = isaacgym_task_map[task_cfg['name']](
         cfg=task_cfg,
         sim_device=sim_device,
+        rl_device=rl_device,
         graphics_device_id=graphics_device_id,
         headless=cfg.env_headless,
+        virtual_screen_capture=False,
+        force_render=False,
     )
 
     env = IsaacGymVecEnv(env, cfg.obs_key)
@@ -183,8 +187,7 @@ def override_default_params_func(env, parser):
         recurrence=1,
         value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
         normalize_input=True,
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
-        save_every_sec=15,
+        save_best_after=int(3e6),
 
         serial_mode=True,  # it makes sense to run isaacgym envs in serial mode since most of the parallelism comes from the env itself (although async mode works!)
         async_rl=False,
@@ -193,7 +196,11 @@ def override_default_params_func(env, parser):
     # environment specific overrides
     env_name = '_'.join(env.split('_')[1:]).lower()
     if env_name == 'ant':
-        parser.set_defaults(mlp_layers=[256, 128, 64])
+        parser.set_defaults(
+            mlp_layers=[256, 128, 64],
+            experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+            save_every_sec=15,
+        )
     elif env_name == 'humanoid':
         parser.set_defaults(
             train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
@@ -203,6 +210,23 @@ def override_default_params_func(env, parser):
             value_loss_coeff=4.0,
             max_grad_norm=1.0,
             num_batches_per_epoch=4,
+            experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+            save_every_sec=15,
+        )
+    elif env_name == 'allegrohand':
+        parser.set_defaults(
+            train_for_env_steps=10_000_000_000,
+            mlp_layers=[512, 256, 128],
+            gamma=0.99,
+            rollout=16,
+            recurrence=16,
+            use_rnn=False,
+            learning_rate=5e-3,
+            lr_schedule_kl_threshold=0.02,
+            reward_scale=0.01,
+            num_epochs=5,
+            max_grad_norm=1.0,
+            num_batches_per_epoch=8,
         )
     elif env_name == 'allegrohandlstm':
         parser.set_defaults(

@@ -3,11 +3,11 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+from sample_factory.algo.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
     ActionParameterizationDefault
-from sample_factory.algo.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
 from sample_factory.utils.normalize import Normalizer
 from sample_factory.utils.timing import Timing
 
@@ -74,6 +74,13 @@ class _ActorCriticBase(nn.Module):
     def action_distribution(self):
         return self.last_action_distribution
 
+    def _maybe_sample_actions(self, sample_actions: bool, result: TensorDict) -> None:
+        if sample_actions:
+            # for non-trivial action spaces it is faster to do these together
+            actions, result['log_prob_actions'] = sample_actions_log_probs(self.last_action_distribution)
+            assert actions.dim() == 2  # TODO: remove this once we test everything
+            result['actions'] = actions.squeeze(dim=1)
+
 
 class _ActorCriticSharedWeights(_ActorCriticBase):
     def __init__(self, make_encoder, make_core, obs_space, action_space, cfg, timing):
@@ -116,10 +123,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
             values=values,
         )
 
-        if sample_actions:
-            # for non-trivial action spaces it is faster to do these together
-            result['actions'], result['log_prob_actions'] = sample_actions_log_probs(self.last_action_distribution)
-
+        self._maybe_sample_actions(sample_actions, result)
         return result
 
     def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
@@ -204,10 +208,7 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
             values=values,
         )
 
-        if sample_actions:
-            # for non-trivial action spaces it is faster to do these together
-            result['actions'], result['log_prob_actions'] = sample_actions_log_probs(self.last_action_distribution)
-
+        self._maybe_sample_actions(sample_actions, result)
         return result
 
     def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:

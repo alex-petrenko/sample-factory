@@ -41,11 +41,15 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument('--serial_mode', default=False, type=str2bool, help='Enable serial mode: run everything completely synchronously in the same process')
     p.add_argument(
-        '--batched_sampling', default=True, type=str2bool,
+        '--batched_sampling', default=False, type=str2bool,
         help='Batched sampling allows the data to be processed in big batches on the rollout worker.'
              'This is especially important for GPU-accelerated vectorized environments such as Megaverse or IsaacGym. '
              'As a downside, in batched mode we do not support (for now) some of the features, such as population-based self-play '
-             'or inactive agents. Each sampler (rollout worker) process only collects data for a single policy.',
+             'or inactive agents, plus each batched sampler (rollout worker) process only collects data for a single policy. '
+             'Another issue between batched/non-batched sampling is handling of infos. '
+             'In batched mode we assume that infos is a single dictionary of lists/tensors containing info for each environment in a vector. '
+             'If you need some complex info dictionary handling and your environment might return dicts with different keys, '
+             'on different rollout steps, you probably need non-batched mode.',
     )
     p.add_argument(
         '--num_batches_to_accumulate', default=2, type=int,
@@ -229,6 +233,7 @@ def add_rl_args(p: ArgumentParser):
     p.add_argument('--save_milestones_sec', default=-1, type=int, help='Save intermediate checkpoints in a separate folder for later evaluation (default=never)')
     p.add_argument('--save_best_every_sec', default=5, type=int, help='How often we check if we should save the policy with the best score ever')
     p.add_argument('--save_best_metric', default='reward', help='Save "best" policies based on this metric (just env reward by default)')
+    p.add_argument('--save_best_after', default=100000, type=int, help='Start saving "best" policies after this many env steps to filter lucky episodes that succeed and dominate the statistics early on')
 
     # debugging options
     p.add_argument('--benchmark', default=False, type=str2bool, help='Benchmark mode')

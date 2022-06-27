@@ -2,13 +2,13 @@ from sample_factory.runner.run_description import RunDescription, Experiment, Pa
 from sample_factory.runner.runs.isaacgym_runs import vstr, base_cli
 
 _params = ParamGrid([
-    ('seed', [1111, 2222, 3333, 4444, 5555, 6666]),
+    ('seed', [1111, 2222, 3333, 4444]),
     ('serial_mode', [True]),
     ('async_rl', [False]),
 ])
 
-ahand_cli = f' --env=isaacgym_AllegroHandLSTM --train_for_env_steps=10000000000 ' \
-            f' --with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
+ahand_cli = f' --env=isaacgym_AllegroHand --train_for_env_steps=150000000 ' \
+            f'--with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
 cli = base_cli + ahand_cli
 
 _experiments = [
