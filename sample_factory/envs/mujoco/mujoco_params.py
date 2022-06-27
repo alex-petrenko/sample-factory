@@ -13,7 +13,6 @@ def mujoco_override_defaults(env, parser):
         env_frameskip=1,
         nonlinearity='tanh',
         batch_size=1024,
-        num_batches_per_epoch=32,
 
         use_rnn=False,
         adaptive_stddev=False,
@@ -71,14 +70,20 @@ def mujoco_override_defaults(env, parser):
         )
     if env_name == 'swimmer':
         parser.set_defaults(
-            reward_scale=1,
-            learning_rate=0.03,
+            reward_scale=0.1,
+            learning_rate=3e-3,
+            lr_schedule_kl_threshold=0.008,
+            batch_size=1024,
+            rollout=64,
             lr_schedule='constant',
         )
     if env_name == 'walker':
         parser.set_defaults(
-            learning_rate=0.01,
-            lr_schedule_kl_threshold=0.008,
+            reward_scale=0.01,
+            learning_rate=0.0003,
+            lr_schedule_kl_threshold=0.08,
+            rollout=64,
+            # lr_schedule='constant',
         )
 
 
