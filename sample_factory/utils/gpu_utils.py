@@ -28,7 +28,7 @@ def get_available_gpus() -> List[int]:
     return available_gpus
 
 
-def gpus_for_process(process_idx: int, num_gpus_per_process: int, gpu_mask=Optional[List[int]]) -> List[int]:
+def gpus_for_process(process_idx: int, num_gpus_per_process: int, gpu_mask: Optional[List[int]] = None) -> List[int]:
     """
     Returns indices of GPUs to use for a process. These indices already respect the CUDA_VISIBLE_DEVICES envvar.
     I.e. if CUDA_VISIBLE_DEVICES is '1,2,3', then from torch's there are three visible GPUs
