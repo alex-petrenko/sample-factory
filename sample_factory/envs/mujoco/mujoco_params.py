@@ -1,6 +1,6 @@
 def mujoco_override_defaults(env, parser):
     parser.set_defaults(
-        batched_sampling=True,
+        batched_sampling=False,
         num_workers=8,
         num_envs_per_worker=16,
         worker_num_splits=2,

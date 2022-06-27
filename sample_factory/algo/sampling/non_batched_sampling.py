@@ -121,8 +121,7 @@ class ActorState:
         self.curr_traj_buffer[rollout_step] = data
 
     def reset_rnn_state(self):
-        if self.cfg.use_rnn:
-            self.last_rnn_state[:] = 0.0
+        self.last_rnn_state[:] = 0.0
 
     def curr_actions(self):
         """
