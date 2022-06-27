@@ -17,7 +17,7 @@ def default_doom_cfg():
     return default_cfg(env='doom_env')
 
 
-def test_env_performance(make_env, env_type, verbose=False):
+def eval_env_performance(make_env, env_type, verbose=False):
     t = Timing()
     with t.timeit('init'):
         env = make_env(AttrDict({'worker_index': 0, 'vector_index': 0}))
@@ -124,7 +124,7 @@ class TestAtari(TestCase):
         return make_atari_env('atari_breakout', cfg=default_cfg(env='atari_breakout'))
 
     def test_atari_performance(self):
-        test_env_performance(self.make_env, 'atari')
+        eval_env_performance(self.make_env, 'atari')
 
 
 class TestDmlab(TestCase):

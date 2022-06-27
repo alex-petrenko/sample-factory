@@ -33,9 +33,13 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
 
     cfg = worker.cfg
 
-    curr_process = psutil.Process()
-    available_cores = curr_process.cpu_affinity()
-    desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, len(available_cores))
+    # on MacOS, psutil.Process() has no method 'cpu_affinity'
+    if hasattr(psutil.Process(), 'cpu_affinity'):
+        curr_process = psutil.Process()
+        available_cores = curr_process.cpu_affinity()
+        desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, len(available_cores))
+    else:
+        desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, psutil.cpu_count(logical=False))
     if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
         from threadpoolctl import threadpool_limits
         threadpool_limits(limits=1, user_api=None)

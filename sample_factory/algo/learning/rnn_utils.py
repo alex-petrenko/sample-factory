@@ -4,7 +4,7 @@ import torch
 
 # noinspection PyPep8Naming
 from torch.nn.utils.rnn import invert_permutation, PackedSequence
-
+from sample_factory.utils.utils import log
 
 def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
