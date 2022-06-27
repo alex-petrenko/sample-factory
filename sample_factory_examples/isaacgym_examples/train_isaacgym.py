@@ -187,7 +187,7 @@ def override_default_params_func(env, parser):
         recurrence=1,
         value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
         normalize_input=True,
-        save_best_after=int(3e6),
+        save_best_after=int(5e6),
 
         serial_mode=True,  # it makes sense to run isaacgym envs in serial mode since most of the parallelism comes from the env itself (although async mode works!)
         async_rl=False,
