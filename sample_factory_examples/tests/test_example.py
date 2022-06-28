@@ -25,7 +25,7 @@ class TestExample(TestCase):
     """
 
     def _run_test_env(
-            self, num_actions: int = 10, num_workers: int = 8, train_steps: int = 100,
+            self, num_actions: int = 10, num_workers: int = 8, train_steps: int = 100, batch_size: int = 64,
             expected_reward_at_least: float = -EPS, expected_reward_at_most: float = 100,
             batched_sampling: bool = False, serial_mode: bool = False, async_rl: bool = True,
     ):
@@ -43,6 +43,7 @@ class TestExample(TestCase):
         cfg.custom_env_num_actions = num_actions
         cfg.num_workers = num_workers
         cfg.num_envs_per_worker = 2
+        cfg.batch_size = batch_size
         cfg.train_for_env_steps = train_steps
         cfg.save_every_sec = 1
         cfg.decorrelate_experience_max_seconds = 0
@@ -93,6 +94,7 @@ class TestExample(TestCase):
             num_actions=10,
             num_workers=8,
             train_steps=100000,
+            batch_size=256,
             expected_reward_at_least=80,
             expected_reward_at_most=100,
             batched_sampling=False,
