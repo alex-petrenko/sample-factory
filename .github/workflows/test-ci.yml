@@ -23,14 +23,14 @@ jobs:
     - name: Install conda env & dependencies on linux
       if: ${{ matrix.os == 'ubuntu-latest' }}
       run: |
-       conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+       conda install pytorch torchvision cpuonly -c pytorch
        pip install -e .
        pip install "gym[atari,accept-rom-license]"
        conda list
     - name: Install conda env & dependencies on macos
       if: ${{ matrix.os == 'macos-latest' }}
       run: |
-        pip3 install torch torchvision torchaudio
+        pip3 install torch torchvision
         pip install -e .
         pip install "gym[atari,accept-rom-license]"
         conda list
