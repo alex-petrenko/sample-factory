@@ -8,9 +8,17 @@ class MujocoSpec:
 
 
 MUJOCO_ENVS = [
-    MujocoSpec('mujoco_hopper', 'Hopper-v2'),
-    MujocoSpec('mujoco_halfcheetah', 'HalfCheetah-v2'),
-    MujocoSpec('mujoco_humanoid', 'Humanoid-v2'),
+    MujocoSpec('mujoco_hopper', 'Hopper-v4'),
+    MujocoSpec('mujoco_halfcheetah', 'HalfCheetah-v4'),
+    MujocoSpec('mujoco_humanoid', 'Humanoid-v4'),
+    MujocoSpec('mujoco_ant', 'Ant-v4'),
+    MujocoSpec('mujoco_standup', 'HumanoidStandup-v4'),
+    MujocoSpec('mujoco_doublependulum', 'InvertedDoublePendulum-v4'),
+    MujocoSpec('mujoco_pendulum', 'InvertedPendulum-v4'),
+    MujocoSpec('mujoco_reacher', 'Reacher-v4'),
+    MujocoSpec('mujoco_walker', 'Walker2d-v4'),
+    MujocoSpec('mujoco_pusher', 'Pusher-v4'),
+    MujocoSpec('mujoco_swimmer', 'Swimmer-v4'),
 ]
 
 
@@ -25,3 +33,4 @@ def make_mujoco_env(env_name, cfg, **kwargs):
     mujoco_spec = mujoco_env_by_name(env_name)
     env = gym.make(mujoco_spec.env_id)
     return env
+
