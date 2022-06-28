@@ -5,11 +5,12 @@ _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
     ('serial_mode', [True]),
     ('async_rl', [False]),
+    ('gae_returns', [True, False]),
 ])
 
 humanoid_cli = f' --env=isaacgym_Humanoid --train_for_env_steps=131000000 ' \
                f'--mlp_layers 400 200 100 --max_grad_norm=1.0 ' \
-               f'--rollout=32 --num_epochs=5 --value_loss_coeff=4.0 ' \
+               f'--rollout=32 --num_epochs=5 --value_loss_coeff=2.0 ' \
                f'--wandb_group=isaacgym_humanoid_sf2 --wandb_tags humanoid brain {vstr}'
 
 cli = base_cli + humanoid_cli
