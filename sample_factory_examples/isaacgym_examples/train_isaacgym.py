@@ -187,8 +187,7 @@ def override_default_params_func(env, parser):
         recurrence=1,
         value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
         normalize_input=True,
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
-        save_every_sec=15,
+        save_best_after=int(5e6),
 
         serial_mode=True,  # it makes sense to run isaacgym envs in serial mode since most of the parallelism comes from the env itself (although async mode works!)
         async_rl=False,
@@ -197,7 +196,11 @@ def override_default_params_func(env, parser):
     # environment specific overrides
     env_name = '_'.join(env.split('_')[1:]).lower()
     if env_name == 'ant':
-        parser.set_defaults(mlp_layers=[256, 128, 64])
+        parser.set_defaults(
+            mlp_layers=[256, 128, 64],
+            experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+            save_every_sec=15,
+        )
     elif env_name == 'humanoid':
         parser.set_defaults(
             train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
@@ -207,6 +210,8 @@ def override_default_params_func(env, parser):
             value_loss_coeff=4.0,
             max_grad_norm=1.0,
             num_batches_per_epoch=4,
+            experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+            save_every_sec=15,
         )
     elif env_name == 'allegrohand':
         parser.set_defaults(

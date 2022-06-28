@@ -52,8 +52,7 @@ def gpus_for_process(process_idx: int, num_gpus_per_process: int, gpu_mask: Opti
         index_mod_num_gpus = (first_gpu_idx + i) % num_gpus
         gpus_to_use.append(index_mod_num_gpus)
 
-    log.debug(f'Using GPUs {gpus_to_use} for process {process_idx}')
-    log.debug(f'Actually maps to GPUs {[available_gpus[g] for g in gpus_to_use]}')
+    log.debug(f'Using GPUs {gpus_to_use} for process {process_idx} (actually maps to GPUs {[available_gpus[g] for g in gpus_to_use]})')
     return gpus_to_use
 
 

@@ -192,44 +192,34 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         if num_dones > 0:
             finished = dones.nonzero(as_tuple=True)[0]
 
-            # TODO: get rid of the loop (we can do it vectorized)
-            # TODO: remove code duplication
+            stats = dict(
+                reward=self.curr_episode_reward[finished],
+                len=self.curr_episode_len[finished],
+                min_raw_reward=self.min_raw_rewards[finished],
+                max_raw_reward=self.max_raw_rewards[finished],
+            )
 
-            last_rew = self.curr_episode_reward[finished]
-            last_dur = self.curr_episode_len[finished]
-            last_min_rew = self.min_raw_rewards[finished]
-            last_max_rew = self.max_raw_rewards[finished]
+            if isinstance(infos, dict):
+                for key, value in infos.items():
+                    if isinstance(value, Tensor):
+                        if value.numel() == 1:
+                            stats[key] = value.item()
+                        elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
+                            # saving value for all agents who finished the episode
+                            stats[key] = value[finished]
+                        else:
+                            log.warning(f'Infos tensor with unexpected shape {value.shape}')
 
-            for i in range(num_dones):
-                last_episode_true_objective = last_rew[i]
-                last_episode_extra_stats = None
+                # make sure everything in the dict is either a scalar or a numpy array
+                for key, value in stats.items():
+                    if isinstance(value, Tensor):
+                        stats[key] = value.cpu().numpy()
 
-                # TODO: we somehow need to deal with two cases: when infos is a dict of tensors and when it is a list of dicts
-                # this only handles the latter.
-                if isinstance(infos, (list, tuple)):
-                    last_episode_true_objective = infos[finished[i]].get('true_objective', last_rew[i])
-                    last_episode_extra_stats = infos[finished[i]].get('episode_extra_stats', None)
-
-                stats = dict(
-                    reward=last_rew[i],
-                    len=last_dur[i],
-                    true_objective=last_episode_true_objective,
-                    min_raw_reward=last_min_rew[i],
-                    max_raw_reward=last_max_rew[i],
-                )
-                if last_episode_extra_stats:
-                    stats['episode_extra_stats'] = last_episode_extra_stats
-
-                for k, v in stats.items():
-                    stats[k] = to_scalar(v)
-
-                report = dict(episodic=stats, policy_id=self.policy_id)
-                reports.append(report)
-
-            self.curr_episode_reward[finished] = 0
-            self.curr_episode_len[finished] = 0
-            self.min_raw_rewards[finished] = np.inf
-            self.max_raw_rewards[finished] = -np.inf
+                # vectorized reports
+                reports.append(dict(episodic=stats, policy_id=self.policy_id))
+            else:
+                # non-vectorized reports TODO
+                pass
 
         return reports
 

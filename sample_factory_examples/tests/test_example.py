@@ -49,6 +49,7 @@ class TestExample(TestCase):
         cfg.decorrelate_envs_on_one_worker = False
         cfg.seed = 0
         cfg.device = 'cpu'
+        cfg.learning_rate = 1e-3
 
         status = run_rl(cfg)
         self.assertEqual(status, ExperimentStatus.SUCCESS)
@@ -95,7 +96,7 @@ class TestExample(TestCase):
             num_actions=10,
             num_workers=8,
             train_steps=100000,
-            expected_reward_at_least=60,
+            expected_reward_at_least=80,
             batched_sampling=False,
             serial_mode=False,
             async_rl=True,
