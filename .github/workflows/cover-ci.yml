@@ -32,7 +32,7 @@ jobs:
         pip install pytest-cov
     - name: Generate coverage report
       run: |
-        pytest --cov=sample_factory --cov=sample_factory_examples/tests --cov-report=xml -v
+        pytest --cov=./ sample_factory/ sample_factory_examples/tests/ --cov-report=xml -v
         ls -al
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
