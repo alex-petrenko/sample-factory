@@ -26,8 +26,8 @@ class TestExample(TestCase):
 
     def _run_test_env(
             self, num_actions: int = 10, num_workers: int = 8, train_steps: int = 100,
-            expected_reward_at_least: float = -EPS, batched_sampling: bool = False,
-            serial_mode: bool = False, async_rl: bool = True,
+            expected_reward_at_least: float = -EPS, expected_reward_at_most: float = 100,
+            batched_sampling: bool = False, serial_mode: bool = False, async_rl: bool = True,
     ):
         log.debug(f'Testing with parameters {locals()}...')
 
@@ -65,13 +65,10 @@ class TestExample(TestCase):
         directory = experiment_dir(cfg=cfg)
         self.assertTrue(isdir(directory))
         shutil.rmtree(directory, ignore_errors=True)
-        # self.assertFalse(isdir(directory))
 
         self.assertEqual(status, ExperimentStatus.SUCCESS)
-
-        # not sure if we should check it here, it's optional
-        # maybe a longer test where it actually has a chance to converge
         self.assertGreaterEqual(avg_reward, expected_reward_at_least)
+        self.assertLessEqual(avg_reward, expected_reward_at_most)
 
     def test_sanity(self):
         """
@@ -97,6 +94,7 @@ class TestExample(TestCase):
             num_workers=8,
             train_steps=100000,
             expected_reward_at_least=80,
+            expected_reward_at_most=100,
             batched_sampling=False,
             serial_mode=False,
             async_rl=True,

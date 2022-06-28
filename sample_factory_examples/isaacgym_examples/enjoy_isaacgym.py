@@ -1,3 +1,7 @@
+# this is here just to guarantee that isaacgym is imported before PyTorch
+# noinspection PyUnresolvedReferences
+import isaacgym
+
 import sys
 
 from sample_factory.cfg.arguments import parse_args
