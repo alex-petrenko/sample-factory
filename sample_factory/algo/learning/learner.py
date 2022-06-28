@@ -374,6 +374,7 @@ class Learner(EventLoopObject, Configurable):
         #         self.last_milestone_time = time.time()
 
     def save_best(self, policy_id, metric, metric_value):
+        # TODO it seems that the Runner is broadcasting the signals to all learners, so it won't pass the assertion in multi-policy env, we may add an if instead of assert?
         assert policy_id == self.policy_id
         p = 3  # precision, number of significant digits
         if metric_value - self.best_performance > 1 / 10**p:
