@@ -25,21 +25,16 @@ jobs:
       run: |
        conda install pytorch torchvision cpuonly -c pytorch
        pip install -e .
-       pip install "gym[atari,accept-rom-license,mujoco]"
-       pip install mujoco
-       pip install mujoco-py
+       pip install "gym[atari,accept-rom-license]"
        conda list
     - name: Install conda env & dependencies on macos
       if: ${{ matrix.os == 'macos-latest' }}
       run: |
         pip3 install torch torchvision
         pip install -e .
-        pip install "gym[atari,accept-rom-license,mujoco]"
-        pip install mujoco
-        pip install mujoco-py
+        pip install "gym[atari,accept-rom-license]"
         conda list
     - name: Run tests
       run: |
         # run all tests
         python -m unittest
-        python -m unittest sample_factory_examples.mujoco_examples.test_mujoco

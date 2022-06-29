@@ -54,22 +54,24 @@ class TestMujoco(TestCase):
                 env=env, num_workers=1, train_steps=100,
             )
     
-    # def test_fail_action_space(self):
-    #     """
-    #     Currently failing tests due to incorrect action dimensions
-    #     """
-    #     env_list = ['mujoco_pendulum', 'mujoco_doublependulum']
-    #     for env in env_list:
-    #         self._run_test_env(
-    #             env=env, num_workers=1, train_steps=100,
-    #         )
+    @unittest.skip('broken tests not fixed yet')
+    def test_fail_action_space(self):
+        """
+        Currently failing tests due to incorrect action dimensions
+        """
+        env_list = ['mujoco_pendulum', 'mujoco_doublependulum']
+        for env in env_list:
+            self._run_test_env(
+                env=env, num_workers=1, train_steps=100,
+            )
 
-    # def test_fail_gae(self):
-    #     """
-    #     Currently failing tests due to gae
-    #     """
-    #     env_list = ['mujoco_hopper', 'mujoco_reacher', 'mujoco_walker', 'mujoco_swimmer']
-    #     for env in env_list:
-    #         self._run_test_env(
-    #             env=env, num_workers=1, train_steps=100,
-    #         )
+    @unittest.skip('broken tests not fixed yet')
+    def test_fail_gae(self):
+        """
+        Currently failing tests due to gae
+        """
+        env_list = ['mujoco_hopper', 'mujoco_reacher', 'mujoco_walker', 'mujoco_swimmer']
+        for env in env_list:
+            self._run_test_env(
+                env=env, num_workers=1, train_steps=100,
+            )
