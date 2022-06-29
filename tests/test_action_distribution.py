@@ -19,7 +19,7 @@ def test_tuple_action_distribution(spaces, sizes):
 
     num_actions = 0
     num_logits = 0
-    
+
     _action_spaces = []
     for space, size in zip(spaces, sizes):
         if space is gym.spaces.Discrete:
