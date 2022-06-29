@@ -14,7 +14,7 @@ def calc_num_actions(action_space):
     if isinstance(action_space, gym.spaces.Discrete):
         return 1
     elif isinstance(action_space, gym.spaces.Tuple):
-        return len(tuple(action_space.spaces))
+        return sum([calc_num_actions(a) for a in action_space])
     elif isinstance(action_space, gym.spaces.Box):
         if len(action_space.shape) != 1:
             raise Exception('Non-trivial shape Box action spaces not currently supported. Try to flatten the space.')
@@ -29,7 +29,7 @@ def calc_num_logits(action_space):
     if isinstance(action_space, gym.spaces.Discrete):
         return action_space.n
     elif isinstance(action_space, gym.spaces.Tuple):
-        return sum(space.n for space in action_space.spaces)
+        return sum([calc_num_logits(a) for a in action_space])
     elif isinstance(action_space, gym.spaces.Box):
         # regress one mean and one standard deviation for every action
         return np.prod(action_space.shape) * 2
@@ -170,6 +170,8 @@ class TupleActionDistribution:
     def __init__(self, action_space, logits_flat):
         self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
+        self.action_lengths = [calc_num_actions(s) for s in action_space.spaces]
+
         assert len(self.split_logits) == len(action_space.spaces)
 
         self.distributions = []
@@ -205,7 +207,7 @@ class TupleActionDistribution:
 
     def log_prob(self, actions):
         # split into batches of actions from individual distributions
-        list_of_action_batches = torch.chunk(actions, len(self.distributions), dim=1)
+        list_of_action_batches = torch.split(actions, self.action_lengths, dim=1)
 
         log_probs = self._calc_log_probs(list_of_action_batches)
         return log_probs

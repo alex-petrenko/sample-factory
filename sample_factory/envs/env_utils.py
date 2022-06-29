@@ -7,12 +7,9 @@ class EnvCriticalError(Exception):
     pass
 
 
+# TODO: move to their respective folders
 def vizdoom_available():
     return is_module_available('vizdoom')
-
-
-def minigrid_available():
-    return is_module_available('gym_minigrid')
 
 
 def dmlab_available():

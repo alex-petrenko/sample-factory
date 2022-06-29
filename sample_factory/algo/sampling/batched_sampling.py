@@ -221,6 +221,11 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                 # non-vectorized reports TODO
                 pass
 
+            self.curr_episode_reward[finished] = 0
+            self.curr_episode_len[finished] = 0
+            self.min_raw_rewards[finished] = np.inf
+            self.max_raw_rewards[finished] = -np.inf
+
         return reports
 
     def _finalize_trajectories(self) -> List[Dict]:

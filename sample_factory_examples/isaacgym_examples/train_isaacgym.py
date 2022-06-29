@@ -1,11 +1,11 @@
+# this is here just to guarantee that isaacgym is imported before PyTorch
+# noinspection PyUnresolvedReferences
+import isaacgym
+
 import os
 import sys
 from os.path import join
 from typing import List
-
-# this is here just to guarantee that isaacgym is imported before PyTorch
-# noinspection PyUnresolvedReferences
-import isaacgym
 
 import gym
 import torch
@@ -87,7 +87,7 @@ def make_isaacgym_env(full_env_name, cfg, env_config=None):
         graphics_device_id=graphics_device_id,
         headless=cfg.env_headless,
         virtual_screen_capture=False,
-        force_render=False,
+        force_render=not cfg.env_headless,
     )
 
     env = IsaacGymVecEnv(env, cfg.obs_key)
@@ -174,7 +174,7 @@ def override_default_params_func(env, parser):
         num_batches_per_epoch=2,
         num_epochs=4,
         ppo_clip_ratio=0.2,
-        value_loss_coeff=2.0,
+        value_loss_coeff=1.0,
         exploration_loss_coeff=0.0,
         nonlinearity='elu',
         learning_rate=3e-4,
@@ -207,7 +207,7 @@ def override_default_params_func(env, parser):
             mlp_layers=[400, 200, 100],
             rollout=32,
             num_epochs=5,
-            value_loss_coeff=4.0,
+            value_loss_coeff=2.0,
             max_grad_norm=1.0,
             num_batches_per_epoch=4,
             experiment_summaries_interval=3,  # experiments are short so we should save summaries often

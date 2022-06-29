@@ -374,7 +374,10 @@ class Learner(EventLoopObject, Configurable):
         #         self.last_milestone_time = time.time()
 
     def save_best(self, policy_id, metric, metric_value):
-        assert policy_id == self.policy_id
+        # TODO it seems that the Runner is broadcasting the signals to all learners, so it won't pass the assertion in multi-policy env, we may add an if instead of assert?
+        # assert policy_id == self.policy_id
+        if policy_id != self.policy_id:
+            return
         p = 3  # precision, number of significant digits
         if metric_value - self.best_performance > 1 / 10**p:
             log.info(f'Saving new best policy, {metric}={metric_value:.{p}f}!')
@@ -812,9 +815,18 @@ class Learner(EventLoopObject, Configurable):
             buff['obs'] = buff['obs'][:, :-1]
             buff['rnn_states'] = buff['rnn_states'][:, :-1]
 
-            buff['advantages'], buff['returns'] = gae_advantages_returns(
-                buff['rewards'], buff['dones'], buff['values'], next_values, self.cfg.gamma, self.cfg.gae_lambda,
-            )
+            if not self.cfg.with_vtrace:
+                # with v-trace advantages and returns are recalculated for each minibatch
+                buff['advantages'], discounted_returns = gae_advantages_returns(
+                    buff['rewards'], buff['dones'], buff['values'], next_values, self.cfg.gamma, self.cfg.gae_lambda,
+                )
+
+                if self.cfg.gae_returns:
+                    buff['returns'] = buff['advantages'] + buff['values']
+                else:
+                    buff['returns'] = discounted_returns
+
+                # log.debug(f'Max diff between returns and returns: {(returns - buff["returns"]).abs().max().item():.4f}')
 
             experience_size = self.cfg.batch_size * self.cfg.num_batches_per_epoch
 
