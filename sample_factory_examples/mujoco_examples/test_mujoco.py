@@ -9,7 +9,7 @@ from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
 from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
 from sample_factory.utils.utils import experiment_dir, log
-from sample_factory.envs.env_utils import mujoco_available
+from sample_factory.envs.mujoco.mujoco_utils import mujoco_available
 
 
 @pytest.mark.skipif(not mujoco_available(), reason='mujoco not installed')

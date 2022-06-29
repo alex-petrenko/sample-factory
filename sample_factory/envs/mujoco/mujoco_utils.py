@@ -1,5 +1,11 @@
 import gym
 
+from sample_factory.utils.utils import is_module_available
+
+
+def mujoco_available():
+    return is_module_available('mujoco')
+
 
 class MujocoSpec:
     def __init__(self, name, env_id):

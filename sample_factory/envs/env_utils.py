@@ -7,20 +7,13 @@ class EnvCriticalError(Exception):
     pass
 
 
+# TODO: move to their respective folders
 def vizdoom_available():
     return is_module_available('vizdoom')
 
 
-def minigrid_available():
-    return is_module_available('gym_minigrid')
-
-
 def dmlab_available():
     return is_module_available('deepmind_lab')
-
-
-def mujoco_available():
-    return is_module_available('mujoco_py')
 
 
 def retry(exception_class=Exception, num_attempts=3, sleep_time=1):
