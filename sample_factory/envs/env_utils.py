@@ -19,6 +19,10 @@ def dmlab_available():
     return is_module_available('deepmind_lab')
 
 
+def mujoco_available():
+    return is_module_available('mujoco_py')
+
+
 def retry(exception_class=Exception, num_attempts=3, sleep_time=1):
     def decorator(func):
         @wraps(func)

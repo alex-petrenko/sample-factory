@@ -2,21 +2,18 @@ import os
 import shutil
 import unittest
 from os.path import isdir
-from unittest import TestCase
+import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus, EPS
 from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
 from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
 from sample_factory.utils.utils import experiment_dir, log
+from sample_factory.envs.env_utils import mujoco_available
 
 
-@unittest.skipIf(
-    'SKIP_TESTS_THAT_REQUIRE_A_SEPARATE_PROCESS' in os.environ,
-    'this test should be executed in a separate process because of how PyTorch works: '
-    'https://github.com/pytorch/pytorch/issues/33248',
-)
-class TestMujoco(TestCase):
+@pytest.mark.skipif(not mujoco_available(), reason='mujoco not installed')
+class TestMujoco:
     """
     This test does not work if other tests used PyTorch autograd before it.
     Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248  # TODO: we might have fixed that by switching to multiprocessing spawn context. Need to check
@@ -47,7 +44,7 @@ class TestMujoco(TestCase):
         cfg.device = 'cpu'
 
         status = run_rl(cfg)
-        self.assertEqual(status, ExperimentStatus.SUCCESS)
+        assert status == ExperimentStatus.SUCCESS
 
     def test_sanity(self):
         """
