@@ -104,12 +104,6 @@ def mujoco_funcs():
     return make_mujoco_env, add_mujoco_env_args, mujoco_override_defaults
 
 
-def minigrid_funcs():
-    from sample_factory.envs.minigrid.minigrid_utils import make_minigrid_env
-    from sample_factory.envs.minigrid.minigrid_params import minigrid_override_defaults
-    return make_minigrid_env, None, minigrid_override_defaults
-
-
 def register_default_envs(env_registry):
     """
     Register default envs.
@@ -124,7 +118,6 @@ def register_default_envs(env_registry):
         'atari_': atari_funcs,
         'dmlab_': dmlab_funcs,
         'mujoco_': mujoco_funcs,
-        'MiniGrid': minigrid_funcs,
     }
 
     for envs_prefix, env_funcs in default_envs.items():
