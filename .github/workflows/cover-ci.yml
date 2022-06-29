@@ -25,6 +25,8 @@ jobs:
        conda install pytorch torchvision cpuonly -c pytorch
        pip install -e .
        pip install "gym[atari,accept-rom-license]"
+       pip install mujoco
+       pip install mujoco-py
        conda list
     - name: Install codecov dependencies
       run: |
@@ -32,7 +34,7 @@ jobs:
         pip install pytest-cov
     - name: Generate coverage report
       run: |
-        pytest --cov=./ sample_factory/ sample_factory_examples/tests/ --cov-report=xml -v
+        pytest --cov=./ sample_factory/ sample_factory_examples/tests/ sample_factory_examples/mujoco_examples/ --cov-report=xml -v
         ls -al
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
