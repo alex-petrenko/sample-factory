@@ -139,7 +139,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
 
 class _ActorCriticSeparateWeights(_ActorCriticBase):
-    def __init__(self, make_encoder, obs_space, make_core, action_space, cfg, timing):
+    def __init__(self, make_encoder, make_core, obs_space, action_space, cfg, timing):
         super().__init__(obs_space, action_space, cfg, timing)
 
         self.actor_encoder = make_encoder()
