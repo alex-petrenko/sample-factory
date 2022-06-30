@@ -1,5 +1,5 @@
 import unittest
-from unittest import TestCase
+import pytest
 
 import torch
 
@@ -11,7 +11,7 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
 
-class TestModel(TestCase):
+class TestModel:
 
     @staticmethod
     def forward_pass(device_type):
@@ -51,6 +51,6 @@ class TestModel(TestCase):
     def test_forward_pass_cpu(self):
         self.forward_pass('cpu')
 
-    @unittest.skipUnless(torch.cuda.is_available(), 'This test requires a GPU')
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='This test requires a GPU')
     def test_forward_pass_gpu(self):
         self.forward_pass('cuda')

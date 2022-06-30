@@ -1,4 +1,4 @@
-from unittest import TestCase
+import pytest
 
 import numpy as np
 import torch
@@ -6,13 +6,12 @@ import torch
 from sample_factory.algo.utils.tensor_dict import TensorDict
 
 
-class TestParams(TestCase):
-    def test_tensordict_simple(self):
-        # setting up tensor dict for a typical RL task
-        n_agents = 16
-        n_obs = 5
-        rollout = 8
-
+class TestParams:
+    # setting up tensor dict for a typical RL task
+    @pytest.mark.parametrize("n_agents", [16])
+    @pytest.mark.parametrize("n_obs", [5])
+    @pytest.mark.parametrize("rollout", [8])
+    def test_tensordict_simple(self, n_agents, n_obs, rollout):
         # dictionary observations
         obs = TensorDict()
         obs['pos'] = torch.rand((n_agents, rollout, n_obs))
@@ -35,17 +34,17 @@ class TestParams(TestCase):
         # Verify that the data is set. First, slice the current step data:
         step = d[:, curr_rollout_step]  # this will create a slice of the entire recursive TensorDict
 
-        self.assertEqual(step['dones'][0].item(), 1.0)
-        self.assertEqual(step['rewards'][5].item(), 0.0)
-        self.assertEqual(step['observations']['vel'][7, 0].item(), 0.0)
+        assert step['dones'][0].item() == 1.0
+        assert step['rewards'][5].item() == 0.0
+        assert step['observations']['vel'][7, 0].item() == 0.0
 
         # get a subset of agents
         odd_agents = d[1::2]  # this will slice the TensorDict to only contain odd-numbered agents
-        self.assertEqual(odd_agents['observations']['pos'].shape, (n_agents // 2, rollout, n_obs))
+        assert odd_agents['observations']['pos'].shape == (n_agents // 2, rollout, n_obs)
 
         # we can also assign numpy arrays, not only tensors
         odd_agents[:] = dict(rewards=np.arange((n_agents // 2) * rollout).reshape((n_agents // 2, rollout)))
-        self.assertTrue(d[1]['rewards'].equal(odd_agents[0]['rewards']))
-        self.assertTrue(d[3]['rewards'].equal(odd_agents[1]['rewards']))
+        assert d[1]['rewards'].equal(odd_agents[0]['rewards'])
+        assert d[3]['rewards'].equal(odd_agents[1]['rewards'])
 
         # and we can do many other things...

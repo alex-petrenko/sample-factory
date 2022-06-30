@@ -2,7 +2,7 @@ import os
 import shutil
 import unittest
 from os.path import isdir
-from unittest import TestCase
+import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus, EPS
 from sample_factory.enjoy import enjoy
@@ -11,12 +11,7 @@ from sample_factory_examples.train_custom_env_custom_model import register_custo
 from sample_factory.utils.utils import experiment_dir, log
 
 
-@unittest.skipIf(
-    'SKIP_TESTS_THAT_REQUIRE_A_SEPARATE_PROCESS' in os.environ,
-    'this test should be executed in a separate process because of how PyTorch works: '
-    'https://github.com/pytorch/pytorch/issues/33248',
-)
-class TestExample(TestCase):
+class TestExample:
     """
     This test does not work if other tests used PyTorch autograd before it.
     Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248  # TODO: we might have fixed that by switching to multiprocessing spawn context. Need to check
@@ -53,7 +48,7 @@ class TestExample(TestCase):
         cfg.learning_rate = 1e-3
 
         status = run_rl(cfg)
-        self.assertEqual(status, ExperimentStatus.SUCCESS)
+        assert status == ExperimentStatus.SUCCESS
 
         # then test the evaluation of the saved model
         cfg = custom_parse_args(
@@ -64,29 +59,30 @@ class TestExample(TestCase):
         status, avg_reward = enjoy(cfg, max_num_frames=1000)
 
         directory = experiment_dir(cfg=cfg)
-        self.assertTrue(isdir(directory))
+        assert isdir(directory)
         shutil.rmtree(directory, ignore_errors=True)
 
-        self.assertEqual(status, ExperimentStatus.SUCCESS)
-        self.assertGreaterEqual(avg_reward, expected_reward_at_least)
-        self.assertLessEqual(avg_reward, expected_reward_at_most)
+        assert status == ExperimentStatus.SUCCESS
+        assert avg_reward >= expected_reward_at_least
+        assert avg_reward <= expected_reward_at_most
 
-    def test_sanity(self):
+    @pytest.mark.parametrize("num_actions", [1, 10])
+    @pytest.mark.parametrize("batched_sampling", [False, True])
+    def test_sanity_1(self, num_actions, batched_sampling):
         """
         Run the test env in various configurations just to make sure nothing crashes or throws exceptions.
         """
-        for num_actions in [1, 10]:
-            for batched_sampling in [False, True]:
-                self._run_test_env(
-                    num_actions=num_actions, num_workers=1, train_steps=50, batched_sampling=batched_sampling,
-                )
+        self._run_test_env(
+            num_actions=num_actions, num_workers=1, train_steps=50, batched_sampling=batched_sampling,
+        )
 
-        for serial_mode in [False, True]:
-            for async_rl in [False, True]:
-                self._run_test_env(
-                    num_actions=10, num_workers=1, train_steps=50, batched_sampling=False,
-                    serial_mode=serial_mode, async_rl=async_rl,
-                )
+    @pytest.mark.parametrize("serial_mode", [False, True])
+    @pytest.mark.parametrize("async_rl", [False, True])
+    def test_sanity_2(self, serial_mode, async_rl):
+        self._run_test_env(
+            num_actions=10, num_workers=1, train_steps=50, batched_sampling=False,
+            serial_mode=serial_mode, async_rl=async_rl,
+        )
 
     def test_full_run(self):
         """Actually train this little env and expect some reward."""

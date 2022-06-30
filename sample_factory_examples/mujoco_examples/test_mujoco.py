@@ -1,17 +1,20 @@
+import os
+import shutil
 import unittest
-from unittest import TestCase
+from os.path import isdir
+import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus, EPS
-from sample_factory.envs.mujoco.mujoco_utils import mujoco_available
+from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
-from sample_factory.utils.utils import log
 from sample_factory_examples.mujoco_examples.train_mujoco import register_mujoco_components
 from sample_factory.cfg.arguments import parse_args
+from sample_factory.utils.utils import experiment_dir, log
+from sample_factory.envs.mujoco.mujoco_utils import mujoco_available
 
 
-
-@unittest.skipUnless(mujoco_available(), 'Please install Mujoco to run a full test suite')
-class TestMujoco(TestCase):
+@pytest.mark.skipif(not mujoco_available(), reason='mujoco not installed')
+class TestMujoco:
     """
     This test does not work if other tests used PyTorch autograd before it.
     Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248  # TODO: we might have fixed that by switching to multiprocessing spawn context. Need to check
@@ -20,7 +23,7 @@ class TestMujoco(TestCase):
     """
 
     def _run_test_env(
-            self, env: str = 'mujoco_ant', num_workers: int = 8, train_steps: int = 100,
+            self, env: str = "mujoco_ant", num_workers: int = 8, train_steps: int = 100,
             expected_reward_at_least: float = -EPS, batched_sampling: bool = False,
             serial_mode: bool = False, async_rl: bool = True, batch_size: int = 64, 
     ):
@@ -43,7 +46,7 @@ class TestMujoco(TestCase):
         cfg.device = 'cpu'
 
         status = run_rl(cfg)
-        self.assertEqual(status, ExperimentStatus.SUCCESS)
+        assert status == ExperimentStatus.SUCCESS
 
     def test_pass_env(self):
         """
@@ -51,7 +54,6 @@ class TestMujoco(TestCase):
         """
         env_list = ['mujoco_ant', 'mujoco_halfcheetah', 'mujoco_humanoid']
         for env in env_list:
-            print(env)
             self._run_test_env(
                 env=env, num_workers=1, train_steps=100,
             )
@@ -64,7 +66,7 @@ class TestMujoco(TestCase):
         env_list = ['mujoco_pendulum', 'mujoco_doublependulum']
         for env in env_list:
             self._run_test_env(
-                env=env, num_workers=1, train_steps=100,
+                env=env, num_workers=1, train_steps=50,
             )
 
     @unittest.skip('broken tests not fixed yet')
