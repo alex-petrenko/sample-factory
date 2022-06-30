@@ -19,7 +19,7 @@ from sample_factory.algo.utils.misc import EPS
 from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
 
 
-class Normalizer(nn.Module):
+class ObservationNormalizer(nn.Module):
     def __init__(self, obs_space, cfg):
         super().__init__()
 

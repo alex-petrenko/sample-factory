@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import torch
 from torch import nn
 
 from sample_factory.algo.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
+from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
     ActionParameterizationDefault
-from sample_factory.utils.normalize import Normalizer
+from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.timing import Timing
 
 
@@ -21,7 +24,14 @@ class _ActorCriticBase(nn.Module):
         self.encoders = []
         self.cores = []
 
-        self.normalizer = Normalizer(obs_space, cfg)
+        # we make normalizers a part of the model, so we can use the same infrastructure
+        # to load/save the state of the normalizer (running mean and stddev statistics)
+        self.obs_normalizer: ObservationNormalizer = ObservationNormalizer(obs_space, cfg)
+
+        self.returns_normalizer: Optional[RunningMeanStdInPlace] = None
+        if cfg.normalize_returns:
+            returns_shape = (1, )
+            self.returns_normalizer = RunningMeanStdInPlace(returns_shape)
 
         self.last_action_distribution = None  # to be populated after each forward step
 
@@ -69,7 +79,7 @@ class _ActorCriticBase(nn.Module):
             pass
 
     def summaries(self):
-        return self.normalizer.summaries()  # Can add more summaries here, like weights statistics
+        return self.obs_normalizer.summaries()  # Can add more summaries here, like weights statistics
 
     def action_distribution(self):
         return self.last_action_distribution

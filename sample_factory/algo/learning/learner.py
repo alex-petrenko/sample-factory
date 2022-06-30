@@ -804,18 +804,27 @@ class Learner(EventLoopObject, Configurable):
             # we still reference the same buffers though
             buff = copy.copy(self.batcher.training_batches[batch_idx])
 
-            # TODO: how about device_and_type_for_input_tensor
+            # TODO: how about device_and_type_for_input_tensor? This is needed for DMLab to work properly (small LSTM is faster on the CPU)
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
-            normalized_last_obs = self.actor_critic.normalizer(buff['obs'][:, -1])
+            normalized_last_obs = self.actor_critic.obs_normalizer(buff['obs'][:, -1])
             next_values = self.actor_critic(normalized_last_obs, buff['rnn_states'][:, -1], values_only=True)['values']
+            buff['values'][:, -1] = next_values  # TODO: move value bootstrapping here
 
             # remove next step obs and rnn_states from the batch, we don't need them anymore
             buff['obs'] = buff['obs'][:, :-1]
             buff['rnn_states'] = buff['rnn_states'][:, :-1]
 
             if not self.cfg.with_vtrace:
+                if self.cfg.normalize_returns:
+                    # Since our value targets are normalized, the values will also have normalized statistics.
+                    # We need to denormalize them before using them for GAE caculation and value bootstrapping.
+                    # rl_games uses a similar approach, see:
+                    # https://github.com/Denys88/rl_games/blob/7b5f9500ee65ae0832a7d8613b019c333ecd932c/rl_games/algos_torch/models.py#L51
+                    self.actor_critic.value_normalizer.denormalize_values(buff['values'])
+
+
                 # with v-trace advantages and returns are recalculated for each minibatch
                 buff['advantages'], discounted_returns = gae_advantages_returns(
                     buff['rewards'], buff['dones'], buff['values'], next_values, self.cfg.gamma, self.cfg.gae_lambda,
@@ -846,7 +855,7 @@ class Learner(EventLoopObject, Configurable):
             # normalize obs and record data statistics (hence the "train" mode)
             self.actor_critic.train()
             with self.param_server.policy_lock:
-                buff['normalized_obs'] = self.actor_critic.normalizer(buff['obs'])
+                buff['normalized_obs'] = self.actor_critic.obs_normalizer(buff['obs'])
             del buff['obs']  # we don't need the regular obs anymore
 
             return buff, experience_size

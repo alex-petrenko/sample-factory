@@ -127,6 +127,7 @@ def add_rl_args(p: ArgumentParser):
         '--value_bootstrap', default=False, type=str2bool,
         help='Bootstrap returns from value estimates if episode is terminated by timeout. More info here: https://github.com/Denys88/rl_games/issues/128',
     )
+    p.add_argument('--normalize_returns', default=False, type=str2bool, help='Whether to use running mean and standard deviation to normalize discounted returns')
 
     # components of the loss function
     p.add_argument('--exploration_loss_coeff', default=0.003, type=float, help='Coefficient for the exploration component of the loss function.')

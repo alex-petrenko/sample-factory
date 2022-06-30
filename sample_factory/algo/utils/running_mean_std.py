@@ -1,6 +1,6 @@
 """
 PyTorch module that keeps track of tensor statistics and uses it to normalize data.
-All credit goes to https://github.com/Denys88/rl_games (only slightly changed here)
+All credit goes to https://github.com/Denys88/rl_games (only slightly changed here, mostly with in-place operations)
 Thanks a lot, great module!
 """
 from typing import Dict, Final, Union
@@ -17,13 +17,13 @@ from sample_factory.utils.utils import log
 _NORM_EPS = 1e-5
 
 
-# noinspection PyAttributeOutsideInit
+# noinspection PyAttributeOutsideInit,NonAsciiCharacters
 class RunningMeanStdInPlace(nn.Module):
     def __init__(self, input_shape, epsilon=_NORM_EPS, per_channel=False, norm_only=False):
         super().__init__()
         log.debug('RunningMeanStd input shape: %r', input_shape)
         self.input_shape: Final = input_shape
-        self.epsilon: Final[float] = epsilon
+        self.eps: Final[float] = epsilon
 
         self.norm_only: Final[bool] = norm_only
         self.per_channel: Final[bool] = per_channel
@@ -57,14 +57,14 @@ class RunningMeanStdInPlace(nn.Module):
         new_var = M2 / tot_count
         return new_mean, new_var, tot_count
 
-    def forward(self, x: Tensor) -> None:
-        """Normalizes in-place! This means this function modifies the input tensor and returns nothing."""
+    def forward(self, x: Tensor, denormalize: bool = False) -> None:
+        """Normalizes in-place! This function modifies the input tensor and returns nothing."""
         if self.training:
             batch_count = x.size()[0]
-            mean = x.mean(self.axis)  # along channel axis
-            var = x.var(self.axis)
+            μ = x.mean(self.axis)  # along channel axis
+            σ2 = x.var(self.axis)
             self.running_mean[:], self.running_var[:], self.count[:] = self._update_mean_var_count_from_moments(
-                self.running_mean, self.running_var, self.count, mean, var, batch_count,
+                self.running_mean, self.running_var, self.count, μ, σ2, batch_count,
             )
 
         # change shape
@@ -84,12 +84,20 @@ class RunningMeanStdInPlace(nn.Module):
             current_mean = self.running_mean
             current_var = self.running_var
 
+        μ = current_mean.float()
+        σ2 = current_var.float()
+        σ = torch.sqrt(σ2 + self.eps)
+
         if self.norm_only:
-            x.mul_(1.0 / torch.sqrt(current_var.float() + self.epsilon))
+            if denormalize:
+                x.mul_(σ)
+            else:
+                x.mul_(1/σ)
         else:
-            x.sub_(current_mean.float())
-            x.mul_(1.0 / torch.sqrt(current_var.float() + self.epsilon))
-            x.clamp_(-5.0, 5.0)
+            if denormalize:
+                x.clamp_(-5, 5).mul_(σ).add_(μ)
+            else:
+                x.sub_(μ).mul_(1/σ).clamp_(-5, 5)
 
 
 class RunningMeanStdDictInPlace(nn.Module):
