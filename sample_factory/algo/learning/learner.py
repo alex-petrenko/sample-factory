@@ -218,7 +218,7 @@ class Learner(EventLoopObject, Configurable):
             # trainable torch module
             self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
             self.actor_critic.model_to_device(self.device)
-            self.actor_critic.share_memory()
+            self.actor_critic.share_memory() # TODO: This line does not work with pytorch 1.12.0
             self.actor_critic.train()
 
             params = list(self.actor_critic.parameters())

@@ -2,7 +2,7 @@ import os
 import time
 import unittest
 from os.path import join
-from unittest import TestCase
+import pytest
 
 from sample_factory.algo.utils.misc import num_env_steps
 from sample_factory.cfg.arguments import default_cfg
@@ -59,8 +59,8 @@ def eval_env_performance(make_env, env_type, verbose=False):
     env.close()
 
 
-@unittest.skipUnless(vizdoom_available(), 'Please install VizDoom to run a full test suite')
-class TestDoom(TestCase):
+@pytest.mark.skipif(not vizdoom_available(), reason='Please install VizDoom to run a full test suite')
+class TestDoom:
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env_singleplayer(env_config):
@@ -73,7 +73,7 @@ class TestDoom(TestCase):
         return make_doom_env('doom_deathmatch_bots', cfg=default_doom_cfg(), env_config=env_config, **kwargs)
 
     def test_doom_env(self):
-        self.assertIsNotNone(self.make_env_singleplayer(None))
+        assert self.make_env_singleplayer(None) is not None
 
     def test_doom_performance(self):
         test_env_performance(self.make_env_singleplayer, 'doom')
@@ -111,12 +111,12 @@ class TestDoom(TestCase):
 
         VizdoomEnv.replay(env, demo_path)
 
-        self.assertTrue(os.path.isfile(demo_path))
+        assert os.path.isfile(demo_path)
         os.remove(demo_path)
-        self.assertFalse(os.path.isfile(demo_path))
+        assert not os.path.isfile(demo_path)
 
 
-class TestAtari(TestCase):
+class TestAtari:
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):
@@ -127,7 +127,7 @@ class TestAtari(TestCase):
         eval_env_performance(self.make_env, 'atari')
 
 
-class TestDmlab(TestCase):
+class TestDmlab:
     """DMLab tests fail too often just randomly (EGL errors), so we're skipping them for now."""
 
     # noinspection PyUnusedLocal
@@ -136,7 +136,7 @@ class TestDmlab(TestCase):
         from sample_factory.envs.dmlab.dmlab_env import make_dmlab_env
         return make_dmlab_env('dmlab_nonmatch', cfg=default_cfg(env='dmlab_nonmatch'), env_config=None)
 
-    @unittest.skipUnless(dmlab_available(), 'Dmlab package not installed')
+    @pytest.mark.skipif(not dmlab_available(), reason='Dmlab package not installed')
     def test_dmlab_performance(self):
         test_env_performance(self.make_env, 'dmlab')
 
@@ -150,4 +150,4 @@ class TestDmlab(TestCase):
             'dmlab': 35,
         }
         for s, h in data.items():
-            self.assertEqual(string_to_hash_bucket(s, vocab_size), h)
+            assert string_to_hash_bucket(s, vocab_size) == h
