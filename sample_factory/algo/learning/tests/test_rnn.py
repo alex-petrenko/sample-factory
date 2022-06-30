@@ -1,4 +1,4 @@
-from unittest import TestCase
+import pytest
 
 import numpy as np
 
@@ -7,8 +7,9 @@ import torch.nn as nn
 
 from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
 
+
 # noinspection PyPep8Naming
-class TestPackedSequences(TestCase):
+class TestPackedSequences:
     def check_packed_version_matching_loopy_version(self, T, N, D, random_dones, norm_tolerance=2e-6):
         rnn = nn.GRU(D, D, 1)
 
@@ -43,27 +44,20 @@ class TestPackedSequences(TestCase):
 
             norm = torch.norm(packed_out - loopy_out)
             print(norm)
-            self.assertLess(norm, norm_tolerance)
-            self.assertTrue(np.allclose(packed_out.detach().numpy(), loopy_out.detach().numpy(), atol=2e-6))
+            assert norm < norm_tolerance
+            assert np.allclose(packed_out.detach().numpy(), loopy_out.detach().numpy(), atol=2e-6)
 
-    def test_full_with_larger_param(self):
-        T = 37  # recurrence, bptt
-        N = 64  # batch size
-        D = 42  # RNN cell size (hidden state size)
-        self.check_packed_version_matching_loopy_version(T, N, D, True, 9e-6)
-        self.check_packed_version_matching_loopy_version(T, N, D, False, 9e-6)
+    @pytest.mark.parametrize("T", [37])
+    @pytest.mark.parametrize("N", [64])
+    @pytest.mark.parametrize("D", [42])
+    @pytest.mark.parametrize("random_dones", [True, False])
+    @pytest.mark.parametrize("norm_tolerance", [9e-6])
+    def test_full_with_larger_param(self, T, N, D, random_dones, norm_tolerance):
+        self.check_packed_version_matching_loopy_version(T, N, D, random_dones, norm_tolerance)
 
-    def test_full(self):
-        T = 27  # recurrence, bptt
-        N = 64  # batch size
-        D = 10  # RNN cell size (hidden state size)
-        self.check_packed_version_matching_loopy_version(T, N, D, True)
-        self.check_packed_version_matching_loopy_version(T, N, D, False)
-
-    def test_trivial(self):
-        T = 5  # recurrence, bptt
-        N = 1  # batch size
-        D = 1  # RNN cell size (hidden state size)
-        self.check_packed_version_matching_loopy_version(T, N, D, True)
-        self.check_packed_version_matching_loopy_version(T, N, D, False)
-
+    @pytest.mark.parametrize("T", [5, 27])
+    @pytest.mark.parametrize("N", [1, 64])
+    @pytest.mark.parametrize("D", [1, 10])
+    @pytest.mark.parametrize("random_dones", [True, False])
+    def test_trivial(self, T, N, D, random_dones):
+        self.check_packed_version_matching_loopy_version(T, N, D, random_dones)

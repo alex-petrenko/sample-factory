@@ -1,6 +1,6 @@
 import random
 import time
-from unittest import TestCase
+import pytest
 
 import gym
 import numpy as np
@@ -13,22 +13,26 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
 
-class TestActionDistributions(TestCase):
-    batch_size = 128  # whatever
-
-    def test_simple_distribution(self):
-        simple_action_space = gym.spaces.Discrete(3)
+class TestActionDistributions:
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
+    @pytest.mark.parametrize("batch_size", [128])
+    def test_simple_distribution(self, gym_space, batch_size):
+        simple_action_space = gym_space
         simple_num_logits = calc_num_logits(simple_action_space)
-        self.assertEqual(simple_num_logits, simple_action_space.n)
+        assert simple_num_logits ==  simple_action_space.n
 
-        simple_logits = torch.rand(self.batch_size, simple_num_logits)
+        simple_logits = torch.rand(batch_size, simple_num_logits)
         simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
 
         simple_actions = simple_action_distribution.sample()
-        self.assertEqual(list(simple_actions.shape), [self.batch_size,1])
-        self.assertTrue(all(0 <= a < simple_action_space.n for a in simple_actions))
+        assert list(simple_actions.shape) == [batch_size, 1]
+        assert all(0 <= a < simple_action_space.n for a in simple_actions)
 
-    def test_gumbel_trick(self):
+
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
+    @pytest.mark.parametrize("batch_size", [128])
+    @pytest.mark.parametrize("device_type", ['cpu'])
+    def test_gumbel_trick(self, gym_space, batch_size, device_type):
         """
         We use a Gumbel noise which seems to be faster compared to using pytorch multinomial.
         Here we test that those are actually equivalent.
@@ -40,11 +44,10 @@ class TestActionDistributions(TestCase):
         torch.backends.cudnn.benchmark = True
 
         with torch.no_grad():
-            action_space = gym.spaces.Discrete(8)
+            action_space = gym_space
             num_logits = calc_num_logits(action_space)
-            device_type = 'cpu'
             device = torch.device(device_type)
-            logits = torch.rand(self.batch_size, num_logits, device=device) * 10.0 - 5.0
+            logits = torch.rand(batch_size, num_logits, device=device) * 10.0 - 5.0
 
             if device_type == 'cuda':
                 torch.cuda.synchronize(device)
@@ -81,34 +84,39 @@ class TestActionDistributions(TestCase):
             log.debug('Sampling timing: %s', timing)
             time.sleep(0.1)  # to finish logging
 
-    def test_tuple_distribution(self):
-        num_spaces = random.randint(1, 4)
-        spaces = [gym.spaces.Discrete(random.randint(2, 5)) for _ in range(num_spaces)]
+
+    @pytest.mark.parametrize("num_spaces", [random.randint(1, 4)])
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(random.randint(2, 5))])
+    @pytest.mark.parametrize("batch_size", [128])
+    def test_tuple_distribution(self, num_spaces, gym_space, batch_size):
+        spaces = [gym_space for _ in range(num_spaces)]
         action_space = gym.spaces.Tuple(spaces)
 
         num_logits = calc_num_logits(action_space)
-        logits = torch.rand(self.batch_size, num_logits)
+        logits = torch.rand(batch_size, num_logits)
 
-        self.assertEqual(num_logits, sum(s.n for s in action_space.spaces))
+        assert num_logits == sum(s.n for s in action_space.spaces)
 
         action_distribution = get_action_distribution(action_space, logits)
 
         tuple_actions = action_distribution.sample()
-        self.assertEqual(list(tuple_actions.shape), [self.batch_size, num_spaces])
+        assert list(tuple_actions.shape) == [batch_size, num_spaces]
 
         log_probs = action_distribution.log_prob(tuple_actions)
-        self.assertEqual(list(log_probs.shape), [self.batch_size])
+        assert list(log_probs.shape) ==  [batch_size]
 
         entropy = action_distribution.entropy()
-        self.assertEqual(list(entropy.shape), [self.batch_size])
+        assert list(entropy.shape) == [batch_size]
 
-    def test_tuple_sanity_check(self):
-        num_spaces, num_actions = 3, 2
+
+    @pytest.mark.parametrize("num_spaces", [3])
+    @pytest.mark.parametrize("num_actions", [2])
+    def test_tuple_sanity_check(self, num_spaces, num_actions):
         simple_space = gym.spaces.Discrete(num_actions)
         spaces = [simple_space for _ in range(num_spaces)]
         tuple_space = gym.spaces.Tuple(spaces)
 
-        self.assertTrue(calc_num_logits(tuple_space), num_spaces * num_actions)
+        assert calc_num_logits(tuple_space) == num_spaces * num_actions
 
         simple_logits = torch.zeros(1, num_actions)
         tuple_logits = torch.zeros(1, calc_num_logits(tuple_space))
@@ -117,11 +125,12 @@ class TestActionDistributions(TestCase):
         tuple_distr = get_action_distribution(tuple_space, tuple_logits)
 
         tuple_entropy = tuple_distr.entropy()
-        self.assertEqual(tuple_entropy, simple_distr.entropy() * num_spaces)
+        assert tuple_entropy == simple_distr.entropy() * num_spaces
 
-        simple_logprob = simple_distr.log_prob(torch.ones(1,1))
+        simple_logprob = simple_distr.log_prob(torch.ones(1, 1))
         tuple_logprob = tuple_distr.log_prob(torch.ones(1, num_spaces))
-        self.assertEqual(tuple_logprob, simple_logprob * num_spaces)
+        assert tuple_logprob == simple_logprob * num_spaces
+
 
     def test_sanity(self):
         raw_logits = torch.tensor([[0.0, 1.0, 2.0]])
@@ -133,17 +142,17 @@ class TestActionDistributions(TestCase):
 
         entropy = categorical.entropy()
         torch_entropy = torch_categorical.entropy()
-        self.assertTrue(np.allclose(entropy.numpy(), torch_entropy))
+        assert np.allclose(entropy.numpy(), torch_entropy)
 
         log_probs = categorical.log_prob(torch.tensor([[0, 1, 2]]))
 
-        self.assertTrue(np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy()))
+        assert np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy())
 
         probs = torch.exp(log_probs)
 
         expected_probs = np.array([0.09003057317038046, 0.24472847105479764, 0.6652409557748219])
 
-        self.assertTrue(np.allclose(probs.numpy(), expected_probs))
+        assert np.allclose(probs.numpy(), expected_probs)
 
         tuple_space = gym.spaces.Tuple([action_space, action_space])
         raw_logits = torch.tensor([[0.0, 1.0, 2.0, 0.0, 1.0, 2.0]])
@@ -154,4 +163,4 @@ class TestActionDistributions(TestCase):
                 action = torch.tensor([[a1, a2]])
                 log_prob = tuple_distr.log_prob(action)
                 probability = torch.exp(log_prob)[0].item()
-                self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2], delta=1e-6)
+                assert probability == pytest.approx(expected_probs[a1] * expected_probs[a2], 1e-6)

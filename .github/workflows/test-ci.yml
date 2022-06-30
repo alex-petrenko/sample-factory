@@ -34,7 +34,10 @@ jobs:
         pip install -e .
         pip install "gym[atari,accept-rom-license]"
         conda list
+    - name: Install test dependencies
+      run: |
+        pip install pytest
     - name: Run tests
       run: |
         # run all tests
-        python -m unittest
+        pytest -s

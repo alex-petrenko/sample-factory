@@ -4,7 +4,7 @@ from os.path import join, split
 
 import numpy as np
 
-from unittest import TestCase
+import pytest
 
 from sample_factory.runner.run import runner_argparser
 from sample_factory.runner.run_description import ParamGrid, ParamList, Experiment, RunDescription
@@ -12,7 +12,7 @@ from sample_factory.runner.run_processes import run
 from sample_factory.utils.utils import ensure_dir_exists, project_tmp_dir
 
 
-class TestParams(TestCase):
+class TestParams:
     def test_param_list(self):
         params = [
             {'p1': 1, 'p2': 'a'},
@@ -22,7 +22,7 @@ class TestParams(TestCase):
         param_combinations = list(param_list.generate_params(randomize=False))
 
         for i, combination in enumerate(params):
-            self.assertEqual(combination, param_combinations[i])
+            assert combination == param_combinations[i]
 
     def test_param_grid(self):
         grid = ParamGrid([
@@ -30,20 +30,19 @@ class TestParams(TestCase):
             ('p2', ['a', 'b', 'c']),
             ('p3', [None, {}]),
         ])
-
         param_combinations = grid.generate_params(randomize=True)
         for p in param_combinations:
             for key in ('p1', 'p2', 'p3'):
-                self.assertIn(key, p)
+                assert key in p
 
         param_combinations = list(grid.generate_params(randomize=False))
-        self.assertEqual(param_combinations[0], {'p1': 0, 'p2': 'a', 'p3': None})
-        self.assertEqual(param_combinations[1], {'p1': 0, 'p2': 'a', 'p3': {}})
-        self.assertEqual(param_combinations[-2], {'p1': 1, 'p2': 'c', 'p3': None})
-        self.assertEqual(param_combinations[-1], {'p1': 1, 'p2': 'c', 'p3': {}})
+        assert param_combinations[0] == {'p1': 0, 'p2': 'a', 'p3': None}
+        assert param_combinations[1] == {'p1': 0, 'p2': 'a', 'p3': {}}
+        assert param_combinations[-2] == {'p1': 1, 'p2': 'c', 'p3': None}
+        assert param_combinations[-1] == {'p1': 1, 'p2': 'c', 'p3': {}}
 
 
-class TestRunner(TestCase):
+class TestRunner:
     def test_experiment(self):
         params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
         cmd = 'python super_rl.py'
@@ -51,8 +50,8 @@ class TestRunner(TestCase):
         cmds = ex.generate_experiments('train_dir', customize_experiment_name=True, param_prefix='--')
         for index, value in enumerate(cmds):
             command, name = value
-            self.assertTrue(command.startswith(cmd))
-            self.assertTrue(name.startswith(f'0{index}_test'))
+            assert command.startswith(cmd)
+            assert name.startswith(f'0{index}_test')
 
     def test_descr(self):
         params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
@@ -64,10 +63,10 @@ class TestRunner(TestCase):
         cmds = rd.generate_experiments('train_dir')
         for command, name, root_dir, env_vars in cmds:
             exp_name = split(root_dir)[-1]
-            self.assertIn('--experiment', command)
-            self.assertIn('--experiments_root', command)
-            self.assertTrue(exp_name in name)
-            self.assertTrue(root_dir.startswith('test_run'))
+            assert '--experiment' in command
+            assert '--experiments_root' in command
+            assert exp_name in name
+            assert root_dir.startswith('test_run')
 
     def test_simple_cmd(self):
         logging.disable(logging.INFO)

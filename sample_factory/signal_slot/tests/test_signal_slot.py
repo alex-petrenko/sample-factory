@@ -1,13 +1,13 @@
 import datetime
 import multiprocessing
-from unittest import TestCase
+import pytest
 
 from sample_factory.signal_slot.signal_slot import EventLoopObject, process_name, EventLoop, EventLoopProcess, Timer, \
     signal
 from sample_factory.utils.utils import log
 
 
-class TestSignalSlot(TestCase):
+class TestSignalSlot:
     class C1(EventLoopObject):
         def __init__(self, event_loop, object_id):
             super().__init__(event_loop, object_id)
@@ -164,10 +164,10 @@ class TestSignalSlot(TestCase):
         o3 = self.C1(p.event_loop, 'o1')
         o4 = self.C2(p.event_loop, 'o2')
 
-        with self.assertRaises(Exception) as context:
+        with pytest.raises(Exception) as context:
             o1.reply.connect(o2.on_reply)
             o1.reply.connect(o4.on_reply)
 
             o2.foo_signal.connect(o3.inc)
 
-        self.assertTrue(isinstance(context.exception, ValueError))
+        assert context.type == ValueError
