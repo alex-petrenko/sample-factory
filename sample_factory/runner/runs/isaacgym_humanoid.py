@@ -5,10 +5,10 @@ _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
     ('serial_mode', [True]),
     ('async_rl', [False]),
-    ('gae_returns', [True, False]),
+    ('normalize_returns', [True, False]),
 ])
 
-vstr = f'{vstr}_norm_returns'
+vstr = f'{vstr}_norm_returns_v2'
 
 humanoid_cli = f' --env=isaacgym_Humanoid --train_for_env_steps=131000000 ' \
                f'--mlp_layers 400 200 100 --max_grad_norm=1.0 ' \
