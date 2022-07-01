@@ -28,7 +28,7 @@ you should see the website on your localhost port now.
 - add your markdown path in the ‘nav’ section of ‘mkdocs.yml’(at the bottom).
 
  Example folder-yml correspondence:
-| <img src="https://user-images.githubusercontent.com/30235642/176805054-9d5f1c24-b8b6-49df-90c3-039acb741af3.png" alt="docs" width="300" height="300"/> | <img src="https://user-images.githubusercontent.com/30235642/176805061-3da4b3b6-9a18-4d87-9d06-044dc863b6e4.png" alt="yml" width="400" height="300"/> | 
-| ----------- | ----------- |
+<img src="https://user-images.githubusercontent.com/30235642/176805054-9d5f1c24-b8b6-49df-90c3-039acb741af3.png" alt="docs" width="300" height="300"/>
+<img src="https://user-images.githubusercontent.com/30235642/176805061-3da4b3b6-9a18-4d87-9d06-044dc863b6e4.png" alt="yml" width="400" height="300"/>
 
 5. commit and push your changes to remote repo. github actions will automatically push your changes to your github pages website.
