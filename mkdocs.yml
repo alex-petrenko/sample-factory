@@ -125,5 +125,7 @@ nav:
     - release-notes/release-notes.md
   - Community:
     - community/contribution.md
+    - community/doc-contribution.md
     - community/citation.md
+
     
