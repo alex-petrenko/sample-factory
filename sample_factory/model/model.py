@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from typing import Optional, Dict
+
 import torch
 from torch import nn
 
 from sample_factory.algo.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
+from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace, running_mean_std_summaries
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import create_encoder, create_core, \
     ActionParameterizationContinuousNonAdaptiveStddev, \
     ActionParameterizationDefault
-from sample_factory.utils.normalize import Normalizer
+from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.timing import Timing
 
 
@@ -21,7 +24,16 @@ class _ActorCriticBase(nn.Module):
         self.encoders = []
         self.cores = []
 
-        self.normalizer = Normalizer(obs_space, cfg)
+        # we make normalizers a part of the model, so we can use the same infrastructure
+        # to load/save the state of the normalizer (running mean and stddev statistics)
+        self.obs_normalizer: ObservationNormalizer = ObservationNormalizer(obs_space, cfg)
+
+        self.returns_normalizer: Optional[RunningMeanStdInPlace] = None
+        if cfg.normalize_returns:
+            returns_shape = (1, )  # it's actually a single scalar but we use 1D shape for the normalizer
+            self.returns_normalizer = RunningMeanStdInPlace(returns_shape)
+            # comment this out for debugging (i.e. to be able to step through normalizer code)
+            self.returns_normalizer = torch.jit.script(self.returns_normalizer)
 
         self.last_action_distribution = None  # to be populated after each forward step
 
@@ -68,8 +80,16 @@ class _ActorCriticBase(nn.Module):
             # do nothing
             pass
 
-    def summaries(self):
-        return self.normalizer.summaries()  # Can add more summaries here, like weights statistics
+    def normalize_obs(self, obs: TensorDict) -> TensorDict:
+        return self.obs_normalizer(obs)
+
+    def summaries(self) -> Dict:
+        # Can add more summaries here, like weights statistics
+        s = self.obs_normalizer.summaries()
+        if self.returns_normalizer is not None:
+            for k, v in running_mean_std_summaries(self.returns_normalizer).items():
+                s[f'returns_{k}'] = v
+        return s
 
     def action_distribution(self):
         return self.last_action_distribution

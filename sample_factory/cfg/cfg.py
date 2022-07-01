@@ -127,6 +127,7 @@ def add_rl_args(p: ArgumentParser):
         '--value_bootstrap', default=False, type=str2bool,
         help='Bootstrap returns from value estimates if episode is terminated by timeout. More info here: https://github.com/Denys88/rl_games/issues/128',
     )
+    p.add_argument('--normalize_returns', default=False, type=str2bool, help='Whether to use running mean and standard deviation to normalize discounted returns')
 
     # components of the loss function
     p.add_argument('--exploration_loss_coeff', default=0.003, type=float, help='Coefficient for the exploration component of the loss function.')
@@ -157,7 +158,6 @@ def add_rl_args(p: ArgumentParser):
 
     # more specific to policy gradient algorithms or PPO
     p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False)')
-    p.add_argument('--gae_returns', default=False, type=str2bool, help='Use GAE returns instead of regular discounted rewards')
     p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
     p.add_argument('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
     p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction. If this is True, then GAE is not used')

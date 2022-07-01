@@ -66,7 +66,7 @@ def enjoy(cfg, max_num_frames=1e9):
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
-            normalized_obs = actor_critic.normalizer(obs)
+            normalized_obs = actor_critic.normalize_obs(obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default

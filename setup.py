@@ -29,10 +29,9 @@ setup(
         'Videos': 'https://sites.google.com/view/sample-factory',
     },
 
-    # might want to add max versions restrictions, i.e. torch < 2?
     install_requires=[
         'numpy>=1.18.1<2.0',
-        'torch>=1.6<=1.11',
+        'torch>=1.6<1.12',
         'gym>=0.17.1<1.0',
         'pyglet',  # gym dependency
         'tensorboard>=1.15.0',
@@ -44,11 +43,8 @@ setup(
         'filelock',
         'opencv-python',
         'wandb>=0.12.9',
-
     ],
-    extras_require={
-        "dev": ['black','isort']
-    },
+    extras_require={'dev': ['black', 'isort', 'pytest<8.0']},
 
     package_dir={'': './'},
     packages=setuptools.find_packages(where='./', include='sample_factory*'),

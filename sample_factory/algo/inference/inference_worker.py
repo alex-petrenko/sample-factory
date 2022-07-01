@@ -268,7 +268,7 @@ class InferenceWorker(EventLoopObject, Configurable):
                 rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
 
             with self.timing.add_time('norm'):
-                normalized_obs = actor_critic.normalizer(obs)
+                normalized_obs = actor_critic.normalize_obs(obs)
 
             with timing.add_time('forward'):
                 policy_outputs = actor_critic(normalized_obs, rnn_states)

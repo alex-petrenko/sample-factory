@@ -10,6 +10,7 @@ before each learning iteration (not before each epoch or minibatch), since this 
 If no data normalization is needed we just keep the original data.
 Otherwise, we create a copy of data and do all of the operations operations in-place.
 """
+from typing import Dict
 
 import torch
 from torch import nn
@@ -19,7 +20,7 @@ from sample_factory.algo.utils.misc import EPS
 from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
 
 
-class Normalizer(nn.Module):
+class ObservationNormalizer(nn.Module):
     def __init__(self, obs_space, cfg):
         super().__init__()
 
@@ -29,7 +30,6 @@ class Normalizer(nn.Module):
         self.running_mean_std = None
         if cfg.normalize_input:
             self.running_mean_std = RunningMeanStdDictInPlace(obs_space)
-
             # comment this out for debugging (i.e. to be able to step through normalizer code)
             self.running_mean_std = torch.jit.script(self.running_mean_std)
 
@@ -69,7 +69,7 @@ class Normalizer(nn.Module):
 
         return obs_clone
 
-    def summaries(self):
+    def summaries(self) -> Dict:
         res = dict()
         if self.running_mean_std:
             res.update(running_mean_std_summaries(self.running_mean_std))

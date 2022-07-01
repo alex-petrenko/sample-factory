@@ -10,10 +10,11 @@ from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_
 from sample_factory.algo.utils.torch_utils import to_scalar
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
+from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
 
@@ -63,7 +64,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
     def __init__(
             self, cfg, env_info, num_envs, worker_idx, split_idx,
-            buffer_mgr, sampling_device: str, pbt_reward_shaping,  #TODO pbt reward
+            buffer_mgr, sampling_device: str, pbt_reward_shaping,  # TODO pbt reward
     ):
         # TODO: comment
         """
@@ -100,7 +101,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.pbt_reward_shaping = pbt_reward_shaping  # TODO
 
         self.min_raw_rewards = self.max_raw_rewards = None
-        self.num_timeouts = self.num_dones = 0
 
     def init(self, timing) -> Dict:
         """
@@ -154,32 +154,25 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         assert policy_request is not None
         return policy_request
 
-    def _process_rewards(self, rewards_orig: Tensor, rewards_orig_cpu: Tensor, infos: Dict[Any, Any], values: Tensor, dones: Tensor):
+    def _process_rewards(self, rewards_orig: Tensor, rewards_orig_cpu: Tensor) -> Tensor:
         rewards = rewards_orig * self.cfg.reward_scale
         rewards.clamp_(-self.cfg.reward_clip, self.cfg.reward_clip)
         self.min_raw_rewards = torch.min(self.min_raw_rewards, rewards_orig_cpu)
         self.max_raw_rewards = torch.max(self.max_raw_rewards, rewards_orig_cpu)
-
-        time_outs = None if not isinstance(infos, dict) else infos.get('time_outs')
-        if time_outs is not None:
-            if self.cfg.value_bootstrap:
-                # What we really want here is v(t+1) which we don't have, using v(t) is an approximation that
-                # requires that rew(t) can be generally ignored.
-                # TODO: if gamma is modified by PBT it should be updated here too?!
-                rewards.add_(self.cfg.gamma * values * time_outs.float())
-
-            time_outs = time_outs.long()
-            num_timeouts = time_outs.sum().item()
-            dones = dones.long()
-            num_dones = dones.sum().item()
-            self.num_timeouts += num_timeouts
-            self.num_dones += num_dones
-
-            assert (time_outs & dones).sum().item() == num_timeouts, \
-                f'Every timeout should correspond to a done flag {time_outs.nonzero().squeeze()=} vs {dones.nonzero().squeeze()=}'
-            assert num_timeouts <= num_dones, f'Timeouts should correspond to dones {num_timeouts=} vs {num_dones=}'
-
         return rewards
+
+    def _process_infos(self, infos: Dict | List | Tuple) -> None:
+        """
+        Record any necessary information from the infos.
+        Note that this is not where we save env statistics for the summaries - this is done in _process_env_step
+        and only if done is True.
+        """
+        if self.cfg.value_bootstrap:
+            # Save the timeout flags for later.
+            # Actual reward modification is done in the learner when batch is prepared for training.
+            time_outs = get_first_present(infos, TIMEOUT_KEYS) if isinstance(infos, dict) else None
+            if time_outs is not None:
+                self.curr_step['time_outs'][:] = time_outs
 
     def _process_env_step(self, rewards: Tensor, dones_orig: Tensor, infos):
         dones = dones_orig.cpu()
@@ -249,10 +242,10 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         """
         with timing.add_time('process_policy_outputs'):
             # save actions/logits/values etc. for the current rollout step
-            self.curr_step[:] = self.policy_output_tensors  # TODO: output tensors should contain the policy version
+            self.curr_step[:] = self.policy_output_tensors
             actions = preprocess_actions(self.env_info, self.policy_output_tensors['actions'])
 
-        complete_rollouts, episodic_stats = [], []  # TODO
+        complete_rollouts, episodic_stats = [], []
 
         with timing.add_time('env_step'):
             self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
@@ -271,9 +264,10 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # record the results from the env step
             rewards_cpu = rewards.cpu()
-            processed_rewards = self._process_rewards(rewards, rewards_cpu, infos, self.policy_output_tensors['values'], dones)
-
+            processed_rewards = self._process_rewards(rewards, rewards_cpu)
             self.curr_step[:] = dict(rewards=processed_rewards, dones=dones, policy_id=self.policy_id_buffer)
+
+            self._process_infos(infos)
 
             # reset next-step hidden states to zero if we encountered an episode boundary
             # not sure if this is the best practice, but this is what everybody seems to be doing
@@ -293,14 +287,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                 self.rollout_step = 0
                 # we will need to request a new trajectory buffer!
                 self.curr_traj_slice = self.curr_traj = None
-
-                if self.num_dones > 0:
-                    timeout_fraction = self.num_timeouts / self.num_dones
-                    # this will be processed by the regular episodic stats handler
-                    episodic_stats.append(dict(episodic=dict(timeout_fraction=timeout_fraction), policy_id=self.policy_id))
-
-                # these stats will be per rollout
-                self.num_dones = self.num_timeouts = 0
 
         self.env_step_ready = True
         return complete_rollouts, episodic_stats

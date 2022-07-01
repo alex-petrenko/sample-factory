@@ -53,7 +53,7 @@ def parse_args(argv=None, evaluation=False, parser=None):
     return args
 
 
-def postprocess_args(args, argv, parser):
+def postprocess_args(args, argv, parser) -> argparse.Namespace:
     """
     Postprocessing after parse_args is called.
     Makes it easy to use SF within another codebase which might have its own parse_args call.
@@ -82,7 +82,31 @@ def postprocess_args(args, argv, parser):
 
     args.cli_args = vars(cli_args)
     args.git_hash, args.git_repo_name = get_git_commit_hash()
+
+    # check for any incompatible arguments
+    verify_cfg(args)
+
     return args
+
+
+def verify_cfg(cfg: argparse.Namespace) -> None:
+    """
+    Do some checks to make sure this is a viable configuration.
+    The fact that configuration passes these checks does not guarantee that it is 100% valid,
+    there are more checks sprinkled throughout the codebase.
+    It is better to add new checks here if possible since we check only once instead of doing this over and
+    over again in the training loop.
+    """
+    if cfg.normalize_returns and cfg.with_vtrace:
+        # When we use vtrace the logic for calculating returns is different - we need to recalculate them
+        # on every minibatch, because important sampling depends on the trained policy.
+        # Current implementation of normalized returns assumed that we can calculate returns once per experience
+        # batch.
+        raise ValueError('Normalized returns are not supported with vtrace!')
+
+    if cfg.async_rl and cfg.serial_mode:
+        log.warning('In serial mode all components run on the same process. Only use async_rl '
+                    'and serial mode together for debugging.')
 
 
 def default_cfg(algo='APPO', env='env', experiment='test'):

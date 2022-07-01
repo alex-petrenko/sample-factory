@@ -44,6 +44,7 @@ class IsaacGymVecEnv(gym.Env):
 
     def reset(self, *args, **kwargs):
         obs_dict = self.env.reset()
+        # some IGE envs return all zeros on the first timestep, but this is probably okay
         return self._proc_obs_func(obs_dict)
 
     def step(self, actions):
@@ -152,6 +153,8 @@ def override_default_params_func(env, parser):
     different values are passed from command line.
 
     """
+    # most of these parameters are taken from IsaacGymEnvs default config files
+
     parser.set_defaults(
         # we're using a single very vectorized env, no need to parallelize it further
         batched_sampling=True,
@@ -174,7 +177,7 @@ def override_default_params_func(env, parser):
         num_batches_per_epoch=2,
         num_epochs=4,
         ppo_clip_ratio=0.2,
-        value_loss_coeff=1.0,
+        value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
         nonlinearity='elu',
         learning_rate=3e-4,
@@ -187,6 +190,7 @@ def override_default_params_func(env, parser):
         recurrence=1,
         value_bootstrap=True,  # assuming reward from the last step in the episode can generally be ignored
         normalize_input=True,
+        normalize_returns=True,  # does not improve results on all envs, but with return normalization we don't need to tune reward scale
         save_best_after=int(5e6),
 
         serial_mode=True,  # it makes sense to run isaacgym envs in serial mode since most of the parallelism comes from the env itself (although async mode works!)
@@ -200,6 +204,9 @@ def override_default_params_func(env, parser):
             mlp_layers=[256, 128, 64],
             experiment_summaries_interval=3,  # experiments are short so we should save summaries often
             save_every_sec=15,
+
+            # trains better without normalized returns, but we keep the default value for consistency
+            # normalize_returns=False,
         )
     elif env_name == 'humanoid':
         parser.set_defaults(
@@ -207,11 +214,14 @@ def override_default_params_func(env, parser):
             mlp_layers=[400, 200, 100],
             rollout=32,
             num_epochs=5,
-            value_loss_coeff=2.0,
+            value_loss_coeff=4.0,
             max_grad_norm=1.0,
             num_batches_per_epoch=4,
             experiment_summaries_interval=3,  # experiments are short so we should save summaries often
             save_every_sec=15,
+
+            # trains a lot better with higher gae_lambda, but we keep the default value for consistency
+            # gae_lambda=0.99,
         )
     elif env_name == 'allegrohand':
         parser.set_defaults(

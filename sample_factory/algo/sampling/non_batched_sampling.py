@@ -4,12 +4,13 @@ from typing import Tuple, Dict, List, Optional
 
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.algo.utils.policy_manager import PolicyManager
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
+from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import set_attr_if_exists, AttrDict, log
 
@@ -161,6 +162,10 @@ class ActorState:
         self.last_episode_duration += env_steps
 
         self.is_active = info.get('is_active', True)
+
+        if self.cfg.value_bootstrap:
+            is_time_out = get_first_present(info, TIMEOUT_KEYS, False)
+            self.curr_traj_buffer['time_outs'][rollout_step] = is_time_out
 
         report = None
         if done:
@@ -440,7 +445,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         # a simulation step right away, without waiting for all other actions to be calculated.
         return all_actors_ready
 
-    def _process_rewards(self, rewards, infos: List[Dict], env_i):
+    def _process_rewards(self, rewards, env_i):
         """
         Pretty self-explanatory, here we record the episode reward and apply the optional clipping and
         scaling of rewards.
@@ -451,15 +456,6 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         rewards = np.asarray(rewards, dtype=np.float32)
         rewards = rewards * self.cfg.reward_scale
         rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
-
-        if self.cfg.value_bootstrap:
-            is_time_out = np.array([info.get('time_out', False) for info in infos])
-            if any(is_time_out):
-                # What we really want here is v(t+1) which we don't have, using v(t) is an approximation that
-                # requires that rew(t) can be generally ignored.
-                values = np.array([s.last_value for s in self.actor_states[env_i]])
-                rewards += self.cfg.gamma * values * is_time_out
-
         return rewards
 
     def _process_env_step(self, new_obs, rewards, dones, infos, env_i):
@@ -474,7 +470,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         episodic_stats = []
         env_actor_states = self.actor_states[env_i]
 
-        rewards = self._process_rewards(rewards, infos, env_i)
+        rewards = self._process_rewards(rewards, env_i)
 
         for agent_i in range(self.num_agents):
             actor_state = env_actor_states[agent_i]
