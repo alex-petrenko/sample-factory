@@ -1,16 +1,13 @@
-import os
-import shutil
 import unittest
-from os.path import isdir
+
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus, EPS
-from sample_factory.enjoy import enjoy
-from sample_factory.train import run_rl
-from sample_factory_examples.mujoco_examples.train_mujoco import register_mujoco_components
 from sample_factory.cfg.arguments import parse_args
-from sample_factory.utils.utils import experiment_dir, log
 from sample_factory.envs.mujoco.mujoco_utils import mujoco_available
+from sample_factory.train import run_rl
+from sample_factory.utils.utils import log
+from sample_factory_examples.mujoco_examples.train_mujoco import register_mujoco_components
 
 
 @pytest.mark.skipif(not mujoco_available(), reason='mujoco not installed')
@@ -23,7 +20,7 @@ class TestMujoco:
     """
 
     def _run_test_env(
-            self, env: str = "mujoco_ant", num_workers: int = 8, train_steps: int = 100,
+            self, env: str = 'mujoco_ant', num_workers: int = 8, train_steps: int = 100,
             expected_reward_at_least: float = -EPS, batched_sampling: bool = False,
             serial_mode: bool = False, async_rl: bool = True, batch_size: int = 64, 
     ):

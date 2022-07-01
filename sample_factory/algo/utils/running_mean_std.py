@@ -62,6 +62,10 @@ class RunningMeanStdInPlace(nn.Module):
     def forward(self, x: Tensor, denormalize: bool = False) -> None:
         """Normalizes in-place! This function modifies the input tensor and returns nothing."""
         if self.training:
+            # check if the shape exactly matches or it's a scalar for which we use shape (1, )
+            assert x.shape[1:] == self.input_shape or (x.shape[1:] == () and self.input_shape == (1, )), \
+                f'RMS expected input shape {self.input_shape}, got {x.shape[1:]}'
+
             batch_count = x.size()[0]
             μ = x.mean(self.axis)  # along channel axis
             σ2 = x.var(self.axis)

@@ -30,7 +30,6 @@ class ObservationNormalizer(nn.Module):
         self.running_mean_std = None
         if cfg.normalize_input:
             self.running_mean_std = RunningMeanStdDictInPlace(obs_space)
-
             # comment this out for debugging (i.e. to be able to step through normalizer code)
             self.running_mean_std = torch.jit.script(self.running_mean_std)
 
