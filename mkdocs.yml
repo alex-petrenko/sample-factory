@@ -1,0 +1,131 @@
+# [TODO] may change
+site_name: Sample-Factory Doc
+
+# Repository
+# [TODO] change to Aleksei
+repo_name: wmFrank/sample-factory
+repo_url: https://github.com/wmFrank/sample-factory
+
+# Configuration
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: cyan
+      accent: lime
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: amber
+      accent: blue grey
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  # [TODO] add a favicon and icon here
+  # favicon: assets/favicon.png
+  icon:
+    # logo: logo
+    repo: fontawesome/brands/github
+  language: en
+  direction: ltr
+  features:
+    # - navigation.instant
+    - navigation.tracking
+    # - navigation.tabs
+    # - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    # - navigation.prune
+    # - navigation.indexes
+    - navigation.top
+    # - toc.follow
+    # - toc.integrate
+    - search.suggest
+    - search.highlight
+
+# Copyright
+copyright: Copyright &copy; 2022, Sample-Factory. All rights reserved.
+
+# Plugins
+plugins:
+  - search
+  - git-authors
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: date
+
+# Footer
+extra:
+  social:
+  # [TODO] change to Aleksei
+    - icon: fontawesome/solid/paper-plane
+      link: mailto:ming@huggingface.co
+    - icon: fontawesome/brands/github
+      link: https://github.com/wmFrank
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/ming-wang-frank/
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - meta
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  # - pymdownx.emoji:
+  #     emoji_generator: !!python/name:materialx.emoji.to_svg
+  #     emoji_index: !!python/name:materialx.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: squidfunk
+      repo: mkdocs-material
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          # format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Page tree
+nav:
+  - Overview: index.md
+  - Get Started:
+    - get-started/installation.md
+    - get-started/basic-usage.md
+    - get-started/running-experiments.md
+  - Release Notes:
+    - release-notes/release-notes.md
+  - Community:
+    - community/contribution.md
+    - community/doc-contribution.md
+    - community/citation.md
+
+    
