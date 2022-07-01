@@ -63,7 +63,6 @@ def extract_env_info(env, cfg):
 
 def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     set_global_context(sf_context)
-
     tmp_env = make_env_func_batched(cfg, env_config=None)
     env_info = extract_env_info(tmp_env, cfg)  # TODO type errors
     tmp_env.close()
@@ -71,14 +70,15 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
 
     log.debug('Env info: %r', env_info)
     res_queue.put(env_info)
+    res_queue.put(sf_context)
 
 
 def obtain_env_info_in_a_separate_process(cfg: AttrDict):
     cache_filename = join(experiment_dir(cfg=cfg), f'env_info_{cfg.env}')
-    if os.path.isfile(cache_filename):
-        with open(cache_filename, 'rb') as fobj:
-            env_info = pickle.load(fobj)
-            return env_info
+    # if os.path.isfile(cache_filename):
+    #     with open(cache_filename, 'rb') as fobj:
+    #         env_info = pickle.load(fobj)
+    #         return env_info
 
     sf_context = sf_global_context()
 
@@ -88,9 +88,11 @@ def obtain_env_info_in_a_separate_process(cfg: AttrDict):
     p.start()
 
     env_info = q.get()
+    updated_context = q.get()
+    set_global_context(updated_context)
     p.join()
-
-    with open(cache_filename, 'wb') as fobj:
-        pickle.dump(env_info, fobj)
+    
+    # with open(cache_filename, 'wb') as fobj:
+    #     pickle.dump(env_info, fobj)
 
     return env_info

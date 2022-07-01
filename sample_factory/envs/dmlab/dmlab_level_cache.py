@@ -213,8 +213,8 @@ class DmlabLevelCacheGlobal:
 def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experiment, num_policies, level_cache_dir):
     global DMLAB_GLOBAL_LEVEL_CACHE
 
-    assert multiprocessing.current_process().name == 'MainProcess', \
-        'make sure you initialize DMLab cache before child processes are forked'
+    # assert multiprocessing.current_process().name == 'MainProcess', \
+    #     'make sure you initialize DMLab cache before child processes are forked'
 
     DMLAB_GLOBAL_LEVEL_CACHE = []
     for policy_id in range(num_policies):

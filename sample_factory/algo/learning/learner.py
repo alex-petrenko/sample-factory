@@ -804,8 +804,12 @@ class Learner(EventLoopObject, Configurable):
             # we still reference the same buffers though
             buff = copy.copy(self.batcher.training_batches[batch_idx])
 
-            # TODO: how about device_and_type_for_input_tensor
-
+            # Some inputs such as DMLab text embeddings are faster to calculate on the CPU
+            for k, v in buff['obs'].items():
+                device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
+                if device != v.device or dtype != v.dtype:
+                    buff['obs'][k] = v.detach().to(device, copy=True).type(dtype)
+            
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
             normalized_last_obs = self.actor_critic.normalizer(buff['obs'][:, -1])

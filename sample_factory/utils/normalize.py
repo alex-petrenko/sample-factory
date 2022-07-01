@@ -41,10 +41,8 @@ class Normalizer(nn.Module):
     def _clone_tensordict(obs_dict):
         obs_clone = copy_dict_structure(obs_dict)  # creates an identical dict but with empty values
         for d, d_clone, k, x, _ in iter_dicts_recursively(obs_dict, obs_clone):
-            if x.dtype != torch.float:
-                d_clone[k] = x.float()  # this will create a copy of a tensor
-            else:
-                d_clone[k] = x.clone()  # otherwise, we explicitly clone it
+            # Previous code converted DMLab INSTR from long to float
+            d_clone[k] = x.clone()  # otherwise, we explicitly clone it
 
         return obs_clone
 

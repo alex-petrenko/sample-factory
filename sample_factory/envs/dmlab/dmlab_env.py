@@ -3,7 +3,7 @@ from collections import deque
 
 import numpy as np
 
-from sample_factory.algorithms.utils.algo_utils import EXTRA_EPISODIC_STATS_PROCESSING, EXTRA_PER_POLICY_SUMMARIES
+from sample_factory.algo.utils.misc import EXTRA_EPISODIC_STATS_PROCESSING, EXTRA_PER_POLICY_SUMMARIES
 from sample_factory.envs.dmlab.dmlab30 import dmlab30_level_name_to_level, \
     DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE, DMLAB30_LEVELS, HUMAN_SCORES, RANDOM_SCORES, LEVEL_MAPPING
 from sample_factory.envs.dmlab.dmlab_gym import DmlabGymEnv, dmlab_level_to_level_name
