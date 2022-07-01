@@ -5,7 +5,10 @@ _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444]),
     ('serial_mode', [True]),
     ('async_rl', [False]),
+    ('normalize_returns', [True, False]),
 ])
+
+vstr = f'{vstr}_norm_returns'
 
 ahand_cli = f' --env=isaacgym_AllegroHand --train_for_env_steps=150000000 ' \
             f'--with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
