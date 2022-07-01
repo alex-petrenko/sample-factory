@@ -5,10 +5,10 @@ _params = ParamGrid([
     ('seed', [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
     ('serial_mode', [True]),
     ('async_rl', [False]),
-    ('gae_returns', [True, False]),
+    ('normalize_returns', [True, False]),
 ])
 
-vstr = f'{vstr}_gae_returns'
+vstr = f'{vstr}_norm_returns'
 
 ant_cli = f' --env=isaacgym_Ant --train_for_env_steps=100000000 --with_wandb=True --wandb_tags ant {vstr}'
 cli = base_cli + ant_cli

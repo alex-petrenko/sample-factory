@@ -70,7 +70,7 @@ def policy_output_shapes(num_actions, num_action_distribution_parameters) -> Lis
     return policy_outputs
 
 
-def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, device, share):
+def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, device, share) -> TensorDict:
     obs_space = env_info.obs_space
 
     tensors = TensorDict()
@@ -89,11 +89,11 @@ def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, 
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
 
     # we need one more step to hold values for the last step
-    tensors_with_extra_rollout_step = ['values']
+    outputs_with_extra_rollout_step = ['values']
 
     for name, shape in policy_outputs:
         assert name not in tensors
-        rollout_len = rollout + 1 if name in tensors_with_extra_rollout_step else rollout
+        rollout_len = rollout + 1 if name in outputs_with_extra_rollout_step else rollout
         tensors[name] = init_tensor([num_traj, rollout_len], torch.float32, shape, device, share)
 
     # env outputs
@@ -101,6 +101,8 @@ def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, 
     tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values by mistake it will be obvious
     tensors['dones'] = init_tensor([num_traj, rollout], torch.bool, [], device, share)
     tensors['dones'].fill_(True)
+    tensors['time_outs'] = init_tensor([num_traj, rollout], torch.bool, [], device, share)
+    tensors['time_outs'].fill_(False)  # no timeouts by default
     tensors['policy_id'] = init_tensor([num_traj, rollout], torch.int, [], device, share)
     tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
 

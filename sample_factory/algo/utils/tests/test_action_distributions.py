@@ -14,12 +14,12 @@ from sample_factory.utils.utils import log
 
 
 class TestActionDistributions:
-    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
-    @pytest.mark.parametrize("batch_size", [128])
+    @pytest.mark.parametrize('gym_space', [gym.spaces.Discrete(3)])
+    @pytest.mark.parametrize('batch_size', [128])
     def test_simple_distribution(self, gym_space, batch_size):
         simple_action_space = gym_space
         simple_num_logits = calc_num_logits(simple_action_space)
-        assert simple_num_logits ==  simple_action_space.n
+        assert simple_num_logits == simple_action_space.n
 
         simple_logits = torch.rand(batch_size, simple_num_logits)
         simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
@@ -28,10 +28,9 @@ class TestActionDistributions:
         assert list(simple_actions.shape) == [batch_size, 1]
         assert all(0 <= a < simple_action_space.n for a in simple_actions)
 
-
-    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
-    @pytest.mark.parametrize("batch_size", [128])
-    @pytest.mark.parametrize("device_type", ['cpu'])
+    @pytest.mark.parametrize('gym_space', [gym.spaces.Discrete(3)])
+    @pytest.mark.parametrize('batch_size', [128])
+    @pytest.mark.parametrize('device_type', ['cpu'])
     def test_gumbel_trick(self, gym_space, batch_size, device_type):
         """
         We use a Gumbel noise which seems to be faster compared to using pytorch multinomial.
@@ -84,10 +83,9 @@ class TestActionDistributions:
             log.debug('Sampling timing: %s', timing)
             time.sleep(0.1)  # to finish logging
 
-
     @pytest.mark.parametrize("num_spaces", [random.randint(1, 4)])
-    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(random.randint(2, 5))])
-    @pytest.mark.parametrize("batch_size", [128])
+    @pytest.mark.parametrize('gym_space', [gym.spaces.Discrete(random.randint(2, 5))])
+    @pytest.mark.parametrize('batch_size', [128])
     def test_tuple_distribution(self, num_spaces, gym_space, batch_size):
         spaces = [gym_space for _ in range(num_spaces)]
         action_space = gym.spaces.Tuple(spaces)
@@ -103,14 +101,13 @@ class TestActionDistributions:
         assert list(tuple_actions.shape) == [batch_size, num_spaces]
 
         log_probs = action_distribution.log_prob(tuple_actions)
-        assert list(log_probs.shape) ==  [batch_size]
+        assert list(log_probs.shape) == [batch_size]
 
         entropy = action_distribution.entropy()
         assert list(entropy.shape) == [batch_size]
 
-
-    @pytest.mark.parametrize("num_spaces", [3])
-    @pytest.mark.parametrize("num_actions", [2])
+    @pytest.mark.parametrize('num_spaces', [3])
+    @pytest.mark.parametrize('num_actions', [2])
     def test_tuple_sanity_check(self, num_spaces, num_actions):
         simple_space = gym.spaces.Discrete(num_actions)
         spaces = [simple_space for _ in range(num_spaces)]
@@ -130,7 +127,6 @@ class TestActionDistributions:
         simple_logprob = simple_distr.log_prob(torch.ones(1, 1))
         tuple_logprob = tuple_distr.log_prob(torch.ones(1, num_spaces))
         assert tuple_logprob == simple_logprob * num_spaces
-
 
     def test_sanity(self):
         raw_logits = torch.tensor([[0.0, 1.0, 2.0]])

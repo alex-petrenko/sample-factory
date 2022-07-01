@@ -15,16 +15,16 @@ from torch import Tensor
 
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
+from sample_factory.algo.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.misc import memory_stats
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
-from sample_factory.algo.utils.rl_utils import gae_advantages_returns
+from sample_factory.algo.utils.rl_utils import gae_advantages
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, to_scalar
-from sample_factory.model.model import create_actor_critic
-from sample_factory.algo.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.model.model import create_actor_critic
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
@@ -808,34 +808,44 @@ class Learner(EventLoopObject, Configurable):
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
-            normalized_last_obs = self.actor_critic.obs_normalizer(buff['obs'][:, -1])
+            normalized_last_obs = self.actor_critic.normalize_obs(buff['obs'][:, -1])
             next_values = self.actor_critic(normalized_last_obs, buff['rnn_states'][:, -1], values_only=True)['values']
-            buff['values'][:, -1] = next_values  # TODO: move value bootstrapping here
+            buff['values'][:, -1] = next_values
 
-            # remove next step obs and rnn_states from the batch, we don't need them anymore
-            buff['obs'] = buff['obs'][:, :-1]
-            buff['rnn_states'] = buff['rnn_states'][:, :-1]
+            if self.cfg.normalize_returns:
+                # Since our value targets are normalized, the values will also have normalized statistics.
+                # We need to denormalize them before using them for GAE caculation and value bootstrapping.
+                # rl_games PPO uses a similar approach, see:
+                # https://github.com/Denys88/rl_games/blob/7b5f9500ee65ae0832a7d8613b019c333ecd932c/rl_games/algos_torch/models.py#L51
+                denormalized_values = buff['values'].clone()  # need to clone since normalizer is in-place
+                self.actor_critic.returns_normalizer(denormalized_values, denormalize=True)
+            else:
+                # values are not normalized in this case, so we can use them as is
+                denormalized_values = buff['values']
+
+            if self.cfg.value_bootstrap:
+                # Value bootstrapping is a technique that reduces the surprise for the critic in case
+                # we're ending the episode by timeout. Intuitively, in this case the cumulative return for the last step
+                # should not be zero, but rather what the critic expects. This improves learning in many envs
+                # because otherwise the critic cannot predict the abrupt change in rewards in a timed-out episode.
+                # What we really want here is v(t+1) which we don't have because we don't have obs(t+1) (since
+                # the episode ended). Using v(t) is an approximation that requires that rew(t) can be generally ignored.
+
+                # Multiply by both time_out and done flags to make sure we count only timeouts in terminal states.
+                # There was a bug in older versions of isaacgym where timeouts were reported for non-terminal states.
+                buff['rewards'].add_(self.cfg.gamma * denormalized_values[:, :-1] * buff['time_outs'] * buff['dones'])
 
             if not self.cfg.with_vtrace:
-                if self.cfg.normalize_returns:
-                    # Since our value targets are normalized, the values will also have normalized statistics.
-                    # We need to denormalize them before using them for GAE caculation and value bootstrapping.
-                    # rl_games uses a similar approach, see:
-                    # https://github.com/Denys88/rl_games/blob/7b5f9500ee65ae0832a7d8613b019c333ecd932c/rl_games/algos_torch/models.py#L51
-                    self.actor_critic.value_normalizer.denormalize_values(buff['values'])
-
-
-                # with v-trace advantages and returns are recalculated for each minibatch
-                buff['advantages'], discounted_returns = gae_advantages_returns(
-                    buff['rewards'], buff['dones'], buff['values'], next_values, self.cfg.gamma, self.cfg.gae_lambda,
+                # calculate advantage estimate (in case of V-trace it is done separately for each minibatch)
+                buff['advantages'] = gae_advantages(
+                    buff['rewards'], buff['dones'], denormalized_values, self.cfg.gamma, self.cfg.gae_lambda,
                 )
+                # here returns are not normalized yet, so we should use denormalized values
+                buff['returns'] = buff['advantages'] + denormalized_values[:, :-1]
 
-                if self.cfg.gae_returns:
-                    buff['returns'] = buff['advantages'] + buff['values']
-                else:
-                    buff['returns'] = discounted_returns
-
-                # log.debug(f'Max diff between returns and returns: {(returns - buff["returns"]).abs().max().item():.4f}')
+            # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
+            for key in ['obs', 'rnn_states', 'values']:
+                buff[key] = buff[key][:, :-1]
 
             experience_size = self.cfg.batch_size * self.cfg.num_batches_per_epoch
 
@@ -844,18 +854,18 @@ class Learner(EventLoopObject, Configurable):
                 shape = (experience_size, ) + tuple(v.shape[2:])
                 d[k] = v.reshape(shape)
 
-            # TODO: inefficiency, do we need these on the GPU in the first place?
             buff['dones_cpu'] = buff['dones'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
             buff['rewards_cpu'] = buff['rewards'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
 
-            # # will squeeze actions only in simple categorical case
-            # for tensor_name in ['actions']:
-            #     buff[tensor_name].squeeze_()
-
             # normalize obs and record data statistics (hence the "train" mode)
             self.actor_critic.train()
+
+            # hold the lock while we alter the state of the normalizers since they can be used in other processes too
             with self.param_server.policy_lock:
-                buff['normalized_obs'] = self.actor_critic.obs_normalizer(buff['obs'])
+                buff['normalized_obs'] = self.actor_critic.normalize_obs(buff['obs'])
+                if self.cfg.normalize_returns:
+                    self.actor_critic.returns_normalizer(buff['returns'])  # in-place
+
             del buff['obs']  # we don't need the regular obs anymore
 
             return buff, experience_size

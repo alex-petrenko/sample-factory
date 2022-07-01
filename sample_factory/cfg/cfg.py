@@ -158,7 +158,6 @@ def add_rl_args(p: ArgumentParser):
 
     # more specific to policy gradient algorithms or PPO
     p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False)')
-    p.add_argument('--gae_returns', default=False, type=str2bool, help='Use GAE returns instead of regular discounted rewards')
     p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
     p.add_argument('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
     p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction. If this is True, then GAE is not used')

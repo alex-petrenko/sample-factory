@@ -8,16 +8,18 @@ _params = ParamGrid([
     ('gae_returns', [True, False]),
 ])
 
+vstr = f'{vstr}_norm_returns'
+
 humanoid_cli = f' --env=isaacgym_Humanoid --train_for_env_steps=131000000 ' \
                f'--mlp_layers 400 200 100 --max_grad_norm=1.0 ' \
                f'--rollout=32 --num_epochs=5 --value_loss_coeff=2.0 ' \
-               f'--with_wandb=True --wandb_group=isaacgym_humanoid_sf2 --wandb_tags humanoid brain {vstr}'
+               f'--with_wandb=True --wandb_tags humanoid brain {vstr}'
 
 cli = base_cli + humanoid_cli
 
 _experiments = [
-    Experiment(f'humanoid_{vstr}', cli, _params.generate_params(False)),
-    Experiment(f'humanoid_{vstr}_rnn', cli + ' --use_rnn=True --recurrence=32', _params.generate_params(False)),
+    Experiment(f'humanoid_{vstr}', cli + f' --wandb_group=isaacgym_humanoid_sf2_{vstr}', _params.generate_params(False)),
+    Experiment(f'humanoid_{vstr}_rnn', cli + f' --use_rnn=True --recurrence=32 --wandb_group=isaacgym_humanoid_sf2_rnn_{vstr}', _params.generate_params(False)),
 ]
 
 RUN_DESCRIPTION = RunDescription(f'humanoid_{vstr}', experiments=_experiments)

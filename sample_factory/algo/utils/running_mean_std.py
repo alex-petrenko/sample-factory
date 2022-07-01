@@ -15,15 +15,17 @@ from sample_factory.utils.utils import log
 
 
 _NORM_EPS = 1e-5
+_DEFAULT_CLIP = 5.0
 
 
 # noinspection PyAttributeOutsideInit,NonAsciiCharacters
 class RunningMeanStdInPlace(nn.Module):
-    def __init__(self, input_shape, epsilon=_NORM_EPS, per_channel=False, norm_only=False):
+    def __init__(self, input_shape, epsilon=_NORM_EPS, clip=_DEFAULT_CLIP, per_channel=False, norm_only=False):
         super().__init__()
         log.debug('RunningMeanStd input shape: %r', input_shape)
         self.input_shape: Final = input_shape
         self.eps: Final[float] = epsilon
+        self.clip: Final[float] = clip
 
         self.norm_only: Final[bool] = norm_only
         self.per_channel: Final[bool] = per_channel
@@ -87,6 +89,7 @@ class RunningMeanStdInPlace(nn.Module):
         μ = current_mean.float()
         σ2 = current_var.float()
         σ = torch.sqrt(σ2 + self.eps)
+        clip = self.clip
 
         if self.norm_only:
             if denormalize:
@@ -95,17 +98,17 @@ class RunningMeanStdInPlace(nn.Module):
                 x.mul_(1/σ)
         else:
             if denormalize:
-                x.clamp_(-5, 5).mul_(σ).add_(μ)
+                x.clamp_(-clip, clip).mul_(σ).add_(μ)
             else:
-                x.sub_(μ).mul_(1/σ).clamp_(-5, 5)
+                x.sub_(μ).mul_(1/σ).clamp_(-clip, clip)
 
 
 class RunningMeanStdDictInPlace(nn.Module):
-    def __init__(self, obs_space: gym.spaces.Dict, epsilon=_NORM_EPS, per_channel=False, norm_only=False):
+    def __init__(self, obs_space: gym.spaces.Dict, epsilon=_NORM_EPS, clip=_DEFAULT_CLIP, per_channel=False, norm_only=False):
         super(RunningMeanStdDictInPlace, self).__init__()
         self.obs_space: Final = obs_space
         self.running_mean_std = nn.ModuleDict({
-            k: RunningMeanStdInPlace(space.shape, epsilon, per_channel, norm_only) for k, space in obs_space.spaces.items()
+            k: RunningMeanStdInPlace(space.shape, epsilon, clip, per_channel, norm_only) for k, space in obs_space.spaces.items()
         })
 
     def forward(self, x: Dict[str, Tensor]) -> None:

@@ -44,6 +44,7 @@ class IsaacGymVecEnv(gym.Env):
 
     def reset(self, *args, **kwargs):
         obs_dict = self.env.reset()
+        # some IGE envs return all zeros on the first timestep, but this is probably okay
         return self._proc_obs_func(obs_dict)
 
     def step(self, actions):
@@ -174,7 +175,7 @@ def override_default_params_func(env, parser):
         num_batches_per_epoch=2,
         num_epochs=4,
         ppo_clip_ratio=0.2,
-        value_loss_coeff=1.0,
+        value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
         nonlinearity='elu',
         learning_rate=3e-4,
@@ -207,7 +208,7 @@ def override_default_params_func(env, parser):
             mlp_layers=[400, 200, 100],
             rollout=32,
             num_epochs=5,
-            value_loss_coeff=2.0,
+            value_loss_coeff=4.0,
             max_grad_norm=1.0,
             num_batches_per_epoch=4,
             experiment_summaries_interval=3,  # experiments are short so we should save summaries often

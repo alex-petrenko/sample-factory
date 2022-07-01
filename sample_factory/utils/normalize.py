@@ -10,6 +10,7 @@ before each learning iteration (not before each epoch or minibatch), since this 
 If no data normalization is needed we just keep the original data.
 Otherwise, we create a copy of data and do all of the operations operations in-place.
 """
+from typing import Dict
 
 import torch
 from torch import nn
@@ -69,7 +70,7 @@ class ObservationNormalizer(nn.Module):
 
         return obs_clone
 
-    def summaries(self):
+    def summaries(self) -> Dict:
         res = dict()
         if self.running_mean_std:
             res.update(running_mean_std_summaries(self.running_mean_std))
