@@ -1,14 +1,21 @@
 import time
-import unittest
 from multiprocessing import Process
-from unittest import TestCase
+
+import pytest
 
 from sample_factory.envs.env_utils import vizdoom_available
 from sample_factory.utils.utils import log, AttrDict
 
 
-@unittest.skipUnless(vizdoom_available(), 'Please install VizDoom to run a full test suite')
-class TestDoom(TestCase):
+@pytest.mark.skipif(not vizdoom_available())
+@pytest.fixture(scope='module', autouse=True)
+def register_doom_fixture():
+    from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+    return register_vizdoom_components()
+
+
+@pytest.mark.skipif(not vizdoom_available(), reason='Please install VizDoom to run a full test suite')
+class TestDoom:
     @staticmethod
     def make_standard_dm(env_config):
         from sample_factory.envs.doom.doom_utils import make_doom_env

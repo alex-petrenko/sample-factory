@@ -1,14 +1,13 @@
-import os
 import shutil
-import unittest
 from os.path import isdir
+
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus, EPS
 from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
-from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
 from sample_factory.utils.utils import experiment_dir, log
+from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
 
 
 class TestExample:

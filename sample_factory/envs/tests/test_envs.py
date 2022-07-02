@@ -1,13 +1,12 @@
 import os
 import time
-import unittest
 from os.path import join
+
 import pytest
 
 from sample_factory.algo.utils.misc import num_env_steps
 from sample_factory.cfg.arguments import default_cfg
 from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
-
 from sample_factory.envs.env_utils import dmlab_available, vizdoom_available
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, AttrDict
@@ -59,6 +58,44 @@ def eval_env_performance(make_env, env_type, verbose=False):
     env.close()
 
 
+# TODO: fix multiplayer tests, why are they disabled?
+# def eval_multi_env_performance(make_env, env_type, num_envs, num_workers, total_num_frames=1000):
+#     t = Timing()
+#     frames = 0
+#
+#     with t.timeit('init'):
+#         multi_env = make_env(AttrDict({'num_envs': num_envs,
+#                                        'num_envs_per_worker': num_workers}))
+#         # multi_env = MultiEnv(num_envs, num_workers, make_env, stats_episodes=100)
+#
+#     with t.timeit('first_reset'):
+#         multi_env.reset()
+#
+#     next_print = print_step = 10000
+#
+#     with t.timeit('experience'):
+#         while frames < total_num_frames:
+#             _, rew, done, info = multi_env.step([multi_env.action_space.sample()] * num_envs)
+#             frames += num_env_steps(info)
+#             if frames > next_print:
+#                 log.info('Collected %d frames of experience...', frames)
+#                 next_print += print_step
+#
+#     fps = total_num_frames / t.experience
+#     log.debug('%s performance:', env_type)
+#     log.debug('Took %.3f sec to collect %d frames in parallel, %.1f FPS', t.experience, total_num_frames, fps)
+#     log.debug('Timing: %s', t)
+#
+#     multi_env.close()
+
+
+@pytest.mark.skipif(not vizdoom_available())
+@pytest.fixture(scope='module', autouse=True)
+def register_doom_fixture():
+    from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+    return register_vizdoom_components()
+
+
 @pytest.mark.skipif(not vizdoom_available(), reason='Please install VizDoom to run a full test suite')
 class TestDoom:
     # noinspection PyUnusedLocal
@@ -76,20 +113,20 @@ class TestDoom:
         assert self.make_env_singleplayer(None) is not None
 
     def test_doom_performance(self):
-        test_env_performance(self.make_env_singleplayer, 'doom')
+        eval_env_performance(self.make_env_singleplayer, 'doom')
 
     # def test_doom_performance_multi(self):
     #     test_multi_env_performance(self.make_env_singleplayer, 'doom', num_envs=2, num_workers=2)
 
     def test_doom_performance_bots_hybrid_actions(self):
-        test_env_performance(self.make_env_bots_hybrid_actions, 'doom')
+        eval_env_performance(self.make_env_bots_hybrid_actions, 'doom')
 
     # def test_doom_performance_bots_multi(self):
     #     test_multi_env_performance(self.make_env_bots_hybrid_actions, 'doom', num_envs=200, num_workers=20)
 
     def test_doom_two_color(self):
         from sample_factory.envs.doom.doom_utils import make_doom_env
-        test_env_performance(
+        eval_env_performance(
             lambda env_config: make_doom_env('doom_two_colors_easy', cfg=default_doom_cfg()), 'doom', verbose=False,
         )
 
@@ -138,7 +175,7 @@ class TestDmlab:
 
     @pytest.mark.skipif(not dmlab_available(), reason='Dmlab package not installed')
     def test_dmlab_performance(self):
-        test_env_performance(self.make_env, 'dmlab')
+        eval_env_performance(self.make_env, 'dmlab')
 
     def test_hash_bucket(self):
         vocab_size = 42

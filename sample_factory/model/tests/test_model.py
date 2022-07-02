@@ -1,12 +1,10 @@
-import unittest
 import pytest
-
 import torch
 
-from sample_factory.model.model import create_actor_critic
-from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.cfg.arguments import default_cfg
 from sample_factory.envs.create_env import create_env
+from sample_factory.model.model import create_actor_critic
+from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 

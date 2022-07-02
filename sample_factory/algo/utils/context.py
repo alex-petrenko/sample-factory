@@ -1,11 +1,9 @@
-from sample_factory.envs.env_registry import EnvRegistry, register_default_envs
+from sample_factory.envs.env_registry import EnvRegistry
 
 
 class SampleFactoryContext:
     def __init__(self):
         self.env_registry = EnvRegistry()
-        register_default_envs(self.env_registry)
-
         self.encoder_registry = dict()
 
 
