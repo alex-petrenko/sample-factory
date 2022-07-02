@@ -31,20 +31,24 @@ setup(
 
     install_requires=[
         'numpy>=1.18.1<2.0',
-        'torch>=1.6<1.12',
-        'gym>=0.17.1<1.0',
+        'torch>=1.6,<1.12',
+        'gym>=0.17.1,<1.0',
         'pyglet',  # gym dependency
         'tensorboard>=1.15.0',
         'tensorboardx>=2.0',
         'psutil>=5.7.0',
         'threadpoolctl>=2.0.0',
         'colorlog',
-        'faster-fifo>=1.4.0<2.0',
+        'faster-fifo>=1.4.0,<2.0',
         'filelock',
         'opencv-python',
         'wandb>=0.12.9',
     ],
-    extras_require={'dev': ['black', 'isort', 'pytest<8.0']},
+    extras_require={
+        'dev': ['black', 'isort', 'pytest<8.0'],
+        'mujoco': ['gym[mujoco]<1.0', 'mujoco', 'mujoco_py>=2.0,<3.0'],
+        'vizdoom': ['vizdoom<2.0'],
+    },
 
     package_dir={'': './'},
     packages=setuptools.find_packages(where='./', include='sample_factory*'),

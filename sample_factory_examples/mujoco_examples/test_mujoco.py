@@ -1,36 +1,29 @@
-import unittest
-
 import pytest
 
-from sample_factory.algo.utils.misc import ExperimentStatus, EPS
+from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.cfg.arguments import parse_args
 from sample_factory.envs.mujoco.mujoco_utils import mujoco_available
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
-from sample_factory_examples.mujoco_examples.train_mujoco import register_mujoco_components
 
 
 @pytest.mark.skipif(not mujoco_available(), reason='mujoco not installed')
 class TestMujoco:
-    """
-    This test does not work if other tests used PyTorch autograd before it.
-    Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248  # TODO: we might have fixed that by switching to multiprocessing spawn context. Need to check
-    Run this test separately from other tests.
+    @pytest.fixture(scope='class', autouse=True)
+    def register_mujoco_fixture(self):
+        from sample_factory_examples.mujoco_examples.train_mujoco import register_mujoco_components
+        register_mujoco_components()
 
-    """
-
+    @staticmethod
     def _run_test_env(
-            self, env: str = 'mujoco_ant', num_workers: int = 8, train_steps: int = 100,
-            expected_reward_at_least: float = -EPS, batched_sampling: bool = False,
-            serial_mode: bool = False, async_rl: bool = True, batch_size: int = 64, 
+            env: str = 'mujoco_ant', num_workers: int = 8, train_steps: int = 128,
+            batched_sampling: bool = False, serial_mode: bool = True, async_rl: bool = False, batch_size: int = 64,
     ):
         log.debug(f'Testing with parameters {locals()}...')
+        assert train_steps > batch_size, 'We need sufficient number of steps to accumulate at least one batch'
 
         experiment_name = 'test_' + env
 
-        register_mujoco_components()
-
-        # test training for a few thousand frames
         cfg = parse_args(argv=['--algo=APPO', f'--env={env}', f'--experiment={experiment_name}'])
         cfg.serial_mode = serial_mode
         cfg.async_rl = async_rl
@@ -45,34 +38,23 @@ class TestMujoco:
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
 
-    def test_pass_env(self):
-        """
-        Runs tests on all envs currently passing
-        """
-        env_list = ['mujoco_ant', 'mujoco_halfcheetah', 'mujoco_humanoid']
-        for env in env_list:
-            self._run_test_env(
-                env=env, num_workers=1, train_steps=100,
-            )
-    
-    @unittest.skip('broken tests not fixed yet')
-    def test_fail_action_space(self):
-        """
-        Currently failing tests due to incorrect action dimensions
-        """
-        env_list = ['mujoco_pendulum', 'mujoco_doublependulum']
-        for env in env_list:
-            self._run_test_env(
-                env=env, num_workers=1, train_steps=50,
-            )
+    @pytest.mark.parametrize('env_name', ['mujoco_ant', 'mujoco_halfcheetah', 'mujoco_humanoid'])
+    @pytest.mark.parametrize('batched_sampling', [False, True])
+    def test_basic_envs(self, env_name, batched_sampling):
+        self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)
 
-    @unittest.skip('broken tests not fixed yet')
-    def test_fail_gae(self):
+    @pytest.mark.parametrize('env_name', ['mujoco_pendulum', 'mujoco_doublependulum'])
+    @pytest.mark.parametrize('batched_sampling', [False, True])
+    def test_single_action_envs(self, env_name, batched_sampling):
+        """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
+        self._run_test_env(env=env_name, num_workers=1, train_steps=100)
+
+    @pytest.mark.parametrize('env_name', ['mujoco_hopper', 'mujoco_reacher', 'mujoco_walker', 'mujoco_swimmer'])
+    @pytest.mark.parametrize('batched_sampling', [False, True])
+    def test_rollout_equals_batch_size(self, env_name, batched_sampling):
         """
-        Currently failing tests due to gae. Test only fails when batch size is small
+        These envs might create unique problems since their default rollout length is not equal to the batch size.
+        Therefore we have a batch consisting of a single trajectory on the learner and we have to be careful
+        with how we handle it.
         """
-        env_list = ['mujoco_hopper', 'mujoco_reacher', 'mujoco_walker', 'mujoco_swimmer']
-        for env in env_list:
-            self._run_test_env(
-                env=env, num_workers=1, train_steps=100, batch_size=64 # Setting batch size = 1024 makes it pass
-            )
+        self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)

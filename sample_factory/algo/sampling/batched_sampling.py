@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 from queue import Empty
-from typing import Optional, Dict, List, Tuple, Any
+from typing import Optional, Dict, List, Tuple
 
 import numpy as np
 import torch
-
-from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
-from sample_factory.algo.utils.torch_utils import to_scalar
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS, fix_action_shape
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.dicts import get_first_present
@@ -19,7 +17,6 @@ from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
 
 
-# TODO: remove code duplication (actor_worker.py)
 def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray:
     """
     We expect actions to have shape [num_envs, num_actions].
@@ -37,9 +34,7 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     if not env_info.gpu_actions:
         actions = actions.cpu().numpy()
 
-    if actions.ndim == 0:
-        actions = actions.item()
-
+    actions = fix_action_shape(actions, env_info.integer_actions)
     return actions
 
 

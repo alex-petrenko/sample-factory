@@ -18,8 +18,9 @@ class TestExample:
 
     """
 
+    @staticmethod
     def _run_test_env(
-            self, num_actions: int = 10, num_workers: int = 8, train_steps: int = 100, batch_size: int = 64,
+            num_actions: int = 10, num_workers: int = 8, train_steps: int = 100, batch_size: int = 64,
             expected_reward_at_least: float = -EPS, expected_reward_at_most: float = 100,
             batched_sampling: bool = False, serial_mode: bool = False, async_rl: bool = True,
     ):
@@ -65,8 +66,8 @@ class TestExample:
         assert avg_reward >= expected_reward_at_least
         assert avg_reward <= expected_reward_at_most
 
-    @pytest.mark.parametrize("num_actions", [1, 10])
-    @pytest.mark.parametrize("batched_sampling", [False, True])
+    @pytest.mark.parametrize('num_actions', [1, 10])
+    @pytest.mark.parametrize('batched_sampling', [False, True])
     def test_sanity_1(self, num_actions, batched_sampling):
         """
         Run the test env in various configurations just to make sure nothing crashes or throws exceptions.
@@ -75,8 +76,8 @@ class TestExample:
             num_actions=num_actions, num_workers=1, train_steps=50, batched_sampling=batched_sampling,
         )
 
-    @pytest.mark.parametrize("serial_mode", [False, True])
-    @pytest.mark.parametrize("async_rl", [False, True])
+    @pytest.mark.parametrize('serial_mode', [False, True])
+    @pytest.mark.parametrize('async_rl', [False, True])
     def test_sanity_2(self, serial_mode, async_rl):
         self._run_test_env(
             num_actions=10, num_workers=1, train_steps=50, batched_sampling=False,

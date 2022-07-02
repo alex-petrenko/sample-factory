@@ -4,7 +4,7 @@ from typing import Tuple, Dict, List, Optional
 
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS, fix_action_shape
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
@@ -124,7 +124,7 @@ class ActorState:
     def reset_rnn_state(self):
         self.last_rnn_state[:] = 0.0
 
-    def curr_actions(self):
+    def curr_actions(self) -> np.ndarray:
         """
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
@@ -132,8 +132,7 @@ class ActorState:
         if self.integer_actions:
             actions = actions.astype(np.int32)
 
-        if actions.ndim == 0:
-            actions = actions.item()
+        actions = fix_action_shape(actions, self.integer_actions)
         return actions
 
     def record_env_step(self, reward, done, info, rollout_step):

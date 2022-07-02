@@ -14,6 +14,13 @@ def clone_tensor(t: Tensor | np.ndarray) -> Tensor | np.ndarray:
         return np.copy(t)
 
 
+def unsqueeze_tensor(t: Tensor | np.ndarray, dim: int) -> Tensor | np.ndarray:
+    if isinstance(t, Tensor):
+        return t.unsqueeze(dim)
+    else:
+        return np.expand_dims(t, dim)
+
+
 def cat_tensors(lt: List[Tensor | np.ndarray]) -> Tensor | np.ndarray:
     if isinstance(lt[0], Tensor):
         return torch.cat(lt)
