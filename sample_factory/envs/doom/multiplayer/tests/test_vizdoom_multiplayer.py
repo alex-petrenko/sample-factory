@@ -7,15 +7,13 @@ from sample_factory.envs.env_utils import vizdoom_available
 from sample_factory.utils.utils import log, AttrDict
 
 
-@pytest.mark.skipif(not vizdoom_available())
-@pytest.fixture(scope='module', autouse=True)
-def register_doom_fixture():
-    from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
-    return register_vizdoom_components()
-
-
 @pytest.mark.skipif(not vizdoom_available(), reason='Please install VizDoom to run a full test suite')
 class TestDoom:
+    @pytest.fixture(scope='class', autouse=True)
+    def register_doom_fixture(self):
+        from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+        return register_vizdoom_components()
+
     @staticmethod
     def make_standard_dm(env_config):
         from sample_factory.envs.doom.doom_utils import make_doom_env

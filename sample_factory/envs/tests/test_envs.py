@@ -89,15 +89,13 @@ def eval_env_performance(make_env, env_type, verbose=False):
 #     multi_env.close()
 
 
-@pytest.mark.skipif(not vizdoom_available())
-@pytest.fixture(scope='module', autouse=True)
-def register_doom_fixture():
-    from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
-    return register_vizdoom_components()
-
-
 @pytest.mark.skipif(not vizdoom_available(), reason='Please install VizDoom to run a full test suite')
 class TestDoom:
+    @pytest.fixture(scope='class', autouse=True)
+    def register_doom_fixture(self):
+        from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+        return register_vizdoom_components()
+
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env_singleplayer(env_config):
