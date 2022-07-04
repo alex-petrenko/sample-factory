@@ -9,7 +9,7 @@ from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
 from sample_factory.algo.utils.action_distributions import ContinuousActionDistribution
 from sample_factory.algo.utils.env_info import extract_env_info
-from sample_factory.algo.utils.make_env import make_env_func_batched, SequentialVectorizeWrapper
+from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.cfg.arguments import parse_args, load_from_checkpoint
 from sample_factory.model.model import create_actor_critic

@@ -265,8 +265,17 @@ def add_default_env_args(p: ArgumentParser):
     """Configuration related to the environments, i.e. things that might be difficult to query from an environment instance."""
     p.add_argument('--env_gpu_actions', default=False, type=str2bool, help='Set to true if environment expects actions on GPU (i.e. as a GPU-side PyTorch tensor)')
 
-    p.add_argument('--env_frameskip', default=None, type=int, help='Number of frames for action repeat (frame skipping). Default (None) means use default environment value')
-    p.add_argument('--env_framestack', default=4, type=int, help='Frame stacking (only used in Atari?)')
+    p.add_argument(
+        '--env_frameskip', default=1, type=int,
+        help='Number of frames for action repeat (frame skipping). '
+             'Setting this to >1 will not add any wrappers that will do frame-skipping, although this can be used '
+             'in the environment factory function to add these wrappers or to tell the environment itself to skip a desired number of frames '
+             'i.e. as it is done in VizDoom. '
+             'FPS metrics will be multiplied by the frameskip value, i.e. 100000FPS with frameskip=4 actually corresponds to '
+             '100000/4=25000 samples per second observed by the policy. '
+             'Frameskip=1 (default) means no frameskip, we process every frame.',
+    )
+    p.add_argument('--env_framestack', default=4, type=int, help='Frame stacking (only used in Atari?)')  # <-- this probably should be moved to environment-specific scripts
     p.add_argument('--pixel_format', default='CHW', type=str, help='PyTorch expects CHW by default, Ray & TensorFlow expect HWC')
 
 

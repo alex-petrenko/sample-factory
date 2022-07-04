@@ -174,7 +174,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         num_dones = dones.sum().item()
 
         self.curr_episode_reward += rewards
-        self.curr_episode_len += 1
+
+        # multiply by frameskip so we record the actual number of simulated steps
+        self.curr_episode_len += self.env_info.frameskip
 
         reports = []
         if num_dones > 0:

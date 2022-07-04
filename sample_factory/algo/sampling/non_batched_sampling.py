@@ -5,6 +5,7 @@ from typing import Tuple, Dict, List, Optional
 import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS, fix_action_shape
+from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
@@ -22,11 +23,13 @@ class ActorState:
     """
 
     def __init__(
-        self, cfg, env_info, env, worker_idx, split_idx, env_idx, agent_idx,
+        self, cfg, env_info: EnvInfo, env, worker_idx, split_idx, env_idx, agent_idx,
         buffer_mgr, traj_tensors, policy_output_tensors, pbt_reward_shaping, policy_mgr,
     ):
         self.cfg = cfg
         self.env = env
+        self.env_info: EnvInfo = env_info
+
         self.worker_idx = worker_idx
         self.split_idx = split_idx
         self.env_idx = env_idx
@@ -66,11 +69,6 @@ class ActorState:
 
         self.num_trajectories = 0
 
-        # have to count env steps per policy, since a single rollout may contain experience from more than one policy
-        self.rollout_env_steps = {-1: 0}
-        for policy_id in range(self.cfg.num_policies):
-            self.rollout_env_steps[policy_id] = 0
-
         self.last_episode_reward = 0
         self.last_episode_duration = 0
 
@@ -79,8 +77,6 @@ class ActorState:
         self.approx_env_steps = {}
 
         self.pbt_reward_shaping = pbt_reward_shaping
-
-        self.integer_actions = env_info.integer_actions
 
         self.env_training_info_interface = find_training_info_interface(env)  # TODO: batched sampler
 
@@ -129,10 +125,10 @@ class ActorState:
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
         actions = ensure_numpy_array(self.last_actions)
-        if self.integer_actions:
+        if self.env_info.integer_actions:
             actions = actions.astype(np.int32)
 
-        actions = fix_action_shape(actions, self.integer_actions)
+        actions = fix_action_shape(actions, self.env_info.integer_actions)
         return actions
 
     def record_env_step(self, reward, done, info, rollout_step):
@@ -156,9 +152,8 @@ class ActorState:
 
         self.has_rollout_data = self.has_rollout_data or self.is_active
 
-        env_steps = info.get('num_frames', 1) if self.is_active else 0
-        self.rollout_env_steps[policy_id] += env_steps
-        self.last_episode_duration += env_steps
+        # multiply by frameskip to get the episode lenghts matching the actual number of simulated steps
+        self.last_episode_duration += self.env_info.frameskip
 
         self.is_active = info.get('is_active', True)
 
@@ -228,15 +223,9 @@ class ActorState:
             buffers_used.add(traj_buffer_idx)
 
             t_id = f'{policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}'
-            traj_dict = dict(
-                t_id=t_id, length=rollout_step, env_steps=self.rollout_env_steps[policy_id], policy_id=policy_id,
-                traj_buffer_idx=traj_buffer_idx,
-            )
+            traj_dict = dict(t_id=t_id, length=rollout_step, policy_id=policy_id, traj_buffer_idx=traj_buffer_idx)
             trajectories.append(traj_dict)
             self.num_trajectories += 1
-
-        # reset rollout lengths
-        self.rollout_env_steps = dict.fromkeys(self.rollout_env_steps, 0)
 
         assert buffers_used, 'We ought to send our buffer to at least one learner'
         self.needs_buffer = True

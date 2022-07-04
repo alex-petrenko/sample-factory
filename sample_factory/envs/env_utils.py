@@ -112,4 +112,10 @@ def set_training_info(training_info_interface, approx_total_training_steps: int)
         training_info_interface.set_training_info(training_info_dict)
 
 
+def num_env_steps(infos):
+    """Calculate number of environment frames in a batch of experience."""
 
+    total_num_frames = 0
+    for info in infos:
+        total_num_frames += info.get('num_frames', 1)
+    return total_num_frames

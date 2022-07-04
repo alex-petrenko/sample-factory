@@ -8,13 +8,14 @@ from torch import Tensor
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.envs.env_wrappers import TimeLimitWrapper
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict
 
 
 # "TimeLimit.truncated" is the key used by Gym TimeLimit wrapper.
 # "time_outs" is used by IsaacGym.
-TIMEOUT_KEYS: Tuple = ('time_outs', 'TimeLimit.truncated')
+TIMEOUT_KEYS: Tuple = ('time_outs', TimeLimitWrapper.terminated_by_timer)
 
 
 class VectorEnvRunner(Configurable):

@@ -13,7 +13,7 @@ import numpy as np
 # noinspection PyProtectedMember
 from gym import spaces, RewardWrapper, ObservationWrapper
 
-from sample_factory.algo.utils.misc import num_env_steps
+from sample_factory.envs.env_utils import num_env_steps
 from sample_factory.utils.utils import numpy_all_the_way, ensure_dir_exists, log
 
 
@@ -303,7 +303,7 @@ class RewardScalingWrapper(RewardWrapper):
 
 
 class TimeLimitWrapper(gym.core.Wrapper):
-    terminated_by_timer = 'terminated_by_timer'
+    terminated_by_timer = 'TimeLimit.truncated'  # this is to match the default key used by Gym
 
     def __init__(self, env, limit, random_variation_steps=0):
         super(TimeLimitWrapper, self).__init__(env)

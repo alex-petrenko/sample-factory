@@ -4,10 +4,9 @@ from os.path import join
 
 import pytest
 
-from sample_factory.algo.utils.misc import num_env_steps
 from sample_factory.cfg.arguments import default_cfg
 from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
-from sample_factory.envs.env_utils import dmlab_available, vizdoom_available
+from sample_factory.envs.env_utils import dmlab_available, vizdoom_available, num_env_steps
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, AttrDict
 

@@ -19,13 +19,3 @@ def memory_stats(process, device):
         stats.update({f'gpu_mem_{process}': gpu_mem_mb, f'gpu_cache_{process}': gpu_cache_mb})
 
     return stats
-
-
-# TODO: do we need this?
-def num_env_steps(infos):
-    """Calculate number of environment frames in a batch of experience."""
-
-    total_num_frames = 0
-    for info in infos:
-        total_num_frames += info.get('num_frames', 1)
-    return total_num_frames

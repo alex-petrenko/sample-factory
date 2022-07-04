@@ -49,8 +49,7 @@ def extract_env_info(env, cfg):
     integer_actions = is_integer_action_env(action_space)
     gpu_actions = cfg.env_gpu_actions
 
-    frameskip = 4 if cfg.env.startswith('doom') else 1  # TODO: this is a hack! rewrite this code!
-    log.warning('Assuming frameskip %d! This is a hack. TODO', frameskip)
+    frameskip = cfg.env_frameskip
 
     # TODO: PBT stuff (default reward shaping)
     # self.reward_shaping_scheme = None

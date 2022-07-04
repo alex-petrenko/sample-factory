@@ -877,23 +877,13 @@ class Learner(EventLoopObject, Configurable):
         with timing.add_time('train'):
             train_stats = self._train(buff, self.cfg.batch_size, experience_size, timing)
 
-        # TODO: don't use frameskip here
+        # multiply the number of samples by frameskip so that FPS metrics reflect the number
+        # of environment steps actually simulated
         self.env_steps += experience_size * self.env_info.frameskip
 
         stats = dict(learner_env_steps=self.env_steps, policy_id=self.policy_id)
         if train_stats is not None:
             stats['train'] = train_stats
-
-            # TODO
-            # if wait_stats is not None:
-            #     wait_avg, wait_min, wait_max = wait_stats
-            #     stats['train']['wait_avg'] = wait_avg
-            #     stats['train']['wait_min'] = wait_min
-            #     stats['train']['wait_max'] = wait_max
-
-            stats['train']['discarded_rollouts'] = 0  # TODO
-            stats['train']['discarding_rate'] = 0  # TODO
-
             stats['stats'] = memory_stats('learner', self.device)
 
         return stats
