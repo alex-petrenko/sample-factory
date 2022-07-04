@@ -10,7 +10,7 @@ from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.signal_slot.signal_slot import signal, EventLoopObject, EventLoop
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, Device
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import AttrDict, debug_log_every_n
 
 
 def slice_len(s: slice) -> int:
@@ -196,7 +196,7 @@ class Batcher(EventLoopObject):
                 if self.cfg.async_rl:
                     self._release_traj_tensors(batch_idx)
                     if not self.available_batches:
-                        log.debug('Signal inference workers to stop experience collection...')
+                        debug_log_every_n(20, 'Signal inference workers to stop experience collection...')
                         self.stop_experience_collection.emit()
 
     def on_training_batch_released(self, batch_idx: int):
@@ -206,7 +206,7 @@ class Batcher(EventLoopObject):
                 self._release_traj_tensors(batch_idx)
 
             if not self.available_batches and self.cfg.async_rl:
-                log.debug('Signal inference workers to resume experience collection...')
+                debug_log_every_n(20, 'Signal inference workers to resume experience collection...')
                 self.resume_experience_collection.emit()
 
             self.available_batches.append(batch_idx)

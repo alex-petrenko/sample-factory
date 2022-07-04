@@ -25,7 +25,7 @@ from sample_factory.utils.dicts import dict_of_lists_append_idx
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, MpQueue, Device
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import log, debug_log_every_n
 
 
 def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWorker):
@@ -142,11 +142,11 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.is_initialized = True
 
     def should_stop_experience_collection(self):
-        log.debug(f'{self.object_id}: stopping experience collection')
+        debug_log_every_n(20, f'{self.object_id}: stopping experience collection')
         self.inference_loop.stop()
 
     def should_resume_experience_collection(self):
-        log.debug(f'{self.object_id}: resuming experience collection')
+        debug_log_every_n(20, f'{self.object_id}: resuming experience collection')
         self.inference_loop.start()
 
     def _batch_slices(self, timing):

@@ -56,6 +56,28 @@ def init_file_logger(experiment_dir_):
     log.addHandler(file_handler)
 
 
+# noinspection PyDefaultArgument
+def log_every_n(n, _level, msg, _history=dict(), *args, **kwargs):
+    """
+    Log message `msg` once in n calls to this function to avoid log spam.
+    Use only msg to count the calls, not args and kwargs.
+    Intentionally using a mutable _history dict to store call history.
+    """
+    if msg not in _history:
+        _history[msg] = 0
+
+    num_msgs = _history[msg]
+    if num_msgs % n == 0:
+        msg_with_ntimes = f'{msg} ({num_msgs} times)' if num_msgs > 1 else msg
+        log.log(_level, msg_with_ntimes, *args, **kwargs)
+
+    _history[msg] += 1
+
+
+def debug_log_every_n(n, msg, *args, **kwargs):
+    log_every_n(n, logging.DEBUG, msg, *args, **kwargs)
+
+
 # general Python utilities
 
 def is_module_available(module_name):

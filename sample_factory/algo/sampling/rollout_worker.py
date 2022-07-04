@@ -125,12 +125,13 @@ class RolloutWorker(EventLoopObject, Configurable):
 
     def _decorrelate_experience(self):
         delay = (float(self.worker_idx) / self.cfg.num_workers) * self.cfg.decorrelate_experience_max_seconds
-        log.info(
-            'Worker %d, sleep for %.3f sec to decorrelate experience collection',
-            self.worker_idx, delay,
-        )
-        time.sleep(delay)
-        log.info('Worker %d awakens!', self.worker_idx)
+        if delay > 0.0:
+            log.info(
+                'Worker %d, sleep for %.3f sec to decorrelate experience collection',
+                self.worker_idx, delay,
+            )
+            time.sleep(delay)
+            log.info('Worker %d awakens!', self.worker_idx)
 
     def _maybe_send_policy_request(self, runner: VectorEnvRunner):
         if runner.update_trajectory_buffers(self.timing):
