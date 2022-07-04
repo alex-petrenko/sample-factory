@@ -25,14 +25,14 @@ SELECTED_WEAPON_REWARDS = dict()
 for weapon in range(NUM_WEAPONS):
     pref = WEAPON_PREFERENCE.get(weapon, 1)
     # reward/penalty for finding/losing a weapon
-    WEAPON_DELTA_REWARDS[f'WEAPON{weapon}'] = (+0.02 * pref, -0.01 * pref)
+    WEAPON_DELTA_REWARDS[f"WEAPON{weapon}"] = (+0.02 * pref, -0.01 * pref)
     # reward/penalty for picking up/spending weapon ammo
-    WEAPON_DELTA_REWARDS[f'AMMO{weapon}'] = (+0.0002 * pref, -0.0001 * pref)
+    WEAPON_DELTA_REWARDS[f"AMMO{weapon}"] = (+0.0002 * pref, -0.0001 * pref)
 
     # reward for choosing a weapon and sticking to it; really helps learning in the beginning, otherwise the agent
     # just keeps changing weapons all the time, unable to shoot. Towards the later stages of the training agents
     # tend to ignore this, and change weapons at will
-    SELECTED_WEAPON_REWARDS[f'SELECTED{weapon}'] = 0.0002 * pref
+    SELECTED_WEAPON_REWARDS[f"SELECTED{weapon}"] = 0.0002 * pref
 
 
 # reward shaping scheme to convert env info into scalar reward
@@ -51,13 +51,15 @@ REWARD_SHAPING_DEATHMATCH_V0 = dict(
 
 # "zero-sum" scheme for self-play scenarios
 REWARD_SHAPING_DEATHMATCH_V1 = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
-REWARD_SHAPING_DEATHMATCH_V1['delta'].update(dict(
-    FRAGCOUNT=(+1, -0.001),
-    DEATHCOUNT=(-1, +1),
-    HITCOUNT=(0, 0),
-    DAMAGECOUNT=(+0.01, -0.01),
-    HEALTH=(+0.01, -0.01),
-))
+REWARD_SHAPING_DEATHMATCH_V1["delta"].update(
+    dict(
+        FRAGCOUNT=(+1, -0.001),
+        DEATHCOUNT=(-1, +1),
+        HITCOUNT=(0, 0),
+        DAMAGECOUNT=(+0.01, -0.01),
+        HEALTH=(+0.01, -0.01),
+    )
+)
 
 
 # just the same reward scheme for consistency, only battle does not have most game variables,
@@ -67,20 +69,20 @@ REWARD_SHAPING_BATTLE = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
 
 
 def true_objective_final_position(info):
-    if info['LEADER_GAP'] == 0:
+    if info["LEADER_GAP"] == 0:
         # tied with the leader for the win, we don't reward for ties, only for the win
         return 0.0
-    elif info['FINAL_PLACE'] > 1:
+    elif info["FINAL_PLACE"] > 1:
         # lost the match (don't care about the place, losing is losing)
         return 0.0
     else:
         # won the match!
-        assert info['FINAL_PLACE'] == 1
+        assert info["FINAL_PLACE"] == 1
         return 1.0
 
 
 def true_objective_frags(info):
-    return info['FRAGCOUNT']
+    return info["FRAGCOUNT"]
 
 
 class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
@@ -124,7 +126,7 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         reward = 0.0
         deltas = []
 
-        for var_name, rewards in self.reward_shaping_scheme['delta'].items():
+        for var_name, rewards in self.reward_shaping_scheme["delta"].items():
             if var_name not in self.prev_vars:
                 continue
 
@@ -155,11 +157,11 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
 
         if selected_weapon_ammo > 0 and unholstered:
             try:
-                reward = self.reward_shaping_scheme['selected_weapon'][f'SELECTED{weapon}']
+                reward = self.reward_shaping_scheme["selected_weapon"][f"SELECTED{weapon}"]
             except KeyError:
-                log.error('%r', self.reward_shaping_scheme)
-                log.error('%r', selected_weapon)
-            weapon_key = f'weapon{selected_weapon}'
+                log.error("%r", self.reward_shaping_scheme)
+                log.error("%r", selected_weapon)
+            weapon_key = f"weapon{selected_weapon}"
             deltas.append((weapon_key, reward))
             self.reward_structure[weapon_key] = self.reward_structure.get(weapon_key, 0.0) + reward
 
@@ -171,13 +173,13 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
             return 0.0
 
         # by default these are negative values if no weapon is selected
-        selected_weapon = info.get('SELECTED_WEAPON', 0.0)
+        selected_weapon = info.get("SELECTED_WEAPON", 0.0)
         selected_weapon = int(max(0, selected_weapon))
-        selected_weapon_ammo = float(max(0.0, info.get('SELECTED_WEAPON_AMMO', 0.0)))
+        selected_weapon_ammo = float(max(0.0, info.get("SELECTED_WEAPON_AMMO", 0.0)))
         self.selected_weapon.append(selected_weapon)
 
         was_dead = self.prev_dead
-        is_alive = not info.get('DEAD', 0.0)
+        is_alive = not info.get("DEAD", 0.0)
         just_respawned = was_dead and is_alive
 
         shaping_reward = 0.0
@@ -185,18 +187,20 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
             shaping_reward, deltas = self._delta_rewards(info)
 
             shaping_reward += self._selected_weapon_rewards(
-                selected_weapon, selected_weapon_ammo, deltas,
+                selected_weapon,
+                selected_weapon_ammo,
+                deltas,
             )
 
             if abs(shaping_reward) > 2.5 and not self.print_once:
-                log.info('Large shaping reward %.3f for %r', shaping_reward, deltas)
+                log.info("Large shaping reward %.3f for %r", shaping_reward, deltas)
                 self.print_once = True
 
-        if done and 'FRAGCOUNT' in self.reward_structure:
+        if done and "FRAGCOUNT" in self.reward_structure:
             sorted_rew = sorted(self.reward_structure.items(), key=operator.itemgetter(1))
             sum_rew = sum(r for key, r in sorted_rew)
-            sorted_rew = {key: f'{r:.3f}' for key, r in sorted_rew}
-            log.info('Sum rewards: %.3f, reward structure: %r', sum_rew, sorted_rew)
+            sorted_rew = {key: f"{r:.3f}" for key, r in sorted_rew}
+            log.info("Sum rewards: %.3f, reward structure: %r", sum_rew, sorted_rew)
 
         return shaping_reward
 
@@ -225,21 +229,23 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         self.total_shaping_reward += shaping_rew
 
         if self.verbose:
-            log.info('Original env reward before shaping: %.3f', self.orig_env_reward)
+            log.info("Original env reward before shaping: %.3f", self.orig_env_reward)
             player_id = 1
-            if hasattr(self.env.unwrapped, 'player_id'):
+            if hasattr(self.env.unwrapped, "player_id"):
                 player_id = self.env.unwrapped.player_id
 
             log.info(
-                'Total shaping reward is %.3f for %d (done %d)',
-                self.total_shaping_reward, player_id, done,
+                "Total shaping reward is %.3f for %d (done %d)",
+                self.total_shaping_reward,
+                player_id,
+                done,
             )
 
         # remember new variable values
-        for var_name in self.reward_shaping_scheme['delta'].keys():
+        for var_name in self.reward_shaping_scheme["delta"].keys():
             self.prev_vars[var_name] = info.get(var_name, 0.0)
 
-        self.prev_dead = not not info.get('DEAD', 0.0)  # float -> bool
+        self.prev_dead = not not info.get("DEAD", 0.0)  # float -> bool
 
         if done:
             if self.true_objective_func is None:
@@ -247,7 +253,7 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
             else:
                 true_objective = self.true_objective_func(info)
 
-            info['true_objective'] = true_objective
+            info["true_objective"] = true_objective
 
         return obs, rew, done, info
 

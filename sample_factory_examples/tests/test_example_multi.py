@@ -19,20 +19,20 @@ class TestExampleMulti:
 
     """
 
-    @pytest.mark.skip('broken tests not fixed yet')
+    @pytest.mark.skip("broken tests not fixed yet")
     def test_example_multi(self):
-        experiment_name = 'test_example_multi'
+        experiment_name = "test_example_multi"
 
         register_custom_components()
 
         # test training for a few thousand frames
-        cfg = parse_args(argv=['--algo=APPO', '--env=my_custom_multi_env_v1', f'--experiment={experiment_name}'])
+        cfg = parse_args(argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}"])
         cfg.num_workers = 6
         cfg.train_for_env_steps = 350000
         cfg.save_every_sec = 1
         cfg.decorrelate_experience_max_seconds = 0
         cfg.seed = 0
-        cfg.device = 'cpu'
+        cfg.device = "cpu"
         cfg.num_policies = 2
 
         status = run_rl(cfg)
@@ -40,7 +40,7 @@ class TestExampleMulti:
 
         # then test the evaluation of the saved model
         cfg = parse_args(
-            argv=['--algo=APPO', '--env=my_custom_multi_env_v1', f'--experiment={experiment_name}', '--device=cpu'],
+            argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}", "--device=cpu"],
             evaluation=True,
         )
         status, avg_reward = enjoy(cfg, max_num_frames=200)

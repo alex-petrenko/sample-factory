@@ -1,4 +1,4 @@
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 import pytest
 import torch
@@ -9,11 +9,16 @@ from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace
 
 
 class TestRMS:
-    @pytest.mark.parametrize('batch_size', [2, 100])
-    @pytest.mark.parametrize('shape', [(1, ), (3, 7)])
-    @pytest.mark.parametrize('norm_only', [False, True])
+    @pytest.mark.parametrize("batch_size", [2, 100])
+    @pytest.mark.parametrize("shape", [(1,), (3, 7)])
+    @pytest.mark.parametrize("norm_only", [False, True])
     def test_rms_sanity(
-            self, batch_size: int, shape: Tuple, norm_only: bool, data: Optional[Tensor] = None, use_jit: bool = False,
+        self,
+        batch_size: int,
+        shape: Tuple,
+        norm_only: bool,
+        data: Optional[Tensor] = None,
+        use_jit: bool = False,
     ):
         normalizer = RunningMeanStdInPlace(shape, norm_only=norm_only)
         assert normalizer.input_shape == shape
@@ -23,9 +28,9 @@ class TestRMS:
 
         # generate some non-normally distributed data
         if data is None:
-            data = torch.rand((batch_size, ) + shape)
+            data = torch.rand((batch_size,) + shape)
         else:
-            assert data.shape == (batch_size, ) + shape
+            assert data.shape == (batch_size,) + shape
 
         orig_data = data.clone()
 
@@ -53,7 +58,9 @@ class TestRMS:
 
     def test_clip(self):
         self.test_rms_sanity(
-            batch_size=1000, shape=(1,), norm_only=False,
+            batch_size=1000,
+            shape=(1,),
+            norm_only=False,
             data=torch.tensor([0.0] * 999 + [1e4]).unsqueeze_(1),
         )
 

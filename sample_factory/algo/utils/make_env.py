@@ -6,7 +6,7 @@ import torch
 from gym import Wrapper, spaces
 from torch import Tensor
 
-from sample_factory.algo.utils.multi_agent_wrapper import is_multiagent_env, MultiAgentWrapper
+from sample_factory.algo.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
 from sample_factory.algo.utils.tensor_utils import dict_of_lists_cat
 from sample_factory.envs.create_env import create_env
 from sample_factory.utils.dicts import dict_of_lists_append
@@ -21,6 +21,7 @@ class _DictObservationsWrapper(Wrapper):
 
 class BatchedDictObservationsWrapper(_DictObservationsWrapper):
     """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
+
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)
         return dict(obs=obs)
@@ -32,6 +33,7 @@ class BatchedDictObservationsWrapper(_DictObservationsWrapper):
 
 class NonBatchedDictObservationsWrapper(_DictObservationsWrapper):
     """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
+
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)
         return [dict(obs=o) for o in obs]
@@ -76,7 +78,7 @@ class TensorWrapper(Wrapper):
                 # leave it like this for now, we can add more cases later if we need to
                 return lambda x_: torch.tensor(x_)
         else:
-            raise RuntimeError(f'Cannot convert data type {type(x)} to torch.Tensor')
+            raise RuntimeError(f"Cannot convert data type {type(x)} to torch.Tensor")
 
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)
@@ -108,8 +110,9 @@ class SequentialVectorizeWrapper(Wrapper):
     def __init__(self, envs):
         super().__init__(envs[0])
         self.single_env_agents = envs[0].num_agents
-        assert all(e.num_agents == self.single_env_agents for e in envs), \
-            f'Expect all envs to have the same number of agents {self.single_env_agents}'
+        assert all(
+            e.num_agents == self.single_env_agents for e in envs
+        ), f"Expect all envs to have the same number of agents {self.single_env_agents}"
 
         self.envs = envs
         self.num_agents = self.single_env_agents * len(envs)

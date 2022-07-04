@@ -13,20 +13,20 @@ def bot_param(difficulty):
 def fmt_bot(difficulty, idx):
     weaponpref = list(range(9))
     np.random.shuffle(weaponpref)
-    weaponpref_str = ''.join([str(w) for w in weaponpref])  # currently not used
+    # weaponpref_str = "".join([str(w) for w in weaponpref])  # currently not used
 
     bot_str = (
-        '{ \n'
-        f'    name BOT_{difficulty}_{idx} \n'
-        f'    aiming {bot_param(difficulty)} \n'
-        f'    perfection {bot_param(difficulty)} \n'
-        f'    reaction {bot_param(difficulty)} \n'
-        f'    isp {bot_param(difficulty)} \n'
+        "{ \n"
+        f"    name BOT_{difficulty}_{idx} \n"
+        f"    aiming {bot_param(difficulty)} \n"
+        f"    perfection {bot_param(difficulty)} \n"
+        f"    reaction {bot_param(difficulty)} \n"
+        f"    isp {bot_param(difficulty)} \n"
         f'    color "00 ff 00" \n'
-        f'    skin base \n'
-        f'    //weaponpref	012345678 \n'
-        '} \n'
-        '\n'
+        f"    skin base \n"
+        f"    //weaponpref	012345678 \n"
+        "} \n"
+        "\n"
     )
     return bot_str
 
@@ -39,5 +39,5 @@ def main():
             print(bot_cfg_string)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

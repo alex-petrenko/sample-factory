@@ -15,8 +15,8 @@ from typing import Dict
 import torch
 from torch import nn
 
-from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace, running_mean_std_summaries
 from sample_factory.algo.utils.misc import EPS
+from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace, running_mean_std_summaries
 from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
 
 
@@ -59,10 +59,10 @@ class ObservationNormalizer(nn.Module):
             # subtraction of mean and scaling is only applied to default "obs"
             # this should be modified for custom obs dicts
             if self.should_sub_mean:
-                obs_clone['obs'].sub_(self.sub_mean)
+                obs_clone["obs"].sub_(self.sub_mean)
 
             if self.should_scale:
-                obs_clone['obs'].mul_(1.0 / self.scale)
+                obs_clone["obs"].mul_(1.0 / self.scale)
 
             if self.running_mean_std:
                 self.running_mean_std(obs_clone)  # in-place normalization

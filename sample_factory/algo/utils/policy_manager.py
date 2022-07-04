@@ -17,7 +17,9 @@ class PolicyManager:
 
         self.num_agents = num_agents
         self.num_policies = cfg.num_policies
-        self.mix_policies_in_one_env = cfg.pbt_mix_policies_in_one_env if hasattr(cfg, 'pbt_mix_policies_in_one_env') else False  # TODO
+        self.mix_policies_in_one_env = (
+            cfg.pbt_mix_policies_in_one_env if hasattr(cfg, "pbt_mix_policies_in_one_env") else False
+        )  # TODO
 
         self.resample_env_policy_every = 10  # episodes
         self.env_policies = dict()

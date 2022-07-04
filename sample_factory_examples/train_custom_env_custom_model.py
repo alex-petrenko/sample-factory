@@ -14,9 +14,9 @@ import numpy as np
 from torch import nn
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.model.model_utils import register_custom_encoder, EncoderBase, get_obs_shape, nonlinearity
-from sample_factory.cfg.arguments import arg_parser, parse_args
 from sample_factory.algo.utils.torch_utils import calc_num_elements
+from sample_factory.cfg.arguments import arg_parser, parse_args
+from sample_factory.model.model_utils import EncoderBase, get_obs_shape, nonlinearity, register_custom_encoder
 from sample_factory.train import run_rl
 
 
@@ -30,7 +30,7 @@ def custom_parse_args(argv=None, evaluation=False):
     parser = arg_parser(argv, evaluation=evaluation)
 
     # add custom args here
-    parser.add_argument('--my_custom_arg', type=int, default=42, help='Any custom arguments users might define')
+    parser.add_argument("--my_custom_arg", type=int, default=42, help="Any custom arguments users might define")
 
     # SampleFactory parse_args function does some additional processing (see comments there)
     cfg = parse_args(argv=argv, evaluation=evaluation, parser=parser)
@@ -66,7 +66,7 @@ class CustomEnv(gym.Env):
 
         return self._obs(), reward, done, dict()
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass
 
 
@@ -79,8 +79,8 @@ def add_extra_params_func(env, parser):
     Specify any additional command line arguments for this family of custom environments.
     """
     p = parser
-    p.add_argument('--custom_env_num_actions', default=10, type=int, help='Number of actions in my custom env')
-    p.add_argument('--custom_env_episode_len', default=1000, type=int, help='Number of steps in the episode')
+    p.add_argument("--custom_env_num_actions", default=10, type=int, help="Number of actions in my custom env")
+    p.add_argument("--custom_env_episode_len", default=1000, type=int, help="Number of steps in the episode")
 
 
 def override_default_params_func(env, parser):
@@ -91,7 +91,7 @@ def override_default_params_func(env, parser):
 
     """
     parser.set_defaults(
-        encoder_custom='custom_env_encoder',
+        encoder_custom="custom_env_encoder",
         hidden_size=128,
     )
 
@@ -103,8 +103,10 @@ class CustomEncoder(EncoderBase):
         obs_shape = get_obs_shape(obs_space)
 
         conv_layers = [
-            nn.Conv2d(1, 8, 3, stride=2), nonlinearity(cfg),
-            nn.Conv2d(8, 16, 2, stride=1), nonlinearity(cfg),
+            nn.Conv2d(1, 8, 3, stride=2),
+            nonlinearity(cfg),
+            nn.Conv2d(8, 16, 2, stride=1),
+            nonlinearity(cfg),
         ]
 
         self.conv_head = nn.Sequential(*conv_layers)
@@ -114,7 +116,7 @@ class CustomEncoder(EncoderBase):
 
     def forward(self, obs_dict):
         # we always work with dictionary observations. Primary observation is available with the key 'obs'
-        main_obs = obs_dict['obs']
+        main_obs = obs_dict["obs"]
 
         x = self.conv_head(main_obs)
         x = x.view(-1, self.conv_head_out_size)
@@ -126,13 +128,13 @@ class CustomEncoder(EncoderBase):
 
 def register_custom_components():
     global_env_registry().register_env(
-        env_name_prefix='my_custom_env_',
+        env_name_prefix="my_custom_env_",
         make_env_func=make_custom_env_func,
         add_extra_params_func=add_extra_params_func,
         override_default_params_func=override_default_params_func,
     )
 
-    register_custom_encoder('custom_env_encoder', CustomEncoder)
+    register_custom_encoder("custom_env_encoder", CustomEncoder)
 
 
 def main():
@@ -143,5 +145,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

@@ -42,7 +42,7 @@ If you would like to work on any of the open Issues:
 
 	**do not** work on the `main` branch.
 
-4. Set up a development environment by running the following command in a virtual environment:
+4. Set up a development environment by running the following command in a virtual (or conda) environment:
 
 	```bash
 	pip install -e .[dev]
@@ -61,7 +61,7 @@ If you would like to work on any of the open Issues:
 	```
 7. Run unittests with the following command:
 	```bash
-	make format
+	make test
 	```
 8. Once you're happy with your files, add your changes and make a commit to record your changes locally:
 

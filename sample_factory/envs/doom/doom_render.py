@@ -17,7 +17,7 @@ def concat_grid(obs):
 
     obs_concat_h = []
     for i in range(vertical):
-        obs_concat_h.append(np.concatenate(obs[i * horizontal:(i + 1) * horizontal], axis=1))
+        obs_concat_h.append(np.concatenate(obs[i * horizontal : (i + 1) * horizontal], axis=1))
 
     obs_concat = np.concatenate(obs_concat_h, axis=0)
     return obs_concat

@@ -22,7 +22,9 @@ def gae_advantages(rewards: Tensor, dones: Tensor, values: Tensor, γ: float, λ
     return advantages
 
 
-def calculate_discounted_sum_torch(x: Tensor, dones: Tensor, discount: float, x_last: Optional[Tensor] = None) -> Tensor:
+def calculate_discounted_sum_torch(
+    x: Tensor, dones: Tensor, discount: float, x_last: Optional[Tensor] = None
+) -> Tensor:
     """
     Computing cumulative sum (of something) for the trajectory, taking episode termination into consideration.
     :param x: ndarray of shape [num_steps, num_envs]

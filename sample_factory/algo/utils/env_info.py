@@ -11,7 +11,7 @@ from gym.spaces import Discrete
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.spaces.discretized import Discretized
-from sample_factory.utils.utils import log, AttrDict, experiment_dir
+from sample_factory.utils.utils import AttrDict, experiment_dir, log
 
 
 def is_integer_action_env(action_space):
@@ -25,9 +25,7 @@ def is_integer_action_env(action_space):
         else:
             # tecnhically possible to add support for such spaces, but it's untested
             # for now, look at Discretized instead.
-            raise Exception(
-                'Mixed discrete & continuous action spaces are not supported (should be an easy fix)'
-            )
+            raise Exception("Mixed discrete & continuous action spaces are not supported (should be an easy fix)")
 
     return integer_actions
 
@@ -68,20 +66,20 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     tmp_env.close()
     del tmp_env
 
-    log.debug('Env info: %r', env_info)
+    log.debug("Env info: %r", env_info)
     res_queue.put(env_info)
 
 
 def obtain_env_info_in_a_separate_process(cfg: AttrDict):
-    cache_filename = join(experiment_dir(cfg=cfg), f'env_info_{cfg.env}')
+    cache_filename = join(experiment_dir(cfg=cfg), f"env_info_{cfg.env}")
     if os.path.isfile(cache_filename):
-        with open(cache_filename, 'rb') as fobj:
+        with open(cache_filename, "rb") as fobj:
             env_info = pickle.load(fobj)
             return env_info
 
     sf_context = sf_global_context()
 
-    ctx = multiprocessing.get_context('spawn')
+    ctx = multiprocessing.get_context("spawn")
     q = ctx.Queue()
     p = ctx.Process(target=spawn_tmp_env_and_get_info, args=(sf_context, q, cfg))
     p.start()
@@ -89,7 +87,7 @@ def obtain_env_info_in_a_separate_process(cfg: AttrDict):
     env_info = q.get()
     p.join()
 
-    with open(cache_filename, 'wb') as fobj:
+    with open(cache_filename, "wb") as fobj:
         pickle.dump(env_info, fobj)
 
     return env_info

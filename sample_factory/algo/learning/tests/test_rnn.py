@@ -1,11 +1,9 @@
-import pytest
-
 import numpy as np
-
+import pytest
 import torch
 import torch.nn as nn
 
-from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
+from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, build_rnn_inputs
 
 
 # noinspection PyPep8Naming
@@ -26,7 +24,10 @@ class TestPackedSequences:
             x = torch.randn(T * N, D)
             rnn_hidden_states = rnn_hidden_states_random.clone().detach()
             x_seq, seq_states, inverted_select_inds = build_rnn_inputs(
-                x, dones, rnn_hidden_states, T,
+                x,
+                dones,
+                rnn_hidden_states,
+                T,
             )
 
             packed_out, _ = rnn(x_seq, seq_states.unsqueeze(0))

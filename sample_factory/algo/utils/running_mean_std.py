@@ -9,10 +9,9 @@ import gym
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.jit import ScriptModule, RecursiveScriptModule
+from torch.jit import RecursiveScriptModule, ScriptModule
 
 from sample_factory.utils.utils import log
-
 
 _NORM_EPS = 1e-5
 _DEFAULT_CLIP = 5.0
@@ -22,7 +21,7 @@ _DEFAULT_CLIP = 5.0
 class RunningMeanStdInPlace(nn.Module):
     def __init__(self, input_shape, epsilon=_NORM_EPS, clip=_DEFAULT_CLIP, per_channel=False, norm_only=False):
         super().__init__()
-        log.debug('RunningMeanStd input shape: %r', input_shape)
+        log.debug("RunningMeanStd input shape: %r", input_shape)
         self.input_shape: Final = input_shape
         self.eps: Final[float] = epsilon
         self.clip: Final[float] = clip
@@ -42,20 +41,22 @@ class RunningMeanStdInPlace(nn.Module):
             self.axis = [0]
             shape = input_shape
 
-        self.register_buffer('running_mean', torch.zeros(shape, dtype=torch.float64))
-        self.register_buffer('running_var', torch.ones(shape, dtype=torch.float64))
-        self.register_buffer('count', torch.ones([1], dtype=torch.float64))
+        self.register_buffer("running_mean", torch.zeros(shape, dtype=torch.float64))
+        self.register_buffer("running_var", torch.ones(shape, dtype=torch.float64))
+        self.register_buffer("count", torch.ones([1], dtype=torch.float64))
 
     @staticmethod
     @torch.jit.script
-    def _update_mean_var_count_from_moments(mean: Tensor, var: Tensor, count: Tensor, batch_mean: Tensor, batch_var: Tensor, batch_count: int):
+    def _update_mean_var_count_from_moments(
+        mean: Tensor, var: Tensor, count: Tensor, batch_mean: Tensor, batch_var: Tensor, batch_count: int
+    ):
         delta = batch_mean - mean
         tot_count = count + batch_count
 
         new_mean = mean + delta * batch_count / tot_count
         m_a = var * count
         m_b = batch_var * batch_count
-        M2 = m_a + m_b + (delta ** 2) * count * batch_count / tot_count
+        M2 = m_a + m_b + (delta**2) * count * batch_count / tot_count
         new_var = M2 / tot_count
         return new_mean, new_var, tot_count
 
@@ -63,14 +64,20 @@ class RunningMeanStdInPlace(nn.Module):
         """Normalizes in-place! This function modifies the input tensor and returns nothing."""
         if self.training:
             # check if the shape exactly matches or it's a scalar for which we use shape (1, )
-            assert x.shape[1:] == self.input_shape or (x.shape[1:] == () and self.input_shape == (1, )), \
-                f'RMS expected input shape {self.input_shape}, got {x.shape[1:]}'
+            assert x.shape[1:] == self.input_shape or (
+                x.shape[1:] == () and self.input_shape == (1,)
+            ), f"RMS expected input shape {self.input_shape}, got {x.shape[1:]}"
 
             batch_count = x.size()[0]
             μ = x.mean(self.axis)  # along channel axis
             σ2 = x.var(self.axis)
             self.running_mean[:], self.running_var[:], self.count[:] = self._update_mean_var_count_from_moments(
-                self.running_mean, self.running_var, self.count, μ, σ2, batch_count,
+                self.running_mean,
+                self.running_var,
+                self.count,
+                μ,
+                σ2,
+                batch_count,
             )
 
         # change shape
@@ -85,7 +92,7 @@ class RunningMeanStdInPlace(nn.Module):
                 current_mean = self.running_mean.view([1, self.input_shape[0]]).expand_as(x)
                 current_var = self.running_var.view([1, self.input_shape[0]]).expand_as(x)
             else:
-                raise RuntimeError(f'RunningMeanStd input shape {self.input_shape} not supported')
+                raise RuntimeError(f"RunningMeanStd input shape {self.input_shape} not supported")
         else:
             current_mean = self.running_mean
             current_var = self.running_var
@@ -99,21 +106,26 @@ class RunningMeanStdInPlace(nn.Module):
             if denormalize:
                 x.mul_(σ)
             else:
-                x.mul_(1/σ)
+                x.mul_(1 / σ)
         else:
             if denormalize:
                 x.clamp_(-clip, clip).mul_(σ).add_(μ)
             else:
-                x.sub_(μ).mul_(1/σ).clamp_(-clip, clip)
+                x.sub_(μ).mul_(1 / σ).clamp_(-clip, clip)
 
 
 class RunningMeanStdDictInPlace(nn.Module):
-    def __init__(self, obs_space: gym.spaces.Dict, epsilon=_NORM_EPS, clip=_DEFAULT_CLIP, per_channel=False, norm_only=False):
+    def __init__(
+        self, obs_space: gym.spaces.Dict, epsilon=_NORM_EPS, clip=_DEFAULT_CLIP, per_channel=False, norm_only=False
+    ):
         super(RunningMeanStdDictInPlace, self).__init__()
         self.obs_space: Final = obs_space
-        self.running_mean_std = nn.ModuleDict({
-            k: RunningMeanStdInPlace(space.shape, epsilon, clip, per_channel, norm_only) for k, space in obs_space.spaces.items()
-        })
+        self.running_mean_std = nn.ModuleDict(
+            {
+                k: RunningMeanStdInPlace(space.shape, epsilon, clip, per_channel, norm_only)
+                for k, space in obs_space.spaces.items()
+            }
+        )
 
     def forward(self, x: Dict[str, Tensor]) -> None:
         """Normalize in-place!"""
@@ -127,11 +139,11 @@ def running_mean_std_summaries(running_mean_std_module: Union[nn.Module, ScriptM
 
     for name, buf in m.named_buffers():
         # converts MODULE_NAME.running_mean_std.obs.running_mean to obs.running_mean
-        name = '_'.join(name.split('.')[-2:])
+        name = "_".join(name.split(".")[-2:])
 
-        if name.endswith('running_mean'):
+        if name.endswith("running_mean"):
             res[name] = buf.float().mean()
-        elif name.endswith('running_var'):
-            res[name.replace('_var', '_std')] = torch.sqrt(buf.float() + _NORM_EPS).mean()
+        elif name.endswith("running_var"):
+            res[name.replace("_var", "_std")] = torch.sqrt(buf.float() + _NORM_EPS).mean()
 
     return res

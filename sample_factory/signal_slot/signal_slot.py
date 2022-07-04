@@ -7,7 +7,7 @@ import types
 import uuid
 from dataclasses import dataclass
 from queue import Empty
-from typing import Dict, Any, Set, Callable, Union, List, Optional, Iterable, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.utils.utils import log
@@ -49,8 +49,9 @@ class signal:
         self._name = name
 
     def __get__(self, obj, objtype=None):
-        assert isinstance(obj, EventLoopObject), \
-            f'signals can only be added to {EventLoopObject.__name__}, not {type(obj)}'
+        assert isinstance(
+            obj, EventLoopObject
+        ), f"signals can only be added to {EventLoopObject.__name__}, not {type(obj)}"
         self._obj = obj
         return self
 
@@ -78,7 +79,7 @@ class EventLoopObject:
 
         # check if there is already an object with the same id on this event loop
         if self.object_id in event_loop.objects:
-            raise ValueError(f'{self.object_id=} is already registered on {event_loop=}')
+            raise ValueError(f"{self.object_id=} is already registered on {event_loop=}")
 
         self.event_loop: EventLoop = event_loop
         self.event_loop.objects[self.object_id] = self
@@ -108,7 +109,7 @@ class EventLoopObject:
     def _throw_if_different_processes(o1: EventLoopObject, o2: EventLoopObject):
         o1_p, o2_p = o1.event_loop.process, o2.event_loop.process
         if o1_p != o2_p:
-            msg = f'Objects {o1.object_id} and {o2.object_id} live on different processes'
+            msg = f"Objects {o1.object_id} and {o2.object_id} live on different processes"
             log.error(msg)
             raise RuntimeError(msg)
 
@@ -118,7 +119,7 @@ class EventLoopObject:
             slot = obj.__name__
             obj = obj.__self__
 
-        assert isinstance(obj, EventLoopObject), f'slot should be a method of {EventLoopObject.__name__}'
+        assert isinstance(obj, EventLoopObject), f"slot should be a method of {EventLoopObject.__name__}"
         assert slot is not None
         return obj, slot
 
@@ -133,7 +134,7 @@ class EventLoopObject:
         # check if we already have a different object with the same name
         if receiver_id in self.event_loop.objects:
             if self.event_loop.objects[receiver_id] is not other:
-                raise ValueError(f'{receiver_id=} object is already registered on {self.event_loop.object_id=}')
+                raise ValueError(f"{receiver_id=} object is already registered on {self.event_loop.object_id=}")
 
         self._add_to_dict_of_sets(self.send_signals_to, signal_, receiver_id)
 
@@ -152,12 +153,12 @@ class EventLoopObject:
         self._throw_if_different_processes(self, other)
 
         if signal_ not in self.send_signals_to:
-            log.warning(f'{self.object_id}:{signal_=} is not connected to anything')
+            log.warning(f"{self.object_id}:{signal_=} is not connected to anything")
             return
 
         receiver_id = other.object_id
         if receiver_id not in self.send_signals_to[signal_]:
-            log.warning(f'{self.object_id}:{signal_=} is not connected to {receiver_id}:{slot=}')
+            log.warning(f"{self.object_id}:{signal_=} is not connected to {receiver_id}:{slot=}")
             return
 
         self.send_signals_to[signal_].remove(receiver_id)
@@ -188,7 +189,7 @@ class EventLoopObject:
         self.event_loop.disconnect(signal_, self, slot)
 
     def emit(self, signal_: str, *args):
-        self.emit_many(signal_, (args, ))
+        self.emit_many(signal_, (args,))
 
     def emit_many(self, signal_: str, list_of_args: Iterable[Tuple]):
         # this is mostly for debugging
@@ -241,7 +242,7 @@ class EventLoop(EventLoopObject):
 
         # Separate container to keep track of timers living on this thread. Start with one default timer.
         self.timers: List[Timer] = []
-        self.default_timer = Timer(self, 0.05, object_id=f'{self.object_id}_timer')
+        self.default_timer = Timer(self, 0.05, object_id=f"{self.object_id}_timer")
 
         self.receivers: Dict[Emitter, Set[ObjectID]] = dict()
 
@@ -256,16 +257,22 @@ class EventLoop(EventLoopObject):
         self._internal_terminate.connect(self._terminate)
 
     """Emitted right before the start of the loop."""
+
     @signal
-    def start(self): pass
+    def start(self):
+        pass
 
     """Emitted upon loop termination."""
+
     @signal
-    def terminate(self): pass
+    def terminate(self):
+        pass
 
     """Internal signal: do not connect to this."""
+
     @signal
-    def _internal_terminate(self): pass
+    def _internal_terminate(self):
+        pass
 
     def add_timer(self, t: Timer):
         self.timers.append(t)
@@ -294,7 +301,7 @@ class EventLoop(EventLoopObject):
 
     def _process_signal(self, signal_):
         if self.verbose:
-            log.debug(f'{self} received {signal_=}...')
+            log.debug(f"{self} received {signal_=}...")
 
         emitter_object_id, signal_name, args = signal_
         emitter = Emitter(emitter_object_id, signal_name)
@@ -305,33 +312,35 @@ class EventLoop(EventLoopObject):
             obj = self.objects.get(obj_id)
             if obj is None:
                 if self.verbose:
-                    log.warning(f'{self} attempting to call a slot on an object {obj_id} which is not found on this loop ({signal_=})')
+                    log.warning(
+                        f"{self} attempting to call a slot on an object {obj_id} which is not found on this loop ({signal_=})"
+                    )
                 self.receivers[emitter].remove(obj_id)
                 continue
 
             slot = obj.connections.get(emitter)
             if obj is None:
-                log.warning(f'{self} {emitter=} does not appear to be connected to {obj_id=}')
+                log.warning(f"{self} {emitter=} does not appear to be connected to {obj_id=}")
                 continue
 
             if not hasattr(obj, slot):
-                log.warning(f'{self} {slot=} not found in object {obj_id}')
+                log.warning(f"{self} {slot=} not found in object {obj_id}")
                 continue
 
             slot_callable = getattr(obj, slot)
             if not isinstance(slot_callable, Callable):
-                log.warning(f'{self} {slot=} of {obj_id=} is not callable')
+                log.warning(f"{self} {slot=} of {obj_id=} is not callable")
                 continue
 
             self.curr_emitter = emitter
             if self.verbose:
-                log.debug(f'{self} calling slot {obj_id}:{slot}')
+                log.debug(f"{self} calling slot {obj_id}:{slot}")
 
             # noinspection PyBroadException
             try:
                 slot_callable(*args)
             except Exception as exc:
-                log.exception(f'{self} unhandled exception in {slot=} connected to {emitter=}')
+                log.exception(f"{self} unhandled exception in {slot=} connected to {emitter=}")
                 raise exc
 
     def _calculate_timeout(self) -> Timer:
@@ -360,7 +369,7 @@ class EventLoop(EventLoopObject):
             self._process_signal(s)
 
         if self.should_terminate:
-            log.debug(f'Loop {self.object_id} terminating...')
+            log.debug(f"Loop {self.object_id} terminating...")
             self.terminate.emit()
             return False
 
@@ -376,10 +385,10 @@ class EventLoop(EventLoopObject):
             while self._loop_iteration():
                 pass
         except Exception as exc:
-            log.warning(f'Unhandled exception {exc} in evt loop {self.object_id}')
+            log.warning(f"Unhandled exception {exc} in evt loop {self.object_id}")
             raise exc
         except KeyboardInterrupt:
-            log.info(f'Keyboard interrupt detected in the event loop {self}, exiting...')
+            log.info(f"Keyboard interrupt detected in the event loop {self}, exiting...")
             status = EventLoopStatus.INTERRUPTED
 
         return status
@@ -388,7 +397,7 @@ class EventLoop(EventLoopObject):
         self._loop_iteration()
 
     def __str__(self):
-        return f'EvtLoop [{self.object_id}, process={process_name(self.process)}]'
+        return f"EvtLoop [{self.object_id}, process={process_name(self.process)}]"
 
 
 class Timer(EventLoopObject):
@@ -402,7 +411,8 @@ class Timer(EventLoopObject):
         self.start()
 
     @signal
-    def timeout(self): pass
+    def timeout(self):
+        pass
 
     def set_interval(self, interval_sec: float):
         self._interval_sec = interval_sec
@@ -440,7 +450,7 @@ class Timer(EventLoopObject):
         return max(0, self._next_timeout - time.time())
 
     def _default_obj_id(self):
-        return f'{Timer.__name__}_{super()._default_obj_id()}'
+        return f"{Timer.__name__}_{super()._default_obj_id()}"
 
 
 class TightLoop(Timer):
@@ -448,14 +458,17 @@ class TightLoop(Timer):
         super().__init__(event_loop, 0.0, object_id)
 
     @signal
-    def iteration(self): pass
+    def iteration(self):
+        pass
 
     def _emit(self):
         self.iteration.emit()
 
 
 class EventLoopProcess(EventLoopObject):
-    def __init__(self, unique_process_name, multiprocessing_context=None, init_func=None, args=(), kwargs=None, daemon=None):
+    def __init__(
+        self, unique_process_name, multiprocessing_context=None, init_func=None, args=(), kwargs=None, daemon=None
+    ):
         """
         Here we could've inherited from Process, but the actual class of process (i.e. Process vs SpawnProcess)
         depends on the multiprocessing context and hence is not known during the generation of the class.
@@ -470,7 +483,7 @@ class EventLoopProcess(EventLoopObject):
         self._args = self._kwargs = None
         self.set_init_func_args(args, kwargs)
 
-        self.event_loop = EventLoop(f'{unique_process_name}_evt_loop')
+        self.event_loop = EventLoop(f"{unique_process_name}_evt_loop")
         EventLoopObject.__init__(self, self.event_loop, unique_process_name)
 
     def set_init_func_args(self, args=(), kwargs=None):
@@ -526,11 +539,11 @@ class EventLoopProcess(EventLoopObject):
 
 def process_name(p: Optional[EventLoopProcess]):
     if p is None:
-        return f'main process {os.getpid()}'
+        return f"main process {os.getpid()}"
     elif isinstance(p, EventLoopProcess):
         return p.name
     else:
-        raise RuntimeError(f'Unknown process type {type(p)}')
+        raise RuntimeError(f"Unknown process type {type(p)}")
 
 
 def process_pid(p: Optional[EventLoopProcess]):
@@ -540,4 +553,4 @@ def process_pid(p: Optional[EventLoopProcess]):
         # noinspection PyProtectedMember
         return p._process.pid
     else:
-        raise RuntimeError(f'Unknown process type {type(p)}')
+        raise RuntimeError(f"Unknown process type {type(p)}")

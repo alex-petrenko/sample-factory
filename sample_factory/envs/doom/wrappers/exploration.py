@@ -1,8 +1,8 @@
 import math
 from collections import deque
-import numpy as np
 
 import gym
+import numpy as np
 
 
 class ExplorationWrapper(gym.Wrapper):
@@ -12,11 +12,11 @@ class ExplorationWrapper(gym.Wrapper):
         self.landmark_threshold = 75.0
 
     def _calc_intrinsic_reward(self, info):
-        pos = info.get('pos', None)
+        pos = info.get("pos", None)
         if pos is None:
             return 0.0
 
-        x, y, angle = pos['agent_x'], pos['agent_y'], pos['agent_a']
+        x, y, angle = pos["agent_x"], pos["agent_y"], pos["agent_a"]
         reward = 0.0
 
         # check if we are far from all known landmarks
@@ -52,5 +52,5 @@ class ExplorationWrapper(gym.Wrapper):
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
         exploration_reward = self._calc_intrinsic_reward(info)
-        info['intrinsic_reward'] = info.get('intrinsic_reward', 0.0) + exploration_reward
+        info["intrinsic_reward"] = info.get("intrinsic_reward", 0.0) + exploration_reward
         return obs, reward, done, info

@@ -11,10 +11,10 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import parse_args, load_from_checkpoint
+from sample_factory.cfg.arguments import load_from_checkpoint, parse_args
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.utils.utils import log, AttrDict
+from sample_factory.utils.utils import AttrDict, log
 
 
 def enjoy(cfg, max_num_frames=1e9):
@@ -22,9 +22,9 @@ def enjoy(cfg, max_num_frames=1e9):
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
     if render_action_repeat is None:
-        log.warning('Not using action repeat!')
+        log.warning("Not using action repeat!")
         render_action_repeat = 1
-    log.debug('Using action repeat %d during evaluation', render_action_repeat)
+    log.debug("Using action repeat %d during evaluation", render_action_repeat)
 
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
@@ -33,22 +33,22 @@ def enjoy(cfg, max_num_frames=1e9):
     # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 
-    if hasattr(env.unwrapped, 'reset_on_init'):
+    if hasattr(env.unwrapped, "reset_on_init"):
         # reset call ruins the demo recording for VizDoom
         env.unwrapped.reset_on_init = False
 
     actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
     actor_critic.eval()
 
-    device = torch.device('cpu' if cfg.device == 'cpu' else 'cuda')
+    device = torch.device("cpu" if cfg.device == "cpu" else "cuda")
     actor_critic.model_to_device(device)
 
     # TODO: move this to a separate IO module
     policy_id = cfg.policy_index
-    name_prefix = dict(latest='checkpoint', best='best')[cfg.load_checkpoint_kind]
-    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f'{name_prefix}_*')
+    name_prefix = dict(latest="checkpoint", best="best")[cfg.load_checkpoint_kind]
+    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
     checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
-    actor_critic.load_state_dict(checkpoint_dict['model'])
+    actor_critic.load_state_dict(checkpoint_dict["model"])
 
     episode_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
     true_objectives = [deque([], maxlen=100) for _ in range(env.num_agents)]
@@ -70,7 +70,7 @@ def enjoy(cfg, max_num_frames=1e9):
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
-            actions = policy_outputs['actions']
+            actions = policy_outputs["actions"]
 
             action_distribution = actor_critic.action_distribution()
             if isinstance(action_distribution, ContinuousActionDistribution):
@@ -79,7 +79,7 @@ def enjoy(cfg, max_num_frames=1e9):
 
             actions = preprocess_actions(env_info, actions)  # TODO: move this to some utils module
 
-            rnn_states = policy_outputs['new_rnn_states']
+            rnn_states = policy_outputs["new_rnn_states"]
 
             for _ in range(render_action_repeat):
                 if not cfg.no_render:
@@ -113,10 +113,16 @@ def enjoy(cfg, max_num_frames=1e9):
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):
-                            true_objective = infos[agent_i].get('true_objective', rew)
+                            true_objective = infos[agent_i].get("true_objective", rew)
                         true_objectives[agent_i].append(true_objective)
 
-                        log.info('Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f', agent_i, num_frames, episode_reward[agent_i], true_objectives[agent_i][-1])
+                        log.info(
+                            "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
+                            agent_i,
+                            num_frames,
+                            episode_reward[agent_i],
+                            true_objectives[agent_i][-1],
+                        )
                         rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
 
@@ -128,22 +134,28 @@ def enjoy(cfg, max_num_frames=1e9):
 
                 if all(finished_episode):
                     finished_episode = [False] * env.num_agents
-                    avg_episode_rewards_str, avg_true_objective_str = '', ''
+                    avg_episode_rewards_str, avg_true_objective_str = "", ""
                     for agent_i in range(env.num_agents):
                         avg_rew = np.mean(episode_rewards[agent_i])
                         avg_true_obj = np.mean(true_objectives[agent_i])
 
                         if not np.isnan(avg_rew):
                             if avg_episode_rewards_str:
-                                avg_episode_rewards_str += ', '
-                            avg_episode_rewards_str += f'#{agent_i}: {avg_rew:.3f}'
+                                avg_episode_rewards_str += ", "
+                            avg_episode_rewards_str += f"#{agent_i}: {avg_rew:.3f}"
                         if not np.isnan(avg_true_obj):
                             if avg_true_objective_str:
-                                avg_true_objective_str += ', '
-                            avg_true_objective_str += f'#{agent_i}: {avg_true_obj:.3f}'
+                                avg_true_objective_str += ", "
+                            avg_true_objective_str += f"#{agent_i}: {avg_true_obj:.3f}"
 
-                    log.info('Avg episode rewards: %s, true rewards: %s', avg_episode_rewards_str, avg_true_objective_str)
-                    log.info('Avg episode reward: %.3f, avg true_objective: %.3f', np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]), np.mean([np.mean(true_objectives[i]) for i in range(env.num_agents)]))
+                    log.info(
+                        "Avg episode rewards: %s, true rewards: %s", avg_episode_rewards_str, avg_true_objective_str
+                    )
+                    log.info(
+                        "Avg episode reward: %.3f, avg true_objective: %.3f",
+                        np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]),
+                        np.mean([np.mean(true_objectives[i]) for i in range(env.num_agents)]),
+                    )
 
                 # VizDoom multiplayer stuff
                 # for player in [1, 2, 3, 4, 5, 6, 7, 8]:
@@ -163,5 +175,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

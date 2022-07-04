@@ -1,24 +1,28 @@
-from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
-from sample_factory.runner.runs.isaacgym_runs import vstr, base_cli
+from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sample_factory.runner.runs.isaacgym_runs import base_cli, vstr
 
-_params = ParamGrid([
-    ('seed', [1111, 2222, 3333, 4444]),
-    ('serial_mode', [True]),
-    ('async_rl', [False]),
-    ('normalize_returns', [True, False]),
-])
+_params = ParamGrid(
+    [
+        ("seed", [1111, 2222, 3333, 4444]),
+        ("serial_mode", [True]),
+        ("async_rl", [False]),
+        ("normalize_returns", [True, False]),
+    ]
+)
 
-vstr = f'{vstr}_norm_returns'
+vstr = f"{vstr}_norm_returns"
 
-ahand_cli = f' --env=isaacgym_AllegroHand --train_for_env_steps=150000000 ' \
-            f'--with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}'
+ahand_cli = (
+    f" --env=isaacgym_AllegroHand --train_for_env_steps=150000000 "
+    f"--with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}"
+)
 cli = base_cli + ahand_cli
 
 _experiments = [
-    Experiment(f'allegrohand_{vstr}', cli, _params.generate_params(False)),
+    Experiment(f"allegrohand_{vstr}", cli, _params.generate_params(False)),
 ]
 
-RUN_DESCRIPTION = RunDescription(f'allegrohand_{vstr}', experiments=_experiments)
+RUN_DESCRIPTION = RunDescription(f"allegrohand_{vstr}", experiments=_experiments)
 
 
 # Run locally: python -m sample_factory.runner.run --run=sample_factory.runner.runs.isaacgym_allegrohand --runner=processes --max_parallel=1 --experiments_per_gpu=1 --num_gpus=1

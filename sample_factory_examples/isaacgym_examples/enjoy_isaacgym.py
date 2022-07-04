@@ -1,8 +1,8 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # noinspection PyUnresolvedReferences
-import isaacgym
-
 import sys
+
+import isaacgym
 
 from sample_factory.cfg.arguments import parse_args
 from sample_factory.enjoy import enjoy
@@ -17,5 +17,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

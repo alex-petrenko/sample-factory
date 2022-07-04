@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, OrderedDict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional, OrderedDict
 
 
 def dict_of_lists_append(d: Dict[Any, List], new_data):

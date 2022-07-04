@@ -5,6 +5,9 @@ from os.path import join
 
 from sample_factory.utils.utils import str2bool
 
+# allow long lines in this file to make it easier to read help strings on a wide monitor
+# fmt: off
+
 
 def add_basic_cli_args(p: ArgumentParser):
     p.add_argument('-h', '--help', action='store_true', help='Print the help message', required=False)

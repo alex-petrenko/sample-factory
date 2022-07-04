@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Tuple, List, Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from torch import Tensor
@@ -12,10 +12,9 @@ from sample_factory.envs.env_wrappers import TimeLimitWrapper
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict
 
-
 # "TimeLimit.truncated" is the key used by Gym TimeLimit wrapper.
 # "time_outs" is used by IsaacGym.
-TIMEOUT_KEYS: Tuple = ('time_outs', TimeLimitWrapper.terminated_by_timer)
+TIMEOUT_KEYS: Tuple = ("time_outs", TimeLimitWrapper.terminated_by_timer)
 
 
 class VectorEnvRunner(Configurable):

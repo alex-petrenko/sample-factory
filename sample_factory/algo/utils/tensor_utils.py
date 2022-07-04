@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
 import torch

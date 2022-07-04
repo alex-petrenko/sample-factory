@@ -1,22 +1,22 @@
 import threading
 import time
 from enum import Enum
+from functools import wraps
 from multiprocessing import Process
 from queue import Empty, Queue
-import faster_fifo
+from time import sleep
 
 import cv2
+import faster_fifo
 import filelock
 import gym
 from filelock import FileLock
 
 from sample_factory.envs.doom.doom_gym import doom_lock_file
 from sample_factory.envs.doom.doom_render import concat_grid, cvt_doom_obs
-from sample_factory.envs.doom.multiplayer.doom_multiagent import find_available_port, DEFAULT_UDP_PORT
+from sample_factory.envs.doom.multiplayer.doom_multiagent import DEFAULT_UDP_PORT, find_available_port
 from sample_factory.envs.env_utils import RewardShapingInterface, get_default_reward_shaping
 from sample_factory.utils.utils import log
-from functools import wraps
-from time import sleep
 
 
 def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False):
@@ -39,14 +39,15 @@ def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_res
                     if i == num_attempts - 1:
                         raise
                     else:
-                        log.error('Failed with error %r, trying again', e)
+                        log.error("Failed with error %r, trying again", e)
                         sleep(sleep_time)
 
         return wrapper
+
     return decorator
 
 
-def safe_get(q, timeout=1e6, msg='Queue timeout'):
+def safe_get(q, timeout=1e6, msg="Queue timeout"):
     """Using queue.get() with timeout is necessary, otherwise KeyboardInterrupt is not handled."""
     while True:
         try:
@@ -69,15 +70,15 @@ class TaskType(Enum):
 def init_multiplayer_env(make_env_func, player_id, env_config, init_info=None):
     env = make_env_func(player_id=player_id)
 
-    if env_config is not None and 'worker_index' in env_config:
+    if env_config is not None and "worker_index" in env_config:
         env.unwrapped.worker_index = env_config.worker_index
-    if env_config is not None and 'vector_index' in env_config:
+    if env_config is not None and "vector_index" in env_config:
         env.unwrapped.vector_index = env_config.vector_index
 
     if init_info is None:
         port_to_use = udp_port_num(env_config)
         port = find_available_port(port_to_use, increment=1000)
-        log.debug('Using port %d', port)
+        log.debug("Using port %d", port)
         init_info = dict(port=port)
 
     env.unwrapped.init_info = init_info
@@ -102,7 +103,7 @@ class MultiAgentEnvWorker:
         self.process.start()
 
     def _init(self, init_info):
-        log.info('Initializing env for player %d, init_info: %r...', self.player_id, init_info)
+        log.info("Initializing env for player %d, init_info: %r...", self.player_id, init_info)
         env = init_multiplayer_env(self.make_env_func, self.player_id, self.env_config, init_info)
         if self.reset_on_init:
             env.reset()
@@ -118,7 +119,7 @@ class MultiAgentEnvWorker:
     def _get_info(env):
         """Specific to custom VizDoom environments."""
         info = {}
-        if hasattr(env.unwrapped, 'get_info_all'):
+        if hasattr(env.unwrapped, "get_info_all"):
             info = env.unwrapped.get_info_all()  # info for the new episode
         return info
 
@@ -126,13 +127,13 @@ class MultiAgentEnvWorker:
         """Allows us to set an arbitrary attribute of the environment, e.g. attr_chain can be unwrapped.foo.bar"""
         assert player_id == self.player_id
 
-        attrs = attr_chain.split('.')
+        attrs = attr_chain.split(".")
         curr_attr = env
         try:
             for attr_name in attrs[:-1]:
                 curr_attr = getattr(curr_attr, attr_name)
         except AttributeError:
-            log.error('Env does not have an attribute %s', attr_chain)
+            log.error("Env does not have an attribute %s", attr_chain)
 
         attr_to_set = attrs[-1]
         setattr(curr_attr, attr_to_set, value)
@@ -166,7 +167,7 @@ class MultiAgentEnvWorker:
                 player_id, attr_chain, value = data
                 self._set_env_attr(env, player_id, attr_chain, value)
             else:
-                raise Exception(f'Unknown task type {task_type}')
+                raise Exception(f"Unknown task type {task_type}")
 
             self.result_queue.put(results)
 
@@ -177,7 +178,7 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
         RewardShapingInterface.__init__(self)
 
         self.num_agents = num_agents
-        log.debug('Multi agent env, num agents: %d', self.num_agents)
+        log.debug("Multi agent env, num agents: %d", self.num_agents)
         self.skip_frames = skip_frames  # number of frames to skip (1 = no skip)
 
         env = make_env_func(player_id=-1)  # temporary env just to query observation_space and stuff
@@ -191,13 +192,13 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
 
         self.make_env_func = make_env_func
 
-        self.safe_init = env_config is not None and env_config.get('safe_init', False)
+        self.safe_init = env_config is not None and env_config.get("safe_init", False)
 
         if self.safe_init:
             sleep_seconds = env_config.worker_index * 1.0
-            log.info('Sleeping %.3f seconds to avoid creating all envs at once', sleep_seconds)
+            log.info("Sleeping %.3f seconds to avoid creating all envs at once", sleep_seconds)
             time.sleep(sleep_seconds)
-            log.info('Done sleeping at %d', env_config.worker_index)
+            log.info("Done sleeping at %d", env_config.worker_index)
 
         self.env_config = env_config
         self.workers = None
@@ -219,7 +220,9 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
         self.current_reward_shaping[agent_idx] = reward_shaping
         self.set_env_attr(
-            agent_idx, 'unwrapped.reward_shaping_interface.reward_shaping_scheme', reward_shaping,
+            agent_idx,
+            "unwrapped.reward_shaping_interface.reward_shaping_scheme",
+            reward_shaping,
         )
 
     def await_tasks(self, data, task_type, timeout=None):
@@ -248,7 +251,7 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             results = safe_get(
                 worker.result_queue,
                 timeout=0.2 if timeout is None else timeout,
-                msg=f'Takes a surprisingly long time to process task {task_type}, retry...',
+                msg=f"Takes a surprisingly long time to process task {task_type}, retry...",
             )
 
             if not isinstance(results, (tuple, list)):
@@ -277,7 +280,7 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             try:
                 port_to_use = udp_port_num(self.env_config)
                 port = find_available_port(port_to_use, increment=1000)
-                log.debug('Using port %d', port)
+                log.debug("Using port %d", port)
                 init_info = dict(port=port)
 
                 lock_file = doom_lock_file(max_parallel=20)
@@ -296,11 +299,11 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             except filelock.Timeout:
                 continue
             except Exception:
-                raise RuntimeError('Critical error: worker stuck on initialization. Abort!')
+                raise RuntimeError("Critical error: worker stuck on initialization. Abort!")
             else:
                 break
 
-        log.debug('%d agent workers initialized for env %d!', len(self.workers), self.env_config.worker_index)
+        log.debug("%d agent workers initialized for env %d!", len(self.workers), self.env_config.worker_index)
         self.initialized = True
 
     @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
@@ -324,7 +327,7 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
 
         obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
         for info in infos:
-            info['num_frames'] = self.skip_frames
+            info["num_frames"] = self.skip_frames
 
         if all(dones):
             obs = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
@@ -343,12 +346,12 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
 
         render_multiagent = True
         if render_multiagent:
-            obs_display = [o['obs'] for o in self.last_obs]
+            obs_display = [o["obs"] for o in self.last_obs]
             obs_grid = concat_grid(obs_display)
-            cv2.imshow('vizdoom', obs_grid)
+            cv2.imshow("vizdoom", obs_grid)
         else:
-            obs_display = self.last_obs[0]['obs']
-            cv2.imshow('vizdoom', cvt_doom_obs(obs_display))
+            obs_display = self.last_obs[0]["obs"]
+            cv2.imshow("vizdoom", cvt_doom_obs(obs_display))
 
         cv2.waitKey(1)
 

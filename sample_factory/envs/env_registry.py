@@ -14,7 +14,11 @@ class EnvRegistry:
         self.registry = dict()
 
     def register_env(
-            self, env_name_prefix, make_env_func, add_extra_params_func=None, override_default_params_func=None,
+        self,
+        env_name_prefix,
+        make_env_func,
+        add_extra_params_func=None,
+        override_default_params_func=None,
     ):
         """
         A standard thing to do in RL frameworks is to just rely on unique environment names registered in Gym.
@@ -49,26 +53,26 @@ class EnvRegistry:
 
         """
 
-        assert callable(make_env_func), 'make_env_func should be callable'
+        assert callable(make_env_func), "make_env_func should be callable"
 
         entry = EnvRegistryEntry(env_name_prefix, make_env_func, add_extra_params_func, override_default_params_func)
         self.registry[env_name_prefix] = entry
 
-        log.debug('Env registry entry created: %s', env_name_prefix)
+        log.debug("Env registry entry created: %s", env_name_prefix)
 
     def register_env_deferred(self, env_name_prefix, register_env_family_func):
         """Same as register_env but we defer the creation of the registry entry until we actually need it."""
         assert callable(register_env_family_func)
 
         self.registry[env_name_prefix] = register_env_family_func
-        
+
     def resolve_env_name(self, full_env_name):
         """
         :param full_env_name: complete name of the environment, to be passed to the make_env_func, e.g. atari_breakout
         :return: env registry entry
         :rtype: EnvRegistryEntry
         """
-        # we find a match with a registered env family prefix
+        # we find a match with a reqgistered env family prefix
         for env_prefix, registry_entry in self.registry.items():
             if not full_env_name.startswith(env_prefix):
                 continue
@@ -80,7 +84,9 @@ class EnvRegistry:
 
             return self.registry[env_prefix]
 
-        msg = (f'Could not resolve {full_env_name}. '
-               'Did you register the family of environments in the registry? See sample_factory_examples for details.')
+        msg = (
+            f"Could not resolve {full_env_name}."
+            f"Did you register the family of environments in the registry? See sample_factory_examples for details."
+        )
         log.warning(msg)
         raise RuntimeError(msg)

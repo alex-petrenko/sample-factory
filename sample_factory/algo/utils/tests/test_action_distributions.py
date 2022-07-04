@@ -1,21 +1,25 @@
 import random
 import time
-import pytest
 
 import gym
 import numpy as np
+import pytest
 import torch
 from torch.distributions import Categorical
 
-from sample_factory.algo.utils.action_distributions import get_action_distribution, calc_num_logits, \
-    sample_actions_log_probs, calc_num_actions
+from sample_factory.algo.utils.action_distributions import (
+    calc_num_actions,
+    calc_num_logits,
+    get_action_distribution,
+    sample_actions_log_probs,
+)
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
 
 class TestActionDistributions:
-    @pytest.mark.parametrize('gym_space', [gym.spaces.Discrete(3)])
-    @pytest.mark.parametrize('batch_size', [128])
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
+    @pytest.mark.parametrize("batch_size", [128])
     def test_simple_distribution(self, gym_space, batch_size):
         simple_action_space = gym_space
         simple_num_logits = calc_num_logits(simple_action_space)
@@ -28,9 +32,9 @@ class TestActionDistributions:
         assert list(simple_actions.shape) == [batch_size, 1]
         assert all(0 <= a < simple_action_space.n for a in simple_actions)
 
-    @pytest.mark.parametrize('gym_space', [gym.spaces.Discrete(3)])
-    @pytest.mark.parametrize('batch_size', [128])
-    @pytest.mark.parametrize('device_type', ['cpu'])
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
+    @pytest.mark.parametrize("batch_size", [128])
+    @pytest.mark.parametrize("device_type", ["cpu"])
     def test_gumbel_trick(self, gym_space, batch_size, device_type):
         """
         We use a Gumbel noise which seems to be faster compared to using pytorch multinomial.
@@ -48,7 +52,7 @@ class TestActionDistributions:
             device = torch.device(device_type)
             logits = torch.rand(batch_size, num_logits, device=device) * 10.0 - 5.0
 
-            if device_type == 'cuda':
+            if device_type == "cuda":
                 torch.cuda.synchronize(device)
 
             count_gumbel, count_multinomial = np.zeros([action_space.n]), np.zeros([action_space.n])
@@ -60,7 +64,7 @@ class TestActionDistributions:
             sample_actions_log_probs(action_distribution)
             action_distribution.sample_gumbel()
 
-            with timing.add_time('gumbel'):
+            with timing.add_time("gumbel"):
                 for i in range(num_samples):
                     action_distribution = get_action_distribution(action_space, logits)
                     samples_gumbel = action_distribution.sample_gumbel()
@@ -69,7 +73,7 @@ class TestActionDistributions:
             action_distribution = get_action_distribution(action_space, logits)
             action_distribution.sample()
 
-            with timing.add_time('multinomial'):
+            with timing.add_time("multinomial"):
                 for i in range(num_samples):
                     action_distribution = get_action_distribution(action_space, logits)
                     samples_multinomial = action_distribution.sample()
@@ -78,14 +82,14 @@ class TestActionDistributions:
             estimated_probs_gumbel = count_gumbel / float(num_samples)
             estimated_probs_multinomial = count_multinomial / float(num_samples)
 
-            log.debug('Gumbel estimated probs: %r', estimated_probs_gumbel)
-            log.debug('Multinomial estimated probs: %r', estimated_probs_multinomial)
-            log.debug('Sampling timing: %s', timing)
+            log.debug("Gumbel estimated probs: %r", estimated_probs_gumbel)
+            log.debug("Multinomial estimated probs: %r", estimated_probs_multinomial)
+            log.debug("Sampling timing: %s", timing)
             time.sleep(0.1)  # to finish logging
 
     @pytest.mark.parametrize("num_spaces", [random.randint(1, 4)])
-    @pytest.mark.parametrize('gym_space', [gym.spaces.Discrete(random.randint(2, 5))])
-    @pytest.mark.parametrize('batch_size', [128])
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(random.randint(2, 5))])
+    @pytest.mark.parametrize("batch_size", [128])
     def test_tuple_distribution(self, num_spaces, gym_space, batch_size):
         spaces = [gym_space for _ in range(num_spaces)]
         action_space = gym.spaces.Tuple(spaces)
@@ -106,8 +110,8 @@ class TestActionDistributions:
         entropy = action_distribution.entropy()
         assert list(entropy.shape) == [batch_size]
 
-    @pytest.mark.parametrize('num_spaces', [3])
-    @pytest.mark.parametrize('num_actions', [2])
+    @pytest.mark.parametrize("num_spaces", [3])
+    @pytest.mark.parametrize("num_actions", [2])
     def test_tuple_sanity_check(self, num_spaces, num_actions):
         simple_space = gym.spaces.Discrete(num_actions)
         spaces = [simple_space for _ in range(num_spaces)]
@@ -162,14 +166,17 @@ class TestActionDistributions:
                 assert probability == pytest.approx(expected_probs[a1] * expected_probs[a2], 1e-6)
 
 
-@pytest.mark.parametrize("spaces", [
-            [gym.spaces.Discrete, gym.spaces.Discrete],
-            [gym.spaces.Discrete, gym.spaces.Box],
-            [gym.spaces.Box, gym.spaces.Box]
-        ])
-@pytest.mark.parametrize("sizes", [[1,1],[2,1], [1,2], [2,3]])
+@pytest.mark.parametrize(
+    "spaces",
+    [
+        [gym.spaces.Discrete, gym.spaces.Discrete],
+        [gym.spaces.Discrete, gym.spaces.Box],
+        [gym.spaces.Box, gym.spaces.Box],
+    ],
+)
+@pytest.mark.parametrize("sizes", [[1, 1], [2, 1], [1, 2], [2, 3]])
 def test_tuple_action_distribution(spaces, sizes):
-     # I like to use prime numbers for tests as it can flag problems hidden by automatic broadcasting etc
+    # I like to use prime numbers for tests as it can flag problems hidden by automatic broadcasting etc
     BATCH_SIZE = 31
 
     assert len(spaces) > 0
@@ -201,12 +208,12 @@ def test_tuple_action_distribution(spaces, sizes):
     assert actions.size() == (BATCH_SIZE, num_actions)
 
     action_log_probs = action_dist.log_prob(actions)
-    assert action_log_probs.size() == (BATCH_SIZE, )
+    assert action_log_probs.size() == (BATCH_SIZE,)
 
     entropy = action_dist.entropy()
-    assert entropy.size() == (BATCH_SIZE, )
+    assert entropy.size() == (BATCH_SIZE,)
 
     actions, action_log_probs = action_dist.sample_actions_log_probs()
 
     assert actions.size() == (BATCH_SIZE, num_actions)
-    assert action_log_probs.size() == (BATCH_SIZE, )
+    assert action_log_probs.size() == (BATCH_SIZE,)

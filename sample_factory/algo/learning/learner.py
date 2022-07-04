@@ -7,14 +7,14 @@ import time
 from abc import ABC, abstractmethod
 from os.path import join
 from threading import Thread
-from typing import Optional, Tuple, Dict
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor
 
 from sample_factory.algo.learning.batcher import Batcher
-from sample_factory.algo.learning.rnn_utils import build_rnn_inputs, build_core_out_from_seq
+from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, build_rnn_inputs
 from sample_factory.algo.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.misc import memory_stats
@@ -25,33 +25,35 @@ from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
-from sample_factory.signal_slot.signal_slot import signal, EventLoopObject
+from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID
-from sample_factory.utils.utils import log, experiment_dir, ensure_dir_exists, AttrDict
+from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log
 
 
 def init_learner_process(sf_context: SampleFactoryContext, learner: Learner):
     set_global_context(sf_context)
-    log.info(f'{learner.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+    log.info(f"{learner.object_id}\tpid {os.getpid()}\tparent {os.getppid()}")
 
     # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
     import signal as os_signal
+
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = learner.cfg
 
     import psutil
+
     try:
         psutil.Process().nice(cfg.default_niceness)
     except psutil.AccessDenied:
-        log.error('Low niceness requires sudo!')
+        log.error("Low niceness requires sudo!")
 
-    if cfg.device == 'gpu':
-        cuda_envvars_for_policy(learner.policy_id, 'learning')
+    if cfg.device == "gpu":
+        cuda_envvars_for_policy(learner.policy_id, "learning")
 
     init_torch_runtime(cfg)
 
@@ -110,24 +112,24 @@ class KlAdaptiveSchedulerPerEpoch(KlAdaptiveScheduler):
 
 
 def get_lr_scheduler(cfg) -> LearningRateScheduler:
-    if cfg.lr_schedule == 'constant':
+    if cfg.lr_schedule == "constant":
         return LearningRateScheduler()
-    elif cfg.lr_schedule == 'kl_adaptive_minibatch':
+    elif cfg.lr_schedule == "kl_adaptive_minibatch":
         return KlAdaptiveSchedulerPerMinibatch(cfg)
-    elif cfg.lr_schedule == 'kl_adaptive_epoch':
+    elif cfg.lr_schedule == "kl_adaptive_epoch":
         return KlAdaptiveSchedulerPerEpoch(cfg)
     else:
-        raise RuntimeError(f'Unknown scheduler {cfg.lr_schedule}')
+        raise RuntimeError(f"Unknown scheduler {cfg.lr_schedule}")
 
 
 class Learner(EventLoopObject, Configurable):
     def __init__(self, evt_loop, cfg, env_info, buffer_mgr, batcher: Batcher, policy_id: PolicyID, mp_ctx):
         Configurable.__init__(self, cfg)
 
-        unique_name = f'{Learner.__name__}_p{policy_id}'
+        unique_name = f"{Learner.__name__}_p{policy_id}"
         EventLoopObject.__init__(self, evt_loop, unique_name)
 
-        self.timing = Timing(name=f'Learner {policy_id} profile')
+        self.timing = Timing(name=f"Learner {policy_id} profile")
 
         self.policy_id = policy_id
 
@@ -162,22 +164,28 @@ class Learner(EventLoopObject, Configurable):
         self.is_initialized = False
 
     @signal
-    def initialized(self): pass
+    def initialized(self):
+        pass
 
     @signal
-    def model_initialized(self): pass
+    def model_initialized(self):
+        pass
 
     @signal
-    def report_msg(self): pass
+    def report_msg(self):
+        pass
 
     @signal
-    def training_batch_released(self): pass
+    def training_batch_released(self):
+        pass
 
     @signal
-    def finished_training_iteration(self): pass
+    def finished_training_iteration(self):
+        pass
 
     @signal
-    def stop(self): pass
+    def stop(self):
+        pass
 
     def init(self):
         if not self.cfg.serial_mode:
@@ -185,18 +193,18 @@ class Learner(EventLoopObject, Configurable):
 
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr, valids: 0.0
-        elif self.cfg.exploration_loss == 'entropy':
+        elif self.cfg.exploration_loss == "entropy":
             self.exploration_loss_func = self._entropy_exploration_loss
-        elif self.cfg.exploration_loss == 'symmetric_kl':
+        elif self.cfg.exploration_loss == "symmetric_kl":
             self.exploration_loss_func = self._symmetric_kl_exploration_loss
         else:
-            raise NotImplementedError(f'{self.cfg.exploration_loss} not supported!')
+            raise NotImplementedError(f"{self.cfg.exploration_loss} not supported!")
 
         if self.cfg.kl_loss_coeff == 0.0:
             if is_continuous_action_space(self.env_info.action_space):
                 log.warning(
-                    'WARNING! It is generally recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks to avoid potential numerical issues. '
-                    'I.e. set --kl_loss_coeff=0.1'
+                    "WARNING! It is generally recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks to avoid potential numerical issues. "
+                    "I.e. set --kl_loss_coeff=0.1"
                 )
             self.kl_loss_func = lambda action_space, action_logits, distribution, valids: (None, 0.0)
         else:
@@ -204,31 +212,33 @@ class Learner(EventLoopObject, Configurable):
 
         # initialize the Torch modules
         if self.cfg.seed is None:
-            log.info('Starting seed is not provided')
+            log.info("Starting seed is not provided")
         else:
-            log.info('Setting fixed seed %d', self.cfg.seed)
+            log.info("Setting fixed seed %d", self.cfg.seed)
             torch.manual_seed(self.cfg.seed)
             np.random.seed(self.cfg.seed)
 
         # initialize device
         self.device = policy_device(self.cfg, self.policy_id)
 
-        log.debug('Initializing actor-critic model on device %s', self.device)
+        log.debug("Initializing actor-critic model on device %s", self.device)
         with self.param_server.policy_lock:
             # trainable torch module
-            self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing)
+            self.actor_critic = create_actor_critic(
+                self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
+            )
             self.actor_critic.model_to_device(self.device)
-            self.actor_critic.share_memory() # TODO: This line does not work with pytorch 1.12.0
+            self.actor_critic.share_memory()  # TODO: This line does not work with pytorch 1.12.0
             self.actor_critic.train()
 
             params = list(self.actor_critic.parameters())
 
             optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
             if self.cfg.optimizer not in optimizer_cls:
-                raise RuntimeError(f'Unknown optimizer {self.cfg.optimizer}')
+                raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
 
             optimizer_cls = optimizer_cls[self.cfg.optimizer]
-            log.debug(f'Using optimizer {optimizer_cls}')
+            log.debug(f"Using optimizer {optimizer_cls}")
 
             self.optimizer = optimizer_cls(
                 params,
@@ -244,13 +254,17 @@ class Learner(EventLoopObject, Configurable):
 
             # in serial mode we will just use the same actor_critic directly
             state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
-            model_state = (state_dict, self.device, self.train_step)  # TODO: probably should not send device since we set CUDA vars to only have one device visible
+            model_state = (
+                state_dict,
+                self.device,
+                self.train_step,
+            )  # TODO: probably should not send device since we set CUDA vars to only have one device visible
             # signal other components that the model is ready
             self.model_initialized.emit(model_state)
 
         self.is_initialized = True
         self.initialized.emit()
-        log.debug(f'{self.object_id} finished initialization!')
+        log.debug(f"{self.object_id} finished initialization!")
 
     def start_batcher_thread(self):
         self.batcher.event_loop.process = self.event_loop.process
@@ -262,18 +276,18 @@ class Learner(EventLoopObject, Configurable):
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
-        checkpoint_dir = join(experiment_dir(cfg=cfg), f'checkpoint_p{policy_id}')
+        checkpoint_dir = join(experiment_dir(cfg=cfg), f"checkpoint_p{policy_id}")
         return ensure_dir_exists(checkpoint_dir)
 
     @staticmethod
-    def get_checkpoints(checkpoints_dir, pattern='checkpoint_*'):
+    def get_checkpoints(checkpoints_dir, pattern="checkpoint_*"):
         checkpoints = glob.glob(join(checkpoints_dir, pattern))
         return sorted(checkpoints)
 
     @staticmethod
     def load_checkpoint(checkpoints, device):
         if len(checkpoints) <= 0:
-            log.warning('No checkpoints found')
+            log.warning("No checkpoints found")
             return None
         else:
             latest_checkpoint = checkpoints[-1]
@@ -283,30 +297,30 @@ class Learner(EventLoopObject, Configurable):
             for attempt in range(num_attempts):
                 # noinspection PyBroadException
                 try:
-                    log.warning('Loading state from checkpoint %s...', latest_checkpoint)
+                    log.warning("Loading state from checkpoint %s...", latest_checkpoint)
                     checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
                     return checkpoint_dict
                 except Exception:
-                    log.exception(f'Could not load from checkpoint, attempt {attempt}')
+                    log.exception(f"Could not load from checkpoint, attempt {attempt}")
 
     def _load_state(self, checkpoint_dict, load_progress=True):
         if load_progress:
-            self.train_step = checkpoint_dict['train_step']
-            self.env_steps = checkpoint_dict['env_steps']
-            self.best_performance = checkpoint_dict.get('best_performance', self.best_performance)
-        self.actor_critic.load_state_dict(checkpoint_dict['model'])
-        self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
+            self.train_step = checkpoint_dict["train_step"]
+            self.env_steps = checkpoint_dict["env_steps"]
+            self.best_performance = checkpoint_dict.get("best_performance", self.best_performance)
+        self.actor_critic.load_state_dict(checkpoint_dict["model"])
+        self.optimizer.load_state_dict(checkpoint_dict["optimizer"])
 
-        log.info('Loaded experiment state at training iteration %d, env step %d', self.train_step, self.env_steps)
+        log.info("Loaded experiment state at training iteration %d, env step %d", self.train_step, self.env_steps)
 
     def load_from_checkpoint(self, policy_id):
-        name_prefix = dict(latest='checkpoint', best='best')[self.cfg.load_checkpoint_kind]
-        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id), pattern=f'{name_prefix}_*')
+        name_prefix = dict(latest="checkpoint", best="best")[self.cfg.load_checkpoint_kind]
+        checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id), pattern=f"{name_prefix}_*")
         checkpoint_dict = self.load_checkpoint(checkpoints, self.device)
         if checkpoint_dict is None:
-            log.debug('Did not load from checkpoint, starting from scratch!')
+            log.debug("Did not load from checkpoint, starting from scratch!")
         else:
-            log.debug('Loading model from checkpoint')
+            log.debug("Loading model from checkpoint")
 
             # if we're replacing our policy with another policy (under PBT), let's not reload the env_steps
             # TODO: learner shouldn't know anything about PBT
@@ -326,11 +340,11 @@ class Learner(EventLoopObject, Configurable):
 
     def _get_checkpoint_dict(self):
         checkpoint = {
-            'train_step': self.train_step,
-            'env_steps': self.env_steps,
-            'best_performance': self.best_performance,
-            'model': self.actor_critic.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
+            "train_step": self.train_step,
+            "env_steps": self.env_steps,
+            "best_performance": self.best_performance,
+            "model": self.actor_critic.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
         }
         return checkpoint
 
@@ -342,26 +356,26 @@ class Learner(EventLoopObject, Configurable):
         assert checkpoint is not None
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
-        tmp_filepath = join(checkpoint_dir, f'.{name_prefix}_temp')
-        checkpoint_name = f'{name_prefix}_{self.train_step:09d}_{self.env_steps}{name_suffix}.pth'
+        tmp_filepath = join(checkpoint_dir, f".{name_prefix}_temp")
+        checkpoint_name = f"{name_prefix}_{self.train_step:09d}_{self.env_steps}{name_suffix}.pth"
         filepath = join(checkpoint_dir, checkpoint_name)
         if verbose:
-            log.info('Saving %s...', filepath)
+            log.info("Saving %s...", filepath)
 
         # This should protect us from a rare case where something goes wrong mid-save and we end up with a corrupted
         # checkpoint file. It better be a corrupted temp file.
         torch.save(checkpoint, tmp_filepath)
         os.rename(tmp_filepath, filepath)
 
-        while len(checkpoints := self.get_checkpoints(checkpoint_dir, f'{name_prefix}_*')) > keep_checkpoints:
+        while len(checkpoints := self.get_checkpoints(checkpoint_dir, f"{name_prefix}_*")) > keep_checkpoints:
             oldest_checkpoint = checkpoints[0]
             if os.path.isfile(oldest_checkpoint):
                 if verbose:
-                    log.debug('Removing %s', oldest_checkpoint)
+                    log.debug("Removing %s", oldest_checkpoint)
                 os.remove(oldest_checkpoint)
 
     def save(self):
-        self._save_impl('checkpoint', '', self.cfg.keep_checkpoints)
+        self._save_impl("checkpoint", "", self.cfg.keep_checkpoints)
 
         # TODO: move milestone logic to the runner?
         # if self.cfg.save_milestones_sec > 0:
@@ -380,10 +394,10 @@ class Learner(EventLoopObject, Configurable):
             return
         p = 3  # precision, number of significant digits
         if metric_value - self.best_performance > 1 / 10**p:
-            log.info(f'Saving new best policy, {metric}={metric_value:.{p}f}!')
+            log.info(f"Saving new best policy, {metric}={metric_value:.{p}f}!")
             self.best_performance = metric_value
-            name_suffix = f'_{metric}_{metric_value:.{p}f}'
-            self._save_impl('best', name_suffix, 1, verbose=False)
+            name_suffix = f"_{metric}_{metric_value:.{p}f}"
+            self._save_impl("best", name_suffix, 1, verbose=False)
 
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids):
@@ -435,17 +449,17 @@ class Learner(EventLoopObject, Configurable):
 
     def _curr_lr(self):
         for param_group in self.optimizer.param_groups:
-            return param_group['lr']
+            return param_group["lr"]
 
     def _update_lr(self, new_lr):
         if new_lr != self._curr_lr():
             for param_group in self.optimizer.param_groups:
-                param_group['lr'] = new_lr
+                param_group["lr"] = new_lr
 
     def _get_minibatches(self, batch_size, experience_size):
         """Generating minibatches for training."""
         assert self.cfg.rollout % self.cfg.recurrence == 0
-        assert experience_size % batch_size == 0, f'experience size: {experience_size}, batch size: {batch_size}'
+        assert experience_size % batch_size == 0, f"experience size: {experience_size}, batch size: {batch_size}"
         minibatches_per_epoch = self.cfg.num_batches_per_epoch
 
         if minibatches_per_epoch == 1:
@@ -480,7 +494,7 @@ class Learner(EventLoopObject, Configurable):
         return mb
 
     def _train(self, gpu_buffer, batch_size, experience_size, timing):
-        with torch.no_grad(), timing.add_time('prepare_train'):
+        with torch.no_grad(), timing.add_time("prepare_train"):
             policy_version_before_train = self.train_step
 
             early_stopping_tolerance = 1e-6
@@ -506,8 +520,9 @@ class Learner(EventLoopObject, Configurable):
             recurrence = self.cfg.recurrence
 
             if self.cfg.with_vtrace:
-                assert recurrence == self.cfg.rollout and recurrence > 1, \
-                    'V-trace requires to recurrence and rollout to be equal'
+                assert (
+                    recurrence == self.cfg.rollout and recurrence > 1
+                ), "V-trace requires to recurrence and rollout to be equal"
 
             num_sgd_steps = 0
             stats_and_summaries = None
@@ -528,7 +543,7 @@ class Learner(EventLoopObject, Configurable):
             assert self.actor_critic.training
 
         for epoch in range(self.cfg.num_epochs):
-            with timing.add_time('epoch_init'):
+            with timing.add_time("epoch_init"):
                 if early_stop:
                     break
 
@@ -536,7 +551,7 @@ class Learner(EventLoopObject, Configurable):
                 minibatches = self._get_minibatches(batch_size, experience_size)
 
             for batch_num in range(len(minibatches)):
-                with timing.add_time('minibatch_init'):
+                with timing.add_time("minibatch_init"):
                     indices = minibatches[batch_num]
 
                     # current minibatch consisting of short trajectory segments with length == recurrence
@@ -546,22 +561,25 @@ class Learner(EventLoopObject, Configurable):
                     mb = AttrDict(mb)
 
                 # calculate policy head outside of recurrent loop
-                with timing.add_time('forward_head'):
+                with timing.add_time("forward_head"):
                     head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
 
                 # initial rnn states
-                with timing.add_time('bptt_initial'):
+                with timing.add_time("bptt_initial"):
                     if self.cfg.use_rnn:
                         head_output_seq, rnn_states, inverted_select_inds = build_rnn_inputs(
-                            head_outputs, mb.dones_cpu, mb.rnn_states, recurrence,
+                            head_outputs,
+                            mb.dones_cpu,
+                            mb.rnn_states,
+                            recurrence,
                         )
                     else:
                         rnn_states = mb.rnn_states[::recurrence]
 
                 # calculate RNN outputs for each timestep in a loop
-                with timing.add_time('bptt'):
+                with timing.add_time("bptt"):
                     if self.cfg.use_rnn:
-                        with timing.add_time('bptt_forward_core'):
+                        with timing.add_time("bptt_forward_core"):
                             core_output_seq, _ = self.actor_critic.forward_core(head_output_seq, rnn_states)
                         core_outputs = build_core_out_from_seq(core_output_seq, inverted_select_inds)
                     else:
@@ -569,7 +587,7 @@ class Learner(EventLoopObject, Configurable):
 
                 num_trajectories = head_outputs.size(0) // recurrence
 
-                with timing.add_time('tail'):
+                with timing.add_time("tail"):
                     assert core_outputs.shape[0] == head_outputs.shape[0]
 
                     # calculate policy tail outside of recurrent loop
@@ -581,7 +599,7 @@ class Learner(EventLoopObject, Configurable):
                     # super large/small values can cause numerical problems and are probably noise anyway
                     ratio = torch.clamp(ratio, 0.05, 20.0)
 
-                    values = result['values'].squeeze()
+                    values = result["values"].squeeze()
 
                 with torch.no_grad():  # these computations are not the part of the computation graph
                     # ignore experience from other agents (i.e. on episode boundary) and from inactive agents
@@ -591,7 +609,7 @@ class Learner(EventLoopObject, Configurable):
                     valids = valids & (policy_version_before_train - mb.policy_version < self.cfg.max_policy_lag)
 
                     if self.cfg.with_vtrace:
-                        with timing.add_time('vtrace'):
+                        with timing.add_time("vtrace"):
                             ratios_cpu = ratio.cpu()
                             values_cpu = values.cpu()
                             rewards_cpu = mb.rewards_cpu
@@ -603,7 +621,9 @@ class Learner(EventLoopObject, Configurable):
                             vs = torch.zeros((num_trajectories * recurrence))
                             adv = torch.zeros((num_trajectories * recurrence))
 
-                            next_values = (values_cpu[recurrence - 1::recurrence] - rewards_cpu[recurrence - 1::recurrence]) / gamma
+                            next_values = (
+                                values_cpu[recurrence - 1 :: recurrence] - rewards_cpu[recurrence - 1 :: recurrence]
+                            ) / gamma
                             next_vs = next_values
 
                             for i in reversed(range(self.cfg.recurrence)):
@@ -617,8 +637,14 @@ class Learner(EventLoopObject, Configurable):
                                 curr_vtrace_c = vtrace_c[i::recurrence]
 
                                 delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
-                                adv[i::recurrence] = curr_vtrace_rho * (rewards + not_done_times_gamma * next_vs - curr_values)
-                                next_vs = curr_values + delta_s + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
+                                adv[i::recurrence] = curr_vtrace_rho * (
+                                    rewards + not_done_times_gamma * next_vs - curr_values
+                                )
+                                next_vs = (
+                                    curr_values
+                                    + delta_s
+                                    + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
+                                )
                                 vs[i::recurrence] = next_vs
 
                                 next_values = curr_values
@@ -635,10 +661,12 @@ class Learner(EventLoopObject, Configurable):
                     adv = (adv - adv_mean) / max(1e-7, adv_std.item())  # normalize advantage
                     adv = adv.to(self.device)  # TODO: is this redundant now?
 
-                with timing.add_time('losses'):
+                with timing.add_time("losses"):
                     policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)
                     exploration_loss = self.exploration_loss_func(action_distribution, valids)
-                    kl_old, kl_loss = self.kl_loss_func(self.actor_critic.action_space, mb.action_logits, action_distribution, valids)
+                    kl_old, kl_loss = self.kl_loss_func(
+                        self.actor_critic.action_space, mb.action_logits, action_distribution, valids
+                    )
 
                     actor_loss = policy_loss + exploration_loss + kl_loss
                     epoch_actor_losses.append(actor_loss.item())
@@ -651,28 +679,38 @@ class Learner(EventLoopObject, Configurable):
                     loss = actor_loss + critic_loss
 
                     high_loss = 30.0
-                    if abs(to_scalar(policy_loss)) > high_loss or abs(to_scalar(value_loss)) > high_loss or abs(to_scalar(exploration_loss)) > high_loss or abs(to_scalar(kl_loss)) > high_loss:
+                    if (
+                        abs(to_scalar(policy_loss)) > high_loss
+                        or abs(to_scalar(value_loss)) > high_loss
+                        or abs(to_scalar(exploration_loss)) > high_loss
+                        or abs(to_scalar(kl_loss)) > high_loss
+                    ):
                         log.warning(
-                            'High loss value: l:%.4f pl:%.4f vl:%.4f exp_l:%.4f kl_l:%.4f (recommended to adjust the --reward_scale parameter)',
-                            to_scalar(loss), to_scalar(policy_loss), to_scalar(value_loss), to_scalar(exploration_loss), to_scalar(kl_loss),
+                            "High loss value: l:%.4f pl:%.4f vl:%.4f exp_l:%.4f kl_l:%.4f (recommended to adjust the --reward_scale parameter)",
+                            to_scalar(loss),
+                            to_scalar(policy_loss),
+                            to_scalar(value_loss),
+                            to_scalar(exploration_loss),
+                            to_scalar(kl_loss),
                         )
 
                         # perhaps something weird is happening, we definitely want summaries from this step
                         force_summaries = True
 
-                with torch.no_grad(), timing.add_time('kl_divergence'):
+                with torch.no_grad(), timing.add_time("kl_divergence"):
                     # if kl_old is not None it is already calculated above
                     if kl_old is None:
                         # calculate KL-divergence with the behaviour policy action distribution
                         old_action_distribution = get_action_distribution(
-                            self.actor_critic.action_space, mb.action_logits,
+                            self.actor_critic.action_space,
+                            mb.action_logits,
                         )
                         kl_old = action_distribution.kl_divergence(old_action_distribution)
                     kl_old_mean = kl_old.mean().item()
                     recent_kls.append(kl_old_mean)
 
                 # update the weights
-                with timing.add_time('update'):
+                with timing.add_time("update"):
                     # following advice from https://youtu.be/9mS1fIYj1So set grad to None instead of optimizer.zero_grad()
                     for p in self.actor_critic.parameters():
                         p.grad = None
@@ -680,7 +718,7 @@ class Learner(EventLoopObject, Configurable):
                     loss.backward()
 
                     if self.cfg.max_grad_norm > 0.0:
-                        with timing.add_time('clip'):
+                        with timing.add_time("clip"):
                             torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
                     curr_policy_version = self.train_step  # policy version before the weight update
@@ -690,7 +728,7 @@ class Learner(EventLoopObject, Configurable):
 
                     num_sgd_steps += 1
 
-                with torch.no_grad(), timing.add_time('after_optimizer'):
+                with torch.no_grad(), timing.add_time("after_optimizer"):
                     self._after_optimizer_step()
 
                     if self.lr_scheduler.invoke_after_each_minibatch():
@@ -716,8 +754,10 @@ class Learner(EventLoopObject, Configurable):
             if loss_delta_abs < early_stopping_tolerance:
                 early_stop = True
                 log.debug(
-                    'Early stopping after %d epochs (%d sgd steps), loss delta %.7f',
-                    epoch + 1, num_sgd_steps, loss_delta_abs,
+                    "Early stopping after %d epochs (%d sgd steps), loss delta %.7f",
+                    epoch + 1,
+                    num_sgd_steps,
+                    loss_delta_abs,
                 )
                 break
 
@@ -740,14 +780,12 @@ class Learner(EventLoopObject, Configurable):
         stats.valids_fraction = var.valids.float().mean()
         stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
 
-        grad_norm = sum(
-            p.grad.data.norm(2).item() ** 2
-            for p in self.actor_critic.parameters()
-            if p.grad is not None
-        ) ** 0.5
+        grad_norm = (
+            sum(p.grad.data.norm(2).item() ** 2 for p in self.actor_critic.parameters() if p.grad is not None) ** 0.5
+        )
         stats.grad_norm = grad_norm
         stats.loss = var.loss
-        stats.value = var.result['values'].mean()
+        stats.value = var.result["values"].mean()
         stats.entropy = var.action_distribution.entropy().mean()
         stats.policy_loss = var.policy_loss
         stats.kl_loss = var.kl_loss
@@ -759,7 +797,7 @@ class Learner(EventLoopObject, Configurable):
         stats.adv_std = var.adv_std
         stats.max_abs_logprob = torch.abs(var.mb.action_logits).max()
 
-        if hasattr(var.action_distribution, 'summaries'):
+        if hasattr(var.action_distribution, "summaries"):
             stats.update(var.action_distribution.summaries())
 
         if var.epoch == self.cfg.num_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
@@ -776,7 +814,9 @@ class Learner(EventLoopObject, Configurable):
             stats.kl_divergence_max = var.kl_old.max()
             stats.value_delta = value_delta_avg
             stats.value_delta_max = value_delta_max
-            stats.fraction_clipped = ((var.ratio < var.clip_ratio_low).float() + (var.ratio > var.clip_ratio_high).float()).mean()
+            stats.fraction_clipped = (
+                (var.ratio < var.clip_ratio_low).float() + (var.ratio > var.clip_ratio_high).float()
+            ).mean()
             stats.ratio_mean = ratio_mean
             stats.ratio_min = ratio_min
             stats.ratio_max = ratio_max
@@ -785,7 +825,7 @@ class Learner(EventLoopObject, Configurable):
         # this caused numerical issues on some versions of PyTorch with second moment reaching infinity
         adam_max_second_moment = 0.0
         for key, tensor_state in self.optimizer.state.items():
-            adam_max_second_moment = max(tensor_state['exp_avg_sq'].max().item(), adam_max_second_moment)
+            adam_max_second_moment = max(tensor_state["exp_avg_sq"].max().item(), adam_max_second_moment)
         stats.adam_max_second_moment = adam_max_second_moment
 
         version_diff = (var.curr_policy_version - var.mb.policy_version)[var.mb.policy_id == self.policy_id]
@@ -808,20 +848,20 @@ class Learner(EventLoopObject, Configurable):
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
-            normalized_last_obs = self.actor_critic.normalize_obs(buff['obs'][:, -1])
-            next_values = self.actor_critic(normalized_last_obs, buff['rnn_states'][:, -1], values_only=True)['values']
-            buff['values'][:, -1] = next_values
+            normalized_last_obs = self.actor_critic.normalize_obs(buff["obs"][:, -1])
+            next_values = self.actor_critic(normalized_last_obs, buff["rnn_states"][:, -1], values_only=True)["values"]
+            buff["values"][:, -1] = next_values
 
             if self.cfg.normalize_returns:
                 # Since our value targets are normalized, the values will also have normalized statistics.
                 # We need to denormalize them before using them for GAE caculation and value bootstrapping.
                 # rl_games PPO uses a similar approach, see:
                 # https://github.com/Denys88/rl_games/blob/7b5f9500ee65ae0832a7d8613b019c333ecd932c/rl_games/algos_torch/models.py#L51
-                denormalized_values = buff['values'].clone()  # need to clone since normalizer is in-place
+                denormalized_values = buff["values"].clone()  # need to clone since normalizer is in-place
                 self.actor_critic.returns_normalizer(denormalized_values, denormalize=True)
             else:
                 # values are not normalized in this case, so we can use them as is
-                denormalized_values = buff['values']
+                denormalized_values = buff["values"]
 
             if self.cfg.value_bootstrap:
                 # Value bootstrapping is a technique that reduces the surprise for the critic in case
@@ -833,48 +873,52 @@ class Learner(EventLoopObject, Configurable):
 
                 # Multiply by both time_out and done flags to make sure we count only timeouts in terminal states.
                 # There was a bug in older versions of isaacgym where timeouts were reported for non-terminal states.
-                buff['rewards'].add_(self.cfg.gamma * denormalized_values[:, :-1] * buff['time_outs'] * buff['dones'])
+                buff["rewards"].add_(self.cfg.gamma * denormalized_values[:, :-1] * buff["time_outs"] * buff["dones"])
 
             if not self.cfg.with_vtrace:
                 # calculate advantage estimate (in case of V-trace it is done separately for each minibatch)
-                buff['advantages'] = gae_advantages(
-                    buff['rewards'], buff['dones'], denormalized_values, self.cfg.gamma, self.cfg.gae_lambda,
+                buff["advantages"] = gae_advantages(
+                    buff["rewards"],
+                    buff["dones"],
+                    denormalized_values,
+                    self.cfg.gamma,
+                    self.cfg.gae_lambda,
                 )
                 # here returns are not normalized yet, so we should use denormalized values
-                buff['returns'] = buff['advantages'] + denormalized_values[:, :-1]
+                buff["returns"] = buff["advantages"] + denormalized_values[:, :-1]
 
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
-            for key in ['obs', 'rnn_states', 'values']:
+            for key in ["obs", "rnn_states", "values"]:
                 buff[key] = buff[key][:, :-1]
 
             experience_size = self.cfg.batch_size * self.cfg.num_batches_per_epoch
 
             for d, k, v in iterate_recursively(buff):
                 # collapse first two dimensions
-                shape = (experience_size, ) + tuple(v.shape[2:])
+                shape = (experience_size,) + tuple(v.shape[2:])
                 d[k] = v.reshape(shape)
 
-            buff['dones_cpu'] = buff['dones'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
-            buff['rewards_cpu'] = buff['rewards'].to('cpu', copy=True, dtype=torch.float, non_blocking=True)
+            buff["dones_cpu"] = buff["dones"].to("cpu", copy=True, dtype=torch.float, non_blocking=True)
+            buff["rewards_cpu"] = buff["rewards"].to("cpu", copy=True, dtype=torch.float, non_blocking=True)
 
             # normalize obs and record data statistics (hence the "train" mode)
             self.actor_critic.train()
 
             # hold the lock while we alter the state of the normalizers since they can be used in other processes too
             with self.param_server.policy_lock:
-                buff['normalized_obs'] = self.actor_critic.normalize_obs(buff['obs'])
+                buff["normalized_obs"] = self.actor_critic.normalize_obs(buff["obs"])
                 if self.cfg.normalize_returns:
-                    self.actor_critic.returns_normalizer(buff['returns'])  # in-place
+                    self.actor_critic.returns_normalizer(buff["returns"])  # in-place
 
-            del buff['obs']  # we don't need the regular obs anymore
+            del buff["obs"]  # we don't need the regular obs anymore
 
             return buff, experience_size
 
     def train(self, batch_idx: int, timing: Timing) -> Dict:
-        with timing.add_time('prepare_batch'):
+        with timing.add_time("prepare_batch"):
             buff, experience_size = self._prepare_batch(batch_idx)
 
-        with timing.add_time('train'):
+        with timing.add_time("train"):
             train_stats = self._train(buff, self.cfg.batch_size, experience_size, timing)
 
         # multiply the number of samples by frameskip so that FPS metrics reflect the number
@@ -883,8 +927,8 @@ class Learner(EventLoopObject, Configurable):
 
         stats = dict(learner_env_steps=self.env_steps, policy_id=self.policy_id)
         if train_stats is not None:
-            stats['train'] = train_stats
-            stats['stats'] = memory_stats('learner', self.device)
+            stats["train"] = train_stats
+            stats["stats"] = memory_stats("learner", self.device)
 
         return stats
 
@@ -897,7 +941,7 @@ class Learner(EventLoopObject, Configurable):
 
     def on_stop(self, *_):
         self.save()
-        log.debug(f'Stopping {self.object_id}...')
+        log.debug(f"Stopping {self.object_id}...")
 
         if not self.cfg.serial_mode:
             self.join_batcher_thread()

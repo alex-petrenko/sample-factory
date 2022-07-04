@@ -2,9 +2,9 @@ import json
 import math
 import multiprocessing
 import time
-from collections import deque, OrderedDict
+from collections import OrderedDict, deque
 from os.path import join
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -13,19 +13,28 @@ from sample_factory.algo.inference.inference_worker import InferenceWorker
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker
-from sample_factory.algo.utils.env_info import obtain_env_info_in_a_separate_process, EnvInfo
+from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoopObject, EventLoop, EventLoopStatus, Timer, signal
+from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, MpQueue
-from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log, \
-    memory_consumption_mb, summaries_dir, save_git_diff, init_file_logger, cfg_file
+from sample_factory.utils.typing import MpQueue, PolicyID
+from sample_factory.utils.utils import (
+    AttrDict,
+    cfg_file,
+    ensure_dir_exists,
+    experiment_dir,
+    init_file_logger,
+    log,
+    memory_consumption_mb,
+    save_git_diff,
+    summaries_dir,
+)
 from sample_factory.utils.wandb_utils import init_wandb
 
 StatusCode = int
@@ -90,7 +99,7 @@ class Runner(EventLoopObject, Configurable):
         Configurable.__init__(self, cfg)
 
         unique_name = Runner.__name__ if unique_name is None else unique_name
-        self.event_loop: EventLoop = EventLoop(unique_loop_name=f'{unique_name}_EvtLoop', serial_mode=cfg.serial_mode)
+        self.event_loop: EventLoop = EventLoop(unique_loop_name=f"{unique_name}_EvtLoop", serial_mode=cfg.serial_mode)
         self.event_loop.owner = self
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
@@ -101,7 +110,9 @@ class Runner(EventLoopObject, Configurable):
 
         self.mp_ctx = self.multiprocessing_context()
 
-        self.inference_queues: Dict[PolicyID, MpQueue] = {p: get_queue(cfg.serial_mode) for p in range(self.cfg.num_policies)}
+        self.inference_queues: Dict[PolicyID, MpQueue] = {
+            p: get_queue(cfg.serial_mode) for p in range(self.cfg.num_policies)
+        }
 
         self.learners: Dict[PolicyID, Learner] = dict()
         self.batchers: Dict[PolicyID, Batcher] = dict()
@@ -112,7 +123,7 @@ class Runner(EventLoopObject, Configurable):
         save_git_diff(experiment_dir(cfg=self.cfg))
         init_file_logger(experiment_dir(self.cfg))
 
-        self.timing = Timing('Runner profile')
+        self.timing = Timing("Runner profile")
 
         # env_steps counts total number of simulation steps per policy (including frameskipped)
         self.env_steps = dict()
@@ -179,35 +190,41 @@ class Runner(EventLoopObject, Configurable):
 
     # singals emitted by the runner
     @signal
-    def inference_workers_initialized(self): pass
+    def inference_workers_initialized(self):
+        pass
 
     @signal
-    def save_periodic(self): pass
+    def save_periodic(self):
+        pass
 
     @signal
-    def save_best(self): pass
+    def save_best(self):
+        pass
 
     """Emitted when we're about to stop the experiment."""
-    @signal
-    def stop(self): pass
 
     @signal
-    def all_components_stopped(self): pass
+    def stop(self):
+        pass
+
+    @signal
+    def all_components_stopped(self):
+        pass
 
     def multiprocessing_context(self) -> Optional[multiprocessing.context.BaseContext]:
         raise NotImplementedError()
 
     def _process_msg(self, msgs):
         if isinstance(msgs, (dict, OrderedDict)):
-            msgs = (msgs, )
+            msgs = (msgs,)
 
         if not (isinstance(msgs, (List, Tuple)) and isinstance(msgs[0], (dict, OrderedDict))):
-            log.error('While parsing a message: expected a dictionary or list/tuple of dictionaries, found %r', msgs)
+            log.error("While parsing a message: expected a dictionary or list/tuple of dictionaries, found %r", msgs)
             return
 
         for msg in msgs:
             # some messages are policy-specific
-            policy_id = msg.get('policy_id', None)
+            policy_id = msg.get("policy_id", None)
 
             for key in msg:
                 for handler in self.msg_handlers.get(key, []):
@@ -218,25 +235,25 @@ class Runner(EventLoopObject, Configurable):
 
     @staticmethod
     def _timing_msg_handler(runner, msg):
-        for k, v in msg['timing'].items():
+        for k, v in msg["timing"].items():
             if k not in runner.avg_stats:
                 runner.avg_stats[k] = deque([], maxlen=50)
             runner.avg_stats[k].append(v)
 
     @staticmethod
     def _stats_msg_handler(runner, msg):
-        runner.stats.update(msg['stats'])
+        runner.stats.update(msg["stats"])
 
     @staticmethod
     def _learner_steps_handler(runner, msg, policy_id):
         if policy_id in runner.env_steps:
-            delta = msg['learner_env_steps'] - runner.env_steps[policy_id]
+            delta = msg["learner_env_steps"] - runner.env_steps[policy_id]
             runner.total_env_steps_since_resume += delta
-        runner.env_steps[policy_id] = msg['learner_env_steps']
+        runner.env_steps[policy_id] = msg["learner_env_steps"]
 
     @staticmethod
     def _episodic_stats_handler(runner, msg, policy_id):
-        s = msg['episodic']
+        s = msg["episodic"]
         for _, key, value in iterate_recursively(s):
             if key not in runner.policy_avg_stats:
                 runner.policy_avg_stats[key] = [
@@ -258,16 +275,16 @@ class Runner(EventLoopObject, Configurable):
     @staticmethod
     def _train_stats_handler(runner, msg, policy_id):
         """We write the train summaries to disk right away instead of accumulating them."""
-        for key, scalar in msg['train'].items():
-            runner.writers[policy_id].add_scalar(f'train/{key}', scalar, runner.env_steps[policy_id])
+        for key, scalar in msg["train"].items():
+            runner.writers[policy_id].add_scalar(f"train/{key}", scalar, runner.env_steps[policy_id])
 
-        for key in ['version_diff_min', 'version_diff_max', 'version_diff_avg']:
-            if key in msg['train']:
-                runner.policy_lag[policy_id][key] = msg['train'][key]
+        for key in ["version_diff_min", "version_diff_max", "version_diff_avg"]:
+            if key in msg["train"]:
+                runner.policy_lag[policy_id][key] = msg["train"][key]
 
     @staticmethod
     def _samples_stats_handler(runner, msg, policy_id):
-        runner.samples_collected[policy_id] += msg['samples_collected']
+        runner.samples_collected[policy_id] += msg["samples_collected"]
 
     @staticmethod
     def _register_msg_handler(handlers_dict, key, func):
@@ -299,29 +316,33 @@ class Runner(EventLoopObject, Configurable):
     def print_stats(self, fps, sample_throughput, total_env_steps):
         fps_str = []
         for interval, fps_value in zip(self.avg_stats_intervals, fps):
-            fps_str.append(f'{int(interval * self.report_interval_sec)} sec: {fps_value:.1f}')
+            fps_str.append(f"{int(interval * self.report_interval_sec)} sec: {fps_value:.1f}")
         fps_str = f'({", ".join(fps_str)})'
 
-        samples_per_policy = ', '.join([f'{p}: {s:.1f}' for p, s in sample_throughput.items()])
+        samples_per_policy = ", ".join([f"{p}: {s:.1f}" for p, s in sample_throughput.items()])
 
         lag_stats = self.policy_lag[0]
         lag = AttrDict()
-        for key in ['min', 'avg', 'max']:
-            lag[key] = lag_stats.get(f'version_diff_{key}', -1)
-        policy_lag_str = f'min: {lag.min:.1f}, avg: {lag.avg:.1f}, max: {lag.max:.1f}'
+        for key in ["min", "avg", "max"]:
+            lag[key] = lag_stats.get(f"version_diff_{key}", -1)
+        policy_lag_str = f"min: {lag.min:.1f}, avg: {lag.avg:.1f}, max: {lag.max:.1f}"
 
         log.debug(
-            'Fps is %s. Total num frames: %d. Throughput: %s. Samples: %d. Policy #0 lag: (%s)',
-            fps_str, total_env_steps, samples_per_policy, sum(self.samples_collected), policy_lag_str,
+            "Fps is %s. Total num frames: %d. Throughput: %s. Samples: %d. Policy #0 lag: (%s)",
+            fps_str,
+            total_env_steps,
+            samples_per_policy,
+            sum(self.samples_collected),
+            policy_lag_str,
         )
 
-        if 'reward' in self.policy_avg_stats:
+        if "reward" in self.policy_avg_stats:
             policy_reward_stats = []
             for policy_id in range(self.cfg.num_policies):
-                reward_stats = self.policy_avg_stats['reward'][policy_id]
+                reward_stats = self.policy_avg_stats["reward"][policy_id]
                 if len(reward_stats) > 0:
-                    policy_reward_stats.append((policy_id, f'{np.mean(reward_stats):.3f}'))
-            log.debug('Avg episode reward: %r', policy_reward_stats)
+                    policy_reward_stats.append((policy_id, f"{np.mean(reward_stats):.3f}"))
+            log.debug("Avg episode reward: %r", policy_reward_stats)
 
     def _update_stats_and_print_report(self):
         """
@@ -353,43 +374,45 @@ class Runner(EventLoopObject, Configurable):
         for policy_id, env_steps in self.env_steps.items():
             if policy_id == default_policy:
                 if not math.isnan(fps):
-                    self.writers[policy_id].add_scalar('perf/_fps', fps, env_steps)
+                    self.writers[policy_id].add_scalar("perf/_fps", fps, env_steps)
 
-                self.writers[policy_id].add_scalar('stats/master_process_memory_mb', float(memory_mb), env_steps)
+                self.writers[policy_id].add_scalar("stats/master_process_memory_mb", float(memory_mb), env_steps)
                 for key, value in self.avg_stats.items():
                     if len(value) >= value.maxlen or (len(value) > 10 and self.total_train_seconds > 300):
-                        self.writers[policy_id].add_scalar(f'stats/{key}', np.mean(value), env_steps)
+                        self.writers[policy_id].add_scalar(f"stats/{key}", np.mean(value), env_steps)
 
                 for key, value in self.stats.items():
-                    self.writers[policy_id].add_scalar(f'stats/{key}', value, env_steps)
+                    self.writers[policy_id].add_scalar(f"stats/{key}", value, env_steps)
 
             if not math.isnan(sample_throughput[policy_id]):
-                self.writers[policy_id].add_scalar('perf/_sample_throughput', sample_throughput[policy_id], env_steps)
+                self.writers[policy_id].add_scalar("perf/_sample_throughput", sample_throughput[policy_id], env_steps)
 
             for key, stat in self.policy_avg_stats.items():
-                if len(stat[policy_id]) >= stat[policy_id].maxlen or (len(stat[policy_id]) > 10 and self.total_train_seconds > 300):
+                if len(stat[policy_id]) >= stat[policy_id].maxlen or (
+                    len(stat[policy_id]) > 10 and self.total_train_seconds > 300
+                ):
                     stat_value = np.mean(stat[policy_id])
                     writer = self.writers[policy_id]
 
-                    if '/' in key:
+                    if "/" in key:
                         # custom summaries have their own sections in tensorboard
                         avg_tag = key
-                        min_tag = f'{key}_min'
-                        max_tag = f'{key}_max'
-                    elif key in ('reward', 'len'):
+                        min_tag = f"{key}_min"
+                        max_tag = f"{key}_max"
+                    elif key in ("reward", "len"):
                         # reward and length get special treatment
-                        avg_tag = f'{key}/{key}'
-                        min_tag = f'{key}/{key}_min'
-                        max_tag = f'{key}/{key}_max'
+                        avg_tag = f"{key}/{key}"
+                        min_tag = f"{key}/{key}_min"
+                        max_tag = f"{key}/{key}_max"
                     else:
-                        avg_tag = f'policy_stats/avg_{key}'
-                        min_tag = f'policy_stats/avg_{key}_min'
-                        max_tag = f'policy_stats/avg_{key}_max'
+                        avg_tag = f"policy_stats/avg_{key}"
+                        min_tag = f"policy_stats/avg_{key}_min"
+                        max_tag = f"policy_stats/avg_{key}_max"
 
                     writer.add_scalar(avg_tag, float(stat_value), env_steps)
 
                     # for key stats report min/max as well
-                    if key in ('reward', 'true_objective', 'len'):
+                    if key in ("reward", "true_objective", "len"):
                         writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
                         writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 
@@ -449,18 +472,27 @@ class Runner(EventLoopObject, Configurable):
 
     def _save_cfg(self):
         cfg_dict = self._cfg_dict()
-        with open(cfg_file(self.cfg), 'w') as json_file:
+        with open(cfg_file(self.cfg), "w") as json_file:
             json.dump(cfg_dict, json_file, indent=2)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
 
     def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
-        return Learner(event_loop, self.cfg, self.env_info, self.buffer_mgr, batcher, policy_id=policy_id, mp_ctx=self.mp_ctx)
+        return Learner(
+            event_loop, self.cfg, self.env_info, self.buffer_mgr, batcher, policy_id=policy_id, mp_ctx=self.mp_ctx
+        )
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
         return InferenceWorker(
-            event_loop, policy_id, worker_idx, self.buffer_mgr, param_server, self.inference_queues[policy_id], self.cfg, self.env_info,
+            event_loop,
+            policy_id,
+            worker_idx,
+            self.buffer_mgr,
+            param_server,
+            self.inference_queues[policy_id],
+            self.cfg,
+            self.env_info,
         )
 
     def _make_rollout_worker(self, event_loop, worker_idx: int):
@@ -535,12 +567,16 @@ class Runner(EventLoopObject, Configurable):
             # inference worker signals to advance rollouts when actions are ready
             for policy_id in range(self.cfg.num_policies):
                 for inference_worker_idx in range(self.cfg.policy_workers_per_policy):
-                    self.inference_workers[policy_id][inference_worker_idx].connect(f'advance{rollout_worker_idx}', rollout_worker.advance_rollouts)
+                    self.inference_workers[policy_id][inference_worker_idx].connect(
+                        f"advance{rollout_worker_idx}", rollout_worker.advance_rollouts
+                    )
 
                 # rollout workers send new trajectories to batchers
-                rollout_worker.connect(f'p{policy_id}_trajectories', self.batchers[policy_id].on_new_trajectories)
+                rollout_worker.connect(f"p{policy_id}_trajectories", self.batchers[policy_id].on_new_trajectories)
                 # wake up rollout workers when trajectory buffers are released
-                self.batchers[policy_id].trajectory_buffers_available.connect(rollout_worker.on_trajectory_buffers_available)
+                self.batchers[policy_id].trajectory_buffers_available.connect(
+                    rollout_worker.on_trajectory_buffers_available
+                )
 
             rollout_worker.report_msg.connect(self._process_msg)
 
@@ -552,7 +588,7 @@ class Runner(EventLoopObject, Configurable):
 
     def inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
         assert not self.inference_workers[policy_id][worker_idx].is_ready
-        log.info(f'Inference worker {policy_id}-{worker_idx} is ready!')
+        log.info(f"Inference worker {policy_id}-{worker_idx} is ready!")
         self.inference_workers[policy_id][worker_idx].is_ready = True
 
         # check if all workers for all policies are ready
@@ -561,7 +597,7 @@ class Runner(EventLoopObject, Configurable):
             all_ready &= all(w.is_ready for w in self.inference_workers[policy_id])
 
         if all_ready:
-            log.info('All inference workers are ready! Signal rollout workers to start!')
+            log.info("All inference workers are ready! Signal rollout workers to start!")
             self.inference_workers_initialized.emit()
 
     def _should_end_training(self):
@@ -578,13 +614,13 @@ class Runner(EventLoopObject, Configurable):
             self.stopped = True
 
     def _component_stopped(self, component_obj_id, component_profile: Timing):
-        log.debug(f'Component {component_obj_id} stopped!')
+        log.debug(f"Component {component_obj_id} stopped!")
 
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
                 del self.components_to_stop[i]
                 if self.components_to_stop:
-                    log.debug(f'Waiting for {[c.object_id for c in self.components_to_stop]} to stop...')
+                    log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
                 break
 
         if component_profile is not None:
@@ -606,16 +642,16 @@ class Runner(EventLoopObject, Configurable):
     def run(self) -> StatusCode:
         status = ExperimentStatus.SUCCESS
 
-        with self.timing.timeit('main_loop'):
+        with self.timing.timeit("main_loop"):
             try:
                 evt_loop_status = self.event_loop.exec()
                 status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
                 self.stop.emit(self.object_id)
             except Exception:
-                log.exception(f'Uncaught exception in {self.object_id} evt loop')
+                log.exception(f"Uncaught exception in {self.object_id} evt loop")
                 status = ExperimentStatus.FAILURE
 
         log.info(self.timing)
         fps = self.total_env_steps_since_resume / self.timing.main_loop
-        log.info('Collected %r, FPS: %.1f', self.env_steps, fps)
+        log.info("Collected %r, FPS: %.1f", self.env_steps, fps)
         return status

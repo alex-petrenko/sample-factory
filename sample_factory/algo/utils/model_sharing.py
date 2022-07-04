@@ -26,7 +26,7 @@ class ParameterServer:
     def init(self, actor_critic, policy_version):
         self.actor_critic = actor_critic
         self.policy_versions[self.policy_id] = policy_version
-        log.debug('Initialized policy %d weights for model version %d', self.policy_id, policy_version)
+        log.debug("Initialized policy %d weights for model version %d", self.policy_id, policy_version)
 
     def update_weights(self, policy_version):
         """
@@ -96,8 +96,7 @@ class ParameterClientAsync(ParameterClient):
 
     @property
     def actor_critic(self):
-        assert self.latest_policy_version >= 0, \
-            f'Trying to access actor critic before it is initialized'
+        assert self.latest_policy_version >= 0, "Trying to access actor critic before it is initialized"
         return self._actor_critic
 
     def _init_local_copy(self, device, cfg, obs_space, action_space):
@@ -120,7 +119,7 @@ class ParameterClientAsync(ParameterClient):
     def ensure_weights_updated(self):
         server_policy_version = self._get_server_policy_version()
         if self.latest_policy_version < server_policy_version and self._shared_model_weights is not None:
-            with self.timing.time_avg('weight_update'), self._policy_lock:
+            with self.timing.time_avg("weight_update"), self._policy_lock:
                 self._actor_critic.load_state_dict(self._shared_model_weights)
 
             self.latest_policy_version = server_policy_version
@@ -128,8 +127,10 @@ class ParameterClientAsync(ParameterClient):
             self.num_policy_updates += 1
             if self.num_policy_updates % 10 == 0:
                 log.info(
-                    'Updated weights for policy %d, policy_version %d (%s)',
-                    self.policy_id, self.latest_policy_version, str(self.timing.weight_update)
+                    "Updated weights for policy %d, policy_version %d (%s)",
+                    self.policy_id,
+                    self.latest_policy_version,
+                    str(self.timing.weight_update),
                 )
 
     def cleanup(self):
@@ -140,8 +141,9 @@ class ParameterClientAsync(ParameterClient):
         del self.policy_versions
 
         import gc
+
         weights_referrers = gc.get_referrers(weights)
-        log.debug(f'Weights refcount: {sys.getrefcount(weights)} {len(weights_referrers)}')
+        log.debug(f"Weights refcount: {sys.getrefcount(weights)} {len(weights_referrers)}")
 
 
 def make_parameter_client(is_serial_mode, parameter_server, cfg, env_info, timing: Timing):

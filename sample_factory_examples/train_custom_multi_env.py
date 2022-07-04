@@ -13,8 +13,8 @@ import gym
 import numpy as np
 
 from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.cfg.arguments import parse_args
+from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.train import run_rl
 from sample_factory_examples.train_custom_env_custom_model import CustomEncoder, override_default_params_func
 
@@ -64,7 +64,7 @@ class CustomMultiEnv(gym.Env):
                 if random.random() < 0.005:
                     self.inactive_steps[agent_idx] = random.randint(1, 48)
 
-            infos[agent_idx]['is_active'] = self.inactive_steps[agent_idx] <= 0
+            infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
 
         self.curr_episode_steps += 1
 
@@ -87,7 +87,7 @@ class CustomMultiEnv(gym.Env):
 
         return obs, rewards, dones, infos
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass
 
 
@@ -100,18 +100,18 @@ def add_extra_params_func(env, parser):
     Specify any additional command line arguments for this family of custom environments.
     """
     p = parser
-    p.add_argument('--custom_env_episode_len', default=10, type=int, help='Number of steps in the episode')
+    p.add_argument("--custom_env_episode_len", default=10, type=int, help="Number of steps in the episode")
 
 
 def register_custom_components():
     global_env_registry().register_env(
-        env_name_prefix='my_custom_multi_env_',
+        env_name_prefix="my_custom_multi_env_",
         make_env_func=make_custom_multi_env_func,
         add_extra_params_func=add_extra_params_func,
         override_default_params_func=override_default_params_func,
     )
 
-    register_custom_encoder('custom_env_encoder', CustomEncoder)
+    register_custom_encoder("custom_env_encoder", CustomEncoder)
 
 
 def main():
@@ -122,5 +122,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

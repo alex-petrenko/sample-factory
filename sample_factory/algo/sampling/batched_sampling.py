@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from queue import Empty
-from typing import Optional, Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS, fix_action_shape
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.tensor_dict import TensorDict
@@ -58,8 +58,15 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
     """
 
     def __init__(
-            self, cfg, env_info, num_envs, worker_idx, split_idx,
-            buffer_mgr, sampling_device: str, pbt_reward_shaping,  # TODO pbt reward
+        self,
+        cfg,
+        env_info,
+        num_envs,
+        worker_idx,
+        split_idx,
+        buffer_mgr,
+        sampling_device: str,
+        pbt_reward_shaping,  # TODO pbt reward
     ):
         # TODO: comment
         """
@@ -78,7 +85,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
 
         self.policy_id = worker_idx % self.cfg.num_policies
-        log.debug(f'EnvRunner {worker_idx}-{split_idx} uses policy {self.policy_id}')
+        log.debug(f"EnvRunner {worker_idx}-{split_idx} uses policy {self.policy_id}")
 
         self.num_envs = num_envs
 
@@ -110,7 +117,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             env_id = self.worker_idx * self.cfg.num_envs_per_worker + vector_idx
 
             env_config = AttrDict(
-                worker_index=self.worker_idx, vector_index=vector_idx, env_id=env_id,
+                worker_index=self.worker_idx,
+                vector_index=vector_idx,
+                env_id=env_id,
             )
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
@@ -131,10 +140,10 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         assert self.curr_traj is not None and self.curr_traj_slice is not None
 
         self.last_obs = self.vec_env.reset()
-        self.last_rnn_state = clone_tensor(self.traj_tensors['rnn_states'][0:self.vec_env.num_agents, 0])
+        self.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
         self.last_rnn_state[:] = 0.0
 
-        self.policy_id_buffer = clone_tensor(self.traj_tensors['policy_id'][0:self.vec_env.num_agents, 0])
+        self.policy_id_buffer = clone_tensor(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
         self.policy_id_buffer[:] = self.policy_id
 
         assert self.rollout_step == 0
@@ -167,7 +176,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # Actual reward modification is done in the learner when batch is prepared for training.
             time_outs = get_first_present(infos, TIMEOUT_KEYS) if isinstance(infos, dict) else None
             if time_outs is not None:
-                self.curr_step['time_outs'][:] = time_outs
+                self.curr_step["time_outs"][:] = time_outs
 
     def _process_env_step(self, rewards: Tensor, dones_orig: Tensor, infos):
         dones = dones_orig.cpu()
@@ -198,7 +207,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                             # saving value for all agents who finished the episode
                             stats[key] = value[finished]
                         else:
-                            log.warning(f'Infos tensor with unexpected shape {value.shape}')
+                            log.warning(f"Infos tensor with unexpected shape {value.shape}")
 
                 # make sure everything in the dict is either a scalar or a numpy array
                 for key, value in stats.items():
@@ -221,8 +230,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
     def _finalize_trajectories(self) -> List[Dict]:
         # Saving obs and hidden states for the step AFTER the last step in the current rollout.
         # We're going to need them later when we calculate next step value estimates.
-        self.curr_traj['obs'][:, self.cfg.rollout] = self.last_obs
-        self.curr_traj['rnn_states'][:, self.cfg.rollout] = self.last_rnn_state
+        self.curr_traj["obs"][:, self.cfg.rollout] = self.last_obs
+        self.curr_traj["rnn_states"][:, self.cfg.rollout] = self.last_rnn_state
 
         traj_dict = dict(policy_id=self.policy_id, traj_buffer_idx=self.curr_traj_slice)
         return [traj_dict]
@@ -237,17 +246,17 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         :return: same as reset(), return a set of requests for policy workers, asking them to generate actions for
         the next env step.
         """
-        with timing.add_time('process_policy_outputs'):
+        with timing.add_time("process_policy_outputs"):
             # save actions/logits/values etc. for the current rollout step
             self.curr_step[:] = self.policy_output_tensors
-            actions = preprocess_actions(self.env_info, self.policy_output_tensors['actions'])
+            actions = preprocess_actions(self.env_info, self.policy_output_tensors["actions"])
 
         complete_rollouts, episodic_stats = [], []
 
-        with timing.add_time('env_step'):
+        with timing.add_time("env_step"):
             self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
 
-        with timing.add_time('post_env_step'):
+        with timing.add_time("post_env_step"):
             self.policy_id_buffer[:] = self.policy_id
 
             # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym_examples), or a list of dictionaries (i.e. swarm_rl quadrotors)
@@ -268,16 +277,16 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # reset next-step hidden states to zero if we encountered an episode boundary
             # not sure if this is the best practice, but this is what everybody seems to be doing
-            not_done = (1.0 - self.curr_step['dones'].float()).unsqueeze(-1)
-            self.last_rnn_state = self.policy_output_tensors['new_rnn_states'] * not_done
+            not_done = (1.0 - self.curr_step["dones"].float()).unsqueeze(-1)
+            self.last_rnn_state = self.policy_output_tensors["new_rnn_states"] * not_done
 
-            with timing.add_time('process_env_step'):
+            with timing.add_time("process_env_step"):
                 stats = self._process_env_step(rewards_cpu, dones, infos)
             episodic_stats.extend(stats)
 
         self.rollout_step += 1
 
-        with timing.add_time('finalize_trajectories'):
+        with timing.add_time("finalize_trajectories"):
             if self.rollout_step == self.cfg.rollout:
                 # finalize and serialize the trajectory if we have a complete rollout
                 complete_rollouts = self._finalize_trajectories()
@@ -293,7 +302,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # don't need to do anything - we have a trajectory buffer already
             return True
 
-        with timing.add_time('wait_for_trajectories'):
+        with timing.add_time("wait_for_trajectories"):
             try:
                 buffers = self.traj_buffer_queue.get(block=block, timeout=1e9)
             except Empty:
@@ -312,7 +321,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # we don't have a shared buffer to store data in - still waiting for one to become available
             return None
 
-        with timing.add_time('prepare_next_step'):
+        with timing.add_time("prepare_next_step"):
             self.curr_step = self.curr_traj[:, self.rollout_step]
             # save observations and RNN states in a trajectory
             self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)

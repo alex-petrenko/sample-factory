@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 import torch
 from torch import nn
 
-from sample_factory.algo.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
+from sample_factory.algo.utils.action_distributions import is_continuous_action_space, sample_actions_log_probs
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace, running_mean_std_summaries
 from sample_factory.algo.utils.tensor_dict import TensorDict
-from sample_factory.model.model_utils import create_encoder, create_core, \
-    ActionParameterizationContinuousNonAdaptiveStddev, \
-    ActionParameterizationDefault
+from sample_factory.model.model_utils import (
+    ActionParameterizationContinuousNonAdaptiveStddev,
+    ActionParameterizationDefault,
+    create_core,
+    create_encoder,
+)
 from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.timing import Timing
 
@@ -30,7 +33,7 @@ class _ActorCriticBase(nn.Module):
 
         self.returns_normalizer: Optional[RunningMeanStdInPlace] = None
         if cfg.normalize_returns:
-            returns_shape = (1, )  # it's actually a single scalar but we use 1D shape for the normalizer
+            returns_shape = (1,)  # it's actually a single scalar but we use 1D shape for the normalizer
             self.returns_normalizer = RunningMeanStdInPlace(returns_shape)
             # comment this out for debugging (i.e. to be able to step through normalizer code)
             self.returns_normalizer = torch.jit.script(self.returns_normalizer)
@@ -40,7 +43,9 @@ class _ActorCriticBase(nn.Module):
     def get_action_parameterization(self, core_output_size):
         if not self.cfg.adaptive_stddev and is_continuous_action_space(self.action_space):
             action_parameterization = ActionParameterizationContinuousNonAdaptiveStddev(
-                self.cfg, core_output_size, self.action_space,
+                self.cfg,
+                core_output_size,
+                self.action_space,
             )
         else:
             action_parameterization = ActionParameterizationDefault(self.cfg, core_output_size, self.action_space)
@@ -59,10 +64,10 @@ class _ActorCriticBase(nn.Module):
         # gain = nn.init.calculate_gain(self.cfg.nonlinearity)
         gain = self.cfg.policy_init_gain
 
-        if hasattr(layer, 'bias') and isinstance(layer.bias, torch.nn.parameter.Parameter):
+        if hasattr(layer, "bias") and isinstance(layer.bias, torch.nn.parameter.Parameter):
             layer.bias.data.fill_(0)
 
-        if self.cfg.policy_initialization == 'orthogonal':
+        if self.cfg.policy_initialization == "orthogonal":
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.orthogonal_(layer.weight.data, gain=gain)
             else:
@@ -71,12 +76,12 @@ class _ActorCriticBase(nn.Module):
                 # I never noticed much difference between different initialization schemes, and here it seems safer to
                 # go with default initialization,
                 pass
-        elif self.cfg.policy_initialization == 'xavier_uniform':
+        elif self.cfg.policy_initialization == "xavier_uniform":
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.xavier_uniform_(layer.weight.data, gain=gain)
             else:
                 pass
-        elif self.cfg.policy_initialization == 'torch_default':
+        elif self.cfg.policy_initialization == "torch_default":
             # do nothing
             pass
 
@@ -88,7 +93,7 @@ class _ActorCriticBase(nn.Module):
         s = self.obs_normalizer.summaries()
         if self.returns_normalizer is not None:
             for k, v in running_mean_std_summaries(self.returns_normalizer).items():
-                s[f'returns_{k}'] = v
+                s[f"returns_{k}"] = v
         return s
 
     def action_distribution(self):
@@ -97,9 +102,9 @@ class _ActorCriticBase(nn.Module):
     def _maybe_sample_actions(self, sample_actions: bool, result: TensorDict) -> None:
         if sample_actions:
             # for non-trivial action spaces it is faster to do these together
-            actions, result['log_prob_actions'] = sample_actions_log_probs(self.last_action_distribution)
+            actions, result["log_prob_actions"] = sample_actions_log_probs(self.last_action_distribution)
             assert actions.dim() == 2  # TODO: remove this once we test everything
-            result['actions'] = actions.squeeze(dim=1)
+            result["actions"] = actions.squeeze(dim=1)
 
 
 class _ActorCriticSharedWeights(_ActorCriticBase):
@@ -154,7 +159,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
             return TensorDict(values=self.calc_value(x))
         else:
             result = self.forward_tail(x)
-            result['new_rnn_states'] = new_rnn_states
+            result["new_rnn_states"] = new_rnn_states
             return result
 
 
@@ -244,7 +249,7 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
             return TensorDict(values=values)
         else:
             result = self.forward_tail(x)
-            result['new_rnn_states'] = new_rnn_states
+            result["new_rnn_states"] = new_rnn_states
             return result
 
 
