@@ -2,9 +2,11 @@ import random
 from queue import Empty
 from typing import Tuple, Dict, List, Optional
 
+import gym
 import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, TIMEOUT_KEYS, fix_action_shape
+from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.tensor_dict import to_numpy
@@ -125,11 +127,36 @@ class ActorState:
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
         actions = ensure_numpy_array(self.last_actions)
-        if self.env_info.integer_actions:
-            actions = actions.astype(np.int32)
 
-        actions = fix_action_shape(actions, self.env_info.integer_actions)
-        return actions
+        if isinstance(self.env_info.action_space, gym.spaces.Discrete):
+            return self.calculate_actions()
+
+        if isinstance(self.env_info.action_space, gym.spaces.Box):
+            return self.calculate_actions()
+
+
+        if isinstance(self.env_info.action_space, gym.spaces.Tuple):
+            # calculate splits
+            splits = [calc_num_actions(space) for space in self.env_info.action_space]
+            array_split = np.split(actions, splits)
+            actions = []
+            for split, space in zip(array_split, self.env_info.action_space):
+                actions.append(self.calculate_actions(split, space))
+
+            return actions
+
+        raise NotImplementedError
+
+    def calculate_actions(self, actions : np.ndarray, space : gym.Space) -> np.ndarray:
+        if isinstance(space, gym.spaces.Discrete):
+            actions = actions.astype(np.int32)
+            return fix_action_shape(actions, True)
+
+        if isinstance(space, gym.spaces.Box):
+            return fix_action_shape(actions, False) 
+    
+        raise NotImplementedError
+
 
     def record_env_step(self, reward, done, info, rollout_step):
         """
