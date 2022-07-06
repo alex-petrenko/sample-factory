@@ -32,7 +32,7 @@ jobs:
       run: |
         pip3 install torch torchvision
         pip install -e .
-        pip install "gym[atari,accept-rom-license]"
+        pip install -e '.[atari, mujoco]'
         conda list
     - name: Install test dependencies
       run: |

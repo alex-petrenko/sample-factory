@@ -27,7 +27,7 @@ ATARI_ENVS = [
     AtariSpec("atari_asteroids", "AsteroidsNoFrameskip-v4"),
     AtariSpec("atari_gravitar", "GravitarNoFrameskip-v4"),
     AtariSpec("atari_mspacman", "MsPacmanNoFrameskip-v4"),
-    AtariSpec("atari_seaquest", "SeaQuestNoFrameskip-v4"),
+    AtariSpec("atari_seaquest", "SeaquestNoFrameskip-v4"),
 ]
 
 
@@ -42,6 +42,8 @@ def atari_env_by_name(name):
 def make_atari_env(env_name, cfg, **kwargs):
     atari_spec = atari_env_by_name(env_name)
 
+    # to render atari, need to add render_mode, will totally fix it in one week
+    # env = gym.make(atari_spec.env_id, render_mode='human')
     env = gym.make(atari_spec.env_id)
     if atari_spec.default_timeout is not None:
         env._max_episode_steps = atari_spec.default_timeout
