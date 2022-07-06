@@ -41,3 +41,8 @@ check-codestyle:
 # Run tests for the library
 test:
 	pytest -s
+
+
+# Run code coverage test
+test-cov:
+	pytest --cov=./ -v
