@@ -27,7 +27,7 @@ ATARI_ENVS = [
     AtariSpec("atari_asteroids", "AsteroidsNoFrameskip-v4"),
     AtariSpec("atari_gravitar", "GravitarNoFrameskip-v4"),
     AtariSpec("atari_mspacman", "MsPacmanNoFrameskip-v4"),
-    AtariSpec("atari_seaquest", "SeaQuestNoFrameskip-v4"),
+    AtariSpec("atari_seaquest", "SeaquestNoFrameskip-v4"),
 ]
 
 
