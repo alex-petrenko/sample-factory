@@ -158,6 +158,12 @@ class TestDoom:
 
 
 class TestAtari:
+    @pytest.fixture(scope="class", autouse=True)
+    def register_atari_fixture(self):
+        from sample_factory_examples.atari_examples.train_atari import register_atari_components
+
+        register_atari_components()
+
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):

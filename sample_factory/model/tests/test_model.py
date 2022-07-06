@@ -10,6 +10,12 @@ from sample_factory.utils.utils import log
 
 
 class TestModel:
+    @pytest.fixture(scope="class", autouse=True)
+    def register_atari_fixture(self):
+        from sample_factory_examples.atari_examples.train_atari import register_atari_components
+
+        register_atari_components()
+
     @staticmethod
     def forward_pass(device_type):
         env_name = "atari_breakout"
