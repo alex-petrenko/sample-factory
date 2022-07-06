@@ -1,7 +1,7 @@
 """
 Evaluate different policies against one another in a multiplayer VizDoom match.
 
-This is an old/unsupported script, update for SF2 API if needed.
+This is an old/unsupported script, update for SF2 API would be needed.
 """
 
 

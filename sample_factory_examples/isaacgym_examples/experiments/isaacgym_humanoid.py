@@ -1,5 +1,5 @@
 from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
-from sample_factory.runner.runs.isaacgym_runs import base_cli, vstr
+from sample_factory_examples.isaacgym_examples.experiments.isaacgym_runs import base_cli, vstr
 
 _params = ParamGrid(
     [
