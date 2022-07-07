@@ -110,6 +110,20 @@ class KlAdaptiveSchedulerPerEpoch(KlAdaptiveScheduler):
     def invoke_after_each_epoch(self):
         return True
 
+class LinearDecayScheduler(LearningRateScheduler):
+    def __init__(self, cfg):
+        num_updates = cfg.train_for_env_steps // cfg.batch_size * cfg.num_epochs
+        self.linear_decay = LinearDecay([(0, cfg.learning_rate), (num_updates, 0)])
+        self.step = 0
+    
+    def invoke_after_each_minibatch(self):
+        return True
+
+    def update(self, current_lr, recent_kls):
+        self.step += 1
+        lr = self.linear_decay.at(self.step)
+        return lr
+
 
 def get_lr_scheduler(cfg) -> LearningRateScheduler:
     if cfg.lr_schedule == "constant":
@@ -118,6 +132,8 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
         return KlAdaptiveSchedulerPerMinibatch(cfg)
     elif cfg.lr_schedule == "kl_adaptive_epoch":
         return KlAdaptiveSchedulerPerEpoch(cfg)
+    elif cfg.lr_schedule == "linear_decay":
+        return LinearDecayScheduler(cfg)
     else:
         raise RuntimeError(f"Unknown scheduler {cfg.lr_schedule}")
 

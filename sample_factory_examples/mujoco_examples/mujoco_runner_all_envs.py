@@ -8,12 +8,12 @@ _params = ParamGrid(
             [
                 "mujoco_ant",
                 "mujoco_halfcheetah",
-                "mujoco_hopper",
+                # "mujoco_hopper",
                 "mujoco_humanoid",
-                "mujoco_doublependulum",
-                "mujoco_pendulum",
-                "mujoco_reacher",
-                "mujoco_swimmer",
+                # "mujoco_doublependulum",
+                # "mujoco_pendulum",
+                # "mujoco_reacher",
+                # "mujoco_swimmer",
                 "mujoco_walker",
             ],
         ),
@@ -23,11 +23,11 @@ _params = ParamGrid(
 _experiments = [
     Experiment(
         "mujoco_all_envs",
-        "python -m sample_factory_examples.mujoco_examples.train_mujoco --algo=APPO --with_wandb=True --wandb_tags mujoco runner_4",
+        "python -m sample_factory_examples.mujoco_examples.train_mujoco --algo=APPO --with_wandb=True --wandb_tags mujoco runner_crl_4",
         _params.generate_params(randomize=False),
     ),
 ]
 
 
 RUN_DESCRIPTION = RunDescription("mujoco_all_envs", experiments=_experiments)
-# python -m sample_factory.runner.run --run=mujoco_all_envs --runner=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=4
+# python -m sample_factory.runner.run --run=sample_factory_examples.mujoco_examples.mujoco_runner_all_envs --runner=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=crl_3
