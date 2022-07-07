@@ -21,7 +21,7 @@ clean:
 
 line_len = 120
 line_len_arg = --line-length $(line_len)
-code_folders = sample_factory sample_factory_examples
+code_folders = ./
 
 
 # Format source code automatically
