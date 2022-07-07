@@ -24,6 +24,7 @@ class TestMujoco:
         serial_mode: bool = True,
         async_rl: bool = False,
         batch_size: int = 64,
+        rollout: int = 8,
     ):
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
@@ -38,6 +39,7 @@ class TestMujoco:
         cfg.num_envs_per_worker = 2
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
+        cfg.rollout = rollout
         cfg.seed = 0
         cfg.device = "cpu"
 
@@ -53,4 +55,5 @@ class TestMujoco:
     @pytest.mark.parametrize("batched_sampling", [False, True])
     def test_single_action_envs(self, env_name, batched_sampling):
         """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
-        self._run_test_env(env=env_name, num_workers=1, train_steps=100)
+        self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)
+        # Currently failing when batched_sampling=True
