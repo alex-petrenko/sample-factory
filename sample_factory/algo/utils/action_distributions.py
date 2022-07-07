@@ -4,7 +4,7 @@ import gym
 import numpy as np
 import torch
 from torch import Tensor
-from torch.distributions import Normal, Independent
+from torch.distributions import Independent, Normal
 from torch.nn import functional
 
 from sample_factory.utils.utils import log
@@ -17,11 +17,11 @@ def calc_num_actions(action_space):
         return sum([calc_num_actions(a) for a in action_space])
     elif isinstance(action_space, gym.spaces.Box):
         if len(action_space.shape) != 1:
-            raise Exception('Non-trivial shape Box action spaces not currently supported. Try to flatten the space.')
+            raise Exception("Non-trivial shape Box action spaces not currently supported. Try to flatten the space.")
 
         return action_space.shape[0]
     else:
-        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+        raise NotImplementedError(f"Action space type {type(action_space)} not supported!")
 
 
 def calc_num_logits(action_space):
@@ -34,7 +34,7 @@ def calc_num_logits(action_space):
         # regress one mean and one standard deviation for every action
         return np.prod(action_space.shape) * 2
     else:
-        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+        raise NotImplementedError(f"Action space type {type(action_space)} not supported!")
 
 
 def is_continuous_action_space(action_space):
@@ -57,7 +57,7 @@ def get_action_distribution(action_space, raw_logits):
     elif isinstance(action_space, gym.spaces.Box):
         return ContinuousActionDistribution(params=raw_logits)
     else:
-        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+        raise NotImplementedError(f"Action space type {type(action_space)} not supported!")
 
 
 def sample_actions_log_probs(distribution):
@@ -116,8 +116,7 @@ class CategoricalActionDistribution:
         return kl
 
     def _kl_inverse(self, other_log_probs):
-        probs, log_probs = self.probs, self.log_probs
-        kl = torch.exp(other_log_probs) * (other_log_probs - log_probs)
+        kl = torch.exp(other_log_probs) * (other_log_probs - self.log_probs)
         kl = kl.sum(dim=-1)
         return kl
 
@@ -130,8 +129,10 @@ class CategoricalActionDistribution:
         uniform_prob = 1 / num_categories
         log_uniform_prob = math.log(uniform_prob)
 
-        return 0.5 * ((probs * (log_probs - log_uniform_prob)).sum(dim=-1)
-                      + (uniform_prob * (log_uniform_prob - log_probs)).sum(dim=-1))
+        return 0.5 * (
+            (probs * (log_probs - log_uniform_prob)).sum(dim=-1)
+            + (uniform_prob * (log_uniform_prob - log_probs)).sum(dim=-1)
+        )
 
     def kl_divergence(self, other):
         return self._kl(other.log_probs)
@@ -145,9 +146,9 @@ class CategoricalActionDistribution:
             max_prob=self.probs.max(),
         )
 
-        msg = ''
+        msg = ""
         for key, value in dbg_info.items():
-            msg += f'{key}={value.cpu().item():.3f} '
+            msg += f"{key}={value.cpu().item():.3f} "
         log.debug(msg)
 
 
@@ -167,6 +168,7 @@ class TupleActionDistribution:
     Entropy of such a distribution is just a sum of entropies of individual distributions.
 
     """
+
     def __init__(self, action_space, logits_flat):
         self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
@@ -219,11 +221,7 @@ class TupleActionDistribution:
         return entropy
 
     def kl_divergence(self, other):
-        kls = [
-            d.kl_divergence(other_d).unsqueeze(dim=1)
-            for d, other_d
-            in zip(self.distributions, other.distributions)
-        ]
+        kls = [d.kl_divergence(other_d).unsqueeze(dim=1) for d, other_d in zip(self.distributions, other.distributions)]
 
         kls = torch.cat(kls, dim=1)
         kl = kls.sum(dim=1)
@@ -268,11 +266,9 @@ class ContinuousActionDistribution(Independent):
             action_mean=self.means.mean(),
             action_mean_min=self.means.min(),
             action_mean_max=self.means.max(),
-
             action_log_std_mean=self.log_std.mean(),
             action_log_std_min=self.log_std.min(),
             action_log_std_max=self.log_std.max(),
-
             action_stddev_mean=self.stddev.mean(),
             action_stddev_min=self.stddev.min(),
             action_stddev_max=self.stddev.max(),

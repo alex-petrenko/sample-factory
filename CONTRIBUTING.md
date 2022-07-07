@@ -56,10 +56,13 @@ If you would like to work on any of the open Issues:
 
 	```bash
 	make format
-	```
+ 	make check-codestyle  
+	``` 
+(make check-codestyle should yield no errors) 
+
 7. Run unittests with the following command:
 	```bash
-	make format
+	make test
 	```
 8. Once you're happy with your files, add your changes and make a commit to record your changes locally:
 

@@ -1,14 +1,20 @@
 import time
-import unittest
 from multiprocessing import Process
-from unittest import TestCase
+
+import pytest
 
 from sample_factory.envs.env_utils import vizdoom_available
-from sample_factory.utils.utils import log, AttrDict
+from sample_factory.utils.utils import AttrDict, log
 
 
-@unittest.skipUnless(vizdoom_available(), 'Please install VizDoom to run a full test suite')
-class TestDoom(TestCase):
+@pytest.mark.skipif(not vizdoom_available(), reason="Please install VizDoom to run a full test suite")
+class TestDoom:
+    @pytest.fixture(scope="class", autouse=True)
+    def register_doom_fixture(self):
+        from sample_factory_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+
+        return register_vizdoom_components()
+
     @staticmethod
     def make_standard_dm(env_config):
         from sample_factory.envs.doom.doom_utils import make_doom_env
@@ -16,7 +22,7 @@ class TestDoom(TestCase):
 
         cfg = default_doom_cfg()
         cfg.env_frameskip = 2
-        env = make_doom_env('doom_deathmatch_full', cfg=cfg, env_config=env_config)
+        env = make_doom_env("doom_deathmatch_full", cfg=cfg, env_config=env_config)
         env.skip_frames = cfg.env_frameskip
         return env
 
@@ -38,16 +44,16 @@ class TestDoom(TestCase):
                 multi_env.render()
 
             if i % 100 == 0 or any(dones):
-                log.info('Rew %r done %r info %r', rew, dones, infos)
+                log.info("Rew %r done %r info %r", rew, dones, infos)
 
             if all(dones):
                 multi_env.reset()
 
         took = time.time() - start
-        log.info('Took %.3f seconds for %d steps', took, num_steps)
-        log.info('Server steps per second: %.1f', num_steps / took)
-        log.info('Observations fps: %.1f', num_steps * multi_env.num_agents / took)
-        log.info('Environment fps: %.1f', num_steps * multi_env.num_agents * multi_env.skip_frames / took)
+        log.info("Took %.3f seconds for %d steps", took, num_steps)
+        log.info("Server steps per second: %.1f", num_steps / took)
+        log.info("Observations fps: %.1f", num_steps * multi_env.num_agents / took)
+        log.info("Environment fps: %.1f", num_steps * multi_env.num_agents * multi_env.skip_frames / took)
 
         multi_env.close()
 
@@ -59,7 +65,7 @@ class TestDoom(TestCase):
         workers = []
 
         for i in range(num_workers):
-            log.info('Starting worker #%d', i)
+            log.info("Starting worker #%d", i)
             worker = Process(target=self.doom_multiagent, args=(self.make_standard_dm, i, 200))
             worker.start()
             workers.append(worker)

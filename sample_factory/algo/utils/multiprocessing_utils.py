@@ -1,7 +1,7 @@
 import multiprocessing
 import os
 import time
-from queue import Queue, Empty
+from queue import Empty, Queue
 
 
 def get_queue(serial=False, buffer_size_bytes=1_000_000):
@@ -13,12 +13,12 @@ def get_queue(serial=False, buffer_size_bytes=1_000_000):
 
 
 def get_mp_queue(buffer_size_bytes=1_000_000):
-    if os.name == 'nt':
+    if os.name == "nt":
         from sample_factory.utils.faster_fifo_stub import MpQueueWrapper as MpQueue
     else:
-        from faster_fifo import Queue as MpQueue
         # noinspection PyUnresolvedReferences
         import faster_fifo_reduction
+        from faster_fifo import Queue as MpQueue
 
     return MpQueue(max_size_bytes=buffer_size_bytes)
 

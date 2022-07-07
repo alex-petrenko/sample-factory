@@ -14,7 +14,11 @@ class EnvRegistry:
         self.registry = dict()
 
     def register_env(
-            self, env_name_prefix, make_env_func, add_extra_params_func=None, override_default_params_func=None,
+        self,
+        env_name_prefix,
+        make_env_func,
+        add_extra_params_func=None,
+        override_default_params_func=None,
     ):
         """
         A standard thing to do in RL frameworks is to just rely on unique environment names registered in Gym.
@@ -49,26 +53,26 @@ class EnvRegistry:
 
         """
 
-        assert callable(make_env_func), 'make_env_func should be callable'
+        assert callable(make_env_func), "make_env_func should be callable"
 
         entry = EnvRegistryEntry(env_name_prefix, make_env_func, add_extra_params_func, override_default_params_func)
         self.registry[env_name_prefix] = entry
 
-        log.debug('Env registry entry created: %s', env_name_prefix)
+        log.debug("Env registry entry created: %s", env_name_prefix)
 
     def register_env_deferred(self, env_name_prefix, register_env_family_func):
         """Same as register_env but we defer the creation of the registry entry until we actually need it."""
         assert callable(register_env_family_func)
 
         self.registry[env_name_prefix] = register_env_family_func
-        
+
     def resolve_env_name(self, full_env_name):
         """
         :param full_env_name: complete name of the environment, to be passed to the make_env_func, e.g. atari_breakout
         :return: env registry entry
         :rtype: EnvRegistryEntry
         """
-        # we find a match with a registered env family prefix
+        # we find a match with a reqgistered env family prefix
         for env_prefix, registry_entry in self.registry.items():
             if not full_env_name.startswith(env_prefix):
                 continue
@@ -80,47 +84,9 @@ class EnvRegistry:
 
             return self.registry[env_prefix]
 
-        msg = (f'Could not resolve {full_env_name}. '
-               'Did you register the family of environments in the registry? See sample_factory_examples for details.')
+        msg = (
+            f"Could not resolve {full_env_name}."
+            f"Did you register the family of environments in the registry? See sample_factory_examples for details."
+        )
         log.warning(msg)
         raise RuntimeError(msg)
-
-
-def atari_funcs():
-    from sample_factory.envs.atari.atari_utils import make_atari_env
-    from sample_factory.envs.atari.atari_params import atari_override_defaults
-    return make_atari_env, None, atari_override_defaults
-
-
-def dmlab_funcs():
-    from sample_factory.envs.dmlab.dmlab_env import make_dmlab_env
-    from sample_factory.envs.dmlab.dmlab_params import add_dmlab_env_args, dmlab_override_defaults
-    return make_dmlab_env, add_dmlab_env_args, dmlab_override_defaults
-
-
-def mujoco_funcs():
-    from sample_factory.envs.mujoco.mujoco_utils import make_mujoco_env
-    from sample_factory.envs.mujoco.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
-    return make_mujoco_env, add_mujoco_env_args, mujoco_override_defaults
-
-
-def register_default_envs(env_registry):
-    """
-    Register default envs.
-    For this set of env families we register a function that can later create an actual registry entry when required.
-    This allows us to import only Python modules that we use.
-
-    """
-
-    # TODO: get rid of this and move this to examples
-
-    default_envs = {
-        'atari_': atari_funcs,
-        'dmlab_': dmlab_funcs,
-        'mujoco_': mujoco_funcs,
-    }
-
-    for envs_prefix, env_funcs in default_envs.items():
-        env_registry.register_env_deferred(envs_prefix, env_funcs)
-
-    log.debug('Default env families supported: %r', [f'{k}*' for k in default_envs.keys()])

@@ -18,7 +18,7 @@ class AvgTime:
 
     def __str__(self):
         avg_time = sum(self.values) / max(1, len(self.values))
-        return f'{avg_time:.4f}'
+        return f"{avg_time:.4f}"
 
 
 @dataclass
@@ -71,12 +71,12 @@ class TimingContext:
 
 
 class Timing(AttrDict):
-    def __init__(self, name='Profile', *args, **kwargs):
+    def __init__(self, name="Profile", *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._name = name
 
-        self._root_context = TimingContext(self, '~')
+        self._root_context = TimingContext(self, "~")
         self._root_context.set_tree_node(TimingTreeNode())
         self._open_contexts_stack = [self._root_context]
 
@@ -108,26 +108,27 @@ class Timing(AttrDict):
 
     @staticmethod
     def _time_str(value):
-        return f'{value:.4f}' if isinstance(value, float) else str(value)
+        return f"{value:.4f}" if isinstance(value, float) else str(value)
 
     def flat_str(self):
         # skip data members of Timing
-        skip_names = ['_root_context', '_open_contexts_stack']
+        skip_names = ["_root_context", "_open_contexts_stack"]
 
         s = []
         for key, value in self.items():
             if key not in skip_names:
-                s.append(f'{key}: {self._time_str(value)}')
-        return ', '.join(s)
+                s.append(f"{key}: {self._time_str(value)}")
+        return ", ".join(s)
 
     @classmethod
     def _tree_str_func(cls, node: TimingTreeNode, depth: int):
-        indent = ' ' * 2 * depth
+        indent = " " * 2 * depth
 
         leaf_nodes = ((k, v) for k, v in node.timing.items() if not v.timing)
         nonleaf_nodes = ((k, v) for k, v in node.timing.items() if v.timing)
 
-        node_str = lambda k, node_: f'{k}: {cls._time_str(node_.self_time)}'
+        def node_str(k, node_):
+            return f"{k}: {cls._time_str(node_.self_time)}"
 
         tokens = []
         for key, child_node in leaf_nodes:
@@ -138,15 +139,15 @@ class Timing(AttrDict):
             lines.append(f'{indent}{", ".join(tokens)}')
 
         for key, child_node in nonleaf_nodes:
-            lines.append(f'{indent}{node_str(key, child_node)}')
+            lines.append(f"{indent}{node_str(key, child_node)}")
             lines.extend(cls._tree_str_func(child_node, depth + 1))
 
         return lines
 
     def tree_str(self):
-        lines = [f'{self._name} tree view:']
+        lines = [f"{self._name} tree view:"]
         lines.extend(self._tree_str_func(self._root_context.timing_tree_node, 0))
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def __str__(self):
         return self.tree_str()
@@ -155,5 +156,5 @@ class Timing(AttrDict):
 def init_global_profiler(t):
     """This is for debugging purposes. Normally prefer to pass it around."""
     global TIMING
-    log.info('Setting global profiler in process %r', psutil.Process())
+    log.info("Setting global profiler in process %r", psutil.Process())
     TIMING = t

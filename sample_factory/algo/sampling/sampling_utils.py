@@ -1,9 +1,20 @@
-from typing import Tuple, List, Dict, Optional
+from __future__ import annotations
+
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+from torch import Tensor
 
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.envs.env_wrappers import TimeLimitWrapper
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict
+
+# "TimeLimit.truncated" is the key used by Gym TimeLimit wrapper.
+# "time_outs" is used by IsaacGym.
+TIMEOUT_KEYS: Tuple = ("time_outs", TimeLimitWrapper.terminated_by_timer)
 
 
 class VectorEnvRunner(Configurable):
@@ -36,3 +47,15 @@ class VectorEnvRunner(Configurable):
 
     def close(self):
         raise NotImplementedError()
+
+
+def fix_action_shape(actions: Tensor | np.ndarray, integer_actions: bool) -> Tensor | np.ndarray:
+    if actions.ndim == 0:
+        if integer_actions:
+            actions = actions.item()
+        else:
+            # envs with continuous actions typically expect a vector of actions (i.e. Mujoco)
+            # if there's only one action (i.e. Mujoco pendulum) then we need to make it a 1D vector
+            actions = unsqueeze_tensor(actions, -1)
+
+    return actions

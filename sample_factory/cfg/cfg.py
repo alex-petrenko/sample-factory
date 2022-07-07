@@ -5,6 +5,9 @@ from os.path import join
 
 from sample_factory.utils.utils import str2bool
 
+# allow long lines in this file to make it easier to read help strings on a wide monitor
+# fmt: off
+
 
 def add_basic_cli_args(p: ArgumentParser):
     p.add_argument('-h', '--help', action='store_true', help='Print the help message', required=False)
@@ -17,10 +20,6 @@ def add_basic_cli_args(p: ArgumentParser):
              'Any parameters passed from command line that do not match the parameters stored in the experiment cfg.json file will be overridden.',
     )
     p.add_argument('--train_dir', default=join(os.getcwd(), 'train_dir'), type=str, help='Root for all experiments')
-    p.add_argument(
-        '--experiments_root', type=str, default=None, required=False,
-        help='If not None, store experiment data in the specified subfolder of train_dir. Useful for groups of experiments (e.g. gridsearch)',
-    )  # TODO: do we absolutely need this?
 
     p.add_argument('--device', default='gpu', type=str, choices=['gpu', 'cpu'], help='CPU training is only recommended for smaller e.g. MLP policies')
     p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')
@@ -127,6 +126,7 @@ def add_rl_args(p: ArgumentParser):
         '--value_bootstrap', default=False, type=str2bool,
         help='Bootstrap returns from value estimates if episode is terminated by timeout. More info here: https://github.com/Denys88/rl_games/issues/128',
     )
+    p.add_argument('--normalize_returns', default=False, type=str2bool, help='Whether to use running mean and standard deviation to normalize discounted returns')
 
     # components of the loss function
     p.add_argument('--exploration_loss_coeff', default=0.003, type=float, help='Coefficient for the exploration component of the loss function.')
@@ -157,7 +157,6 @@ def add_rl_args(p: ArgumentParser):
 
     # more specific to policy gradient algorithms or PPO
     p.add_argument('--gae_lambda', default=0.95, type=float, help='Generalized Advantage Estimation discounting (only used when V-trace is False)')
-    p.add_argument('--gae_returns', default=False, type=str2bool, help='Use GAE returns instead of regular discounted rewards')
     p.add_argument('--ppo_clip_ratio', default=0.1, type=float, help='We use unbiased clip(x, 1+e, 1/(1+e)) instead of clip(x, 1+e, 1-e) in the paper')
     p.add_argument('--ppo_clip_value', default=1.0, type=float, help='Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude')
     p.add_argument('--with_vtrace', default=True, type=str2bool, help='Enables V-trace off-policy correction. If this is True, then GAE is not used')
@@ -265,8 +264,17 @@ def add_default_env_args(p: ArgumentParser):
     """Configuration related to the environments, i.e. things that might be difficult to query from an environment instance."""
     p.add_argument('--env_gpu_actions', default=False, type=str2bool, help='Set to true if environment expects actions on GPU (i.e. as a GPU-side PyTorch tensor)')
 
-    p.add_argument('--env_frameskip', default=None, type=int, help='Number of frames for action repeat (frame skipping). Default (None) means use default environment value')
-    p.add_argument('--env_framestack', default=4, type=int, help='Frame stacking (only used in Atari?)')
+    p.add_argument(
+        '--env_frameskip', default=1, type=int,
+        help='Number of frames for action repeat (frame skipping). '
+             'Setting this to >1 will not add any wrappers that will do frame-skipping, although this can be used '
+             'in the environment factory function to add these wrappers or to tell the environment itself to skip a desired number of frames '
+             'i.e. as it is done in VizDoom. '
+             'FPS metrics will be multiplied by the frameskip value, i.e. 100000FPS with frameskip=4 actually corresponds to '
+             '100000/4=25000 samples per second observed by the policy. '
+             'Frameskip=1 (default) means no frameskip, we process every frame.',
+    )
+    p.add_argument('--env_framestack', default=4, type=int, help='Frame stacking (only used in Atari?)')  # <-- this probably should be moved to environment-specific scripts
     p.add_argument('--pixel_format', default='CHW', type=str, help='PyTorch expects CHW by default, Ray & TensorFlow expect HWC')
 
 

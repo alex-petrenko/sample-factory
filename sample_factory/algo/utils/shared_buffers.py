@@ -1,32 +1,32 @@
 from __future__ import annotations
 
 import math
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 from gym import spaces
 from torch import Tensor
 
 from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
+from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import to_torch_dtype
-from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.gpu_utils import gpus_for_process
-from sample_factory.utils.typing import PolicyID, MpQueue, Device
-from sample_factory.utils.utils import log, AttrDict
+from sample_factory.utils.typing import Device, MpQueue, PolicyID
+from sample_factory.utils.utils import AttrDict, log
 
 
 def policy_device(cfg: AttrDict, policy_id: PolicyID) -> torch.device:
     """Inference/Learning device for the given policy."""
 
-    if cfg.device == 'cpu':
-        return torch.device('cpu')
+    if cfg.device == "cpu":
+        return torch.device("cpu")
     else:
-        return torch.device('cuda', index=gpus_for_process(policy_id, 1)[0])
+        return torch.device("cuda", index=gpus_for_process(policy_id, 1)[0])
 
 
 def init_tensor(leading_dimensions: List, tensor_type, tensor_shape, device: torch.device, share: bool) -> Tensor:
@@ -61,48 +61,50 @@ def action_info(env_info: EnvInfo) -> Tuple[int, int]:
 def policy_output_shapes(num_actions, num_action_distribution_parameters) -> List[Tuple[str, List]]:
     # policy outputs, this matches the expected output of the actor-critic
     policy_outputs = [
-        ('actions', [num_actions]),
-        ('action_logits', [num_action_distribution_parameters]),
-        ('log_prob_actions', []),
-        ('values', []),
-        ('policy_version', []),
+        ("actions", [num_actions]),
+        ("action_logits", [num_action_distribution_parameters]),
+        ("log_prob_actions", []),
+        ("values", []),
+        ("policy_version", []),
     ]
     return policy_outputs
 
 
-def alloc_trajectory_tensors(env_info: EnvInfo, num_trajectories, rollout, hidden_size, device, share):
+def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, device, share) -> TensorDict:
     obs_space = env_info.obs_space
 
     tensors = TensorDict()
 
-    # just to minimize the amount of typing
-    def init_trajectory_tensor(dtype_, shape_):
-        return init_tensor([num_trajectories, rollout], dtype_, shape_, device, share)
-
     # policy inputs
-    tensors['obs'] = TensorDict()
+    tensors["obs"] = TensorDict()
     if not isinstance(obs_space, spaces.Dict):
-        raise Exception('Only Dict observations spaces are supported')
+        raise Exception("Only Dict observations spaces are supported")
 
-    # TODO: make sure we use this extra step at the end for value bootstrapping in the non batched runner
+    # we need to allocate an extra rollout step here to calculate the value estimates for the last step
     for space_name, space in obs_space.spaces.items():
-        tensors['obs'][space_name] = init_tensor([num_trajectories, rollout + 1], space.dtype, space.shape, device, share)
-    tensors['rnn_states'] = init_tensor([num_trajectories, rollout + 1], torch.float32, [hidden_size], device, share)
+        tensors["obs"][space_name] = init_tensor([num_traj, rollout + 1], space.dtype, space.shape, device, share)
+    tensors["rnn_states"] = init_tensor([num_traj, rollout + 1], torch.float32, [hidden_size], device, share)
 
     num_actions, num_action_distribution_parameters = action_info(env_info)
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
 
+    # we need one more step to hold values for the last step
+    outputs_with_extra_rollout_step = ["values"]
+
     for name, shape in policy_outputs:
         assert name not in tensors
-        tensors[name] = init_trajectory_tensor(torch.float32, shape)
+        rollout_len = rollout + 1 if name in outputs_with_extra_rollout_step else rollout
+        tensors[name] = init_tensor([num_traj, rollout_len], torch.float32, shape, device, share)
 
     # env outputs
-    tensors['rewards'] = init_trajectory_tensor(torch.float32, [])
-    tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values by mistake it will be obvious
-    tensors['dones'] = init_trajectory_tensor(torch.bool, [])
-    tensors['dones'].fill_(True)
-    tensors['policy_id'] = init_trajectory_tensor(torch.int, [])
-    tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
+    tensors["rewards"] = init_tensor([num_traj, rollout], torch.float32, [], device, share)
+    tensors["rewards"].fill_(-42.42)  # if we're using uninitialized values by mistake it will be obvious
+    tensors["dones"] = init_tensor([num_traj, rollout], torch.bool, [], device, share)
+    tensors["dones"].fill_(True)
+    tensors["time_outs"] = init_tensor([num_traj, rollout], torch.bool, [], device, share)
+    tensors["time_outs"].fill_(False)  # no timeouts by default
+    tensors["policy_id"] = init_tensor([num_traj, rollout], torch.int, [], device, share)
+    tensors["policy_id"].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
 
     return tensors
 
@@ -119,7 +121,7 @@ def alloc_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, sha
 
     num_actions, num_action_distribution_parameters = action_info(env_info)
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
-    policy_outputs += [('new_rnn_states', [hidden_size])]  # different name so we don't override current step rnn_state
+    policy_outputs += [("new_rnn_states", [hidden_size])]  # different name so we don't override current step rnn_state
 
     output_names, output_shapes = list(zip(*policy_outputs))
     output_sizes = [shape[0] if shape else 1 for shape in output_shapes]
@@ -150,7 +152,7 @@ class BufferMgr(Configurable):
             # TODO: this should take into account whether we just need a GPU for sampling, or we actually receive observations on the GPU
             # otherwise it will not work for things like Megaverse or GPU-rendered DMLab
             sampling_device = str(rollout_worker_device(i, cfg))
-            log.debug(f'Rollout worker {i} uses device {sampling_device}')
+            log.debug(f"Rollout worker {i} uses device {sampling_device}")
 
             num_buffers = self.env_info.num_agents * cfg.num_envs_per_worker
             buffers_for_device = self.buffers_per_device.get(sampling_device, 0) + num_buffers
@@ -164,8 +166,9 @@ class BufferMgr(Configurable):
 
         if cfg.batched_sampling:
             worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
-            assert math.gcd(self.trajectories_per_batch, worker_samples_per_iteration) == min(self.trajectories_per_batch, worker_samples_per_iteration), \
-                f'{worker_samples_per_iteration=} should divide the {self.trajectories_per_batch=} or vice versa'
+            assert math.gcd(self.trajectories_per_batch, worker_samples_per_iteration) == min(
+                self.trajectories_per_batch, worker_samples_per_iteration
+            ), f"{worker_samples_per_iteration=} should divide the {self.trajectories_per_batch=} or vice versa"
             self.worker_samples_per_iteration = worker_samples_per_iteration
         else:
             self.worker_samples_per_iteration = -1
@@ -189,7 +192,7 @@ class BufferMgr(Configurable):
         # determine the number of minibatches we're allowed to accumulate before experience collection is halted
         self.max_batches_to_accumulate = cfg.num_batches_to_accumulate
         if not cfg.async_rl and self.max_batches_to_accumulate != 1:
-            log.debug('In synchronous mode, we only accumulate one batch. Setting num_batches_to_accumulate to 1')
+            log.debug("In synchronous mode, we only accumulate one batch. Setting num_batches_to_accumulate to 1")
             self.max_batches_to_accumulate = 1
 
         # allocate trajectory buffers for sampling
@@ -199,15 +202,30 @@ class BufferMgr(Configurable):
 
         for device, num_buffers in self.buffers_per_device.items():
             # make sure that at the very least we have enough buffers to feed the learner
-            num_buffers = max(num_buffers, self.max_batches_to_accumulate * self.trajectories_per_batch * cfg.num_policies)
+            num_buffers = max(
+                num_buffers, self.max_batches_to_accumulate * self.trajectories_per_batch * cfg.num_policies
+            )
 
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
 
             self.traj_tensors_torch[device] = alloc_trajectory_tensors(
-                self.env_info, num_buffers, rollout, hidden_size, device, share,
+                self.env_info,
+                num_buffers,
+                rollout,
+                hidden_size,
+                device,
+                share,
             )
-            self.policy_output_tensors_torch[device], self.output_names, self.output_sizes = alloc_policy_output_tensors(
-                cfg, self.env_info, hidden_size, device, share,
+            (
+                self.policy_output_tensors_torch[device],
+                self.output_names,
+                self.output_sizes,
+            ) = alloc_policy_output_tensors(
+                cfg,
+                self.env_info,
+                hidden_size,
+                device,
+                share,
             )
 
             if cfg.batched_sampling:

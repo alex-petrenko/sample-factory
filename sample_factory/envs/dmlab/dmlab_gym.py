@@ -1,7 +1,7 @@
 import os
-import time
 import random
 import shutil
+import time
 from os.path import join
 
 import cv2
@@ -12,56 +12,68 @@ import numpy as np
 from sample_factory.envs.dmlab import dmlab_level_cache
 from sample_factory.envs.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
 from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
-from sample_factory.utils.utils import log, ensure_dir_exists
+from sample_factory.utils.utils import ensure_dir_exists, log
 
 ACTION_SET = (
-    (0, 0, 0, 1, 0, 0, 0),    # Forward
-    (0, 0, 0, -1, 0, 0, 0),   # Backward
-    (0, 0, -1, 0, 0, 0, 0),   # Strafe Left
-    (0, 0, 1, 0, 0, 0, 0),    # Strafe Right
+    (0, 0, 0, 1, 0, 0, 0),  # Forward
+    (0, 0, 0, -1, 0, 0, 0),  # Backward
+    (0, 0, -1, 0, 0, 0, 0),  # Strafe Left
+    (0, 0, 1, 0, 0, 0, 0),  # Strafe Right
     (-20, 0, 0, 0, 0, 0, 0),  # Look Left
-    (20, 0, 0, 0, 0, 0, 0),   # Look Right
+    (20, 0, 0, 0, 0, 0, 0),  # Look Right
     (-20, 0, 0, 1, 0, 0, 0),  # Look Left + Forward
-    (20, 0, 0, 1, 0, 0, 0),   # Look Right + Forward
-    (0, 0, 0, 0, 1, 0, 0),    # Fire.
+    (20, 0, 0, 1, 0, 0, 0),  # Look Right + Forward
+    (0, 0, 0, 0, 1, 0, 0),  # Fire.
 )
 
 
 EXTENDED_ACTION_SET = (
-    (0, 0, 0, 1, 0, 0, 0),    # Forward
-    (0, 0, 0, -1, 0, 0, 0),   # Backward
-    (0, 0, -1, 0, 0, 0, 0),   # Strafe Left
-    (0, 0, 1, 0, 0, 0, 0),    # Strafe Right
+    (0, 0, 0, 1, 0, 0, 0),  # Forward
+    (0, 0, 0, -1, 0, 0, 0),  # Backward
+    (0, 0, -1, 0, 0, 0, 0),  # Strafe Left
+    (0, 0, 1, 0, 0, 0, 0),  # Strafe Right
     (-10, 0, 0, 0, 0, 0, 0),  # Small Look Left
-    (10, 0, 0, 0, 0, 0, 0),   # Small Look Right
+    (10, 0, 0, 0, 0, 0, 0),  # Small Look Right
     (-60, 0, 0, 0, 0, 0, 0),  # Large Look Left
-    (60, 0, 0, 0, 0, 0, 0),   # Large Look Right
-    (0, 10, 0, 0, 0, 0, 0),   # Look Down
+    (60, 0, 0, 0, 0, 0, 0),  # Large Look Right
+    (0, 10, 0, 0, 0, 0, 0),  # Look Down
     (0, -10, 0, 0, 0, 0, 0),  # Look Up
     (-10, 0, 0, 1, 0, 0, 0),  # Forward + Small Look Left
-    (10, 0, 0, 1, 0, 0, 0),   # Forward + Small Look Right
+    (10, 0, 0, 1, 0, 0, 0),  # Forward + Small Look Right
     (-60, 0, 0, 1, 0, 0, 0),  # Forward + Large Look Left
-    (60, 0, 0, 1, 0, 0, 0),   # Forward + Large Look Right
-    (0, 0, 0, 0, 1, 0, 0),    # Fire.
+    (60, 0, 0, 1, 0, 0, 0),  # Forward + Large Look Right
+    (0, 0, 0, 0, 1, 0, 0),  # Fire.
 )
 
 
 def dmlab_level_to_level_name(level):
-    level_name = level.split('/')[-1]
+    level_name = level.split("/")[-1]
     return level_name
 
 
 class DmlabGymEnv(gym.Env):
     def __init__(
-            self, task_id, level, action_repeat, res_w, res_h, benchmark_mode, renderer, dataset_path,
-            with_instructions, extended_action_set, use_level_cache, level_cache_path,
-            gpu_index, extra_cfg=None,
+        self,
+        task_id,
+        level,
+        action_repeat,
+        res_w,
+        res_h,
+        benchmark_mode,
+        renderer,
+        dataset_path,
+        with_instructions,
+        extended_action_set,
+        use_level_cache,
+        level_cache_path,
+        gpu_index,
+        extra_cfg=None,
     ):
         self.width = res_w
         self.height = res_h
 
         # self._main_observation = 'DEBUG.CAMERA_INTERLEAVED.PLAYER_VIEW_NO_RETICLE'
-        self.main_observation = 'RGB_INTERLEAVED'
+        self.main_observation = "RGB_INTERLEAVED"
         self.instructions_observation = DMLAB_INSTRUCTIONS
         self.with_instructions = with_instructions and not benchmark_mode
 
@@ -84,10 +96,10 @@ class DmlabGymEnv(gym.Env):
             observation_format += [self.instructions_observation]
 
         config = {
-            'width': self.width,
-            'height': self.height,
-            'gpuDeviceIndex': str(gpu_index),
-            'datasetPath': dataset_path,
+            "width": self.width,
+            "height": self.height,
+            "gpuDeviceIndex": str(gpu_index),
+            "datasetPath": dataset_path,
         }
 
         if extra_cfg is not None:
@@ -104,13 +116,17 @@ class DmlabGymEnv(gym.Env):
         if env_level_cache is not None:
             if not isinstance(self.curr_cache, dmlab_level_cache.DmlabLevelCacheGlobal):
                 raise Exception(
-                    'DMLab global level cache object is not initialized! Make sure to call'
-                    'dmlab_ensure_global_cache_initialized() in the main thread before you fork any child processes'
-                    'or create any DMLab envs'
+                    "DMLab global level cache object is not initialized! Make sure to call"
+                    "dmlab_ensure_global_cache_initialized() in the main thread before you fork any child processes"
+                    "or create any DMLab envs"
                 )
 
         self.dmlab = deepmind_lab.Lab(
-            level, observation_format, config=config, renderer=renderer, level_cache=env_level_cache,
+            level,
+            observation_format,
+            config=config,
+            renderer=renderer,
+            level_cache=env_level_cache,
         )
 
         self.action_set = EXTENDED_ACTION_SET if extended_action_set else ACTION_SET
@@ -129,12 +145,15 @@ class DmlabGymEnv(gym.Env):
         )
         if self.with_instructions:
             self.observation_space.spaces[self.instructions_observation] = gym.spaces.Box(
-                low=0, high=DMLAB_VOCABULARY_SIZE, shape=[DMLAB_MAX_INSTRUCTION_LEN], dtype=np.int32,
+                low=0,
+                high=DMLAB_VOCABULARY_SIZE,
+                shape=[DMLAB_MAX_INSTRUCTION_LEN],
+                dtype=np.int32,
             )
 
         self.benchmark_mode = benchmark_mode
         if self.benchmark_mode:
-            log.warning('DmLab benchmark mode is true! Use this only for testing, not for actual training runs!')
+            log.warning("DmLab benchmark mode is true! Use this only for testing, not for actual training runs!")
 
         self.seed()
 
@@ -152,7 +171,7 @@ class DmlabGymEnv(gym.Env):
 
     def format_obs_dict(self, env_obs_dict):
         """SampleFactory traditionally uses 'obs' key for the 'main' observation."""
-        env_obs_dict['obs'] = env_obs_dict.pop(self.main_observation)
+        env_obs_dict["obs"] = env_obs_dict.pop(self.main_observation)
 
         instr = env_obs_dict.get(self.instructions_observation)
         self.instructions[:] = 0
@@ -170,7 +189,7 @@ class DmlabGymEnv(gym.Env):
             self.curr_cache = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE[self.curr_policy_idx]
             self.last_reset_seed = self.curr_cache.get_unused_seed(self.level, self.random_state)
         else:
-            self.last_reset_seed = self.random_state.randint(0, 2 ** 31 - 1)
+            self.last_reset_seed = self.random_state.randint(0, 2**31 - 1)
 
         self.dmlab.reset()
         self.last_observation = self.format_obs_dict(self.dmlab.observations())
@@ -190,24 +209,24 @@ class DmlabGymEnv(gym.Env):
             obs_dict = self.format_obs_dict(self.dmlab.observations())
             self.last_observation = obs_dict
 
-        info = {'num_frames': self.action_repeat}
+        info = {"num_frames": self.action_repeat}
         return self.last_observation, reward, done, info
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         if self.last_observation is None and self.dmlab.is_running():
             self.last_observation = self.dmlab.observations()
 
         img = self.last_observation[self.main_observation]
-        if mode == 'rgb_array':
+        if mode == "rgb_array":
             return img
-        elif mode != 'human':
-            raise Exception(f'Rendering mode {mode} not supported')
+        elif mode != "human":
+            raise Exception(f"Rendering mode {mode} not supported")
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
         scale = self.render_scale
         img_big = cv2.resize(img, (self.width * scale, self.height * scale), interpolation=cv2.INTER_NEAREST)
-        cv2.imshow('dmlab', img_big)
+        cv2.imshow("dmlab", img_big)
 
         since_last_frame = time.time() - self.last_frame
         wait_time_sec = max(1.0 / self.render_fps - since_last_frame, 0.001)
@@ -231,10 +250,10 @@ class DmlabGymEnv(gym.Env):
             shutil.copyfile(path, pk3_path)
             return True
         else:
-            log.warning('Cache miss in environment %s key: %s!', self.level_name, key)
+            log.warning("Cache miss in environment %s key: %s!", self.level_name, key)
             return False
 
     def write(self, key, pk3_path):
         """Environment object itself acts as a proxy to the global level cache."""
-        log.debug('Add new level to cache! Level %s seed %r key %s', self.level_name, self.last_reset_seed, key)
+        log.debug("Add new level to cache! Level %s seed %r key %s", self.level_name, self.last_reset_seed, key)
         self.curr_cache.add_new_level(self.level, self.last_reset_seed, key, pk3_path)

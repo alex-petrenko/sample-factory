@@ -1,6 +1,7 @@
-from sample_factory.utils.utils import is_module_available, log
 from functools import wraps
 from time import sleep
+
+from sample_factory.utils.utils import is_module_available, log
 
 
 class EnvCriticalError(Exception):
@@ -9,11 +10,11 @@ class EnvCriticalError(Exception):
 
 # TODO: move to their respective folders
 def vizdoom_available():
-    return is_module_available('vizdoom')
+    return is_module_available("vizdoom")
 
 
 def dmlab_available():
-    return is_module_available('deepmind_lab')
+    return is_module_available("deepmind_lab")
 
 
 def retry(exception_class=Exception, num_attempts=3, sleep_time=1):
@@ -27,7 +28,7 @@ def retry(exception_class=Exception, num_attempts=3, sleep_time=1):
                     if i == num_attempts - 1:
                         raise
                     else:
-                        log.error('Failed with error %r, trying again', e)
+                        log.error("Failed with error %r, trying again", e)
                         sleep(sleep_time)
 
         return wrapper
@@ -112,4 +113,10 @@ def set_training_info(training_info_interface, approx_total_training_steps: int)
         training_info_interface.set_training_info(training_info_dict)
 
 
+def num_env_steps(infos):
+    """Calculate number of environment frames in a batch of experience."""
 
+    total_num_frames = 0
+    for info in infos:
+        total_num_frames += info.get("num_frames", 1)
+    return total_num_frames

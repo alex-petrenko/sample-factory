@@ -3,10 +3,14 @@ from typing import Tuple
 import torch
 
 # noinspection PyPep8Naming
-from torch.nn.utils.rnn import invert_permutation, PackedSequence
+from torch.nn.utils.rnn import PackedSequence, invert_permutation
+
 from sample_factory.utils.utils import log
 
-def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+
+def _build_pack_info_from_dones(
+    dones: torch.Tensor, T: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Create the indexing info needed to make the PackedSequence based on the dones.
 
@@ -26,13 +30,15 @@ def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tens
     num_samples = len(dones)
 
     rollout_boundaries = dones.clone().detach()
-    rollout_boundaries[T - 1::T] = 1  # end of each rollout is the boundary
+    rollout_boundaries[T - 1 :: T] = 1  # end of each rollout is the boundary
     rollout_boundaries = rollout_boundaries.nonzero(as_tuple=False).squeeze(dim=1) + 1
 
     first_len = rollout_boundaries[0].unsqueeze(0)
 
     if len(rollout_boundaries) <= 1:
-        log.debug('Only one rollout boundary. This can happen if batch size is 1, probably not during the real training.')
+        log.debug(
+            "Only one rollout boundary. This can happen if batch size is 1, probably not during the real training."
+        )
         rollout_lengths = first_len
     else:
         rollout_lengths = rollout_boundaries[1:] - rollout_boundaries[:-1]
@@ -48,12 +54,12 @@ def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tens
     # roll() is cyclical, so done=True in the last position in the rollout will roll to 0th position
     # we want to avoid it here. (note to self: is there a function that does two of these things at once?)
     is_new_episode[:, 0] = 0
-    is_new_episode = is_new_episode.view((-1, ))
+    is_new_episode = is_new_episode.view((-1,))
 
     lengths, sorted_indices = torch.sort(rollout_lengths, descending=True)
     # We will want these on the CPU for torch.unique_consecutive,
     # so move now.
-    cpu_lengths = lengths.to(device='cpu', non_blocking=True)
+    cpu_lengths = lengths.to(device="cpu", non_blocking=True)
 
     # We need to keep the original unpermuted rollout_starts, because the permutation is later applied
     # internally in the RNN implementation.
@@ -67,7 +73,7 @@ def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tens
 
     max_length = int(cpu_lengths[0].item())
     # batch_sizes is *always* on the CPU
-    batch_sizes = torch.empty((max_length,), device='cpu', dtype=torch.int64)
+    batch_sizes = torch.empty((max_length,), device="cpu", dtype=torch.int64)
 
     offset = 0
     prev_len = 0
@@ -92,7 +98,7 @@ def _build_pack_info_from_dones(dones: torch.Tensor, T: int) -> Tuple[torch.Tens
         # for a set of sequences [1, 2, 3], [4, 5], [6, 7], [8]
         # these indices will be 1,4,6,8,2,5,7,3
         # (all first steps in all trajectories, then all second steps, etc.)
-        select_inds[offset:offset + new_inds.numel()] = new_inds
+        select_inds[offset : offset + new_inds.numel()] = new_inds
 
         offset += new_inds.numel()
 

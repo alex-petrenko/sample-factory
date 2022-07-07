@@ -9,14 +9,14 @@ import os
 import random
 import time
 from enum import Enum
-from queue import Full
 from os.path import join
+from queue import Full
 
 import numpy as np
 
 from sample_factory.algorithms.appo.appo_utils import TaskType, iter_dicts_recursively, iterate_recursively
 from sample_factory.algorithms.utils.algo_utils import EPS
-from sample_factory.utils.utils import log, experiment_dir
+from sample_factory.utils.utils import experiment_dir, log
 
 
 def perturb_float(x, perturb_amount=1.2):
@@ -58,13 +58,18 @@ class PbtTask(Enum):
 
 
 HYPERPARAMS_TO_TUNE = {
-    'learning_rate', 'exploration_loss_coeff', 'value_loss_coeff', 'max_grad_norm', 'ppo_clip_ratio', 'ppo_clip_value',
+    "learning_rate",
+    "exploration_loss_coeff",
+    "value_loss_coeff",
+    "max_grad_norm",
+    "ppo_clip_ratio",
+    "ppo_clip_value",
     # batch size and gamma are added with a CLI parameter
 }
 
 # if not specified then tune all rewards
 REWARD_CATEGORIES_TO_TUNE = {
-    'doom_': ['delta', 'selected_weapon'],
+    "doom_": ["delta", "selected_weapon"],
 }
 
 # HYPERPARAMS_TO_TUNE_EXTENDED = {
@@ -82,11 +87,11 @@ SPECIAL_PERTURBATION = dict(
 
 
 def policy_cfg_file(cfg, policy_id):
-    return join(experiment_dir(cfg=cfg), f'policy_{policy_id:02d}_cfg.json')
+    return join(experiment_dir(cfg=cfg), f"policy_{policy_id:02d}_cfg.json")
 
 
 def policy_reward_shaping_file(cfg, policy_id):
-    return join(experiment_dir(cfg=cfg), f'policy_{policy_id:02d}_reward_shaping.json')
+    return join(experiment_dir(cfg=cfg), f"policy_{policy_id:02d}_reward_shaping.json")
 
 
 class PopulationBasedTraining:
@@ -94,9 +99,9 @@ class PopulationBasedTraining:
         self.cfg = cfg
 
         if cfg.pbt_optimize_batch_size:
-            HYPERPARAMS_TO_TUNE.add('batch_size')
+            HYPERPARAMS_TO_TUNE.add("batch_size")
         if cfg.pbt_optimize_gamma:
-            HYPERPARAMS_TO_TUNE.add('gamma')
+            HYPERPARAMS_TO_TUNE.add("gamma")
 
         self.last_update = [0] * self.cfg.num_policies
 
@@ -123,8 +128,8 @@ class PopulationBasedTraining:
             # save the policy-specific configs if they don't exist, or else load them from files
             policy_cfg_filename = policy_cfg_file(self.cfg, policy_id)
             if os.path.exists(policy_cfg_filename):
-                with open(policy_cfg_filename, 'r') as json_file:
-                    log.debug('Loading initial policy %d configuration from file %s', policy_id, policy_cfg_filename)
+                with open(policy_cfg_filename, "r") as json_file:
+                    log.debug("Loading initial policy %d configuration from file %s", policy_id, policy_cfg_filename)
                     json_params = json.load(json_file)
                     self.policy_cfg[policy_id] = json_params
             else:
@@ -133,7 +138,7 @@ class PopulationBasedTraining:
                     self.policy_cfg[policy_id][param_name] = self.cfg[param_name]
 
                 if policy_id > 0:  # keep one policy with default settings in the beginning
-                    log.debug('Initial cfg mutation for policy %d', policy_id)
+                    log.debug("Initial cfg mutation for policy %d", policy_id)
                     self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[policy_id])
 
         for policy_id in range(self.cfg.num_policies):
@@ -141,16 +146,18 @@ class PopulationBasedTraining:
             policy_reward_shaping_filename = policy_reward_shaping_file(self.cfg, policy_id)
 
             if os.path.exists(policy_reward_shaping_filename):
-                with open(policy_reward_shaping_filename, 'r') as json_file:
+                with open(policy_reward_shaping_filename, "r") as json_file:
                     log.debug(
-                        'Loading policy %d reward shaping from file %s', policy_id, policy_reward_shaping_filename,
+                        "Loading policy %d reward shaping from file %s",
+                        policy_id,
+                        policy_reward_shaping_filename,
                     )
                     json_params = json.load(json_file)
                     self.policy_reward_shaping[policy_id] = json_params
             else:
                 self.policy_reward_shaping[policy_id] = copy.deepcopy(self.default_reward_shaping)
                 if policy_id > 0:  # keep one policy with default settings in the beginning
-                    log.debug('Initial rewards mutation for policy %d', policy_id)
+                    log.debug("Initial rewards mutation for policy %d", policy_id)
                     self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[policy_id])
 
         # send initial configuration to the system components
@@ -162,14 +169,14 @@ class PopulationBasedTraining:
 
     def _save_cfg(self, policy_id):
         policy_cfg_filename = policy_cfg_file(self.cfg, policy_id)
-        with open(policy_cfg_filename, 'w') as json_file:
-            log.debug('Saving policy-specific configuration %d to file %s', policy_id, policy_cfg_filename)
+        with open(policy_cfg_filename, "w") as json_file:
+            log.debug("Saving policy-specific configuration %d to file %s", policy_id, policy_cfg_filename)
             json.dump(self.policy_cfg[policy_id], json_file)
 
     def _save_reward_shaping(self, policy_id):
         policy_reward_shaping_filename = policy_reward_shaping_file(self.cfg, policy_id)
-        with open(policy_reward_shaping_filename, 'w') as json_file:
-            log.debug('Saving policy-specific reward shaping %d to file %s', policy_id, policy_reward_shaping_filename)
+        with open(policy_reward_shaping_filename, "w") as json_file:
+            log.debug("Saving policy-specific reward shaping %d to file %s", policy_id, policy_reward_shaping_filename)
             json.dump(self.policy_reward_shaping[policy_id], json_file)
 
     def _perturb_param(self, param, param_name, default_param):
@@ -179,7 +186,7 @@ class PopulationBasedTraining:
 
         if param != default_param and random.random() < 0.05:
             # small chance to replace parameter with a default value
-            log.debug('%s changed to default value %r', param_name, default_param)
+            log.debug("%s changed to default value %r", param_name, default_param)
             return default_param
 
         if param_name in SPECIAL_PERTURBATION:
@@ -190,9 +197,9 @@ class PopulationBasedTraining:
             perturb_amount = random.uniform(self.cfg.pbt_perturb_min, self.cfg.pbt_perturb_max)
             new_value = perturb_float(float(param), perturb_amount=perturb_amount)
         else:
-            raise RuntimeError('Unsupported parameter type')
+            raise RuntimeError("Unsupported parameter type")
 
-        log.debug('Param %s changed from %.6f to %.6f', param_name, param, new_value)
+        log.debug("Param %s changed from %.6f to %.6f", param_name, param, new_value)
         return new_value
 
     def _perturb(self, old_params, default_params):
@@ -207,7 +214,7 @@ class PopulationBasedTraining:
                 # of something in the environment, like health).
                 # See envs/doom/wrappers/reward_shaping.py:39 for example
                 d_params[key] = tuple(
-                    self._perturb_param(p, f'{key}_{i}', value_default[i]) for i, p in enumerate(value)
+                    self._perturb_param(p, f"{key}_{i}", value_default[i]) for i, p in enumerate(value)
                 )
             else:
                 d_params[key] = self._perturb_param(value, key, value_default)
@@ -228,7 +235,8 @@ class PopulationBasedTraining:
             for category in self.reward_categories_to_tune:
                 if category in replacement_shaping:
                     replacement_shaping[category] = self._perturb(
-                        replacement_shaping[category], default_params=self.default_reward_shaping[category],
+                        replacement_shaping[category],
+                        default_params=self.default_reward_shaping[category],
                     )
         else:
             replacement_shaping = self._perturb(replacement_shaping, default_params=self.default_reward_shaping)
@@ -240,7 +248,7 @@ class PopulationBasedTraining:
         learner_worker.save_model()
 
     def _learner_load_model(self, policy_id, replacement_policy):
-        log.debug('Asking learner %d to load model from %d', policy_id, replacement_policy)
+        log.debug("Asking learner %d to load model from %d", policy_id, replacement_policy)
 
         load_task = (PbtTask.LOAD_MODEL, (policy_id, replacement_policy))
         learner_worker = self.learner_workers[policy_id]
@@ -249,19 +257,19 @@ class PopulationBasedTraining:
     def _learner_update_cfg(self, policy_id):
         learner_worker = self.learner_workers[policy_id]
 
-        log.debug('Sending learning configuration to learner %d...', policy_id)
+        log.debug("Sending learning configuration to learner %d...", policy_id)
         cfg_task = (PbtTask.UPDATE_CFG, (policy_id, self.policy_cfg[policy_id]))
         learner_worker.task_queue.put((TaskType.PBT, cfg_task))
 
     def _actors_update_shaping_scheme(self, policy_id):
-        log.debug('Sending latest reward scheme to actors for policy %d...', policy_id)
+        log.debug("Sending latest reward scheme to actors for policy %d...", policy_id)
         for actor_worker in self.actor_workers:
             reward_scheme_task = (PbtTask.UPDATE_REWARD_SCHEME, (policy_id, self.policy_reward_shaping[policy_id]))
             task = (TaskType.PBT, reward_scheme_task)
             try:
                 actor_worker.task_queue.put(task, timeout=0.1)
             except Full:
-                log.warning('Could not add task %r to queue, it is likely that worker died', task)
+                log.warning("Could not add task %r to queue, it is likely that worker died", task)
 
     @staticmethod
     def _write_dict_summaries(dictionary, writer, name, env_steps):
@@ -270,18 +278,18 @@ class PopulationBasedTraining:
                 value = int(value)
 
             if isinstance(value, (int, float)):
-                writer.add_scalar(f'zz_pbt/{name}_{key}', value, env_steps)
+                writer.add_scalar(f"zz_pbt/{name}_{key}", value, env_steps)
             elif isinstance(value, (tuple, list)):
                 for i, tuple_value in enumerate(value):
-                    writer.add_scalar(f'zz_pbt/{name}_{key}_{i}', tuple_value, env_steps)
+                    writer.add_scalar(f"zz_pbt/{name}_{key}_{i}", tuple_value, env_steps)
             else:
-                log.error('Unsupported type in pbt summaries %r', type(value))
+                log.error("Unsupported type in pbt summaries %r", type(value))
 
     def _write_pbt_summaries(self, policy_id, env_steps):
         writer = self.summary_writers[policy_id]
-        self._write_dict_summaries(self.policy_cfg[policy_id], writer, 'cfg', env_steps)
+        self._write_dict_summaries(self.policy_cfg[policy_id], writer, "cfg", env_steps)
         if self.policy_reward_shaping[policy_id] is not None:
-            self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, 'rew', env_steps)
+            self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, "rew", env_steps)
 
     def _update_policy(self, policy_id, policy_stats):
         if self.cfg.pbt_target_objective not in policy_stats:
@@ -310,27 +318,35 @@ class PopulationBasedTraining:
             # don't touch the policies that are doing well
             return
 
-        log.debug('PBT best policies: %r, worst policies %r', best_policies, worst_policies)
+        log.debug("PBT best policies: %r, worst policies %r", best_policies, worst_policies)
 
         # to make the code below uniform, this means keep our own parameters and cfg
         # we only take parameters and cfg from another policy if certain conditions are met (see below)
         replacement_policy = policy_id
 
         if policy_id in worst_policies:
-            log.debug('Current policy %d is among the worst policies %r', policy_id, worst_policies)
+            log.debug("Current policy %d is among the worst policies %r", policy_id, worst_policies)
 
             replacement_policy_candidate = random.choice(best_policies)
             reward_delta = target_objectives[replacement_policy_candidate] - target_objectives[policy_id]
-            reward_delta_relative = abs(reward_delta / (target_objectives[replacement_policy_candidate] + EPS))  # TODO: this might not work correctly with negative rewards
+            reward_delta_relative = abs(
+                reward_delta / (target_objectives[replacement_policy_candidate] + EPS)
+            )  # TODO: this might not work correctly with negative rewards
 
-            if abs(reward_delta) > self.cfg.pbt_replace_reward_gap_absolute and reward_delta_relative > self.cfg.pbt_replace_reward_gap:
+            if (
+                abs(reward_delta) > self.cfg.pbt_replace_reward_gap_absolute
+                and reward_delta_relative > self.cfg.pbt_replace_reward_gap
+            ):
                 replacement_policy = replacement_policy_candidate
                 log.debug(
-                    'Difference in reward is %.4f (%.4f), policy %d weights to be replaced by %d',
-                    reward_delta, reward_delta_relative, policy_id, replacement_policy,
+                    "Difference in reward is %.4f (%.4f), policy %d weights to be replaced by %d",
+                    reward_delta,
+                    reward_delta_relative,
+                    policy_id,
+                    replacement_policy,
                 )
             else:
-                log.debug('Difference in reward is not enough %.3f %.3f', abs(reward_delta), reward_delta_relative)
+                log.debug("Difference in reward is not enough %.3f %.3f", abs(reward_delta), reward_delta_relative)
 
         if policy_id == 0:
             # Do not ever mutate the 1st policy, leave it for the reference

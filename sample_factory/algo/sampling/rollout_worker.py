@@ -15,26 +15,27 @@ from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.torch_utils import inference_context
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
-from sample_factory.utils.gpu_utils import set_gpus_for_process, gpus_for_process
+from sample_factory.utils.gpu_utils import gpus_for_process, set_gpus_for_process
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, MpQueue
-from sample_factory.utils.utils import log, set_process_cpu_affinity, AttrDict, cores_for_worker_process
+from sample_factory.utils.typing import MpQueue, PolicyID
+from sample_factory.utils.utils import AttrDict, cores_for_worker_process, log, set_process_cpu_affinity
 
 
 def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
-    log.debug(f'Rollout worker {worker.worker_idx} starting...')
+    log.debug(f"Rollout worker {worker.worker_idx} starting...")
 
     set_global_context(sf_context)
-    log.info(f'ROLLOUT worker {worker.worker_idx}\tpid {os.getpid()}\tparent {os.getppid()}')
+    log.info(f"ROLLOUT worker {worker.worker_idx}\tpid {os.getpid()}\tparent {os.getppid()}")
 
     # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
     import signal as os_signal
+
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = worker.cfg
 
     # on MacOS, psutil.Process() has no method 'cpu_affinity'
-    if hasattr(psutil.Process(), 'cpu_affinity'):
+    if hasattr(psutil.Process(), "cpu_affinity"):
         curr_process = psutil.Process()
         available_cores = curr_process.cpu_affinity()
         desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, len(available_cores))
@@ -42,6 +43,7 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
         desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, psutil.cpu_count(logical=False))
     if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
         from threadpoolctl import threadpool_limits
+
         threadpool_limits(limits=1, user_api=None)
 
     if cfg.set_workers_cpu_affinity:
@@ -54,11 +56,13 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     if cfg.actor_worker_gpus:
         worker_gpus = set_gpus_for_process(
             worker.worker_idx,
-            num_gpus_per_process=1, process_type='actor', gpu_mask=cfg.actor_worker_gpus,
+            num_gpus_per_process=1,
+            process_type="actor",
+            gpu_mask=cfg.actor_worker_gpus,
         )
         assert len(worker_gpus) == 1
 
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
@@ -68,17 +72,19 @@ def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
 
     gpus_to_use = gpus_for_process(worker_idx, num_gpus_per_process=1, gpu_mask=cfg.actor_worker_gpus)
     assert len(gpus_to_use) <= 1
-    sampling_device = torch.device('cuda', index=gpus_to_use[0]) if gpus_to_use else torch.device('cpu')
+    sampling_device = torch.device("cuda", index=gpus_to_use[0]) if gpus_to_use else torch.device("cpu")
     return sampling_device
 
 
 class RolloutWorker(EventLoopObject, Configurable):
-    def __init__(self, event_loop, worker_idx: int, buffer_mgr, inference_queues: Dict[PolicyID, MpQueue], cfg, env_info: EnvInfo):
+    def __init__(
+        self, event_loop, worker_idx: int, buffer_mgr, inference_queues: Dict[PolicyID, MpQueue], cfg, env_info: EnvInfo
+    ):
         Configurable.__init__(self, cfg)
-        unique_name = f'{RolloutWorker.__name__}_w{worker_idx}'
+        unique_name = f"{RolloutWorker.__name__}_w{worker_idx}"
         EventLoopObject.__init__(self, event_loop, unique_name)
 
-        self.timing = Timing(name=f'{self.object_id} profile')
+        self.timing = Timing(name=f"{self.object_id} profile")
 
         self.buffer_mgr = buffer_mgr
         self.inference_queues = inference_queues
@@ -90,7 +96,7 @@ class RolloutWorker(EventLoopObject, Configurable):
         self.vector_size = cfg.num_envs_per_worker
         self.num_splits = cfg.worker_num_splits
         assert self.vector_size >= self.num_splits
-        assert self.vector_size % self.num_splits == 0, 'Vector size should be divisible by num_splits'
+        assert self.vector_size % self.num_splits == 0, "Vector size should be divisible by num_splits"
 
         self.env_runners: List[VectorEnvRunner] = []
 
@@ -101,18 +107,26 @@ class RolloutWorker(EventLoopObject, Configurable):
         self.is_initialized = False
 
     @signal
-    def report_msg(self): pass
+    def report_msg(self):
+        pass
 
     @signal
-    def stop(self): pass
+    def stop(self):
+        pass
 
     def init(self):
         for split_idx in range(self.num_splits):
             env_runner_cls = BatchedVectorEnvRunner if self.cfg.batched_sampling else NonBatchedVectorEnvRunner
 
             env_runner = env_runner_cls(
-                self.cfg, self.env_info, self.vector_size // self.num_splits,
-                self.worker_idx, split_idx, self.buffer_mgr, self.sampling_device, self.reward_shaping,
+                self.cfg,
+                self.env_info,
+                self.vector_size // self.num_splits,
+                self.worker_idx,
+                split_idx,
+                self.buffer_mgr,
+                self.sampling_device,
+                self.reward_shaping,
             )
 
             policy_request = env_runner.init(self.timing)
@@ -125,17 +139,19 @@ class RolloutWorker(EventLoopObject, Configurable):
 
     def _decorrelate_experience(self):
         delay = (float(self.worker_idx) / self.cfg.num_workers) * self.cfg.decorrelate_experience_max_seconds
-        log.info(
-            'Worker %d, sleep for %.3f sec to decorrelate experience collection',
-            self.worker_idx, delay,
-        )
-        time.sleep(delay)
-        log.info('Worker %d awakens!', self.worker_idx)
+        if delay > 0.0:
+            log.info(
+                "Worker %d, sleep for %.3f sec to decorrelate experience collection",
+                self.worker_idx,
+                delay,
+            )
+            time.sleep(delay)
+            log.info("Worker %d awakens!", self.worker_idx)
 
     def _maybe_send_policy_request(self, runner: VectorEnvRunner):
         if runner.update_trajectory_buffers(self.timing):
             policy_request = runner.generate_policy_request(self.timing)
-            with self.timing.add_time('enqueue_policy_requests'):
+            with self.timing.add_time("enqueue_policy_requests"):
                 if policy_request is not None:
                     self._enqueue_policy_request(runner.split_idx, policy_request)
 
@@ -150,23 +166,24 @@ class RolloutWorker(EventLoopObject, Configurable):
             # This can happen if all agents on this worker were deactivated (is_active=False)
             # log.warning('No policy requests on worker %d-%d', self.worker_idx, split_idx)
             # log.warning('Send fake signal to our own queue to wake up the worker on the next iteration')
-            advance_rollout_request = dict(split_idx=split_idx, policy_id=-1)
+            # advance_rollout_request = dict(split_idx=split_idx, policy_id=-1)
             # TODO: sent the same type of signal inference worker sends to us
             # TODO: connect to this signal
             # TODO: or maybe just proceed to the next iteration right away?
             # self.task_queue.put((TaskType.ROLLOUT_STEP, advance_rollout_request))
+            pass
 
     def _enqueue_complete_rollouts(self, complete_rollouts: List[Dict]):
         """Emit complete rollouts."""
         rollouts_per_policy = dict()
         for rollout in complete_rollouts:
-            policy_id = rollout['policy_id']
+            policy_id = rollout["policy_id"]
             if policy_id not in rollouts_per_policy:
                 rollouts_per_policy[policy_id] = []
             rollouts_per_policy[policy_id].append(rollout)
 
         for policy_id, rollouts in rollouts_per_policy.items():
-            self.emit(f'p{policy_id}_trajectories', rollouts, self.sampling_device)
+            self.emit(f"p{policy_id}_trajectories", rollouts, self.sampling_device)
 
     def advance_rollouts(self, data: Tuple):
         # TODO: comment
@@ -184,7 +201,7 @@ class RolloutWorker(EventLoopObject, Configurable):
             runner = self.env_runners[split_idx]
             complete_rollouts, episodic_stats = runner.advance_rollouts(policy_id, self.timing)
 
-            with self.timing.add_time('complete_rollouts'):
+            with self.timing.add_time("complete_rollouts"):
                 if complete_rollouts:
                     self._enqueue_complete_rollouts(complete_rollouts)
                     if self.num_complete_rollouts == 0 and not self.cfg.benchmark:
@@ -215,7 +232,7 @@ class RolloutWorker(EventLoopObject, Configurable):
 
     # TODO: base class for this to avoid repeating this code everywhere
     def on_stop(self, *_):
-        log.debug(f'Stopping {self.object_id}...')
+        log.debug(f"Stopping {self.object_id}...")
 
         for env_runner in self.env_runners:
             env_runner.close()

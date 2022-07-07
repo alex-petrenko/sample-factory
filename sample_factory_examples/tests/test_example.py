@@ -1,14 +1,13 @@
-import os
 import shutil
-import unittest
 from os.path import isdir
+
 import pytest
 
-from sample_factory.algo.utils.misc import ExperimentStatus, EPS
+from sample_factory.algo.utils.misc import EPS, ExperimentStatus
 from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
-from sample_factory_examples.train_custom_env_custom_model import register_custom_components, custom_parse_args
 from sample_factory.utils.utils import experiment_dir, log
+from sample_factory_examples.train_custom_env_custom_model import custom_parse_args, register_custom_components
 
 
 class TestExample:
@@ -19,19 +18,26 @@ class TestExample:
 
     """
 
+    @staticmethod
     def _run_test_env(
-            self, num_actions: int = 10, num_workers: int = 8, train_steps: int = 100, batch_size: int = 64,
-            expected_reward_at_least: float = -EPS, expected_reward_at_most: float = 100,
-            batched_sampling: bool = False, serial_mode: bool = False, async_rl: bool = True,
+        num_actions: int = 10,
+        num_workers: int = 8,
+        train_steps: int = 100,
+        batch_size: int = 64,
+        expected_reward_at_least: float = -EPS,
+        expected_reward_at_most: float = 100,
+        batched_sampling: bool = False,
+        serial_mode: bool = False,
+        async_rl: bool = True,
     ):
-        log.debug(f'Testing with parameters {locals()}...')
+        log.debug(f"Testing with parameters {locals()}...")
 
-        experiment_name = 'test_example'
+        experiment_name = "test_example"
 
         register_custom_components()
 
         # test training for a few thousand frames
-        cfg = custom_parse_args(argv=['--algo=APPO', '--env=my_custom_env_v1', f'--experiment={experiment_name}'])
+        cfg = custom_parse_args(argv=["--algo=APPO", "--env=my_custom_env_v1", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
         cfg.async_rl = async_rl
         cfg.batched_sampling = batched_sampling
@@ -44,7 +50,7 @@ class TestExample:
         cfg.decorrelate_experience_max_seconds = 0
         cfg.decorrelate_envs_on_one_worker = False
         cfg.seed = 0
-        cfg.device = 'cpu'
+        cfg.device = "cpu"
         cfg.learning_rate = 1e-3
 
         status = run_rl(cfg)
@@ -52,10 +58,10 @@ class TestExample:
 
         # then test the evaluation of the saved model
         cfg = custom_parse_args(
-            argv=['--algo=APPO', '--env=my_custom_env_v1', f'--experiment={experiment_name}'],
+            argv=["--algo=APPO", "--env=my_custom_env_v1", f"--experiment={experiment_name}"],
             evaluation=True,
         )
-        cfg.device = 'cpu'
+        cfg.device = "cpu"
         status, avg_reward = enjoy(cfg, max_num_frames=1000)
 
         directory = experiment_dir(cfg=cfg)
@@ -73,15 +79,22 @@ class TestExample:
         Run the test env in various configurations just to make sure nothing crashes or throws exceptions.
         """
         self._run_test_env(
-            num_actions=num_actions, num_workers=1, train_steps=50, batched_sampling=batched_sampling,
+            num_actions=num_actions,
+            num_workers=1,
+            train_steps=50,
+            batched_sampling=batched_sampling,
         )
 
     @pytest.mark.parametrize("serial_mode", [False, True])
     @pytest.mark.parametrize("async_rl", [False, True])
     def test_sanity_2(self, serial_mode, async_rl):
         self._run_test_env(
-            num_actions=10, num_workers=1, train_steps=50, batched_sampling=False,
-            serial_mode=serial_mode, async_rl=async_rl,
+            num_actions=10,
+            num_workers=1,
+            train_steps=50,
+            batched_sampling=False,
+            serial_mode=serial_mode,
+            async_rl=async_rl,
         )
 
     def test_full_run(self):

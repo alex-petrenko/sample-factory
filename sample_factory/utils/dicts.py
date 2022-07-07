@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, OrderedDict
+from typing import Any, Dict, Iterable, List, Optional, OrderedDict
 
 
 def dict_of_lists_append(d: Dict[Any, List], new_data):
@@ -74,3 +74,10 @@ def list_of_dicts_to_dict_of_lists(list_of_dicts):
             dict_of_lists[key].append(x)
 
     return dict_of_lists
+
+
+def get_first_present(d: Dict, keys: Iterable, default: Optional[Any] = None) -> Optional[Any]:
+    for key in keys:
+        if key in d:
+            return d[key]
+    return default

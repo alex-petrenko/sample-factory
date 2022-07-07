@@ -45,7 +45,7 @@ class TensorDict(dict):
                 elif isinstance(new_data, np.ndarray):
                     t = torch.from_numpy(new_data)
                 else:
-                    raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+                    raise Exception(f"Type {type(new_data)} not supported in set_data_func")
 
                 x[index].copy_(t)
 
@@ -55,7 +55,7 @@ class TensorDict(dict):
                 elif isinstance(new_data, np.ndarray):
                     n = new_data
                 else:
-                    raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+                    raise Exception(f"Type {type(new_data)} not supported in set_data_func")
 
                 x[index] = n
 

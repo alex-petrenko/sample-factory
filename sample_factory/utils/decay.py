@@ -17,7 +17,7 @@ class LinearDecay:
 
         """
         if len(milestones) == 0:
-            raise Exception('Milestones list should not be empty!')
+            raise Exception("Milestones list should not be empty!")
 
         self._schedule = sorted(milestones)
         self._staircase = staircase
@@ -38,7 +38,7 @@ class LinearDecay:
         x1, y1 = self._schedule[milestone]
 
         # linear interpolation
-        value = y0 * (1 - (x-x0)/(x1-x0)) + y1 * (1 - (x1-x)/(x1-x0))
+        value = y0 * (1 - (x - x0) / (x1 - x0)) + y1 * (1 - (x1 - x) / (x1 - x0))
 
         if self._staircase is None:
             return value

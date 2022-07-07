@@ -1,7 +1,7 @@
 def atari_override_defaults(env, parser):
     """RL params specific to Atari envs."""
     parser.set_defaults(
-        encoder_subtype='convnet_simple',
+        encoder_subtype="convnet_simple",
         hidden_size=512,
         obs_subtract_mean=0.0,
         obs_scale=255.0,
@@ -12,3 +12,8 @@ def atari_override_defaults(env, parser):
         exploration_loss_coeff=0.01,
     )
 
+
+# noinspection PyUnusedLocal
+def add_atari_env_args(env, parser):
+    # in case we more args in the future
+    pass

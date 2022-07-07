@@ -19,17 +19,30 @@ clean:
 	rm -rf build dist _vizdoom && find . -name "_vizdoom.ini" -delete && find . -type d -name "_vizdoom" -delete
 
 
-# Check that source code meets quality standards
-check-codestyle:
-	black --check --line-length 119 --target-version py37 sample_factory sample_factory_examples
-	isort --check-only sample_factory sample_factory_examples
-	flake8 sample_factory sample_factory_examples
+line_len = 120
+line_len_arg = --line-length $(line_len)
+code_folders = sample_factory sample_factory_examples
+
 
 # Format source code automatically
 format:
-	black --line-length 119 --target-version py36 sample_factory sample_factory_examples
-	isort sample_factory sample_factory_examples
+	black $(line_len_arg) -t py38 $(code_folders)
+	isort $(line_len_arg) --py 38 --profile black $(code_folders)
+
+
+# Check that source code meets quality standards
+check-codestyle:
+	black --check $(line_len_arg) -t py38 $(code_folders)
+	isort --check-only $(line_len_arg) --py 38 --profile black $(code_folders)
+# ignore some formatting issues already covered by black
+	flake8 --max-line-length $(line_len) --ignore=E501,F401,E203,W503,E126,E722 $(code_folders)
+
 
 # Run tests for the library
 test:
-	bash all_tests.sh
+	pytest -s
+
+
+# Run code coverage test
+test-cov:
+	pytest --cov=./ -v

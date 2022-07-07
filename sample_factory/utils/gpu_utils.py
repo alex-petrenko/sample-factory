@@ -6,25 +6,25 @@ import torch
 from sample_factory.utils.get_available_gpus import get_gpus_without_triggering_pytorch_cuda_initialization
 from sample_factory.utils.utils import log
 
-CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
+CUDA_ENVVAR = "CUDA_VISIBLE_DEVICES"
 
 
 def set_global_cuda_envvars(cfg):
     if CUDA_ENVVAR not in os.environ:
-        if cfg.device == 'cpu':
-            available_gpus = ''
+        if cfg.device == "cpu":
+            available_gpus = ""
         else:
             available_gpus = get_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
         os.environ[CUDA_ENVVAR] = available_gpus
-    log.info(f'Environment var {CUDA_ENVVAR} is {os.environ[CUDA_ENVVAR]}')
+    log.info(f"Environment var {CUDA_ENVVAR} is {os.environ[CUDA_ENVVAR]}")
 
 
 def get_available_gpus() -> List[int]:
     """
     Returns indices of GPUs specified by CUDA_VISIBLE_DEVICES.
     """
-    orig_visible_devices = os.environ[f'{CUDA_ENVVAR}']
-    available_gpus = [int(g) for g in orig_visible_devices.split(',') if g]
+    orig_visible_devices = os.environ[f"{CUDA_ENVVAR}"]
+    available_gpus = [int(g) for g in orig_visible_devices.split(",") if g]
     return available_gpus
 
 
@@ -38,8 +38,9 @@ def gpus_for_process(process_idx: int, num_gpus_per_process: int, gpu_mask: Opti
 
     available_gpus = get_available_gpus()
     if gpu_mask is not None:
-        assert len(available_gpus) >= len(gpu_mask), \
-            f'Number of available GPUs ({len(available_gpus)}) is less than number of GPUs in mask ({len(gpu_mask)})'
+        assert len(available_gpus) >= len(
+            gpu_mask
+        ), f"Number of available GPUs ({len(available_gpus)}) is less than number of GPUs in mask ({len(gpu_mask)})"
         available_gpus = [available_gpus[g] for g in gpu_mask]
     num_gpus = len(available_gpus)
 
@@ -52,7 +53,9 @@ def gpus_for_process(process_idx: int, num_gpus_per_process: int, gpu_mask: Opti
         index_mod_num_gpus = (first_gpu_idx + i) % num_gpus
         gpus_to_use.append(index_mod_num_gpus)
 
-    log.debug(f'Using GPUs {gpus_to_use} for process {process_idx} (actually maps to GPUs {[available_gpus[g] for g in gpus_to_use]})')
+    log.debug(
+        f"Using GPUs {gpus_to_use} for process {process_idx} (actually maps to GPUs {[available_gpus[g] for g in gpus_to_use]})"
+    )
     return gpus_to_use
 
 
@@ -60,15 +63,18 @@ def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_ma
     gpus_to_use = gpus_for_process(process_idx, num_gpus_per_process, gpu_mask)
 
     if not gpus_to_use:
-        os.environ[CUDA_ENVVAR] = ''
-        log.debug('Not using GPUs for %s process %d', process_type, process_idx)
+        os.environ[CUDA_ENVVAR] = ""
+        log.debug("Not using GPUs for %s process %d", process_type, process_idx)
     else:
-        os.environ[CUDA_ENVVAR] = ','.join([str(g) for g in gpus_to_use])
+        os.environ[CUDA_ENVVAR] = ",".join([str(g) for g in gpus_to_use])
         log.info(
-            'Set environment var %s to %r for %s process %d',
-            CUDA_ENVVAR, os.environ[CUDA_ENVVAR], process_type, process_idx,
+            "Set environment var %s to %r for %s process %d",
+            CUDA_ENVVAR,
+            os.environ[CUDA_ENVVAR],
+            process_type,
+            process_idx,
         )
-        log.debug('Visible devices: %r', torch.cuda.device_count())
+        log.debug("Visible devices: %r", torch.cuda.device_count())
 
     return gpus_to_use
 

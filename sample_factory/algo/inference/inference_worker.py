@@ -14,26 +14,27 @@ import torch
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import memory_stats
-from sample_factory.algo.utils.model_sharing import make_parameter_client, ParameterServer
+from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
-from sample_factory.algo.utils.tensor_utils import cat_tensors, ensure_torch_tensor, dict_of_lists_cat
-from sample_factory.algo.utils.torch_utils import init_torch_runtime, inference_context
+from sample_factory.algo.utils.tensor_utils import cat_tensors, dict_of_lists_cat, ensure_torch_tensor
+from sample_factory.algo.utils.torch_utils import inference_context, init_torch_runtime
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoopObject, Timer, TightLoop, signal
+from sample_factory.signal_slot.signal_slot import EventLoopObject, TightLoop, Timer, signal
 from sample_factory.utils.dicts import dict_of_lists_append_idx
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, MpQueue, Device
-from sample_factory.utils.utils import log
+from sample_factory.utils.typing import Device, MpQueue, PolicyID
+from sample_factory.utils.utils import debug_log_every_n, log
 
 
 def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWorker):
     set_global_context(sf_context)
-    log.info(f'{worker.object_id}\tpid {os.getpid()}\tparent {os.getppid()}')
+    log.info(f"{worker.object_id}\tpid {os.getpid()}\tparent {os.getppid()}")
 
     # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
     import signal as os_signal
+
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = worker.cfg
@@ -42,23 +43,30 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
         if cfg.num_workers > 1:
             psutil.Process().nice(min(cfg.default_niceness + 2, 20))
     except psutil.AccessDenied:
-        log.error('Low niceness requires sudo!')
+        log.error("Low niceness requires sudo!")
 
-    if cfg.device == 'gpu':
-        cuda_envvars_for_policy(worker.policy_id, 'inference')
+    if cfg.device == "gpu":
+        cuda_envvars_for_policy(worker.policy_id, "inference")
     init_torch_runtime(cfg)
 
 
 class InferenceWorker(EventLoopObject, Configurable):
     def __init__(
-            self, event_loop, policy_id: PolicyID, worker_idx: int, buffer_mgr,
-            param_server: ParameterServer, inference_queue: MpQueue, cfg, env_info: EnvInfo,
+        self,
+        event_loop,
+        policy_id: PolicyID,
+        worker_idx: int,
+        buffer_mgr,
+        param_server: ParameterServer,
+        inference_queue: MpQueue,
+        cfg,
+        env_info: EnvInfo,
     ):
         Configurable.__init__(self, cfg)
-        unique_name = f'{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}'
+        unique_name = f"{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}"
         EventLoopObject.__init__(self, event_loop, unique_name)
 
-        self.timing = Timing(name=f'{self.object_id} profile')
+        self.timing = Timing(name=f"{self.object_id} profile")
 
         self.policy_id: PolicyID = policy_id
         self.worker_idx: int = worker_idx
@@ -84,12 +92,14 @@ class InferenceWorker(EventLoopObject, Configurable):
         min_num_requests = self.cfg.num_workers // (self.cfg.num_policies * self.cfg.policy_workers_per_policy)
         min_num_requests //= 3
         self.min_num_requests = max(1, min_num_requests)
-        log.info(f'{self.object_id}: min num requests: %d', self.min_num_requests)
+        log.info(f"{self.object_id}: min num requests: %d", self.min_num_requests)
 
         self.requests = []
         self.total_num_samples = self.last_report_samples = 0
 
-        self._get_inference_requests_func = self._get_inference_requests_serial if cfg.serial_mode else self._get_inference_requests_async
+        self._get_inference_requests_func = (
+            self._get_inference_requests_serial if cfg.serial_mode else self._get_inference_requests_async
+        )
 
         self.inference_loop: Optional[Timer] = None  # zero delay timer
         self.report_timer: Optional[Timer] = None
@@ -109,18 +119,21 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.is_initialized = False
 
     @signal
-    def initialized(self): pass
+    def initialized(self):
+        pass
 
     @signal
-    def report_msg(self): pass
+    def report_msg(self):
+        pass
 
     @signal
-    def stop(self): pass
+    def stop(self):
+        pass
 
     def init(self, initial_model_state):
-        if 'cpu' in self.traj_tensors:
-            self.traj_tensors['cpu'] = to_numpy(self.traj_tensors['cpu'])
-            self.policy_output_tensors['cpu'] = to_numpy(self.policy_output_tensors['cpu'])
+        if "cpu" in self.traj_tensors:
+            self.traj_tensors["cpu"] = to_numpy(self.traj_tensors["cpu"])
+            self.policy_output_tensors["cpu"] = to_numpy(self.policy_output_tensors["cpu"])
 
         state_dict, self.device, policy_version = initial_model_state
         self.param_client.on_weights_initialized(state_dict, self.device, policy_version)
@@ -142,24 +155,24 @@ class InferenceWorker(EventLoopObject, Configurable):
         self.is_initialized = True
 
     def should_stop_experience_collection(self):
-        log.debug(f'{self.object_id}: stopping experience collection')
+        debug_log_every_n(20, f"{self.object_id}: stopping experience collection")
         self.inference_loop.stop()
 
     def should_resume_experience_collection(self):
-        log.debug(f'{self.object_id}: resuming experience collection')
+        debug_log_every_n(20, f"{self.object_id}: resuming experience collection")
         self.inference_loop.start()
 
     def _batch_slices(self, timing):
-        with timing.add_time('deserialize'):
+        with timing.add_time("deserialize"):
             obs = dict()
             rnn_states = []
             for actor_idx, split_idx, traj_idx, device in self.requests:
                 # TODO: what should we do with data sampled on different devices
                 traj_tensors = self.traj_tensors[device]
-                dict_of_lists_append_idx(obs, traj_tensors['obs'], traj_idx)
-                rnn_states.append(traj_tensors['rnn_states'][traj_idx])
+                dict_of_lists_append_idx(obs, traj_tensors["obs"], traj_idx)
+                rnn_states.append(traj_tensors["rnn_states"][traj_idx])
 
-        with timing.add_time('stack'):
+        with timing.add_time("stack"):
             if len(rnn_states) == 1:
                 for obs_key, tensor_list in obs.items():
                     obs[obs_key] = tensor_list[0]
@@ -174,7 +187,7 @@ class InferenceWorker(EventLoopObject, Configurable):
         return obs, rnn_states
 
     def _batch_individual_steps(self, timing):
-        with timing.add_time('deserialize'):
+        with timing.add_time("deserialize"):
             indices = []
             for request in self.requests:
                 # TODO: what should we do with data sampled on different devices
@@ -186,10 +199,10 @@ class InferenceWorker(EventLoopObject, Configurable):
 
             indices = tuple(np.array(indices).T)
             traj_tensors = self.traj_tensors[device]  # TODO: multiple sampling devices?
-            observations = traj_tensors['obs'][indices]
-            rnn_states = traj_tensors['rnn_states'][indices]
+            observations = traj_tensors["obs"][indices]
+            rnn_states = traj_tensors["rnn_states"][indices]
 
-        with timing.add_time('stack'):
+        with timing.add_time("stack"):
             for key, x in observations.items():
                 observations[key] = ensure_torch_tensor(x)
             rnn_states = ensure_torch_tensor(rnn_states)
@@ -203,7 +216,7 @@ class InferenceWorker(EventLoopObject, Configurable):
                 policy_output.unsqueeze_(-1)
 
     def _store_and_enqueue_policy_outputs_batched(self, num_samples, policy_outputs, requests, timing) -> Set:
-        with timing.add_time('save_outputs'):
+        with timing.add_time("save_outputs"):
             # gotta unsqueeze some 0-dim tensors
             if num_samples <= 1:
                 self._unsqueeze_0dim_tensors(policy_outputs)
@@ -212,7 +225,9 @@ class InferenceWorker(EventLoopObject, Configurable):
             samples_per_request = num_samples // len(requests)
             ofs = 0
             for actor_idx, split_idx, _, device in requests:
-                self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[ofs:ofs + samples_per_request]
+                self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[
+                    ofs : ofs + samples_per_request
+                ]
                 ofs += samples_per_request
 
         outputs_ready = set((actor_idx, split_idx) for actor_idx, split_idx, _, _ in requests)
@@ -220,13 +235,13 @@ class InferenceWorker(EventLoopObject, Configurable):
 
     def _store_and_enqueue_policy_outputs_non_batched(self, _num_samples, policy_outputs, requests, timing):
         # TODO: respect sampling device instead of just dumping everything on cpu
-        device = 'cpu'
+        device = "cpu"
 
-        with timing.add_time('to_cpu'):
+        with timing.add_time("to_cpu"):
             for key, output_value in policy_outputs.items():
                 policy_outputs[key] = output_value.to(device)
 
-        with timing.add_time('save_outputs'):
+        with timing.add_time("save_outputs"):
             # concat all tensors into a single tensor for performance
             output_tensors = []
             for name in self.buffer_mgr.output_names:
@@ -257,7 +272,7 @@ class InferenceWorker(EventLoopObject, Configurable):
             num_samples = rnn_states.shape[0]
             self.total_num_samples += num_samples
 
-            with timing.add_time('obs_to_device'):
+            with timing.add_time("obs_to_device"):
                 actor_critic = self.param_client.actor_critic
                 if actor_critic.training:
                     actor_critic.eval()  # need to call this because we can be in serial mode
@@ -267,18 +282,20 @@ class InferenceWorker(EventLoopObject, Configurable):
                     obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
                 rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
 
-            with self.timing.add_time('norm'):
-                normalized_obs = actor_critic.normalizer(obs)
+            with self.timing.add_time("norm"):
+                normalized_obs = actor_critic.normalize_obs(obs)
 
-            with timing.add_time('forward'):
+            with timing.add_time("forward"):
                 policy_outputs = actor_critic(normalized_obs, rnn_states)
-                policy_outputs['policy_version'] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
+                policy_outputs["policy_version"] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
 
-            outputs_ready = self._store_and_enqueue_policy_outputs_func(num_samples, policy_outputs, self.requests, timing)
+            outputs_ready = self._store_and_enqueue_policy_outputs_func(
+                num_samples, policy_outputs, self.requests, timing
+            )
 
-            with timing.add_time('send_messages'):
+            with timing.add_time("send_messages"):
                 for actor_idx, split_idx in outputs_ready:
-                    self.emit(f'advance{actor_idx}', (split_idx, self.policy_id))
+                    self.emit(f"advance{actor_idx}", (split_idx, self.policy_id))
 
             self.requests = []
 
@@ -295,7 +312,7 @@ class InferenceWorker(EventLoopObject, Configurable):
         waiting_started = time.time()
         while len(self.requests) < self.min_num_requests and time.time() - waiting_started < wait_for_min_requests:
             try:
-                with self.timing.timeit('wait_policy'), self.timing.add_time('wait_policy_total'):
+                with self.timing.timeit("wait_policy"), self.timing.add_time("wait_policy_total"):
                     policy_requests = self.inference_queue.get_many(timeout=0.005)
                 self.requests.extend(policy_requests)
             except Empty:
@@ -306,31 +323,36 @@ class InferenceWorker(EventLoopObject, Configurable):
         if not self.requests:
             return
 
-        with self.timing.add_time('update_model'):
+        with self.timing.add_time("update_model"):
             self.param_client.ensure_weights_updated()
 
-        with self.timing.timeit('one_step'), self.timing.add_time('handle_policy_step'):
+        with self.timing.timeit("one_step"), self.timing.add_time("handle_policy_step"):
             self.request_count.append(len(self.requests))  # TODO: count requests properly when we use slices
             self._handle_policy_steps(self.timing)
 
     def _report_stats(self):
-        if 'one_step' not in self.timing:
+        if "one_step" not in self.timing:
             return
 
-        timing_stats = dict(wait_policy=self.timing.get('wait_policy', 0), step_policy=self.timing.one_step)
+        timing_stats = dict(wait_policy=self.timing.get("wait_policy", 0), step_policy=self.timing.one_step)
         samples_since_last_report = self.total_num_samples - self.last_report_samples
         self.last_report_samples = self.total_num_samples
 
-        stats = memory_stats('policy_worker', self.device)
+        stats = memory_stats("policy_worker", self.device)
         if len(self.request_count) > 0:
-            stats['avg_request_count'] = np.mean(self.request_count)
+            stats["avg_request_count"] = np.mean(self.request_count)
 
-        self.report_msg.emit(dict(
-            timing=timing_stats, samples_collected=samples_since_last_report, policy_id=self.policy_id, stats=stats,
-        ))
+        self.report_msg.emit(
+            dict(
+                timing=timing_stats,
+                samples_collected=samples_since_last_report,
+                policy_id=self.policy_id,
+                stats=stats,
+            )
+        )
 
     def _cache_cleanup(self):
-        if self.cfg.device == 'gpu':
+        if self.cfg.device == "gpu":
             torch.cuda.empty_cache()
 
         # initially we clean cache very frequently, later on do it every few minutes
@@ -342,7 +364,7 @@ class InferenceWorker(EventLoopObject, Configurable):
             self.param_client.cleanup()
             del self.param_client
 
-        log.debug(f'Stopping {self.object_id}...')
+        log.debug(f"Stopping {self.object_id}...")
         self.stop.emit(self.object_id, self.timing)
 
         if self.event_loop.owner is self:

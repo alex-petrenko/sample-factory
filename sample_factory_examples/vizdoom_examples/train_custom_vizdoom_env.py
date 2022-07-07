@@ -28,7 +28,7 @@ def custom_parse_args(argv=None, evaluation=False):
     parser = arg_parser(argv, evaluation=evaluation)
 
     # add custom args here
-    parser.add_argument('--my_custom_doom_arg', type=int, default=300, help='Any custom arguments users might define')
+    parser.add_argument("--my_custom_doom_arg", type=int, default=300, help="Any custom arguments users might define")
 
     # SampleFactory parse_args function does some additional processing (see comments there)
     cfg = parse_args(argv=argv, evaluation=evaluation, parser=parser)
@@ -37,12 +37,13 @@ def custom_parse_args(argv=None, evaluation=False):
 
 def register_custom_doom_env(custom_timeout):
     # absolute path needs to be specified, otherwise Doom will look in the SampleFactory scenarios folder
-    scenario_absolute_path = join(os.path.dirname(__file__), 'doom_examples', 'custom_doom_env.cfg')
+    scenario_absolute_path = join(os.path.dirname(__file__), "doom_examples", "custom_doom_env.cfg")
     spec = DoomSpec(
-        'doom_my_custom_env',
+        "doom_my_custom_env",
         scenario_absolute_path,  # use your custom cfg here
         doom_action_space_extended(),
-        reward_scaling=0.01, default_timeout=custom_timeout,
+        reward_scaling=0.01,
+        default_timeout=custom_timeout,
     )
     register_additional_doom_env(spec)
 
@@ -56,5 +57,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
