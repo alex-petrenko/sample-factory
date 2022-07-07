@@ -20,10 +20,6 @@ def add_basic_cli_args(p: ArgumentParser):
              'Any parameters passed from command line that do not match the parameters stored in the experiment cfg.json file will be overridden.',
     )
     p.add_argument('--train_dir', default=join(os.getcwd(), 'train_dir'), type=str, help='Root for all experiments')
-    p.add_argument(
-        '--experiments_root', type=str, default=None, required=False,
-        help='If not None, store experiment data in the specified subfolder of train_dir. Useful for groups of experiments (e.g. gridsearch)',
-    )  # TODO: do we absolutely need this?
 
     p.add_argument('--device', default='gpu', type=str, choices=['gpu', 'cpu'], help='CPU training is only recommended for smaller e.g. MLP policies')
     p.add_argument('--seed', default=None, type=int, help='Set a fixed seed value')

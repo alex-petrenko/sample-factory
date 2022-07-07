@@ -11,3 +11,9 @@ def atari_override_defaults(env, parser):
         env_framestack=4,
         exploration_loss_coeff=0.01,
     )
+
+
+# noinspection PyUnusedLocal
+def add_atari_env_args(env, parser):
+    # in case we more args in the future
+    pass

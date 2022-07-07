@@ -369,7 +369,7 @@ def set_process_cpu_affinity(worker_idx, num_workers):
 # working with filesystem
 
 
-def ensure_dir_exists(path):
+def ensure_dir_exists(path) -> str:
     if not os.path.exists(path):
         os.makedirs(path)
     return path
@@ -402,24 +402,14 @@ def project_tmp_dir():
     return ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name))
 
 
-def experiments_dir(cfg):
+def experiments_dir(cfg) -> str:
     return ensure_dir_exists(cfg.train_dir)
 
 
-def experiment_dir(cfg):
+def experiment_dir(cfg) -> str:
     experiment = cfg.experiment
-    experiments_root = cfg.experiments_root
-
-    if experiments_root is None:
-        experiments_root = experiments_dir(cfg)
-    else:
-        experiments_root = join(experiments_dir(cfg), experiments_root)
-
+    experiments_root = experiments_dir(cfg)
     return ensure_dir_exists(join(experiments_root, experiment))
-
-
-def model_dir(experiment_dir_):
-    return ensure_dir_exists(join(experiment_dir_, ".model"))
 
 
 def summaries_dir(experiment_dir_):

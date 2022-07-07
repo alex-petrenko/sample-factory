@@ -65,7 +65,6 @@ class TestRunner:
         for command, name, root_dir, env_vars in cmds:
             exp_name = split(root_dir)[-1]
             assert "--experiment" in command
-            assert "--experiments_root" in command
             assert exp_name in name
             assert root_dir.startswith("test_run")
 
@@ -97,7 +96,6 @@ class TestRunner:
         rd2 = RunDescription(
             root_dir_name,
             experiments,
-            experiment_dirs_sf_format=False,
             experiment_arg_name="--experiment_tst",
             experiment_dir_arg_name="--dir",
         )
