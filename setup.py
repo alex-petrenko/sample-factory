@@ -43,7 +43,7 @@ setup(
         "wandb>=0.12.9",
     ],
     extras_require={
-        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commmit"],
+        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit"],
         "atari": ["gym[atari, accept-rom-license]"],
         "mujoco": ["gym[mujoco]<1.0", "mujoco", "mujoco_py>=2.0,<3.0"],
         "vizdoom": ["vizdoom<2.0"],
