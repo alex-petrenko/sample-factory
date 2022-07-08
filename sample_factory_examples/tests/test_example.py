@@ -22,7 +22,7 @@ class TestExample:
     def _run_test_env(
         num_actions: int = 10,
         num_workers: int = 8,
-        train_steps: int = 100,
+        train_steps: int = 128,
         batch_size: int = 64,
         expected_reward_at_least: float = -EPS,
         expected_reward_at_most: float = 100,
@@ -52,6 +52,9 @@ class TestExample:
         cfg.seed = 0
         cfg.device = "cpu"
         cfg.learning_rate = 1e-3
+        cfg.normalize_input = True
+        cfg.normalize_returns = True
+        cfg.with_vtrace = False
 
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS

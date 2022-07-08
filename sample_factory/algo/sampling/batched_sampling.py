@@ -24,17 +24,22 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     because in this case the action is usually expected to be a scalar.
 
     """
-
-    if actions.ndim > 1:
-        actions = actions.squeeze(dim=1)
-
     if env_info.integer_actions:
         actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
 
     if not env_info.gpu_actions:
         actions = actions.cpu().numpy()
 
-    actions = fix_action_shape(actions, env_info.integer_actions)
+    # action tensor/array should have two dimensions (num_agents, num_actions) where num_agents is a number of
+    # individual actors in a vectorized environment (whether actually different agents or separate envs - does not
+    # matter)
+    # While continuous action envs generally expect an array/tensor of actions, even when there's just one action,
+    # discrete action envs typically expect to get the action index when there's only one action. So we squeeze the
+    # second dimension for integer action envs.
+    assert actions.ndim == 2, f"Expected actions to have two dimensions, got {actions}"
+    if env_info.integer_actions:
+        actions = actions.squeeze(-1)
+
     return actions
 
 
@@ -199,6 +204,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             )
 
             if isinstance(infos, dict):
+                # vectorized reports
                 for key, value in infos.items():
                     if isinstance(value, Tensor):
                         if value.numel() == 1:
@@ -208,17 +214,15 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                             stats[key] = value[finished]
                         else:
                             log.warning(f"Infos tensor with unexpected shape {value.shape}")
-
-                # make sure everything in the dict is either a scalar or a numpy array
-                for key, value in stats.items():
-                    if isinstance(value, Tensor):
-                        stats[key] = value.cpu().numpy()
-
-                # vectorized reports
-                reports.append(dict(episodic=stats, policy_id=self.policy_id))
             else:
-                # non-vectorized reports TODO
+                # non-vectorized reports TODO (parse infos)
                 pass
+
+            # make sure everything in the dict is either a scalar or a numpy array
+            for key, value in stats.items():
+                if isinstance(value, Tensor):
+                    stats[key] = value.cpu().numpy()
+            reports.append(dict(episodic=stats, policy_id=self.policy_id))
 
             self.curr_episode_reward[finished] = 0
             self.curr_episode_len[finished] = 0

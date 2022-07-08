@@ -59,7 +59,6 @@ class DoomSpec:
         # 1 for singleplayer, >1 otherwise
         self.num_agents = num_agents
 
-        # CLI arguments override this (see enjoy_rllib.py)
         self.num_bots = num_bots
 
         self.respawn_delay = respawn_delay

@@ -1,12 +1,16 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
+# isort: off
 # noinspection PyUnresolvedReferences
+import isaacgym
+
+# isort: on
+
 import os
 import sys
 from os.path import join
 from typing import List
 
 import gym
-import isaacgym
 import torch
 from isaacgymenvs.tasks import isaacgym_task_map
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
