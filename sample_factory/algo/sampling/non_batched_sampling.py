@@ -9,7 +9,7 @@ from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.policy_manager import PolicyManager
 from sample_factory.algo.utils.tensor_dict import to_numpy
-from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
+from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array, unsqueeze_tensor
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
@@ -139,7 +139,13 @@ class ActorState:
         if self.env_info.integer_actions:
             actions = actions.astype(np.int32)
 
-        actions = fix_action_shape(actions, self.env_info.integer_actions)
+        if actions.ndim == 0:
+            if self.env_info.integer_actions:
+                actions = actions.item()
+            else:
+                # envs with continuous actions typically expect a vector of actions (i.e. Mujoco)
+                # if there's only one action (i.e. Mujoco pendulum) then we need to make it a 1D vector
+                actions = np.expand_dims(actions, -1)
         return actions
 
     def record_env_step(self, reward, done, info, rollout_step):

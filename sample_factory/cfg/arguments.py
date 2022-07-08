@@ -88,10 +88,6 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
 
     args.cli_args = vars(cli_args)
     args.git_hash, args.git_repo_name = get_git_commit_hash()
-
-    # check for any incompatible arguments
-    verify_cfg(args)
-
     return args
 
 

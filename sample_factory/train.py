@@ -1,8 +1,12 @@
 from sample_factory.algo.runners.runner_parallel import ParallelRunner
 from sample_factory.algo.runners.runner_serial import SerialRunner
+from sample_factory.cfg.arguments import verify_cfg
 
 
 def run_rl(cfg):
+    # check for any incompatible arguments
+    verify_cfg(cfg)
+
     if cfg.serial_mode:
         runner_cls = SerialRunner
     else:
