@@ -57,15 +57,15 @@ def extract_env_info(env, cfg):
     # if self.cfg.with_pbt:
     #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
     splits = None
-    if isinstance(action_space, gym.Tuple):
-        splits = [calc_num_actions(space) for space in action_space]
+    if isinstance(action_space, gym.spaces.Tuple):
+        action_splits = [calc_num_actions(space) for space in action_space]
 
     env_info = EnvInfo(
         obs_space=obs_space,
         action_space=action_space,
         num_agents=num_agents,
         gpu_actions=gpu_actions,
-        splits=splits,
+        action_splits=action_splits,
         frameskip=frameskip,
     )
     return env_info
