@@ -221,6 +221,11 @@ class InferenceWorker(EventLoopObject, Configurable):
             if num_samples <= 1:
                 self._unsqueeze_0dim_tensors(policy_outputs)
 
+            # actions are handled differently in the batched version so we have to convert them to
+            # [batch_size, num_actions]
+            if policy_outputs["actions"].ndim < 2:
+                policy_outputs["actions"] = policy_outputs["actions"].unsqueeze(-1)
+
             # assuming all workers provide the same number of samples
             samples_per_request = num_samples // len(requests)
             ofs = 0
