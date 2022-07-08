@@ -4,7 +4,10 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.cfg.arguments import parse_args
 from sample_factory_examples.mujoco_examples.mujoco_utils import mujoco_available
 from sample_factory.train import run_rl
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import experiment_dir, log
+
+import shutil
+from os.path import isdir
 
 
 @pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
@@ -19,7 +22,7 @@ class TestMujoco:
     def _run_test_env(
         env: str = "mujoco_ant",
         num_workers: int = 8,
-        train_steps: int = 256,
+        train_steps: int = 128,
         batched_sampling: bool = False,
         serial_mode: bool = True,
         async_rl: bool = False,
@@ -47,6 +50,11 @@ class TestMujoco:
 
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
+
+        directory = experiment_dir(cfg=cfg)
+        assert isdir(directory)
+        shutil.rmtree(directory, ignore_errors=True)
+
 
     @pytest.mark.parametrize("env_name", ["mujoco_ant", "mujoco_halfcheetah", "mujoco_humanoid", "mujoco_hopper", "mujoco_reacher", "mujoco_walker", "mujoco_swimmer"])
     @pytest.mark.parametrize("num_workers", [1, 8])
