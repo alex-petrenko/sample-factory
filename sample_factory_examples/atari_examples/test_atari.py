@@ -47,31 +47,17 @@ class TestAtariEnv:
         [
             "atari_montezuma",
             "atari_pong",
-            "atari_qbert",
             "atari_breakout",
-            "atari_spaceinvaders",
-            "atari_asteroids",
-            "atari_gravitar",
-            "atari_mspacman",
-            "atari_seaquest",
+
+            # probably no reason to test on all of them, as they are kind of the same
+            # "atari_qbert",
+            # "atari_spaceinvaders",
+            # "atari_asteroids",
+            # "atari_gravitar",
+            # "atari_mspacman",
+            # "atari_seaquest",
         ],
     )
     @pytest.mark.parametrize("batched_sampling", [False, True])
     def test_basic_envs(self, env_name, batched_sampling):
         self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)
-
-    # @pytest.mark.parametrize("env_name", ["mujoco_pendulum", "mujoco_doublependulum"])
-    # @pytest.mark.parametrize("batched_sampling", [False, True])
-    # def test_single_action_envs(self, env_name, batched_sampling):
-    #     """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
-    #     self._run_test_env(env=env_name, num_workers=1, train_steps=100)
-    #
-    # @pytest.mark.parametrize("env_name", ["mujoco_hopper", "mujoco_reacher", "mujoco_walker", "mujoco_swimmer"])
-    # @pytest.mark.parametrize("batched_sampling", [False, True])
-    # def test_rollout_equals_batch_size(self, env_name, batched_sampling):
-    #     """
-    #     These envs might create unique problems since their default rollout length is not equal to the batch size.
-    #     Therefore we have a batch consisting of a single trajectory on the learner and we have to be careful
-    #     with how we handle it.
-    #     """
-    #     self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)

@@ -19,7 +19,7 @@ class TestMujoco:
     def _run_test_env(
         env: str = "mujoco_ant",
         num_workers: int = 8,
-        train_steps: int = 128,
+        train_steps: int = 256,
         batched_sampling: bool = False,
         serial_mode: bool = True,
         async_rl: bool = False,
@@ -40,6 +40,8 @@ class TestMujoco:
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
         cfg.rollout = rollout
+        cfg.decorrelate_envs_on_one_worker = False
+        cfg.decorrelate_experience_max_seconds = 0
         cfg.seed = 0
         cfg.device = "cpu"
 
@@ -47,13 +49,19 @@ class TestMujoco:
         assert status == ExperimentStatus.SUCCESS
 
     @pytest.mark.parametrize("env_name", ["mujoco_ant", "mujoco_halfcheetah", "mujoco_humanoid", "mujoco_hopper", "mujoco_reacher", "mujoco_walker", "mujoco_swimmer"])
+    @pytest.mark.parametrize("num_workers", [1, 8])
     @pytest.mark.parametrize("batched_sampling", [False, True])
-    def test_basic_envs(self, env_name, batched_sampling):
-        self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)
+    def test_basic_envs(self, env_name, batched_sampling, num_workers):
+        self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=batched_sampling)
 
     @pytest.mark.parametrize("env_name", ["mujoco_pendulum", "mujoco_doublependulum"])
-    @pytest.mark.parametrize("batched_sampling", [False, True])
-    def test_single_action_envs(self, env_name, batched_sampling):
+    @pytest.mark.parametrize("num_workers", [1, 8])
+    def test_single_action_envs_batched(self, env_name, num_workers):
         """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
-        self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)
-        # Currently failing when batched_sampling=True
+        self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=True)
+
+    @pytest.mark.parametrize("env_name", ["mujoco_pendulum", "mujoco_doublependulum"])
+    @pytest.mark.parametrize("num_workers", [1, 8])
+    def test_single_action_envs_non_batched(self, env_name, num_workers):
+        """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
+        self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=False)
