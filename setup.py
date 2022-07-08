@@ -46,6 +46,7 @@ setup(
     ],
     extras_require={
         'dev': ['black', 'isort', 'pytest<8.0', 'flake8'],
+        'atari': ['gym[atari, accept-rom-license]'],
         'mujoco': ['gym[mujoco]<1.0', 'mujoco', 'mujoco_py>=2.0,<3.0'],
         'vizdoom': ['vizdoom<2.0'],
     },
