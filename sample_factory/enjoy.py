@@ -11,6 +11,7 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint, parse_args
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
@@ -66,6 +67,10 @@ def enjoy(cfg, max_num_frames=1e9):
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
+            for key, x in obs.items():
+                device, dtype = actor_critic.device_and_type_for_input_tensor(key)
+                obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+
             normalized_obs = actor_critic.normalize_obs(obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
