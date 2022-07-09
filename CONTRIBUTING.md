@@ -26,57 +26,62 @@ If you would like to work on any of the open Issues:
 
 2. Clone your fork to your local disk, and add the base repository as a remote:
 
-	```bash
-	git clone git@github.com:<your Github handle>/sample-factory.git
-	cd sample-factory
-	git remote add upstream https://github.com/alex-petrenko/sample-factory.git
-	```
+    ```bash
+    git clone git@github.com:<your Github handle>/sample-factory.git
+    cd sample-factory
+    git remote add upstream https://github.com/alex-petrenko/sample-factory.git
+    ```
 
 3. Create a new branch to hold your development changes:
 
-	```bash
-	git checkout -b a-descriptive-name-for-my-changes
-	```
+    ```bash
+    git checkout -b a-descriptive-name-for-my-changes
+    ```
 
-	**do not** work on the `main` branch.
+    **do not** work on the `main` branch.
 
 4. Set up a development environment by running the following command in a virtual environment:
 
-	```bash
-	pip install -e .[dev]
-	```
+    ```bash
+    pip install -e .[dev]
+    ```
 
    (If sample-factory was already installed in the virtual environment, remove
    it with `pip uninstall sample-factory` before reinstalling it in editable
    mode with the `-e` flag.)
 
-5. Develop the features on your branch.
+5. This repo uses *black*, *isort* and *flake8* to enforce code format and style. If you wanna automatically check and correct your code format everytime you commit, run the following commands:
+   ```bash
+   pre-commit install
+   ```
 
-6. Format your code. Run black and isort so that your newly added files look nice with the following command:
+6. Develop the features on your branch.
 
-	```bash
-	make format
- 	make check-codestyle  
-	``` 
+7. Format your code. Run black and isort so that your newly added files look nice with the following command:
+   ```bash
+   make format
+   make check-codestyle
+   ```
+  
 (make check-codestyle should yield no errors) 
 
-7. Run unittests with the following command:
-	```bash
-	make test
-	```
-8. Once you're happy with your files, add your changes and make a commit to record your changes locally:
+8. Run unittests with the following command:
+    ```bash
+    make test
+    ```
+9. Once you're happy with your files, add your changes and make a commit to record your changes locally:
 
-	```bash
-	git add sample-factory/<your_dataset_name>
-	git commit
-	```
+    ```bash
+    git add sample-factory/<your_dataset_name>
+    git commit
+    ```
 
-	It is a good idea to sync your copy of the code with the original
-	repository regularly. This way you can quickly account for changes:
+    It is a good idea to sync your copy of the code with the original
+    repository regularly. This way you can quickly account for changes:
 
-	```bash
-	git fetch upstream
-	git rebase upstream/main
+    ```bash
+    git fetch upstream
+    git rebase upstream/main
     ```
 
    Push the changes to your account using:
@@ -85,4 +90,4 @@ If you would like to work on any of the open Issues:
    git push -u origin a-descriptive-name-for-my-changes
    ```
 
-9. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.
+10. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.

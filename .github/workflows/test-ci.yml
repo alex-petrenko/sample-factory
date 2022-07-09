@@ -20,20 +20,10 @@ jobs:
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         echo $CONDA/bin >> $GITHUB_PATH
-    - name: Install conda env & dependencies on linux
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+    - name: Install conda env & dependencies
       run: |
-       conda install pytorch torchvision cpuonly -c pytorch
-       pip install -e .
        pip install -e '.[atari, mujoco]'
        conda list
-    - name: Install conda env & dependencies on macos
-      if: ${{ matrix.os == 'macos-latest' }}
-      run: |
-        pip3 install torch torchvision
-        pip install -e .
-        pip install -e '.[atari, mujoco]'
-        conda list
     - name: Install test dependencies
       run: |
         pip install pytest

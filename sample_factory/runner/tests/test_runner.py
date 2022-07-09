@@ -3,7 +3,6 @@ import shutil
 from os.path import join, split
 
 import numpy as np
-import pytest
 
 from sample_factory.runner.run import runner_argparser
 from sample_factory.runner.run_description import Experiment, ParamGrid, ParamList, RunDescription
