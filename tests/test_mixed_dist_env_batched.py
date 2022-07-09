@@ -52,7 +52,7 @@ class IdentityEnvMixedActions(gym.Env):
         return
 
 
-class MultiIdentityEnvMixedActions(gym.Env):
+class BatchedIdentityEnvMixedActions(gym.Env):
     def __init__(self, size=4) -> None:
         n_envs = 4
         self.envs = [IdentityEnvMixedActions(size) for _ in range(n_envs) ]
@@ -117,7 +117,7 @@ def make_env(env_name, cfg, **kwargs):
 
 def register_test_components():
     global_env_registry().register_env(
-        env_name_prefix='multi_mix_dist_env',
+        env_name_prefix='batched_mix_dist_env',
         make_env_func=make_env,
         add_extra_params_func=None,
         override_default_params_func=override_defaults
