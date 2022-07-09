@@ -3,10 +3,10 @@ from __future__ import annotations
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
+import gym
 import numpy as np
 import torch
 from torch import Tensor
-import gym
 
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
 from sample_factory.algo.utils.env_info import EnvInfo
@@ -34,13 +34,16 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     if isinstance(env_info.action_space, gym.spaces.Tuple):
         # input is (B, N)
         out_actions = []
-        for split, space in zip(torch.split(actions, env_info.action_splits, 1), env_info.action_space):    
-            out_actions.append(process_action_space(split, env_info.gpu_actions, isinstance(space, gym.spaces.Discrete)))
+        for split, space in zip(torch.split(actions, env_info.action_splits, 1), env_info.action_space):
+            out_actions.append(
+                process_action_space(split, env_info.gpu_actions, isinstance(space, gym.spaces.Discrete))
+            )
         # this line can be used to transpose the actions, perhaps add as an option ?
-        # out_actions = list(zip(*out_actions)) # transpose 
+        # out_actions = list(zip(*out_actions)) # transpose
         return out_actions
 
     raise NotImplementedError
+
 
 def process_action_space(actions, gpu_actions, is_discrete):
     if actions.ndim > 1:
@@ -50,6 +53,7 @@ def process_action_space(actions, gpu_actions, is_discrete):
     if not gpu_actions:
         actions = actions.cpu().numpy()
     return fix_action_shape(actions, is_discrete)
+
 
 class BatchedVectorEnvRunner(VectorEnvRunner):
     # TODO: comment
