@@ -145,12 +145,11 @@ class ActorState:
             return self.calculate_actions(actions, False)
 
         if isinstance(self.env_info.action_space, gym.spaces.Tuple):
-            # calculate splits
-            actions = []
+            out_actions = []
             for split, space in zip(np.split(actions, self.env_info.action_splits), self.env_info.action_space):
-                actions.append(self.calculate_actions(split, space))
-
-            return actions
+                is_discete = isinstance(space, gym.spaces.Discrete)
+                out_actions.append(self.calculate_actions(split, is_discete))
+            return out_actions
 
         raise NotImplementedError
 

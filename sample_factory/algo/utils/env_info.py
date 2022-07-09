@@ -56,7 +56,7 @@ def extract_env_info(env, cfg):
     # self.reward_shaping_scheme = None
     # if self.cfg.with_pbt:
     #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
-    splits = None
+    action_splits = None
     if isinstance(action_space, gym.spaces.Tuple):
         action_splits = [calc_num_actions(space) for space in action_space]
 

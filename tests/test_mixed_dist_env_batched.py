@@ -27,7 +27,8 @@ class IdentityEnvMixedActions(gym.Env):
         return self.state
 
     def _get_reward(self, action: Union[int, np.ndarray]) -> float:
-        discrete_reward = 1.0 if np.array_equal(self.state, action[0]) else 0.0
+        print(self.state, action, np.argmax(self.state)  == action[0])
+        discrete_reward = 1.0 if np.argmax(self.state)  == action[0] else 0.0
         continuous_reward = 1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
 
         return discrete_reward + continuous_reward
@@ -51,12 +52,56 @@ class IdentityEnvMixedActions(gym.Env):
     def seed(self, value):
         return
 
+
+class MultiIdentityEnvMixedActions(gym.Env):
+    def __init__(self, size=4) -> None:
+        n_envs = 4
+        self.envs = [IdentityEnvMixedActions(size) for _ in range(n_envs) ]
+        self.num_agents = n_envs
+
+        super().__init__()
+
+    @property
+    def observation_space(self):
+        return self.envs[0].observation_space
+    @property
+    def action_space(self):
+        return self.envs[0].action_space
+
+    
+    def reset(self):
+        obss = []
+        for i, env in enumerate(self.envs):
+            obs = env.reset()
+
+            obss.append(obs)
+        return obss
+
+    def step(self, action: List[np.ndarray]):
+        obss, rewards, dones, infos = [], [], [], []
+
+        for i, env in enumerate(self.envs):
+            obs, reward, done, info = env.step([action[0][i], action[1][i]])
+            obss.append(obs),
+            rewards.append(reward)
+            dones.append(done)
+            infos.append(info)
+
+        return obss, rewards, dones, infos
+
+    def close(self):
+        pass
+
+    def seed(self, value):
+        return
+
+
 def override_defaults(env, parser):
     parser.set_defaults(
-        batched_sampling=False,
-        num_workers=4,
-        num_envs_per_worker=4,
-        worker_num_splits=2,
+        batched_sampling=True,
+        num_workers=1,
+        num_envs_per_worker=1,
+        worker_num_splits=1,
         train_for_env_steps=1000000,
 
         encoder_type='mlp',
@@ -69,11 +114,11 @@ def override_defaults(env, parser):
     )
 
 def make_env(env_name, cfg, **kwargs):
-    return IdentityEnvMixedActions(4)
+    return MultiIdentityEnvMixedActions(4)
 
 def register_test_components():
     global_env_registry().register_env(
-        env_name_prefix='mix_dist_env',
+        env_name_prefix='multi_mix_dist_env',
         make_env_func=make_env,
         add_extra_params_func=None,
         override_default_params_func=override_defaults
