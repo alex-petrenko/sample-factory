@@ -504,7 +504,7 @@ class RecordingWrapper(gym.core.Wrapper):
 
         if isinstance(action, np.ndarray):
             self._recorded_actions.append(action.tolist())
-        elif isinstance(action, np.int64):
+        elif np.issubdtype(type(action), np.integer):
             self._recorded_actions.append(int(action))
         else:
             self._recorded_actions.append(action)
