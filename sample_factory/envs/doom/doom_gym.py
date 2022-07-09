@@ -132,7 +132,8 @@ class VizdoomEnv(gym.Env):
         self.variable_indices = self._parse_variable_indices(self.config_path)
 
         # only created if we call render() method
-        self.viewer = None
+        self.screen = None
+        self.surf = None
 
         # record full episodes using VizDoom recording functionality
         self.record_to = record_to
@@ -441,17 +442,26 @@ class VizdoomEnv(gym.Env):
                 return img
 
             h, w = img.shape[:2]
-            render_w = 1280
+            render_h, render_w = h, w
+            max_w = 1280
 
-            if w < render_w:
-                render_h = int(render_w * h / w)
+            if w < max_w:
+                render_w = max_w
+                render_h = int(max_w * h / w)
                 img = cv2.resize(img, (render_w, render_h))
 
-            if self.viewer is None:
-                from gym.envs.classic_control import rendering
+            import pygame
 
-                self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
-            self.viewer.imshow(img)
+            if self.screen is None:
+                pygame.init()
+                pygame.display.init()
+                self.screen = pygame.display.set_mode((render_w, render_h))
+
+            self.surf = pygame.surfarray.make_surface(np.rot90(img))
+            self.screen.blit(self.surf, (0, 0))
+            pygame.display.update()
+            # pygame.display.flip()
+
             return img
         except AttributeError:
             return None
@@ -463,8 +473,13 @@ class VizdoomEnv(gym.Env):
         except RuntimeError as exc:
             log.warning("Runtime error in VizDoom game close(): %r", exc)
 
-        if self.viewer is not None:
-            self.viewer.close()
+        # if self.viewer is not None:
+        #     self.viewer.close()
+        if self.screen is not None:
+            import pygame
+
+            pygame.display.quit()
+            pygame.quit()
 
     def get_info(self, variables=None):
         if variables is None:
