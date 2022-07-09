@@ -11,8 +11,7 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor
-from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
+from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint, parse_args
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size

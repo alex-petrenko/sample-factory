@@ -65,23 +65,23 @@ If you would like to work on any of the open Issues:
   
 (make check-codestyle should yield no errors) 
 
-7. Run unittests with the following command:
-	```bash
-	make test
-	```
-8. Once you're happy with your files, add your changes and make a commit to record your changes locally:
+8. Run unittests with the following command:
+    ```bash
+    make test
+    ```
+9. Once you're happy with your files, add your changes and make a commit to record your changes locally:
 
-	```bash
-	git add sample-factory/<your_dataset_name>
-	git commit
-	```
+    ```bash
+    git add sample-factory/<your_dataset_name>
+    git commit
+    ```
 
-	It is a good idea to sync your copy of the code with the original
-	repository regularly. This way you can quickly account for changes:
+    It is a good idea to sync your copy of the code with the original
+    repository regularly. This way you can quickly account for changes:
 
-	```bash
-	git fetch upstream
-	git rebase upstream/main
+    ```bash
+    git fetch upstream
+    git rebase upstream/main
     ```
 
    Push the changes to your account using:
@@ -90,4 +90,4 @@ If you would like to work on any of the open Issues:
    git push -u origin a-descriptive-name-for-my-changes
    ```
 
-9. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.
+10. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.
