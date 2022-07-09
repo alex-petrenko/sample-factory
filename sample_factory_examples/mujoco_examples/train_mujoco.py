@@ -6,8 +6,8 @@ from sample_factory.train import run_rl
 
 
 def register_mujoco_components():
-    from sample_factory.envs.mujoco.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
-    from sample_factory.envs.mujoco.mujoco_utils import make_mujoco_env
+    from sample_factory_examples.mujoco_examples.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
+    from sample_factory_examples.mujoco_examples.mujoco_utils import make_mujoco_env
 
     global_env_registry().register_env(
         env_name_prefix="mujoco_",

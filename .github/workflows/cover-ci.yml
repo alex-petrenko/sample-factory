@@ -24,7 +24,7 @@ jobs:
       run: |
        conda install pytorch torchvision cpuonly -c pytorch
        pip install -e .
-       pip install "gym[atari,accept-rom-license]"
+       pip install -e '.[atari, mujoco]'
        conda list
     - name: Install codecov dependencies
       run: |
