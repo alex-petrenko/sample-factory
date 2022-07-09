@@ -48,7 +48,6 @@ def process_action_space(actions, gpu_actions, is_discrete):
     if is_discrete:
         actions = actions.to(torch.int32)
     if not gpu_actions:
-        print("NOT GPU ACTIONS")
         actions = actions.cpu().numpy()
     return fix_action_shape(actions, is_discrete)
 

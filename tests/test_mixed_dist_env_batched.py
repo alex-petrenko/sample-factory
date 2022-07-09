@@ -27,7 +27,6 @@ class IdentityEnvMixedActions(gym.Env):
         return self.state
 
     def _get_reward(self, action: Union[int, np.ndarray]) -> float:
-        print(self.state, action, np.argmax(self.state)  == action[0])
         discrete_reward = 1.0 if np.argmax(self.state)  == action[0] else 0.0
         continuous_reward = 1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
 
