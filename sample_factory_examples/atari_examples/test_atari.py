@@ -48,7 +48,6 @@ class TestAtariEnv:
             "atari_montezuma",
             "atari_pong",
             "atari_breakout",
-
             # probably no reason to test on all of them, as they are kind of the same
             # "atari_qbert",
             # "atari_spaceinvaders",
