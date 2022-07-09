@@ -1,21 +1,40 @@
 ## Installation
 
-### Method 1 - Install from setup.py on sf2
+To install MuJoCo environments to work with Sample-Factory v2, run `pip install sample-factory[mujoco]`
+or `pip install -e .[mujoco]` in the sample-factory directory.
 
-1. Clone sample factory and checkout the sf2 branch and `cd sample-factory`
-2. Create new conda environment with python=3.9 `conda create -n {myenv} python=3.9`
-3. Install pytorch with `conda install pytorch==1.11.0 torchvision -c pytorch`
-4. Install other dependencies with `pip install -e .`
-5. Install gym environments `pip install "gym[mujoco]"`
-6. `pip install mujoco`
-7. `pip install mujoco-py`
+## Running Experiments
 
-### Method 2 - Install from environment.yaml from master (also steps for debugging on existing environment)
+To run a single experiment, use the `sample_factory_examples.mujoco_examples.train_mujoco` script. An example command is
+`python -m sample_factory_examples.mujoco_examples.train_mujoco --algo=APPO --env=mujoco_ant --experiment=experiment_name`.
 
-1. Clone sample factory and `cd sample-factory`
-2. Install the environment `conda env create -f environment.yml` and `conda activate sample-factory`
-3. `pip install mujoco`
-4. `pip install mujoco-py`
-5. Update gym by `pip uninstall gym[mujoco]` then `pip install gym[mujoco]`
-6. Update pytorch to version 1.11.0 `conda install pytorch==1.11.0 -c pytorch`
-7. Uninstall and reinstall cffi `pip uninstall cffi` then `pip install cffi`
+To run multiple experiments in parallel, use the runner script at `sample_factory_examples.mujoco_examples.mujoco_runner_all_envs`.
+An example command is `python -m sample_factory.runner.run --run=sample_factory_examples.mujoco_examples.mujoco_runner_all_envs --runner=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=test`
+
+## Showing Experiment Results
+
+To display videos of experiments, use the `sample_factory_examples.mujoco_examples.enjoy_mujoco` script. An example command is 
+`python -m sample_factory_examples.mujoco_examples.enjoy_mujoco --env=mujoco_ant --algo=APPO --experiment=experiment_name`
+
+## Supported MuJoCo environments
+
+SF2 supports the following MuJoCo v4 environments:
+
+- mujoco_hopper
+- mujoco_halfcheetah
+- mujoco_humanoid
+- mujoco_ant
+- mujoco_standup
+- mujoco_doublependulum
+- mujoco_pendulum
+- mujoco_reacher
+- mujoco_walker
+- mujoco_pusher
+- mujoco_swimmer
+
+More environments can be added in `sample_factory_examples.mujoco_examples.mujoco_utils`
+
+## Benchmark Results
+
+We benchmarked SF2 against CleanRL on a few environments. We achieved similar sample efficiency with the same parameters.
+Results can be found here: https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-w-o-EnvPool--VmlldzoyMjMyMTQ0
