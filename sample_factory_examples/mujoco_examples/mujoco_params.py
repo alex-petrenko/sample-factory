@@ -40,7 +40,6 @@ def mujoco_override_defaults(env, parser):
     )
 
 
-
 # noinspection PyUnusedLocal
 def add_mujoco_env_args(env, parser):
     # in case we need to add more args in the future

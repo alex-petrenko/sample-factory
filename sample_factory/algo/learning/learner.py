@@ -110,12 +110,13 @@ class KlAdaptiveSchedulerPerEpoch(KlAdaptiveScheduler):
     def invoke_after_each_epoch(self):
         return True
 
+
 class LinearDecayScheduler(LearningRateScheduler):
     def __init__(self, cfg):
         num_updates = cfg.train_for_env_steps // cfg.batch_size * cfg.num_epochs
         self.linear_decay = LinearDecay([(0, cfg.learning_rate), (num_updates, 0)])
         self.step = 0
-    
+
     def invoke_after_each_minibatch(self):
         return True
 

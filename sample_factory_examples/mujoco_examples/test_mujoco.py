@@ -1,13 +1,13 @@
+import shutil
+from os.path import isdir
+
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.cfg.arguments import parse_args
-from sample_factory_examples.mujoco_examples.mujoco_utils import mujoco_available
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import experiment_dir, log
-
-import shutil
-from os.path import isdir
+from sample_factory_examples.mujoco_examples.mujoco_utils import mujoco_available
 
 
 @pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
@@ -55,8 +55,18 @@ class TestMujoco:
         assert isdir(directory)
         shutil.rmtree(directory, ignore_errors=True)
 
-
-    @pytest.mark.parametrize("env_name", ["mujoco_ant", "mujoco_halfcheetah", "mujoco_humanoid", "mujoco_hopper", "mujoco_reacher", "mujoco_walker", "mujoco_swimmer"])
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            "mujoco_ant",
+            "mujoco_halfcheetah",
+            "mujoco_humanoid",
+            "mujoco_hopper",
+            "mujoco_reacher",
+            "mujoco_walker",
+            "mujoco_swimmer",
+        ],
+    )
     @pytest.mark.parametrize("num_workers", [1, 8])
     @pytest.mark.parametrize("batched_sampling", [False, True])
     def test_basic_envs(self, env_name, batched_sampling, num_workers):
