@@ -113,7 +113,7 @@ def override_defaults(env, parser):
     )
 
 def make_env(env_name, cfg, **kwargs):
-    return MultiIdentityEnvMixedActions(4)
+    return BatchedIdentityEnvMixedActions(4)
 
 def register_test_components():
     global_env_registry().register_env(
