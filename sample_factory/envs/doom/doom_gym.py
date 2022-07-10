@@ -193,7 +193,7 @@ class VizdoomEnv(gym.Env):
 
         self.game.load_config(self.config_path)
         self.game.set_screen_resolution(self.screen_resolution)
-        self.game.set_seed(self.rng.randint(0, 2**32 - 1))
+        self.game.set_seed(self.curr_seed)
 
         if mode == "algo":
             self.game.set_window_visible(False)
@@ -307,21 +307,33 @@ class VizdoomEnv(gym.Env):
         demo_path = os.path.normpath(demo_path)
         return demo_path
 
-    def reset(self):
+    def reset(self, **kwargs):
+        if "seed" in kwargs:
+            self.seed(kwargs["seed"])
+
         self._ensure_initialized()
 
-        if self.record_to is not None and not self.is_multiplayer:
+        episode_started = False
+        if self.record_to and not self.is_multiplayer:
             # does not work in multiplayer (uses different mechanism)
             if not os.path.exists(self.record_to):
                 os.makedirs(self.record_to)
 
             demo_path = self.demo_path(self._num_episodes)
-            log.warning("Recording episode demo to %s", demo_path)
-            self.game.new_episode(demo_path)
-        else:
-            if self._num_episodes > 0:
-                # no demo recording (default)
-                self.game.new_episode()
+            log.warning(f"Recording episode demo to {demo_path=}")
+
+            if len(demo_path) > 100:
+                log.error(f"Demo path {len(demo_path)=}>100, will not record demo")
+                log.error(
+                    "This seems to be a bug in VizDoom, please just use a shorter demo path, i.e. set --record_to to /tmp/doom_recs"
+                )
+            else:
+                self.game.new_episode(demo_path)
+                episode_started = True
+
+        if self._num_episodes > 0 and not episode_started:
+            # no demo recording (default)
+            self.game.new_episode()
 
         self.state = self.game.get_state()
         img = None

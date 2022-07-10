@@ -1,9 +1,10 @@
 import json
 import math
 import multiprocessing
+import shutil
 import time
 from collections import OrderedDict, deque
-from os.path import join
+from os.path import isdir, join
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -118,10 +119,6 @@ class Runner(EventLoopObject, Configurable):
         self.batchers: Dict[PolicyID, Batcher] = dict()
         self.inference_workers: Dict[PolicyID, List[InferenceWorker]] = dict()
         self.rollout_workers: List[RolloutWorker] = []
-
-        self._save_cfg()
-        save_git_diff(experiment_dir(cfg=self.cfg))
-        init_file_logger(experiment_dir(self.cfg))
 
         self.timing = Timing("Runner profile")
 
@@ -499,6 +496,34 @@ class Runner(EventLoopObject, Configurable):
         return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info)
 
     def init(self):
+        init_file_logger(experiment_dir(self.cfg))
+        exp_dir = experiment_dir(self.cfg, mkdir=False)
+        if isdir(exp_dir):
+            log.debug(f"Experiment dir {exp_dir} already exists!")
+            if self.cfg.restart_behavior == "resume":
+                log.debug(f"Resuming existing experiment from {exp_dir}...")
+            else:
+                if self.cfg.restart_behavior == "restart":
+                    attempt = 0
+                    old_exp_dir = exp_dir
+                    while isdir(old_exp_dir):
+                        attempt += 1
+                        old_exp_dir = f"{exp_dir}_old{attempt:04d}"
+
+                    # move the existing experiment dir to a new one with a suffix
+                    log.debug(f"Moving the existing experiment dir to {old_exp_dir}...")
+                    shutil.move(exp_dir, old_exp_dir)
+                elif self.cfg.restart_behavior == "overwrite":
+                    log.debug(f"Overwriting the existing experiment dir {exp_dir}...")
+                    shutil.rmtree(exp_dir)
+                else:
+                    raise ValueError(f"Unknown restart behavior {self.cfg.restart_behavior}")
+
+                log.debug(f"Starting training in {exp_dir}...")
+
+        self._save_cfg()
+        save_git_diff(experiment_dir(cfg=self.cfg))
+
         set_global_cuda_envvars(self.cfg)
         self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)

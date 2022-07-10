@@ -48,10 +48,13 @@ class TestMujoco:
         cfg.seed = 0
         cfg.device = "cpu"
 
+        directory = experiment_dir(cfg=cfg, mkdir=False)
+        if isdir(directory):
+            # remove any previous unfinished test dirs so they don't interfere with this test
+            shutil.rmtree(directory, ignore_errors=True)
+
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
-
-        directory = experiment_dir(cfg=cfg)
         assert isdir(directory)
         shutil.rmtree(directory, ignore_errors=True)
 

@@ -156,7 +156,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 used_bots.append(bot_name)
                 return bot_name
 
-    def reset(self):
+    def reset(self, **kwargs):
         obs = super().reset()
 
         if self._is_server() and self.num_bots > 0:
