@@ -1,20 +1,20 @@
-from typing import Optional, Tuple, Union, List
-import numpy as np
-import gym
 import sys
+from typing import List, Optional, Tuple, Union
+
+import gym
+import numpy as np
 
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.cfg.arguments import parse_args
 from sample_factory.train import run_rl
 
+
 class IdentityEnvMixedActions(gym.Env):
     def __init__(self, size=4):
-        self.observation_space = gym.spaces.Box(-1,1,shape=(size,))
+        self.observation_space = gym.spaces.Box(-1, 1, shape=(size,))
         self._observation_space = gym.spaces.Discrete(size)
 
-        self.action_space =  gym.spaces.Tuple(
-            [gym.spaces.Discrete(size), gym.spaces.Box(-1,1,shape=(size,))]
-            )
+        self.action_space = gym.spaces.Tuple([gym.spaces.Discrete(size), gym.spaces.Box(-1, 1, shape=(size,))])
         self.ep_length = 10
         self.num_resets = -1  # Becomes 0 after __init__ exits.
         self.eps = 0.05
@@ -27,8 +27,10 @@ class IdentityEnvMixedActions(gym.Env):
         return self.state
 
     def _get_reward(self, action: Union[int, np.ndarray]) -> float:
-        discrete_reward = 1.0 if np.argmax(self.state)  == action[0] else 0.0
-        continuous_reward = 1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
+        discrete_reward = 1.0 if np.argmax(self.state) == action[0] else 0.0
+        continuous_reward = (
+            1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
+        )
 
         return discrete_reward + continuous_reward
 
@@ -55,7 +57,7 @@ class IdentityEnvMixedActions(gym.Env):
 class BatchedIdentityEnvMixedActions(gym.Env):
     def __init__(self, size=4) -> None:
         n_envs = 4
-        self.envs = [IdentityEnvMixedActions(size) for _ in range(n_envs) ]
+        self.envs = [IdentityEnvMixedActions(size) for _ in range(n_envs)]
         self.num_agents = n_envs
 
         super().__init__()
@@ -63,11 +65,11 @@ class BatchedIdentityEnvMixedActions(gym.Env):
     @property
     def observation_space(self):
         return self.envs[0].observation_space
+
     @property
     def action_space(self):
         return self.envs[0].action_space
 
-    
     def reset(self):
         obss = []
         for i, env in enumerate(self.envs):
@@ -102,32 +104,34 @@ def override_defaults(env, parser):
         num_envs_per_worker=1,
         worker_num_splits=1,
         train_for_env_steps=10000,
-
-        encoder_type='mlp',
-        encoder_subtype='mlp_mujoco',
+        encoder_type="mlp",
+        encoder_subtype="mlp_mujoco",
         hidden_size=64,
         encoder_extra_fc_layers=0,
         env_frameskip=1,
-        nonlinearity='tanh',
+        nonlinearity="tanh",
         batch_size=1024,
     )
+
 
 def make_env(env_name, cfg, **kwargs):
     return BatchedIdentityEnvMixedActions(4)
 
+
 def register_test_components():
     global_env_registry().register_env(
-        env_name_prefix='batched_mix_dist_env',
+        env_name_prefix="batched_mix_dist_env",
         make_env_func=make_env,
         add_extra_params_func=None,
-        override_default_params_func=override_defaults
-    )    
+        override_default_params_func=override_defaults,
+    )
 
 
 def test_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    cfg = parse_args(argv=["--algo=APPO", "--env=batched_mix_dist_env", f"--experiment=test_batched_mixed_action_dists"])
+    cfg = parse_args(
+        argv=["--algo=APPO", "--env=batched_mix_dist_env", f"--experiment=test_batched_mixed_action_dists"]
+    )
     status = run_rl(cfg)
     return status
-
