@@ -101,7 +101,7 @@ def override_defaults(env, parser):
         num_workers=1,
         num_envs_per_worker=1,
         worker_num_splits=1,
-        train_for_env_steps=1000000,
+        train_for_env_steps=10000,
 
         encoder_type='mlp',
         encoder_subtype='mlp_mujoco',
@@ -124,22 +124,10 @@ def register_test_components():
     )    
 
 
-def main():
+def test_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    cfg = parse_args()
+    cfg = parse_args(argv=["--algo=APPO", "--env=batched_mix_dist_env", f"--experiment=test_batched_mixed_action_dists"])
     status = run_rl(cfg)
     return status
 
-
-if __name__ == '__main__':
-    sys.exit(main())
-
-
-#python tests/test_mixed_dist_env.py --env mix_dist_env --experiment mix_dist_env
-
-# if __name__ == "__main__":
-
-#     env = IdentityEnvMixedActions(4,3)
-
-#     print(env.action_space.sample())

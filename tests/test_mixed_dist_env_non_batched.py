@@ -57,7 +57,7 @@ def override_defaults(env, parser):
         num_workers=4,
         num_envs_per_worker=4,
         worker_num_splits=2,
-        train_for_env_steps=1000000,
+        train_for_env_steps=10000,
 
         encoder_type='mlp',
         encoder_subtype='mlp_mujoco',
@@ -73,29 +73,17 @@ def make_env(env_name, cfg, **kwargs):
 
 def register_test_components():
     global_env_registry().register_env(
-        env_name_prefix='mix_dist_env',
+        env_name_prefix='non_batched_mix_dist_env',
         make_env_func=make_env,
         add_extra_params_func=None,
         override_default_params_func=override_defaults
     )    
 
 
-def main():
+def test_non_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    cfg = parse_args()
+    cfg = parse_args(argv=["--algo=APPO", "--env=non_batched_mix_dist_env", f"--experiment=test_non_batched_mixed_action_dists"])
     status = run_rl(cfg)
     return status
 
-
-if __name__ == '__main__':
-    sys.exit(main())
-
-
-#python tests/test_mixed_dist_env.py --env mix_dist_env --experiment mix_dist_env
-
-# if __name__ == "__main__":
-
-#     env = IdentityEnvMixedActions(4,3)
-
-#     print(env.action_space.sample())
