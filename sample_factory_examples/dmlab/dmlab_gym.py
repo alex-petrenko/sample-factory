@@ -9,10 +9,10 @@ import deepmind_lab
 import gym
 import numpy as np
 
-from sample_factory.envs.dmlab import dmlab_level_cache
-from sample_factory.envs.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
-from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
 from sample_factory.utils.utils import ensure_dir_exists, log
+from sample_factory_examples.dmlab import dmlab_level_cache
+from sample_factory_examples.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
+from sample_factory_examples.dmlab.dmlab_utils import string_to_hash_bucket
 
 ACTION_SET = (
     (0, 0, 0, 1, 0, 0, 0),  # Forward

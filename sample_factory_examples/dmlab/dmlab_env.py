@@ -3,8 +3,9 @@ from collections import deque
 
 import numpy as np
 
-from sample_factory.algorithms.utils.algo_utils import EXTRA_EPISODIC_STATS_PROCESSING, EXTRA_PER_POLICY_SUMMARIES
-from sample_factory.envs.dmlab.dmlab30 import (
+from sample_factory.envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
+from sample_factory.utils.utils import experiment_dir, log, static_vars
+from sample_factory_examples.dmlab.dmlab30 import (
     DMLAB30_LEVELS,
     DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE,
     HUMAN_SCORES,
@@ -12,12 +13,14 @@ from sample_factory.envs.dmlab.dmlab30 import (
     RANDOM_SCORES,
     dmlab30_level_name_to_level,
 )
-from sample_factory.envs.dmlab.dmlab_gym import DmlabGymEnv, dmlab_level_to_level_name
-from sample_factory.envs.dmlab.dmlab_level_cache import dmlab_ensure_global_cache_initialized
-from sample_factory.envs.dmlab.dmlab_model import dmlab_register_models
-from sample_factory.envs.dmlab.wrappers.reward_shaping import RAW_SCORE_SUMMARY_KEY_SUFFIX, DmlabRewardShapingWrapper
-from sample_factory.envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
-from sample_factory.utils.utils import experiment_dir, log, static_vars
+from sample_factory_examples.dmlab.dmlab_gym import DmlabGymEnv, dmlab_level_to_level_name
+from sample_factory_examples.dmlab.dmlab_level_cache import dmlab_ensure_global_cache_initialized
+from sample_factory_examples.dmlab.dmlab_model import dmlab_register_models
+from sample_factory_examples.dmlab.dmlab_utils import EXTRA_EPISODIC_STATS_PROCESSING, EXTRA_PER_POLICY_SUMMARIES
+from sample_factory_examples.dmlab.wrappers.reward_shaping import (
+    RAW_SCORE_SUMMARY_KEY_SUFFIX,
+    DmlabRewardShapingWrapper,
+)
 
 DMLAB_INITIALIZED = False
 
