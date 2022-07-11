@@ -4,10 +4,10 @@ from os.path import isdir
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sf_examples.mujoco_examples.train_mujoco import register_mujoco_components, parse_mujoco_cfg
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import experiment_dir, log
 from sf_examples.mujoco_examples.mujoco.mujoco_utils import mujoco_available
+from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 
 
 @pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
