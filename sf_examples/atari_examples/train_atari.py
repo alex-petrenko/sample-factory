@@ -1,26 +1,34 @@
 import sys
 
-from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.cfg.arguments import parse_args
+from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
+from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
+from sf_examples.atari_examples.atari_params import add_atari_env_args, atari_override_defaults
+from sf_examples.atari_examples.atari_utils import ATARI_ENVS, make_atari_env
+
+
+def register_atari_envs():
+    for env in ATARI_ENVS:
+        register_env(env.name, make_atari_env)
 
 
 def register_atari_components():
-    from sample_factory.envs.atari.atari_params import add_atari_env_args, atari_override_defaults
-    from sample_factory.envs.atari.atari_utils import make_atari_env
+    register_atari_envs()
 
-    global_env_registry().register_env(
-        env_name_prefix="atari_",
-        make_env_func=make_atari_env,
-        add_extra_params_func=add_atari_env_args,
-        override_default_params_func=atari_override_defaults,
-    )
+
+def parse_atari_args(argv=None, evaluation=False):
+    parser, cfg = parse_sf_args(argv, evaluation=evaluation)
+    add_atari_env_args(parser)
+    atari_override_defaults(parser)
+    cfg = parse_full_cfg(parser, argv)
+    return cfg
 
 
 def main():
     """Script entry point."""
     register_atari_components()
-    cfg = parse_args()
+    cfg = parse_atari_args()
+
     status = run_rl(cfg)
     return status
 

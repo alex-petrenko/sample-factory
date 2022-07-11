@@ -16,7 +16,7 @@ class TestAtari:
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):
-        from sample_factory.envs.atari.atari_utils import make_atari_env
+        from sf_examples.atari_examples.atari_utils import make_atari_env
 
         return make_atari_env("atari_breakout", cfg=default_cfg(env="atari_breakout"))
 

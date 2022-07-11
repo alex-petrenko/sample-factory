@@ -39,10 +39,10 @@ def atari_env_by_name(name):
 
 
 # noinspection PyUnusedLocal
-def make_atari_env(env_name, cfg, **kwargs):
+def make_atari_env(env_name, cfg, env_config, **kwargs):
     atari_spec = atari_env_by_name(env_name)
 
-    # to render atari, need to add render_mode, will totally fix it in one week
+    # TODO to render atari, need to add render_mode, will totally fix it in one week
     # env = gym.make(atari_spec.env_id, render_mode='human')
     env = gym.make(atari_spec.env_id)
     if atari_spec.default_timeout is not None:
