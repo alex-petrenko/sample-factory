@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from sample_factory.model.model_utils import EncoderBase, create_standard_encoder, register_custom_encoder
+from sample_factory.model.model_utils import EncoderBase, create_standard_encoder
 from sample_factory.utils.utils import log
 from sample_factory_examples.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_VOCABULARY_SIZE
 
@@ -83,7 +83,3 @@ class DmlabEncoder(EncoderBase):
 
         x = torch.cat((x, last_outputs), dim=1)
         return x
-
-
-def dmlab_register_models():
-    register_custom_encoder("dmlab_instructions", DmlabEncoder)
