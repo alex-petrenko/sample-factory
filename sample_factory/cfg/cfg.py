@@ -564,13 +564,6 @@ def add_eval_args(parser):
     parser.add_argument(
         "--policy_index", default=0, type=int, help="Policy to evaluate in case of multi-policy training"
     )
-    # TODO: move this to Doom-specific args
-    parser.add_argument(
-        "--record_to",
-        default=join(os.getcwd(), "..", "recs"),
-        type=str,
-        help="Record episodes to this folder. Only used for VizDoom!",
-    )
 
     parser.add_argument(
         "--continuous_actions_sample",

@@ -1,4 +1,3 @@
-import sys
 import time
 from collections import deque
 
@@ -12,7 +11,7 @@ from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
-from sample_factory.cfg.arguments import load_from_checkpoint, parse_args
+from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.utils import AttrDict, log
@@ -174,14 +173,3 @@ def enjoy(cfg, max_num_frames=1e9):
     env.close()
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
-
-
-def main():
-    """Script entry point."""
-    cfg = parse_args(evaluation=True)
-    status, avg_reward = enjoy(cfg)
-    return status
-
-
-if __name__ == "__main__":
-    sys.exit(main())

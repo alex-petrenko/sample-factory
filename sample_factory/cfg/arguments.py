@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import sys
+from typing import List, Optional, Tuple
 
 from sample_factory.cfg.cfg import (
     add_basic_cli_args,
@@ -12,50 +13,46 @@ from sample_factory.cfg.cfg import (
     add_rl_args,
     add_wandb_args,
 )
-from sample_factory.envs.env_config import add_env_args, env_override_defaults
 from sample_factory.utils.utils import AttrDict, cfg_file, get_git_commit_hash, log
 
 
-def arg_parser(argv=None, evaluation=False):
+def parse_sf_args(
+    argv: Optional[List[str]] = None, evaluation: bool = False
+) -> Tuple[argparse.ArgumentParser, argparse.Namespace]:
+    """
+    Create a parser and parse the known arguments (default SF configuration, see cfg.py).
+    Returns a parser that can be further extended with additional arguments before a final pass is made.
+    This allows custom scripts to add any additional arguments they need depending on partially known configuration,
+    such as the environment name.
+
+    argv: list of arguments to parse. If None, use sys.argv.
+    evaluation: if True, also add evaluation-only arguments.
+    returns: (parser, args)
+    """
     if argv is None:
         argv = sys.argv[1:]
 
-    # noinspection PyTypeChecker
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, add_help=False)
-
-    add_basic_cli_args(parser)
-
-    basic_args, _ = parser.parse_known_args(argv)
-    env = basic_args.env
-
-    # add the rest of the arguments
-    add_rl_args(parser)
-    add_model_args(parser)
-    add_default_env_args(parser)
-    add_wandb_args(parser)
+    p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, add_help=False)
+    add_basic_cli_args(p)
+    add_rl_args(p)
+    add_model_args(p)
+    add_default_env_args(p)
+    add_wandb_args(p)
 
     if evaluation:
-        add_eval_args(parser)
+        add_eval_args(p)
 
-    # env-specific parameters (e.g. for Doom env)
-    add_env_args(env, parser)
-    # override env-specific default values for algo parameters
-    env_override_defaults(env, parser)
-
-    return parser
+    args, _ = p.parse_known_args(argv)
+    return p, args
 
 
-def parse_args(argv=None, evaluation=False, parser=None):
+def parse_full_cfg(parser: argparse.ArgumentParser, argv: Optional[List[str]] = None) -> argparse.Namespace:
+    """Given a parser, parse all arguments and return the final configuration."""
     if argv is None:
         argv = sys.argv[1:]
 
-    if parser is None:
-        parser = arg_parser(argv, evaluation)
-
-    # parse all the arguments (algo, env, and optionally evaluation)
     args = parser.parse_args(argv)
     args = postprocess_args(args, argv, parser)
-
     return args
 
 
@@ -115,7 +112,10 @@ def verify_cfg(cfg: argparse.Namespace) -> None:
 
 def default_cfg(algo="APPO", env="env", experiment="test"):
     """Useful for tests."""
-    return parse_args(argv=[f"--algo={algo}", f"--env={env}", f"--experiment={experiment}"])
+    argv = [f"--algo={algo}", f"--env={env}", f"--experiment={experiment}"]
+    parser, args = parse_sf_args(argv)
+    args = parse_full_cfg(parser, argv)
+    return args
 
 
 def load_from_checkpoint(cfg):

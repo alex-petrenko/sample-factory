@@ -5,7 +5,7 @@ class LinearDecay:
     def __init__(self, milestones, staircase=None):
         """
         Linear decay of some value according to schedule.
-        See tests for usage sample_factory_examples.
+        See tests for usage sf_examples.
 
         :param milestones: list
         List of tuples (step, desired_value)

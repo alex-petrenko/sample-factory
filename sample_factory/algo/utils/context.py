@@ -1,16 +1,16 @@
-from sample_factory.envs.env_registry import EnvRegistry
+from typing import Callable, Dict
 
 
 class SampleFactoryContext:
     def __init__(self):
-        self.env_registry = EnvRegistry()
+        self.env_registry = dict()
         self.encoder_registry = dict()
 
 
 GLOBAL_CONTEXT = None
 
 
-def global_env_registry():
+def global_env_registry() -> Dict[str, Callable]:
     """
     :return: global env registry
     :rtype: EnvRegistry
