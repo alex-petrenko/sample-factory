@@ -150,11 +150,11 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
     return env
 
 
-def make_dmlab_env(env_name, cfg=None, **kwargs):
+def make_dmlab_env(env_name, cfg, env_config, **kwargs):  # TODO: env_config required here for DMlab?
     ensure_initialized(cfg, env_name)
 
     spec = dmlab_env_by_name(env_name)
-    return make_dmlab_env_impl(spec, cfg=cfg, **kwargs)
+    return make_dmlab_env_impl(spec, cfg=cfg, env_config=env_config, **kwargs)
 
 
 @static_vars(new_level_returns=dict(), env_spec=None)

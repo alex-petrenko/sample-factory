@@ -4,20 +4,26 @@ from os.path import join
 from sample_factory.utils.utils import str2bool
 
 
-def dmlab_override_defaults(env, parser):
+def dmlab_override_defaults(parser):
     parser.set_defaults(
         encoder_type="conv",
         encoder_subtype="convnet_impala",
         encoder_custom=None,
-        hidden_size=512,
+        hidden_size=256,
         obs_subtract_mean=0.0,
+        nonlinearity="relu",
         obs_scale=255.0,
         env_frameskip=4,
+        rollout=32,
+        recurrence=32,
+        rnn_type="lstm",
+        max_policy_lag=35,
+        num_epochs=1,
     )
 
 
 # noinspection PyUnusedLocal
-def add_dmlab_env_args(env, parser):
+def add_dmlab_env_args(parser):
     p = parser
 
     p.add_argument("--res_w", default=96, type=int, help="Game frame width after resize")
