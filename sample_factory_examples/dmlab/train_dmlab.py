@@ -31,8 +31,8 @@ def main():
             "--dmlab_level_cache_path=~/datasets/.dmlab_cache",
             "--gamma=0.99",
             "--use_rnn=True",
-            "--num_workers=4",
-            "--num_envs_per_worker=4",
+            "--num_workers=90",
+            "--num_envs_per_worker=12",
             "--num_epochs=1",
             "--rollout=32",
             "--recurrence=32",
@@ -52,11 +52,9 @@ def main():
             "--num_policies=1",
             "--set_workers_cpu_affinity=True",
             "--max_policy_lag=35",
-            "--experiment=dmlab123",
+            "--experiment=dmlab_30_resnet_w90_v12",
         ]
     )
-    cfg.num_workers = 4
-    cfg.num_envs_per_worker = 2
 
     status = run_rl(cfg)
     return status
