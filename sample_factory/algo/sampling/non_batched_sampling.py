@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.policy_manager import PolicyManager
@@ -139,7 +139,13 @@ class ActorState:
         if self.env_info.integer_actions:
             actions = actions.astype(np.int32)
 
-        actions = fix_action_shape(actions, self.env_info.integer_actions)
+        if actions.ndim == 0:
+            if self.env_info.integer_actions:
+                actions = actions.item()
+            else:
+                # envs with continuous actions typically expect a vector of actions (i.e. Mujoco)
+                # if there's only one action (i.e. Mujoco pendulum) then we need to make it a 1D vector
+                actions = np.expand_dims(actions, -1)
         return actions
 
     def record_env_step(self, reward, done, info, rollout_step):

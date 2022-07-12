@@ -135,7 +135,7 @@ class SequentialVectorizeWrapper(Wrapper):
         ofs = 0
         next_ofs = self.single_env_agents
         for i, e in enumerate(self.envs):
-            idx = ofs if self.single_env_agents == 1 else slice(ofs, next_ofs)
+            idx = slice(ofs, next_ofs)
             env_actions = actions[idx]
             obs, rew, dones, info = e.step(env_actions)
 

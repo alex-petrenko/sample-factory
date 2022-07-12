@@ -375,6 +375,13 @@ def ensure_dir_exists(path) -> str:
     return path
 
 
+def maybe_ensure_dir_exists(path, mkdir: bool) -> str:
+    if mkdir:
+        return ensure_dir_exists(path)
+    else:
+        return path
+
+
 def safe_ensure_dir_exists(path):
     """Should be safer in multi-treaded environment."""
     try:
@@ -397,23 +404,23 @@ def get_username():
         return str(uid)
 
 
-def project_tmp_dir():
+def project_tmp_dir(mkdir: bool = True) -> str:
     tmp_dir_name = f"sample_factory_{get_username()}"
-    return ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name))
+    return maybe_ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name), mkdir)
 
 
-def experiments_dir(cfg) -> str:
-    return ensure_dir_exists(cfg.train_dir)
+def experiments_dir(cfg, mkdir=True) -> str:
+    return maybe_ensure_dir_exists(cfg.train_dir, mkdir)
 
 
-def experiment_dir(cfg) -> str:
+def experiment_dir(cfg, mkdir=True) -> str:
     experiment = cfg.experiment
-    experiments_root = experiments_dir(cfg)
-    return ensure_dir_exists(join(experiments_root, experiment))
+    experiments_root = experiments_dir(cfg, mkdir)
+    return maybe_ensure_dir_exists(join(experiments_root, experiment), mkdir)
 
 
-def summaries_dir(experiment_dir_):
-    return ensure_dir_exists(join(experiment_dir_, ".summary"))
+def summaries_dir(experiment_dir_, mkdir=True) -> str:
+    return maybe_ensure_dir_exists(join(experiment_dir_, ".summary"), mkdir)
 
 
 def cfg_file(cfg):

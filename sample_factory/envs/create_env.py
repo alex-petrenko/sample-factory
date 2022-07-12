@@ -1,15 +1,21 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from sample_factory.algo.utils.context import global_env_registry
+from sample_factory.utils.typing import Config
+from sample_factory.utils.utils import AttrDict
 
 
-def create_env(full_env_name, cfg=None, env_config=None):
+# TODO: type hint for the return type?
+def create_env(
+    full_env_name: str,
+    cfg: Optional[Config] = None,
+    env_config: Optional[AttrDict] = None,
+):
     """
     Factory function that creates environment instances.
-    Matches full_env_name with env family prefixes registered in the REGISTRY and calls make_env_func()
-    for the first match.
-
-    :param full_env_name: complete name of the environment, starting with the prefix of registered environment family,
-    e.g. atari_breakout, or doom_battle. Passed to make_env_func() for further processing by the specific env family
-    factory (see doom_utils.py or dmlab_env.py)
+    :param full_env_name: complete name of the environment
     :param cfg: namespace with full system configuration, output of argparser (or AttrDict when loaded from JSON)
     :param env_config: AttrDict with additional system information:
     env_config = AttrDict(worker_index=self.worker_idx, vector_index=vector_idx, env_id=env_id)
@@ -18,6 +24,10 @@ def create_env(full_env_name, cfg=None, env_config=None):
     """
 
     env_registry = global_env_registry()
-    env_registry_entry = env_registry.resolve_env_name(full_env_name)
-    env = env_registry_entry.make_env_func(full_env_name, cfg=cfg, env_config=env_config)
+
+    if full_env_name not in env_registry:
+        raise ValueError(f"Env name {full_env_name} is not registered. See register_env()!")
+
+    env_factory = env_registry[full_env_name]
+    env = env_factory(full_env_name, cfg, env_config)
     return env

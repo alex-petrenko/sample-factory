@@ -143,4 +143,4 @@ wandb/
 *~
 
 cmake-build*
-sample_factory/envs/doom/multiplayer/tests/_vizdoom/
+sf_examples/vizdoom_examples/doom/multiplayer/tests/_vizdoom/

@@ -1,9 +1,10 @@
 import json
 import math
 import multiprocessing
+import shutil
 import time
 from collections import OrderedDict, deque
-from os.path import join
+from os.path import isdir, join
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -18,6 +19,7 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
+from sample_factory.cfg.arguments import cfg_dict, cfg_str
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from sample_factory.utils.dicts import iterate_recursively
@@ -118,10 +120,6 @@ class Runner(EventLoopObject, Configurable):
         self.batchers: Dict[PolicyID, Batcher] = dict()
         self.inference_workers: Dict[PolicyID, List[InferenceWorker]] = dict()
         self.rollout_workers: List[RolloutWorker] = []
-
-        self._save_cfg()
-        save_git_diff(experiment_dir(cfg=self.cfg))
-        init_file_logger(experiment_dir(self.cfg))
 
         self.timing = Timing("Runner profile")
 
@@ -464,16 +462,11 @@ class Runner(EventLoopObject, Configurable):
     def register_policy_msg_handler(self, key, func):
         self._register_msg_handler(self.policy_msg_handlers, key, func)
 
-    def _cfg_dict(self):
-        if isinstance(self.cfg, dict):
-            return self.cfg
-        else:
-            return vars(self.cfg)
-
     def _save_cfg(self):
-        cfg_dict = self._cfg_dict()
-        with open(cfg_file(self.cfg), "w") as json_file:
-            json.dump(cfg_dict, json_file, indent=2)
+        fname = cfg_file(self.cfg)
+        with open(fname, "w") as json_file:
+            log.debug(f"Saving configuration to {fname}...")
+            json.dump(cfg_dict(self.cfg), json_file, indent=2)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
@@ -499,6 +492,36 @@ class Runner(EventLoopObject, Configurable):
         return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info)
 
     def init(self):
+        log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
+
+        init_file_logger(experiment_dir(self.cfg))
+        exp_dir = experiment_dir(self.cfg, mkdir=False)
+        if isdir(exp_dir):
+            log.debug(f"Experiment dir {exp_dir} already exists!")
+            if self.cfg.restart_behavior == "resume":
+                log.debug(f"Resuming existing experiment from {exp_dir}...")
+            else:
+                if self.cfg.restart_behavior == "restart":
+                    attempt = 0
+                    old_exp_dir = exp_dir
+                    while isdir(old_exp_dir):
+                        attempt += 1
+                        old_exp_dir = f"{exp_dir}_old{attempt:04d}"
+
+                    # move the existing experiment dir to a new one with a suffix
+                    log.debug(f"Moving the existing experiment dir to {old_exp_dir}...")
+                    shutil.move(exp_dir, old_exp_dir)
+                elif self.cfg.restart_behavior == "overwrite":
+                    log.debug(f"Overwriting the existing experiment dir {exp_dir}...")
+                    shutil.rmtree(exp_dir)
+                else:
+                    raise ValueError(f"Unknown restart behavior {self.cfg.restart_behavior}")
+
+                log.debug(f"Starting training in {exp_dir}...")
+
+        self._save_cfg()
+        save_git_diff(experiment_dir(cfg=self.cfg))
+
         set_global_cuda_envvars(self.cfg)
         self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)

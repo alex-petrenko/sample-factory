@@ -1,4 +1,3 @@
-import sys
 import time
 from collections import deque
 
@@ -11,7 +10,8 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import load_from_checkpoint, parse_args
+from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
+from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.utils import AttrDict, log
@@ -66,6 +66,10 @@ def enjoy(cfg, max_num_frames=1e9):
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
+            for key, x in obs.items():
+                device, dtype = actor_critic.device_and_type_for_input_tensor(key)
+                obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+
             normalized_obs = actor_critic.normalize_obs(obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
@@ -77,6 +81,9 @@ def enjoy(cfg, max_num_frames=1e9):
                 if not cfg.continuous_actions_sample:  # TODO: add similar option for discrete actions
                     actions = action_distribution.means
 
+            # actions shape should be [num_agents, num_actions] even if it's [1, 1]
+            if actions.ndim == 1:
+                actions = unsqueeze_tensor(actions, dim=-1)
             actions = preprocess_actions(env_info, actions)  # TODO: move this to some utils module
 
             rnn_states = policy_outputs["new_rnn_states"]
@@ -92,6 +99,8 @@ def enjoy(cfg, max_num_frames=1e9):
                         time.sleep(time_wait)
 
                     last_render_start = time.time()
+                    # TODO to render atari, need to add mode, will totally fix it in one week
+                    # env.render(mode='rgb_array')
                     env.render()
 
                 obs, rew, dones, infos = env.step(actions)
@@ -129,6 +138,8 @@ def enjoy(cfg, max_num_frames=1e9):
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
                     if not cfg.no_render:
+                        # TODO to render atari, need to add mode, will totally fix it in one week
+                        # env.render(mode='rgb_array')
                         env.render()
                     time.sleep(0.05)
 
@@ -166,14 +177,3 @@ def enjoy(cfg, max_num_frames=1e9):
     env.close()
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
-
-
-def main():
-    """Script entry point."""
-    cfg = parse_args(evaluation=True)
-    status, avg_reward = enjoy(cfg)
-    return status
-
-
-if __name__ == "__main__":
-    sys.exit(main())
