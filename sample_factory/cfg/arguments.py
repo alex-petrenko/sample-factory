@@ -13,6 +13,7 @@ from sample_factory.cfg.cfg import (
     add_rl_args,
     add_wandb_args,
 )
+from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import AttrDict, cfg_file, get_git_commit_hash, log
 
 
@@ -88,7 +89,7 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
     return args
 
 
-def verify_cfg(cfg: argparse.Namespace) -> None:
+def verify_cfg(cfg: Config) -> None:
     """
     Do some checks to make sure this is a viable configuration.
     The fact that configuration passes these checks does not guarantee that it is 100% valid,
@@ -110,6 +111,21 @@ def verify_cfg(cfg: argparse.Namespace) -> None:
         )
 
 
+def cfg_dict(cfg: Config) -> AttrDict:
+    if isinstance(cfg, dict):
+        return AttrDict(cfg)
+    else:
+        return AttrDict(vars(cfg))
+
+
+def cfg_str(cfg: Config) -> str:
+    cfg = cfg_dict(cfg)
+    cfg_lines = []
+    for k, v in cfg.items():
+        cfg_lines.append(f"{k}={v}")
+    return "\n".join(cfg_lines)
+
+
 def default_cfg(algo="APPO", env="env", experiment="test"):
     """Useful for tests."""
     argv = [f"--algo={algo}", f"--env={env}", f"--experiment={experiment}"]
@@ -118,10 +134,10 @@ def default_cfg(algo="APPO", env="env", experiment="test"):
     return args
 
 
-def load_from_checkpoint(cfg):
+def load_from_checkpoint(cfg: Config) -> AttrDict:
     filename = cfg_file(cfg)
     if not os.path.isfile(filename):
-        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment}")
+        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment} (file {filename} not found)")
 
     with open(filename, "r") as json_file:
         json_params = json.load(json_file)
@@ -143,7 +159,12 @@ def load_from_checkpoint(cfg):
     return loaded_cfg
 
 
-def maybe_load_from_checkpoint(cfg):
+def maybe_load_from_checkpoint(cfg: Config) -> AttrDict:
+    """
+    Will attempt to load experiment configuration from the checkpoint while preserving any new overrides passed
+    from command line.
+    """
+
     filename = cfg_file(cfg)
     if not os.path.isfile(filename):
         log.warning("Saved parameter configuration for experiment %s not found!", cfg.experiment)

@@ -18,7 +18,7 @@ class TestAtari:
     def make_env(env_config):
         from sf_examples.atari_examples.atari_utils import make_atari_env
 
-        return make_atari_env("atari_breakout", cfg=default_cfg(env="atari_breakout"))
+        return make_atari_env("atari_breakout", cfg=default_cfg(env="atari_breakout"), env_config=None)
 
     def test_atari_performance(self):
         eval_env_performance(self.make_env, "atari")

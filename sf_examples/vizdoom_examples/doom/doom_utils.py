@@ -223,18 +223,6 @@ def doom_env_by_name(name):
     raise RuntimeError("Unknown Doom env")
 
 
-def register_additional_doom_env(doom_spec):
-    try:
-        spec = doom_env_by_name(doom_spec.name)
-        log.error("Doom env spec %s already exists", spec.name)
-        return
-    except RuntimeError:
-        pass
-
-    log.debug("Registering Doom environment %s...", doom_spec.name)
-    DOOM_ENVS.append(doom_spec)
-
-
 # noinspection PyUnusedLocal
 def make_doom_env_impl(
     doom_spec,
@@ -377,6 +365,15 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
 
 def make_doom_env(env_name, cfg, env_config, **kwargs):
     spec = doom_env_by_name(env_name)
+    return make_doom_env_from_spec(spec, env_name, cfg, env_config, **kwargs)
+
+
+def make_doom_env_from_spec(spec, _env_name, cfg, env_config, **kwargs):
+    """
+    Makes a Doom environment from a DoomSpec instance.
+    _env_name is unused but we keep it, so functools.partial(make_doom_env_from_spec, env_spec) can registered
+    in Sample Factory (first argument in make_env_func is expected to be the env_name).
+    """
 
     if "record_to" in cfg and cfg.record_to:
         tstamp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
