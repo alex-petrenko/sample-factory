@@ -121,7 +121,7 @@ def default_cfg(algo="APPO", env="env", experiment="test"):
 def load_from_checkpoint(cfg):
     filename = cfg_file(cfg)
     if not os.path.isfile(filename):
-        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment}")
+        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment} (file {filename} not found)")
 
     with open(filename, "r") as json_file:
         json_params = json.load(json_file)

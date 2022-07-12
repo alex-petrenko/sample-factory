@@ -56,6 +56,11 @@ class TestExample:
         cfg.normalize_returns = True
         cfg.with_vtrace = False
 
+        directory = experiment_dir(cfg=cfg, mkdir=False)
+        if isdir(directory):
+            # remove any previous unfinished test dirs so they don't interfere with this test
+            shutil.rmtree(directory, ignore_errors=True)
+
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
 
@@ -67,7 +72,6 @@ class TestExample:
         cfg.device = "cpu"
         status, avg_reward = enjoy(cfg, max_num_frames=1000)
 
-        directory = experiment_dir(cfg=cfg)
         assert isdir(directory)
         shutil.rmtree(directory, ignore_errors=True)
 

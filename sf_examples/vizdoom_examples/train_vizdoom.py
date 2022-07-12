@@ -1,3 +1,4 @@
+import functools
 import sys
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
@@ -6,12 +7,13 @@ from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.train import run_rl
 from sf_examples.vizdoom_examples.doom.doom_model import VizdoomEncoder
 from sf_examples.vizdoom_examples.doom.doom_params import add_doom_env_args, doom_override_defaults
-from sf_examples.vizdoom_examples.doom.doom_utils import DOOM_ENVS, make_doom_env
+from sf_examples.vizdoom_examples.doom.doom_utils import DOOM_ENVS, make_doom_env_from_spec
 
 
 def register_vizdoom_envs():
-    for env in DOOM_ENVS:
-        register_env(env.name, make_doom_env)
+    for env_spec in DOOM_ENVS:
+        make_env_func = functools.partial(make_doom_env_from_spec, env_spec)
+        register_env(env_spec.name, make_env_func)
 
 
 def register_vizdoom_models():
