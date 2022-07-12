@@ -35,7 +35,7 @@ def mujoco_env_by_name(name):
     raise Exception("Unknown Mujoco env")
 
 
-def make_mujoco_env(env_name, cfg, **kwargs):
+def make_mujoco_env(env_name, _cfg, _env_config, **kwargs):
     mujoco_spec = mujoco_env_by_name(env_name)
     env = gym.make(mujoco_spec.env_id)
     return env
