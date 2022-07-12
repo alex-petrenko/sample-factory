@@ -1,6 +1,5 @@
-import numpy as np
-
 import gym
+import numpy as np
 
 from sample_factory.algo.utils.spaces.discretized import Discretized
 

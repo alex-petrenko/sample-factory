@@ -6,7 +6,7 @@ class QuadsAdditionalInputWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
 
-        obs_space = gym.spaces.Box(-5.0, 5.0, shape=(21, ))
+        obs_space = gym.spaces.Box(-5.0, 5.0, shape=(21,))
         self.observation_space = obs_space
 
     def _modify_obs(self, obs):

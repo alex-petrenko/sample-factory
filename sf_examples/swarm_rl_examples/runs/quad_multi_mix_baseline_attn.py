@@ -1,19 +1,20 @@
-from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
+from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sf_examples.swarm_rl_examples.runs.quad_multi_mix_baseline import QUAD_BASELINE_CLI
 
-from sample_factory_examples.swarm_rl_examples.runs.quad_multi_mix_baseline import QUAD_BASELINE_CLI
-
-_params = ParamGrid([
-    ('quads_neighbor_encoder_type', ['attention']),
-    ('seed', [0000, 1111, 2222, 3333]),
-])
+_params = ParamGrid(
+    [
+        ("quads_neighbor_encoder_type", ["attention"]),
+        ("seed", [0000, 1111, 2222, 3333]),
+    ]
+)
 
 _experiment = Experiment(
-    'quad_mix_baseline-8_mixed_attn',
+    "quad_mix_baseline-8_mixed_attn",
     QUAD_BASELINE_CLI,
     _params.generate_params(randomize=False),
 )
 
-RUN_DESCRIPTION = RunDescription('paper_quads_multi_mix_baseline_8a_attn_v116', experiments=[_experiment])
+RUN_DESCRIPTION = RunDescription("paper_quads_multi_mix_baseline_8a_attn_v116", experiments=[_experiment])
 
 # On Brain server, when you use num_workers = 72, if the system reports: Resource temporarily unavailable,
 # then, try to use two commands below
