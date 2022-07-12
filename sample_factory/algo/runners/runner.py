@@ -19,6 +19,7 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
+from sample_factory.cfg.arguments import cfg_dict, cfg_str
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from sample_factory.utils.dicts import iterate_recursively
@@ -461,16 +462,11 @@ class Runner(EventLoopObject, Configurable):
     def register_policy_msg_handler(self, key, func):
         self._register_msg_handler(self.policy_msg_handlers, key, func)
 
-    def _cfg_dict(self):
-        if isinstance(self.cfg, dict):
-            return self.cfg
-        else:
-            return vars(self.cfg)
-
     def _save_cfg(self):
-        cfg_dict = self._cfg_dict()
-        with open(cfg_file(self.cfg), "w") as json_file:
-            json.dump(cfg_dict, json_file, indent=2)
+        fname = cfg_file(self.cfg)
+        with open(fname, "w") as json_file:
+            log.debug(f"Saving configuration to {fname}...")
+            json.dump(cfg_dict(self.cfg), json_file, indent=2)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
@@ -496,6 +492,8 @@ class Runner(EventLoopObject, Configurable):
         return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info)
 
     def init(self):
+        log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
+
         init_file_logger(experiment_dir(self.cfg))
         exp_dir = experiment_dir(self.cfg, mkdir=False)
         if isdir(exp_dir):
