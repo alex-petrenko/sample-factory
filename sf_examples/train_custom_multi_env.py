@@ -108,8 +108,8 @@ def register_custom_components():
     register_custom_encoder("custom_env_encoder", CustomEncoder)
 
 
-def parse_custom_args(evaluation=False):
-    parser, cfg = parse_sf_args(evaluation=evaluation)
+def parse_custom_args(argv=None, evaluation=False):
+    parser, cfg = parse_sf_args(argv=argv, evaluation=evaluation)
     add_extra_params_func(parser)
     override_default_params(parser)
     # second parsing pass yields the final configuration

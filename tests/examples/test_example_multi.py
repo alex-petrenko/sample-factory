@@ -4,11 +4,10 @@ from os.path import isdir
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import parse_args
 from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import experiment_dir
-from sf_examples.train_custom_multi_env import register_custom_components
+from sf_examples.train_custom_multi_env import parse_custom_args, register_custom_components
 
 
 class TestExampleMulti:
@@ -26,7 +25,7 @@ class TestExampleMulti:
         register_custom_components()
 
         # test training for a few thousand frames
-        cfg = parse_args(argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}"])
+        cfg = parse_custom_args(argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}"])
         cfg.num_workers = 6
         cfg.train_for_env_steps = 350000
         cfg.save_every_sec = 1
@@ -39,7 +38,7 @@ class TestExampleMulti:
         assert status == ExperimentStatus.SUCCESS
 
         # then test the evaluation of the saved model
-        cfg = parse_args(
+        cfg = parse_custom_args(
             argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}", "--device=cpu"],
             evaluation=True,
         )
