@@ -4,7 +4,8 @@ from sample_factory.cfg.arguments import maybe_load_from_checkpoint, verify_cfg
 
 
 def run_rl(cfg):
-    cfg = maybe_load_from_checkpoint(cfg)
+    if cfg.restart_behavior == "resume":
+        cfg = maybe_load_from_checkpoint(cfg)
 
     # check for any incompatible arguments
     verify_cfg(cfg)
