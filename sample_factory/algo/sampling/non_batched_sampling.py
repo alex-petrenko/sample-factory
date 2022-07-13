@@ -219,6 +219,10 @@ class ActorState:
         trajectories = []
         buffers_used = set()
 
+        if len(np.unique(self.curr_traj_buffer["policy_id"])) > 1:
+            # TODO: dbg
+            log.debug(f"Multiple policies in trajectory buffer: {self.curr_traj_buffer['policy_id']}")
+
         for policy_id in np.unique(self.curr_traj_buffer["policy_id"]):
             policy_id = int(policy_id)
             if policy_id == -1:
