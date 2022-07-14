@@ -1,7 +1,8 @@
 ## Installing swarm-rl
 1. Clone https://github.com/Zhehui-Huang/quad-swarm-rl into your home directory
-2. Follow the instructions in the repo to create the conda environment
-3. Install the gym_art folder by adding  `export PATH=$PATH:~/quad-swarm-rl` to your .bashrc
+2. Follow the instructions in the repo to create the conda environment - `cd ~/quad-swarm-rl` then `pip install -e .`
+- Note: if you have any error with bezier, run `BEZIER_NO_EXTENSION=true pip install bezier==2020.5.19` then `pip install -e .`
+4. Install the gym_art folder by adding  `export PATH=$PATH:~/quad-swarm-rl` to your .bashrc
 
 ## Running an example
 ```
