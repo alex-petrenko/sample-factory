@@ -1,4 +1,4 @@
-## How to use SF2 on Slurm
+# How to use SF2 on Slurm
 
 This doc contains instructions for running Sample-Factory v2 using slurm
 
