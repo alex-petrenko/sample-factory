@@ -1,5 +1,7 @@
 ## How to use SF2 on Slurm
 
+This doc contains instructions for running Sample-Factory v2 on USC's brain cluster
+
 ### Logging in
 
 Login to `brain.usc.edu` using ssh with your username and password.
