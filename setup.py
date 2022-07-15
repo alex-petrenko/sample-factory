@@ -30,7 +30,7 @@ setup(
     install_requires=[
         "numpy>=1.18.1<2.0",
         "torch>=1.6,<1.12",
-        "gym>=0.17.1,<0.25",
+        "gym>=0.17.1,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
         "tensorboardx>=2.0",
@@ -45,7 +45,7 @@ setup(
     extras_require={
         "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit"],
         "atari": ["gym[atari, accept-rom-license]"],
-        "mujoco": ["gym[mujoco, mujoco_py]"],
+        "mujoco": ["gym[mujoco]"],
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
     },
     package_dir={"": "./"},
