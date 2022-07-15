@@ -195,7 +195,6 @@ class InferenceWorker(EventLoopObject, Configurable):
                 for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
                     index = [traj_buffer_idx, rollout_step]
                     indices.append(index)
-                    self.total_num_samples += 1
 
             indices = tuple(np.array(indices).T)
             traj_tensors = self.traj_tensors[device]  # TODO: multiple sampling devices?
