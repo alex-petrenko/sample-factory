@@ -1,56 +1,34 @@
-import shutil
-from os.path import isdir
-
 import pytest
 
-from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import parse_args
-from sample_factory.enjoy import enjoy
-from sample_factory.train import run_rl
-from sample_factory.utils.utils import experiment_dir
 from sf_examples.train_custom_multi_env import register_custom_components
+from tests.examples.test_example import run_test_env
+
+
+def run_test_env_multi(train_steps: int, num_workers: int, expected_reward_at_least: float, **kwargs):
+    return run_test_env(
+        num_workers=num_workers,
+        experiment_name="test_example_multi",
+        register_custom_components_func=register_custom_components,
+        env_name="my_custom_multi_env_v1",
+        expected_reward_at_least=expected_reward_at_least,
+        train_steps=train_steps,
+        num_policies=2,
+        **kwargs,
+    )
 
 
 class TestExampleMulti:
-    """
-    This test does not work if other tests used PyTorch autograd before it.
-    Caused by PyTorch issue that is not easy to work around: https://github.com/pytorch/pytorch/issues/33248
-    Run this test separately from other tests.
-
-    """
-
-    @pytest.mark.skip("broken tests not fixed yet")
-    def test_example_multi(self):
-        experiment_name = "test_example_multi"
-
-        register_custom_components()
-
-        # test training for a few thousand frames
-        cfg = parse_args(argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}"])
-        cfg.num_workers = 6
-        cfg.train_for_env_steps = 350000
-        cfg.save_every_sec = 1
-        cfg.decorrelate_experience_max_seconds = 0
-        cfg.seed = 0
-        cfg.device = "cpu"
-        cfg.num_policies = 2
-
-        status = run_rl(cfg)
-        assert status == ExperimentStatus.SUCCESS
-
-        # then test the evaluation of the saved model
-        cfg = parse_args(
-            argv=["--algo=APPO", "--env=my_custom_multi_env_v1", f"--experiment={experiment_name}", "--device=cpu"],
-            evaluation=True,
+    def test_sanity(self):
+        run_test_env_multi(
+            train_steps=128, num_workers=1, serial_mode=True, async_rl=False, expected_reward_at_least=-1000
         )
-        status, avg_reward = enjoy(cfg, max_num_frames=200)
 
-        directory = experiment_dir(cfg=cfg)
-        assert isdir(directory)
-        shutil.rmtree(directory, ignore_errors=True)
-
-        assert status == ExperimentStatus.SUCCESS
-
-        # not sure if we should check it here, it's optional
-        # maybe a longer test where it actually has a chance to converge
-        assert avg_reward > -1.3
+    @pytest.mark.skip(reason="TODO: fix this test")
+    def test_example_multi(self):
+        run_test_env_multi(
+            train_steps=350000,
+            num_workers=8,
+            expected_reward_at_least=-1.3,
+            serial_mode=True,
+            async_rl=False,
+        )  # TODO disable serial mode

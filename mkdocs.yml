@@ -121,6 +121,7 @@ nav:
     - get-started/installation.md
     - get-started/basic-usage.md
     - get-started/running-experiments.md
+    - get-started/running-slurm.md
   - Release Notes:
     - release-notes/release-notes.md
   - Community:

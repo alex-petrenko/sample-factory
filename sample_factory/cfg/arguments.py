@@ -10,9 +10,11 @@ from sample_factory.cfg.cfg import (
     add_default_env_args,
     add_eval_args,
     add_model_args,
+    add_pbt_args,
     add_rl_args,
     add_wandb_args,
 )
+from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import AttrDict, cfg_file, get_git_commit_hash, log
 
 
@@ -38,6 +40,7 @@ def parse_sf_args(
     add_model_args(p)
     add_default_env_args(p)
     add_wandb_args(p)
+    add_pbt_args(p)
 
     if evaluation:
         add_eval_args(p)
@@ -88,26 +91,53 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
     return args
 
 
-def verify_cfg(cfg: argparse.Namespace) -> None:
+def verify_cfg(cfg: Config) -> bool:
     """
     Do some checks to make sure this is a viable configuration.
     The fact that configuration passes these checks does not guarantee that it is 100% valid,
     there are more checks sprinkled throughout the codebase.
     It is better to add new checks here if possible since we check only once instead of doing this over and
     over again in the training loop.
+
+    cfg: the configuration to verify
+    returns: True if the configuration is valid, False otherwise.
     """
+    good_config = True
     if cfg.normalize_returns and cfg.with_vtrace:
         # When we use vtrace the logic for calculating returns is different - we need to recalculate them
         # on every minibatch, because important sampling depends on the trained policy.
         # Current implementation of normalized returns assumed that we can calculate returns once per experience
         # batch.
-        raise ValueError("Normalized returns are not supported with vtrace!")
+        log.error("Normalized returns are not supported with vtrace!")
+        good_config = False
 
     if cfg.async_rl and cfg.serial_mode:
         log.warning(
             "In serial mode all components run on the same process. Only use async_rl "
             "and serial mode together for debugging."
         )
+
+    if cfg.num_policies > 1 and cfg.batched_sampling:
+        log.warning(
+            "In batched mode we're using a single policy per worker which does not allow us to use multiple different policies in the same env (see policy_manager.py)."
+        )
+
+    return good_config
+
+
+def cfg_dict(cfg: Config) -> AttrDict:
+    if isinstance(cfg, dict):
+        return AttrDict(cfg)
+    else:
+        return AttrDict(vars(cfg))
+
+
+def cfg_str(cfg: Config) -> str:
+    cfg = cfg_dict(cfg)
+    cfg_lines = []
+    for k, v in cfg.items():
+        cfg_lines.append(f"{k}={v}")
+    return "\n".join(cfg_lines)
 
 
 def default_cfg(algo="APPO", env="env", experiment="test"):
@@ -118,10 +148,10 @@ def default_cfg(algo="APPO", env="env", experiment="test"):
     return args
 
 
-def load_from_checkpoint(cfg):
+def load_from_checkpoint(cfg: Config) -> AttrDict:
     filename = cfg_file(cfg)
     if not os.path.isfile(filename):
-        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment}")
+        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment} (file {filename} not found)")
 
     with open(filename, "r") as json_file:
         json_params = json.load(json_file)
@@ -143,7 +173,12 @@ def load_from_checkpoint(cfg):
     return loaded_cfg
 
 
-def maybe_load_from_checkpoint(cfg):
+def maybe_load_from_checkpoint(cfg: Config) -> AttrDict:
+    """
+    Will attempt to load experiment configuration from the checkpoint while preserving any new overrides passed
+    from command line.
+    """
+
     filename = cfg_file(cfg)
     if not os.path.isfile(filename):
         log.warning("Saved parameter configuration for experiment %s not found!", cfg.experiment)

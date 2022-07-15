@@ -64,7 +64,8 @@ class CustomMultiEnv(gym.Env):
                 if random.random() < 0.005:
                     self.inactive_steps[agent_idx] = random.randint(1, 48)
 
-            infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
+            # TODO: enable this back
+            # infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
 
         self.curr_episode_steps += 1
 
@@ -108,8 +109,8 @@ def register_custom_components():
     register_custom_encoder("custom_env_encoder", CustomEncoder)
 
 
-def parse_custom_args(evaluation=False):
-    parser, cfg = parse_sf_args(evaluation=evaluation)
+def parse_custom_args(argv=None, evaluation=False):
+    parser, cfg = parse_sf_args(argv=argv, evaluation=evaluation)
     add_extra_params_func(parser)
     override_default_params(parser)
     # second parsing pass yields the final configuration

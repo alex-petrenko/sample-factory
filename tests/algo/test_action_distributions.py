@@ -87,8 +87,8 @@ class TestActionDistributions:
             log.debug("Sampling timing: %s", timing)
             time.sleep(0.1)  # to finish logging
 
-    @pytest.mark.parametrize("num_spaces", [random.randint(1, 4)])
-    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(random.randint(2, 5))])
+    @pytest.mark.parametrize("num_spaces", [1, 4])
+    @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(1), gym.spaces.Discrete(3)])
     @pytest.mark.parametrize("batch_size", [128])
     def test_tuple_distribution(self, num_spaces, gym_space, batch_size):
         spaces = [gym_space for _ in range(num_spaces)]

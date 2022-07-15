@@ -1,9 +1,9 @@
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import parse_args
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
+from sf_examples.atari_examples.train_atari import parse_atari_args
 
 
 class TestAtariEnv:
@@ -28,7 +28,7 @@ class TestAtariEnv:
 
         experiment_name = "test_" + env
 
-        cfg = parse_args(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
+        cfg = parse_atari_args(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
         cfg.async_rl = async_rl
         cfg.batched_sampling = batched_sampling

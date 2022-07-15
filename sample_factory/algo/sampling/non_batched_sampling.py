@@ -4,12 +4,12 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.policy_manager import PolicyManager
 from sample_factory.algo.utils.tensor_dict import to_numpy
-from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array, unsqueeze_tensor
+from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
@@ -218,6 +218,10 @@ class ActorState:
         # The part of the experience that belongs to a different policy will be ignored on the learner.
         trajectories = []
         buffers_used = set()
+
+        if len(np.unique(self.curr_traj_buffer["policy_id"])) > 1:
+            # TODO: dbg
+            log.debug(f"Multiple policies in trajectory buffer: {self.curr_traj_buffer['policy_id']}")
 
         for policy_id in np.unique(self.curr_traj_buffer["policy_id"]):
             policy_id = int(policy_id)

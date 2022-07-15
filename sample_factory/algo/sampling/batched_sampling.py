@@ -37,7 +37,7 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     # discrete action envs typically expect to get the action index when there's only one action. So we squeeze the
     # second dimension for integer action envs.
     assert actions.ndim == 2, f"Expected actions to have two dimensions, got {actions}"
-    if env_info.integer_actions:
+    if env_info.integer_actions and actions.shape[1] == 1:
         actions = actions.squeeze(-1)
 
     return actions

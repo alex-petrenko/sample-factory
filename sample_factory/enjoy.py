@@ -99,6 +99,8 @@ def enjoy(cfg, max_num_frames=1e9):
                         time.sleep(time_wait)
 
                     last_render_start = time.time()
+                    # TODO to render atari, need to add mode, will totally fix it in one week
+                    # env.render(mode='rgb_array')
                     env.render()
 
                 obs, rew, dones, infos = env.step(actions)
@@ -136,6 +138,8 @@ def enjoy(cfg, max_num_frames=1e9):
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
                     if not cfg.no_render:
+                        # TODO to render atari, need to add mode, will totally fix it in one week
+                        # env.render(mode='rgb_array')
                         env.render()
                     time.sleep(0.05)
 
