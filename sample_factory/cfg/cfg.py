@@ -544,6 +544,9 @@ def add_default_env_args(p: ArgumentParser):
     p.add_argument(
         "--pixel_format", default="CHW", type=str, help="PyTorch expects CHW by default, Ray & TensorFlow expect HWC"
     )
+    p.add_argument(
+        "--multiply_frameskip", default=True, type=str2bool, help="Whether to multiply frameskip for training steps"
+    )
 
 
 def add_eval_args(parser):

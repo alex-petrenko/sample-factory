@@ -170,7 +170,10 @@ class ActorState:
         self.has_rollout_data = self.has_rollout_data or self.is_active
 
         # multiply by frameskip to get the episode lenghts matching the actual number of simulated steps
-        self.last_episode_duration += self.env_info.frameskip
+        if self.cfg.multiply_frameskip:
+            self.last_episode_duration += self.env_info.frameskip
+        else:
+            self.last_episode_duration += 1
 
         self.is_active = info.get("is_active", True)
 

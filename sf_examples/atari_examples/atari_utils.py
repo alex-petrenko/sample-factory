@@ -1,10 +1,17 @@
 import gym
 
 from sample_factory.envs.env_wrappers import (
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    FrameStack,
+    MaxAndSkipEnv,
+    NoopResetEnv,
     PixelFormatChwWrapper,
     ResizeWrapper,
     SkipAndStackFramesWrapper,
     SkipFramesWrapper,
+    StackFramesWrapper,
 )
 
 ATARI_W = ATARI_H = 84
@@ -28,6 +35,7 @@ ATARI_ENVS = [
     AtariSpec("atari_gravitar", "GravitarNoFrameskip-v4"),
     AtariSpec("atari_mspacman", "MsPacmanNoFrameskip-v4"),
     AtariSpec("atari_seaquest", "SeaquestNoFrameskip-v4"),
+    AtariSpec("atari_beamrider", "BeamRiderNoFrameskip-v4"),
 ]
 
 
@@ -38,7 +46,6 @@ def atari_env_by_name(name):
     raise Exception("Unknown Atari env")
 
 
-# noinspection PyUnusedLocal
 def make_atari_env(env_name, cfg, env_config, **kwargs):
     atari_spec = atari_env_by_name(env_name)
 
@@ -48,27 +55,15 @@ def make_atari_env(env_name, cfg, env_config, **kwargs):
     if atari_spec.default_timeout is not None:
         env._max_episode_steps = atari_spec.default_timeout
 
-    assert "NoFrameskip" in env.spec.id
-
-    # if 'Montezuma' in atari_cfg.env_id or 'Pitfall' in atari_cfg.env_id:
-    #     env = AtariVisitedRoomsInfoWrapper(env)
-
-    add_channel_dim = cfg.env_framestack == 1
-    env = ResizeWrapper(
-        env,
-        ATARI_W,
-        ATARI_H,
-        grayscale=True,
-        add_channel_dim=add_channel_dim,
-        area_interpolation=False,
-    )
-
-    pixel_format = cfg.pixel_format if "pixel_format" in cfg else "HWC"
-    if pixel_format == "CHW" and add_channel_dim:
-        env = PixelFormatChwWrapper(env)
-
-    if cfg.env_framestack == 1:
-        env = SkipFramesWrapper(env, skip_frames=cfg.env_frameskip)
-    else:
-        env = SkipAndStackFramesWrapper(env, skip_frames=cfg.env_frameskip, stack_frames=4, channel_config="CHW")
+    env = gym.wrappers.RecordEpisodeStatistics(env)
+    env = NoopResetEnv(env, noop_max=30)
+    env = MaxAndSkipEnv(env, skip=4)
+    env = EpisodicLifeEnv(env)
+    if "FIRE" in env.unwrapped.get_action_meanings():
+        env = FireResetEnv(env)
+    env = ClipRewardEnv(env)
+    env = gym.wrappers.ResizeObservation(env, (84, 84))
+    env = gym.wrappers.GrayScaleObservation(env)
+    env = FrameStack(env, 4)
+    # env = StackFramesWrapper(env, stack_past_frames=4, channel_config="CHW")
     return env
