@@ -561,6 +561,11 @@ def add_eval_args(parser):
         help="Repeat an action that many frames during evaluation. By default uses the value from env config (used during training).",
     )
     parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
+    
+    parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
+    parser.add_argument("--video_frames", default=0, type=int, help="Number of frames to render for the video")
+    parser.add_argument("--video_name", default="replay.mp4", type=str, help="Name of video to save")
+    
     parser.add_argument(
         "--policy_index", default=0, type=int, help="Policy to evaluate in case of multi-policy training"
     )

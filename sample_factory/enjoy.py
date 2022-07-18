@@ -3,6 +3,7 @@ from collections import deque
 
 import numpy as np
 import torch
+import cv2
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
@@ -56,6 +57,9 @@ def enjoy(cfg, max_num_frames=1e9):
 
     last_render_start = time.time()
 
+    if cfg.save_video:
+        max_num_frames = cfg.video_frames
+
     def max_frames_reached(frames):
         return max_num_frames is not None and frames > max_num_frames
 
@@ -63,6 +67,8 @@ def enjoy(cfg, max_num_frames=1e9):
     rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False] * env.num_agents
+
+    video_frames = []
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
@@ -101,7 +107,10 @@ def enjoy(cfg, max_num_frames=1e9):
                     last_render_start = time.time()
                     # TODO to render atari, need to add mode, will totally fix it in one week
                     # env.render(mode='rgb_array')
-                    env.render()
+                    if cfg.save_video:
+                        video_frames.append(env.render(mode='rgb_array'))
+                    else:
+                        env.render()
 
                 obs, rew, dones, infos = env.step(actions)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
@@ -140,7 +149,10 @@ def enjoy(cfg, max_num_frames=1e9):
                     if not cfg.no_render:
                         # TODO to render atari, need to add mode, will totally fix it in one week
                         # env.render(mode='rgb_array')
-                        env.render()
+                        if cfg.save_video:
+                            video_frames.append(env.render(mode='rgb_array'))
+                        else:
+                            env.render()
                     time.sleep(0.05)
 
                 if all(finished_episode):
@@ -174,6 +186,17 @@ def enjoy(cfg, max_num_frames=1e9):
                 #     if key in infos[0]:
                 #         log.debug('Score for player %d: %r', player, infos[0][key])
 
+    if cfg.save_video:
+        if cfg.fps > 0:
+            fps = cfg.fps
+        else:
+            fps = 20
+        frame_size = (video_frames[0].shape[0], video_frames[0].shape[1])
+        video = cv2.VideoWriter(cfg.video_name, cv2.VideoWriter_fourcc('m', 'p', '4', 'v'), fps, frame_size)
+        for frame in video_frames:
+            video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        video.release()
+    
     env.close()
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
