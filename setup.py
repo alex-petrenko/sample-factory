@@ -45,7 +45,7 @@ setup(
     extras_require={
         "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit"],
         "atari": ["gym[atari, accept-rom-license]"],
-        "mujoco": ["gym[mujoco]", "mujoco", "mujoco_py>=2.0,<3.0"],
+        "mujoco": ["gym[mujoco]"],
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
     },
     package_dir={"": "./"},
