@@ -1,7 +1,8 @@
-from huggingface_hub import HfApi, upload_folder, repocard, snapshot_download
-import os
 import json
+import os
 from argparse import ArgumentParser
+
+from huggingface_hub import HfApi, repocard, snapshot_download, upload_folder
 
 
 def generate_metadata():
@@ -15,30 +16,29 @@ def generate_metadata():
     return metadata
 
 
-def generate_model_card(dir_path : str):
+def generate_model_card(dir_path: str):
     readme_path = dir_path + "/README.md"
     cfg_path = dir_path + "/cfg.json"
     if os.path.exists(readme_path):
         # Skip creating README if one already exists
         return
-    
+
     with open(cfg_path, "r") as json_file:
         cfg = json.load(json_file)
 
     readme = f"""
 A(n) **{cfg["algo"]}** model trained on the **{cfg["env"]}** environment.
 This model was trained using Sample Factory 2.0: https://github.com/alex-petrenko/sample-factory
-    """    
+    """
 
     with open(readme_path, "w", encoding="utf-8") as f:
         f.write(readme)
-    
+
     metadata = generate_metadata()
     repocard.metadata_save(readme_path, metadata)
 
 
-
-def push_model_to_new_repo(dir_path : str, repo_name : str):
+def push_model_to_new_repo(dir_path: str, repo_name: str):
     HfApi().create_repo(
         repo_id=repo_name,
         private=False,

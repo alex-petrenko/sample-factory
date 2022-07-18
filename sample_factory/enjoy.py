@@ -1,9 +1,9 @@
 import time
 from collections import deque
 
+import cv2
 import numpy as np
 import torch
-import cv2
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
@@ -108,7 +108,7 @@ def enjoy(cfg, max_num_frames=1e9):
                     # TODO to render atari, need to add mode, will totally fix it in one week
                     # env.render(mode='rgb_array')
                     if cfg.save_video:
-                        video_frames.append(env.render(mode='rgb_array'))
+                        video_frames.append(env.render(mode="rgb_array"))
                     else:
                         env.render()
 
@@ -150,7 +150,7 @@ def enjoy(cfg, max_num_frames=1e9):
                         # TODO to render atari, need to add mode, will totally fix it in one week
                         # env.render(mode='rgb_array')
                         if cfg.save_video:
-                            video_frames.append(env.render(mode='rgb_array'))
+                            video_frames.append(env.render(mode="rgb_array"))
                         else:
                             env.render()
                     time.sleep(0.05)
@@ -192,11 +192,11 @@ def enjoy(cfg, max_num_frames=1e9):
         else:
             fps = 20
         frame_size = (video_frames[0].shape[0], video_frames[0].shape[1])
-        video = cv2.VideoWriter(cfg.video_name, cv2.VideoWriter_fourcc('m', 'p', '4', 'v'), fps, frame_size)
+        video = cv2.VideoWriter(cfg.video_name, cv2.VideoWriter_fourcc("m", "p", "4", "v"), fps, frame_size)
         for frame in video_frames:
             video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         video.release()
-    
+
     env.close()
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
