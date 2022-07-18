@@ -4,8 +4,8 @@ from typing import List, Optional, Tuple, Union
 import gym
 import numpy as np
 
-from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.cfg.arguments import parse_args
+from sample_factory.envs.env_utils import register_env
+from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.train import run_rl
 
 
@@ -54,7 +54,7 @@ class IdentityEnvMixedActions(gym.Env):
         return
 
 
-def override_defaults(env, parser):
+def override_defaults(parser):
     parser.set_defaults(
         batched_sampling=False,
         num_workers=4,
@@ -76,19 +76,22 @@ def make_env(env_name, cfg, **kwargs):
 
 
 def register_test_components():
-    global_env_registry().register_env(
-        env_name_prefix="non_batched_mix_dist_env",
-        make_env_func=make_env,
-        add_extra_params_func=None,
-        override_default_params_func=override_defaults,
+    register_env(
+        "non_batched_mix_dist_env",
+        make_env,
     )
 
 
 def test_non_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    cfg = parse_args(
-        argv=["--algo=APPO", "--env=non_batched_mix_dist_env", f"--experiment=test_non_batched_mixed_action_dists"]
+    
+
+    parser, cfg = parse_sf_args(
+        argv=["--algo=APPO", "--env=non_batched_mix_dist_env", "--experiment=test_non_batched_mixed_action_dists"]
     )
+    override_defaults(parser)
+    cfg = parse_full_cfg(parser)
+
     status = run_rl(cfg)
     return status

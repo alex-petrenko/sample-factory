@@ -3,9 +3,8 @@ from typing import List, Optional, Tuple, Union
 
 import gym
 import numpy as np
-
-from sample_factory.algo.utils.context import global_env_registry
-from sample_factory.cfg.arguments import parse_args
+from sample_factory.envs.env_utils import register_env
+from sample_factory.cfg.arguments import parse_sf_args
 from sample_factory.train import run_rl
 
 
@@ -119,7 +118,7 @@ def make_env(env_name, cfg, **kwargs):
 
 
 def register_test_components():
-    global_env_registry().register_env(
+    register_env(
         env_name_prefix="batched_mix_dist_env",
         make_env_func=make_env,
         add_extra_params_func=None,
@@ -130,7 +129,7 @@ def register_test_components():
 def test_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    cfg = parse_args(
+    cfg = parse_sf_args(
         argv=["--algo=APPO", "--env=batched_mix_dist_env", f"--experiment=test_batched_mixed_action_dists"]
     )
     status = run_rl(cfg)
