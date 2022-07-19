@@ -25,7 +25,7 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     because in this case the action is usually expected to be a scalar.
 
     """
-    if isinstance(env_info.action_space, gym.spaces.Discrete):
+    if env_info.all_discrete or isinstance(env_info.action_space, gym.spaces.Discrete):
         return process_action_space(actions, env_info.gpu_actions, True)
 
     if isinstance(env_info.action_space, gym.spaces.Box):

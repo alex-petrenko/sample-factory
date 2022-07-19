@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import gym
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.policy_manager import PolicyManager
@@ -138,7 +138,7 @@ class ActorState:
         """
         actions = ensure_numpy_array(self.last_actions)
 
-        if isinstance(self.env_info.action_space, gym.spaces.Discrete):
+        if self.env_info.all_discrete or isinstance(self.env_info.action_space, gym.spaces.Discrete):
             return self.calculate_actions(actions, True)
 
         if isinstance(self.env_info.action_space, gym.spaces.Box):

@@ -9,12 +9,12 @@ from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 
 
-class IdentityEnvMixedActions(gym.Env):
+class IdentityEnvTwoDiscreteActions(gym.Env):
     def __init__(self, size=4):
         self.observation_space = gym.spaces.Box(-1, 1, shape=(size,))
         self._observation_space = gym.spaces.Discrete(size)
 
-        self.action_space = gym.spaces.Tuple([gym.spaces.Discrete(size), gym.spaces.Box(-1, 1, shape=(size,))])
+        self.action_space = gym.spaces.Tuple([gym.spaces.Discrete(size), gym.spaces.Discrete(size * 3)])
         self.ep_length = 10
         self.num_resets = -1  # Becomes 0 after __init__ exits.
         self.eps = 0.05
@@ -26,13 +26,11 @@ class IdentityEnvMixedActions(gym.Env):
         self._choose_next_state()
         return self.state
 
-    def _get_reward(self, action: Union[int, np.ndarray]) -> float:
-        discrete_reward = 1.0 if np.argmax(self.state) == action[0] else 0.0
-        continuous_reward = (
-            1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
-        )
+    def _get_reward(self, action: Union[int, int]) -> float:
+        discrete_reward1 = 1.0 if np.argmax(self.state) == action[0] else 0.0
+        discrete_reward2 = 1.0 if np.argmax(self.state) * 3 == (len(self.state) - action[1] - 1) else 0.0
 
-        return discrete_reward + continuous_reward
+        return discrete_reward1 + discrete_reward2
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -41,6 +39,7 @@ class IdentityEnvMixedActions(gym.Env):
         self.state = state
 
     def step(self, action: List[np.ndarray]):
+        print(action, type(action))
         reward = self._get_reward(action)
         self._choose_next_state()
         self.current_step += 1
@@ -72,21 +71,21 @@ def override_defaults(parser):
 
 
 def make_env(env_name, cfg, cfg_env):
-    return IdentityEnvMixedActions(4)
+    return IdentityEnvTwoDiscreteActions(4)
 
 
 def register_test_components():
     register_env(
-        "non_batched_mix_dist_env",
+        "non_batched_two_discete_dist_env",
         make_env,
     )
 
 
-def test_non_batched_mixed_action_dists():
+def test_non_batched_two_discrete_action_dists():
     """Script entry point."""
     register_test_components()
 
-    argv = ["--algo=APPO", "--env=non_batched_mix_dist_env", "--experiment=test_non_batched_mixed_action_dists"]
+    argv = ["--algo=APPO", "--env=non_batched_two_discete_dist_env", "--experiment=test_non_batched_two_discete_dists"]
 
     parser, cfg = parse_sf_args(argv=argv)
     override_defaults(parser)

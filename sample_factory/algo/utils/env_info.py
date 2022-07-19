@@ -39,6 +39,7 @@ class EnvInfo:
     num_agents: int
     gpu_actions: bool  # whether actions provided by the agent should be on GPU or not
     action_splits: List[int]  # in the case of tuple actions, the splits for the actions
+    all_discrete: List[int]  # in the case of tuple actions, whether the actions are all discrete
     frameskip: int
 
 
@@ -57,8 +58,10 @@ def extract_env_info(env, cfg):
     # if self.cfg.with_pbt:
     #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
     action_splits = None
+    all_discrete = None
     if isinstance(action_space, gym.spaces.Tuple):
         action_splits = [calc_num_actions(space) for space in action_space]
+        all_discrete = is_all_discrete(action_space)
 
     env_info = EnvInfo(
         obs_space=obs_space,
@@ -66,9 +69,18 @@ def extract_env_info(env, cfg):
         num_agents=num_agents,
         gpu_actions=gpu_actions,
         action_splits=action_splits,
+        all_discrete=all_discrete,
         frameskip=frameskip,
     )
     return env_info
+
+
+def is_all_discrete(action_space: gym.spaces.Tuple) -> bool:
+    all_discrete = True
+    for space in action_space:
+        all_discrete = all_discrete and isinstance(space, gym.spaces.Discrete)
+
+    return all_discrete
 
 
 def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
