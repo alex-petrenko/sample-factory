@@ -564,7 +564,12 @@ def add_eval_args(parser):
 
     parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
     parser.add_argument("--video_frames", default=0, type=int, help="Number of frames to render for the video")
-    parser.add_argument("--video_name", default="replay.mp4", type=str, help="Name of video to save")
+    parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
+    parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
+
+    parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
+    parser.add_argument("--hf_username", default=None, type=str, help="HuggingFace username")
+    parser.add_argument("--hf_repository", default=None, type=str, help="Name of HuggingFace repository")
 
     parser.add_argument(
         "--policy_index", default=0, type=int, help="Policy to evaluate in case of multi-policy training"

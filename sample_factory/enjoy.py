@@ -1,7 +1,6 @@
 import time
 from collections import deque
 
-import cv2
 import numpy as np
 import torch
 
@@ -15,10 +14,11 @@ from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueez
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.huggingface_utils import generate_model_card, generate_replay_video, push_model_to_repo
+from sample_factory.utils.utils import AttrDict, experiment_dir, log
 
 
-def enjoy(cfg, max_num_frames=1e9):
+def enjoy(cfg):
     cfg = load_from_checkpoint(cfg)
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
@@ -57,11 +57,10 @@ def enjoy(cfg, max_num_frames=1e9):
 
     last_render_start = time.time()
 
-    if cfg.save_video:
-        max_num_frames = cfg.video_frames
-
     def max_frames_reached(frames):
-        return max_num_frames is not None and frames > max_num_frames
+        return cfg.max_num_frames is not None and frames > cfg.max_num_frames
+
+    reward_list = []
 
     obs = env.reset()
     rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
@@ -108,7 +107,9 @@ def enjoy(cfg, max_num_frames=1e9):
                     # TODO to render atari, need to add mode, will totally fix it in one week
                     # env.render(mode='rgb_array')
                     if cfg.save_video:
-                        video_frames.append(env.render(mode="rgb_array"))
+                        frame = env.render(mode="rgb_array")
+                        if num_frames < cfg.video_frames:
+                            video_frames.append(frame)
                     else:
                         env.render()
 
@@ -128,6 +129,7 @@ def enjoy(cfg, max_num_frames=1e9):
                         finished_episode[agent_i] = True
                         rew = episode_reward[agent_i].item()
                         episode_rewards[agent_i].append(rew)
+                        reward_list.append(rew)
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):
@@ -150,7 +152,9 @@ def enjoy(cfg, max_num_frames=1e9):
                         # TODO to render atari, need to add mode, will totally fix it in one week
                         # env.render(mode='rgb_array')
                         if cfg.save_video:
-                            video_frames.append(env.render(mode="rgb_array"))
+                            frame = env.render(mode="rgb_array")
+                            if num_frames < cfg.video_frames:
+                                video_frames.append(frame)
                         else:
                             env.render()
                     time.sleep(0.05)
@@ -186,17 +190,17 @@ def enjoy(cfg, max_num_frames=1e9):
                 #     if key in infos[0]:
                 #         log.debug('Score for player %d: %r', player, infos[0][key])
 
+    env.close()
+
     if cfg.save_video:
         if cfg.fps > 0:
             fps = cfg.fps
         else:
             fps = 20
-        frame_size = (video_frames[0].shape[0], video_frames[0].shape[1])
-        video = cv2.VideoWriter(cfg.video_name, cv2.VideoWriter_fourcc("m", "p", "4", "v"), fps, frame_size)
-        for frame in video_frames:
-            video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        video.release()
+        generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps)
 
-    env.close()
+    if cfg.push_to_hub:
+        generate_model_card(cfg, reward_list)
+        push_model_to_repo(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}")
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
