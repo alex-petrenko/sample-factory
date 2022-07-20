@@ -2,9 +2,8 @@
 site_name: Sample-Factory Doc
 
 # Repository
-# [TODO] change to Aleksei
-repo_name: wmFrank/sample-factory
-repo_url: https://github.com/wmFrank/sample-factory
+repo_name: alex-petrenko/sample-factory
+repo_url: https://github.com/alex-petrenko/sample-factory
 
 # Configuration
 theme:
@@ -122,6 +121,8 @@ nav:
     - get-started/basic-usage.md
     - get-started/running-experiments.md
     - get-started/running-slurm.md
+  - Environment Integrations:
+    - environment-integrations/mujoco.md
   - Release Notes:
     - release-notes/release-notes.md
   - Community:

@@ -18,9 +18,8 @@ Install Miniconda
 Make new conda environment `conda create --name sf2` then `conda activate sf2`
 
 Install dependencies for sf2
-- `cd sample-factory`
 - `git checkout sf2`
-- `pip install -e .`
+- `pip install sample-factory`
 
 ### Necessary scripts in SF2
 
