@@ -201,6 +201,6 @@ def enjoy(cfg):
 
     if cfg.push_to_hub:
         generate_model_card(cfg, reward_list)
-        push_model_to_repo(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}")
+        push_model_to_repo(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", policy_id)
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)

@@ -57,7 +57,7 @@ This model was trained using Sample Factory 2.0: https://github.com/alex-petrenk
     repocard.metadata_save(readme_path, metadata)
 
 
-def push_model_to_repo(dir_path: str, repo_name: str):
+def push_model_to_repo(dir_path: str, repo_name: str, policy_id: int):
     HfApi().create_repo(
         repo_id=repo_name,
         private=False,
@@ -65,7 +65,7 @@ def push_model_to_repo(dir_path: str, repo_name: str):
     )
 
     # Upload folders
-    folders = ["checkpoint_p0", ".summary"]
+    folders = [f"checkpoint_p{policy_id}", ".summary"]
     for f in folders:
         if os.path.exists(os.path.join(dir_path, f)):
             upload_folder(
