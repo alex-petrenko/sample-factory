@@ -17,43 +17,50 @@ class DoomAdditionalInput(gym.Wrapper):
         ammo_low = [0.0] * self.num_weapons
         low = [0.0, 0.0, -1.0, -1.0, -50.0, 0.0, 0.0] + weapons_low + ammo_low
 
-        weapons_high = [5.0] * self.num_weapons  # can have multiple weapons in the same slot?
+        weapons_high = [
+            5.0
+        ] * self.num_weapons  # can have multiple weapons in the same slot?
         ammo_high = [50.0] * self.num_weapons
         high = [20.0, 50.0, 50.0, 50.0, 50.0, 1.0, 10.0] + weapons_high + ammo_high
 
-        self.observation_space = gym.spaces.Dict({
-            'obs': current_obs_space,
-            'measurements': gym.spaces.Box(
-                low=np.array(low, dtype=np.float32), high=np.array(high, dtype=np.float32),
-            ),
-        })
+        self.observation_space = gym.spaces.Dict(
+            {
+                "obs": current_obs_space,
+                "measurements": gym.spaces.Box(
+                    low=np.array(low, dtype=np.float32),
+                    high=np.array(high, dtype=np.float32),
+                ),
+            }
+        )
 
         num_measurements = len(low)
         self.measurements_vec = np.zeros([num_measurements], dtype=np.float32)
 
     def _parse_info(self, obs, info):
-        obs_dict = {'obs': obs, 'measurements': self.measurements_vec}
+        obs_dict = {"obs": obs, "measurements": self.measurements_vec}
 
         # by default these are negative values if no weapon is selected
-        selected_weapon = info.get('SELECTED_WEAPON', 0.0)
+        selected_weapon = info.get("SELECTED_WEAPON", 0.0)
         selected_weapon = round(max(0, selected_weapon))
-        selected_weapon_ammo = max(0.0, info.get('SELECTED_WEAPON_AMMO', 0.0))
+        selected_weapon_ammo = max(0.0, info.get("SELECTED_WEAPON_AMMO", 0.0))
 
         # similar to DFP paper, scaling all measurements so that they are small numbers
         selected_weapon_ammo /= 15.0
         selected_weapon_ammo = min(selected_weapon_ammo, 5.0)
 
         # we don't really care how much negative health we have, dead is dead
-        info['HEALTH'] = max(0.0, info.get('HEALTH', 0.0))
-        health = info.get('HEALTH', 0.0) / 30.0
-        armor = info.get('ARMOR', 0.0) / 30.0
-        kills = info.get('USER2', 0.0) / 10.0  # only works in battle and battle2, this is not really useful
-        attack_ready = info.get('ATTACK_READY', 0.0)
-        num_players = info.get('PLAYER_COUNT', 1) / 5.0
+        info["HEALTH"] = max(0.0, info.get("HEALTH", 0.0))
+        health = info.get("HEALTH", 0.0) / 30.0
+        armor = info.get("ARMOR", 0.0) / 30.0
+        kills = (
+            info.get("USER2", 0.0) / 10.0
+        )  # only works in battle and battle2, this is not really useful
+        attack_ready = info.get("ATTACK_READY", 0.0)
+        num_players = info.get("PLAYER_COUNT", 1) / 5.0
 
         # TODO add FRAGCOUNT to the input, so agents know when they are winning/losing
 
-        measurements = obs_dict['measurements']
+        measurements = obs_dict["measurements"]
 
         i = 0
         measurements[i] = float(selected_weapon)
@@ -72,11 +79,13 @@ class DoomAdditionalInput(gym.Wrapper):
         i += 1
 
         for weapon in range(self.num_weapons):
-            measurements[i] = float(max(0.0, info.get(f'WEAPON{weapon}', 0.0)))
+            measurements[i] = float(max(0.0, info.get(f"WEAPON{weapon}", 0.0)))
             i += 1
         for weapon in range(self.num_weapons):
-            ammo = float(max(0.0, info.get(f'AMMO{weapon}', 0.0)))
-            ammo /= 15.0  # scaling factor similar to DFP paper (to keep everything small)
+            ammo = float(max(0.0, info.get(f"AMMO{weapon}", 0.0)))
+            ammo /= (
+                15.0  # scaling factor similar to DFP paper (to keep everything small)
+            )
             ammo = min(ammo, 5.0)  # to avoid values that are too big
             measurements[i] = ammo
             i += 1

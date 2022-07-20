@@ -4,7 +4,13 @@ ENV_REGISTRY = None
 
 
 class EnvRegistryEntry:
-    def __init__(self, env_name_prefix, make_env_func, add_extra_params_func=None, override_default_params_func=None):
+    def __init__(
+        self,
+        env_name_prefix,
+        make_env_func,
+        add_extra_params_func=None,
+        override_default_params_func=None,
+    ):
         self.env_name_prefix = env_name_prefix
         self.make_env_func = make_env_func
         self.add_extra_params_func = add_extra_params_func
@@ -16,7 +22,11 @@ class EnvRegistry:
         self.registry = dict()
 
     def register_env(
-            self, env_name_prefix, make_env_func, add_extra_params_func=None, override_default_params_func=None,
+        self,
+        env_name_prefix,
+        make_env_func,
+        add_extra_params_func=None,
+        override_default_params_func=None,
     ):
         """
         A standard thing to do in RL frameworks is to just rely on unique environment names registered in Gym.
@@ -51,19 +61,24 @@ class EnvRegistry:
 
         """
 
-        assert callable(make_env_func), 'make_env_func should be callable'
+        assert callable(make_env_func), "make_env_func should be callable"
 
-        entry = EnvRegistryEntry(env_name_prefix, make_env_func, add_extra_params_func, override_default_params_func)
+        entry = EnvRegistryEntry(
+            env_name_prefix,
+            make_env_func,
+            add_extra_params_func,
+            override_default_params_func,
+        )
         self.registry[env_name_prefix] = entry
 
-        log.debug('Env registry entry created: %s', env_name_prefix)
+        log.debug("Env registry entry created: %s", env_name_prefix)
 
     def register_env_deferred(self, env_name_prefix, register_env_family_func):
         """Same as register_env but we defer the creation of the registry entry until we actually need it."""
         assert callable(register_env_family_func)
 
         self.registry[env_name_prefix] = register_env_family_func
-        
+
     def resolve_env_name(self, full_env_name):
         """
         :param full_env_name: complete name of the environment, to be passed to the make_env_func, e.g. atari_breakout
@@ -77,44 +92,69 @@ class EnvRegistry:
 
             # We found a match. If it's a callable, we should first handle a deferred registry entry
             if callable(registry_entry):
-                make_env_func, add_extra_params_func, override_default_params_func = registry_entry()
-                self.register_env(env_prefix, make_env_func, add_extra_params_func, override_default_params_func)
+                (
+                    make_env_func,
+                    add_extra_params_func,
+                    override_default_params_func,
+                ) = registry_entry()
+                self.register_env(
+                    env_prefix,
+                    make_env_func,
+                    add_extra_params_func,
+                    override_default_params_func,
+                )
 
             return self.registry[env_prefix]
 
-        msg = (f'Could not resolve {full_env_name}. '
-               'Did you register the family of environments in the registry? See sample_factory_examples for details.')
+        msg = (
+            f"Could not resolve {full_env_name}. "
+            "Did you register the family of environments in the registry? See sample_factory_examples for details."
+        )
         log.warning(msg)
         raise RuntimeError(msg)
 
 
 def doom_funcs():
+    from sample_factory.envs.doom.doom_params import (
+        add_doom_env_args,
+        doom_override_defaults,
+    )
     from sample_factory.envs.doom.doom_utils import make_doom_env
-    from sample_factory.envs.doom.doom_params import add_doom_env_args, doom_override_defaults
+
     return make_doom_env, add_doom_env_args, doom_override_defaults
 
 
 def atari_funcs():
-    from sample_factory.envs.atari.atari_utils import make_atari_env
     from sample_factory.envs.atari.atari_params import atari_override_defaults
+    from sample_factory.envs.atari.atari_utils import make_atari_env
+
     return make_atari_env, None, atari_override_defaults
 
 
 def dmlab_funcs():
     from sample_factory.envs.dmlab.dmlab_env import make_dmlab_env
-    from sample_factory.envs.dmlab.dmlab_params import add_dmlab_env_args, dmlab_override_defaults
+    from sample_factory.envs.dmlab.dmlab_params import (
+        add_dmlab_env_args,
+        dmlab_override_defaults,
+    )
+
     return make_dmlab_env, add_dmlab_env_args, dmlab_override_defaults
 
 
 def mujoco_funcs():
+    from sample_factory.envs.mujoco.mujoco_params import (
+        add_mujoco_env_args,
+        mujoco_override_defaults,
+    )
     from sample_factory.envs.mujoco.mujoco_utils import make_mujoco_env
-    from sample_factory.envs.mujoco.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
+
     return make_mujoco_env, add_mujoco_env_args, mujoco_override_defaults
 
 
 def minigrid_funcs():
-    from sample_factory.envs.minigrid.minigrid_utils import make_minigrid_env
     from sample_factory.envs.minigrid.minigrid_params import minigrid_override_defaults
+    from sample_factory.envs.minigrid.minigrid_utils import make_minigrid_env
+
     return make_minigrid_env, None, minigrid_override_defaults
 
 
@@ -127,17 +167,19 @@ def register_default_envs(env_registry):
     """
 
     default_envs = {
-        'doom_': doom_funcs,
-        'atari_': atari_funcs,
-        'dmlab_': dmlab_funcs,
-        'mujoco_': mujoco_funcs,
-        'MiniGrid': minigrid_funcs,
+        "doom_": doom_funcs,
+        "atari_": atari_funcs,
+        "dmlab_": dmlab_funcs,
+        "mujoco_": mujoco_funcs,
+        "MiniGrid": minigrid_funcs,
     }
 
     for envs_prefix, env_funcs in default_envs.items():
         env_registry.register_env_deferred(envs_prefix, env_funcs)
 
-    log.debug('Default env families supported: %r', [f'{k}*' for k in default_envs.keys()])
+    log.debug(
+        "Default env families supported: %r", [f"{k}*" for k in default_envs.keys()]
+    )
 
 
 def ensure_env_registry_initialized():

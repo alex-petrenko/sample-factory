@@ -4,12 +4,14 @@ import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
 
-from sample_factory.algorithms.utils.action_distributions import calc_num_logits, get_action_distribution, is_continuous_action_space
+from sample_factory.algorithms.utils.action_distributions import (
+    calc_num_logits,
+    get_action_distribution,
+    is_continuous_action_space,
+)
 from sample_factory.algorithms.utils.algo_utils import EPS
 from sample_factory.algorithms.utils.pytorch_utils import calc_num_elements
-from sample_factory.utils.utils import AttrDict
-from sample_factory.utils.utils import log
-
+from sample_factory.utils.utils import AttrDict, log
 
 # register custom encoders
 ENCODER_REGISTRY = dict()
@@ -17,11 +19,17 @@ ENCODER_REGISTRY = dict()
 
 def register_custom_encoder(custom_encoder_name, encoder_cls):
     if custom_encoder_name in ENCODER_REGISTRY:
-        log.warning('Encoder %s already registered', custom_encoder_name)
+        log.warning("Encoder %s already registered", custom_encoder_name)
 
-    assert issubclass(encoder_cls, EncoderBase), 'Custom encoders must be derived from EncoderBase'
+    assert issubclass(
+        encoder_cls, EncoderBase
+    ), "Custom encoders must be derived from EncoderBase"
 
-    log.debug('Adding model class %r to registry (with name %s)', encoder_cls, custom_encoder_name)
+    log.debug(
+        "Adding model class %r to registry (with name %s)",
+        encoder_cls,
+        custom_encoder_name,
+    )
     ENCODER_REGISTRY[custom_encoder_name] = encoder_cls
 
 
@@ -31,7 +39,7 @@ def get_hidden_size(cfg):
     else:
         size = 1
 
-    if cfg.rnn_type == 'lstm':
+    if cfg.rnn_type == "lstm":
         size *= 2
 
     if not cfg.actor_critic_share_weights:
@@ -46,19 +54,19 @@ def fc_after_encoder_size(cfg):
 
 
 def nonlinearity(cfg):
-    if cfg.nonlinearity == 'elu':
+    if cfg.nonlinearity == "elu":
         return nn.ELU(inplace=True)
-    elif cfg.nonlinearity == 'relu':
+    elif cfg.nonlinearity == "relu":
         return nn.ReLU(inplace=True)
-    elif cfg.nonlinearity == 'tanh':
+    elif cfg.nonlinearity == "tanh":
         return nn.Tanh()
     else:
-        raise Exception('Unknown nonlinearity')
+        raise Exception("Unknown nonlinearity")
 
 
 def get_obs_shape(obs_space):
     obs_shape = AttrDict()
-    if hasattr(obs_space, 'spaces'):
+    if hasattr(obs_space, "spaces"):
         for key, space in obs_space.spaces.items():
             obs_shape[key] = space.shape
     else:
@@ -72,14 +80,14 @@ def normalize_obs(obs_dict, cfg):
         mean = cfg.obs_subtract_mean
         scale = cfg.obs_scale
 
-        if obs_dict['obs'].dtype != torch.float:
-            obs_dict['obs'] = obs_dict['obs'].float()
+        if obs_dict["obs"].dtype != torch.float:
+            obs_dict["obs"] = obs_dict["obs"].float()
 
         if abs(mean) > EPS:
-            obs_dict['obs'].sub_(mean)
+            obs_dict["obs"].sub_(mean)
 
         if abs(scale - 1.0) > EPS:
-            obs_dict['obs'].mul_(1.0 / scale)
+            obs_dict["obs"].mul_(1.0 / scale)
 
 
 class EncoderBase(nn.Module):
@@ -90,7 +98,9 @@ class EncoderBase(nn.Module):
         self.timing = timing
 
         self.fc_after_enc = None
-        self.encoder_out_size = -1  # to be initialized in the constuctor of derived class
+        self.encoder_out_size = (
+            -1
+        )  # to be initialized in the constuctor of derived class
 
     def get_encoder_out_size(self):
         return self.encoder_out_size
@@ -102,10 +112,12 @@ class EncoderBase(nn.Module):
         for i in range(self.cfg.encoder_extra_fc_layers):
             size = input_size if i == 0 else fc_layer_size
 
-            layers.extend([
-                nn.Linear(size, fc_layer_size),
-                nonlinearity(self.cfg),
-            ])
+            layers.extend(
+                [
+                    nn.Linear(size, fc_layer_size),
+                    nonlinearity(self.cfg),
+                ]
+            )
 
         if len(layers) > 0:
             self.fc_after_enc = nn.Sequential(*layers)
@@ -138,18 +150,28 @@ class ConvEncoder(EncoderBase):
         we devote a separate module to it to be able to use torch.jit.script (hopefully benefit from some layer
         fusion).
         """
-        def __init__(self, activation, conv_filters, fc_layer_size, encoder_extra_fc_layers, obs_shape):
+
+        def __init__(
+            self,
+            activation,
+            conv_filters,
+            fc_layer_size,
+            encoder_extra_fc_layers,
+            obs_shape,
+        ):
             super(ConvEncoder.ConvEncoderImpl, self).__init__()
             conv_layers = []
             for layer in conv_filters:
-                if layer == 'maxpool_2x2':
+                if layer == "maxpool_2x2":
                     conv_layers.append(nn.MaxPool2d((2, 2)))
                 elif isinstance(layer, (list, tuple)):
                     inp_ch, out_ch, filter_size, stride = layer
-                    conv_layers.append(nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride))
+                    conv_layers.append(
+                        nn.Conv2d(inp_ch, out_ch, filter_size, stride=stride)
+                    )
                     conv_layers.append(activation)
                 else:
-                    raise NotImplementedError(f'Layer {layer} not supported!')
+                    raise NotImplementedError(f"Layer {layer} not supported!")
 
             self.conv_head = nn.Sequential(*conv_layers)
             self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
@@ -172,29 +194,31 @@ class ConvEncoder(EncoderBase):
 
         obs_shape = get_obs_shape(obs_space)
         input_ch = obs_shape.obs[0]
-        log.debug('Num input channels: %d', input_ch)
+        log.debug("Num input channels: %d", input_ch)
 
-        if cfg.encoder_subtype == 'convnet_simple':
+        if cfg.encoder_subtype == "convnet_simple":
             conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
-        elif cfg.encoder_subtype == 'convnet_impala':
+        elif cfg.encoder_subtype == "convnet_impala":
             conv_filters = [[input_ch, 16, 8, 4], [16, 32, 4, 2]]
-        elif cfg.encoder_subtype == 'minigrid_convnet_tiny':
+        elif cfg.encoder_subtype == "minigrid_convnet_tiny":
             conv_filters = [[3, 16, 3, 1], [16, 32, 2, 1], [32, 64, 2, 1]]
         else:
-            raise NotImplementedError(f'Unknown encoder {cfg.encoder_subtype}')
+            raise NotImplementedError(f"Unknown encoder {cfg.encoder_subtype}")
 
         activation = nonlinearity(self.cfg)
         fc_layer_size = fc_after_encoder_size(self.cfg)
         encoder_extra_fc_layers = self.cfg.encoder_extra_fc_layers
 
-        enc = self.ConvEncoderImpl(activation, conv_filters, fc_layer_size, encoder_extra_fc_layers, obs_shape)
+        enc = self.ConvEncoderImpl(
+            activation, conv_filters, fc_layer_size, encoder_extra_fc_layers, obs_shape
+        )
         self.enc = torch.jit.script(enc)
 
         self.encoder_out_size = calc_num_elements(self.enc, obs_shape.obs)
-        log.debug('Encoder output size: %r', self.encoder_out_size)
+        log.debug("Encoder output size: %r", self.encoder_out_size)
 
     def forward(self, obs_dict):
-        return self.enc(obs_dict['obs'])
+        return self.enc(obs_dict["obs"])
 
 
 class ResBlock(nn.Module):
@@ -205,18 +229,22 @@ class ResBlock(nn.Module):
 
         layers = [
             nonlinearity(cfg),
-            nn.Conv2d(input_ch, output_ch, kernel_size=3, stride=1, padding=1),  # padding SAME
+            nn.Conv2d(
+                input_ch, output_ch, kernel_size=3, stride=1, padding=1
+            ),  # padding SAME
             nonlinearity(cfg),
-            nn.Conv2d(output_ch, output_ch, kernel_size=3, stride=1, padding=1),  # padding SAME
+            nn.Conv2d(
+                output_ch, output_ch, kernel_size=3, stride=1, padding=1
+            ),  # padding SAME
         ]
 
         self.res_block_core = nn.Sequential(*layers)
 
     def forward(self, x):
-        with self.timing.add_time('res_block'):
+        with self.timing.add_time("res_block"):
             identity = x
             out = self.res_block_core(x)
-            with self.timing.add_time('res_block_plus'):
+            with self.timing.add_time("res_block_plus"):
                 out = out + identity
             return out
 
@@ -227,21 +255,29 @@ class ResnetEncoder(EncoderBase):
 
         obs_shape = get_obs_shape(obs_space)
         input_ch = obs_shape.obs[0]
-        log.debug('Num input channels: %d', input_ch)
+        log.debug("Num input channels: %d", input_ch)
 
-        if cfg.encoder_subtype == 'resnet_impala':
+        if cfg.encoder_subtype == "resnet_impala":
             # configuration from the IMPALA paper
             resnet_conf = [[16, 2], [32, 2], [32, 2]]
         else:
-            raise NotImplementedError(f'Unknown resnet subtype {cfg.encoder_subtype}')
+            raise NotImplementedError(f"Unknown resnet subtype {cfg.encoder_subtype}")
 
         curr_input_channels = input_ch
         layers = []
         for i, (out_channels, res_blocks) in enumerate(resnet_conf):
-            layers.extend([
-                nn.Conv2d(curr_input_channels, out_channels, kernel_size=3, stride=1, padding=1),  # padding SAME
-                nn.MaxPool2d(kernel_size=3, stride=2, padding=1),  # padding SAME
-            ])
+            layers.extend(
+                [
+                    nn.Conv2d(
+                        curr_input_channels,
+                        out_channels,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                    ),  # padding SAME
+                    nn.MaxPool2d(kernel_size=3, stride=2, padding=1),  # padding SAME
+                ]
+            )
 
             for j in range(res_blocks):
                 layers.append(ResBlock(cfg, out_channels, out_channels, self.timing))
@@ -252,12 +288,12 @@ class ResnetEncoder(EncoderBase):
 
         self.conv_head = nn.Sequential(*layers)
         self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
-        log.debug('Convolutional layer output size: %r', self.conv_head_out_size)
+        log.debug("Convolutional layer output size: %r", self.conv_head_out_size)
 
         self.init_fc_blocks(self.conv_head_out_size)
 
     def forward(self, obs_dict):
-        x = self.conv_head(obs_dict['obs'])
+        x = self.conv_head(obs_dict["obs"])
         x = x.contiguous().view(-1, self.conv_head_out_size)
 
         x = self.forward_fc_blocks(x)
@@ -271,7 +307,7 @@ class MlpEncoder(EncoderBase):
         obs_shape = get_obs_shape(obs_space)
         assert len(obs_shape.obs) == 1
 
-        if cfg.encoder_subtype == 'mlp_mujoco':
+        if cfg.encoder_subtype == "mlp_mujoco":
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
                 nn.Linear(obs_shape.obs[0], fc_encoder_layer),
@@ -280,20 +316,22 @@ class MlpEncoder(EncoderBase):
                 nonlinearity(cfg),
             ]
         else:
-            raise NotImplementedError(f'Unknown mlp encoder {cfg.encoder_subtype}')
+            raise NotImplementedError(f"Unknown mlp encoder {cfg.encoder_subtype}")
 
         self.mlp_head = nn.Sequential(*encoder_layers)
         self.init_fc_blocks(fc_encoder_layer)
 
     def forward(self, obs_dict):
-        x = self.mlp_head(obs_dict['obs'])
+        x = self.mlp_head(obs_dict["obs"])
         x = self.forward_fc_blocks(x)
         return x
+
 
 def fc_layer(in_features, out_features, bias=True, spec_norm=False):
     if spec_norm:
         return spectral_norm(nn.Linear(in_features, out_features, bias))
     return nn.Linear(in_features, out_features, bias)
+
 
 def create_encoder(cfg, obs_space, timing):
     if cfg.encoder_custom:
@@ -306,14 +344,14 @@ def create_encoder(cfg, obs_space, timing):
 
 
 def create_standard_encoder(cfg, obs_space, timing):
-    if cfg.encoder_type == 'conv':
+    if cfg.encoder_type == "conv":
         encoder = ConvEncoder(cfg, obs_space, timing)
-    elif cfg.encoder_type == 'resnet':
+    elif cfg.encoder_type == "resnet":
         encoder = ResnetEncoder(cfg, obs_space, timing)
-    elif cfg.encoder_type == 'mlp':
+    elif cfg.encoder_type == "mlp":
         encoder = MlpEncoder(cfg, obs_space, timing)
     else:
-        raise Exception('Encoder type not supported')
+        raise Exception("Encoder type not supported")
 
     return encoder
 
@@ -336,13 +374,13 @@ class PolicyCoreRNN(PolicyCoreBase):
         self.cfg = cfg
         self.is_gru = False
 
-        if cfg.rnn_type == 'gru':
+        if cfg.rnn_type == "gru":
             self.core = nn.GRU(input_size, cfg.hidden_size, cfg.rnn_num_layers)
             self.is_gru = True
-        elif cfg.rnn_type == 'lstm':
+        elif cfg.rnn_type == "lstm":
             self.core = nn.LSTM(input_size, cfg.hidden_size, cfg.rnn_num_layers)
         else:
-            raise RuntimeError(f'Unknown RNN type {cfg.rnn_type}')
+            raise RuntimeError(f"Unknown RNN type {cfg.rnn_type}")
 
         self.core_output_size = cfg.hidden_size
         self.rnn_num_layers = cfg.rnn_num_layers
@@ -353,7 +391,9 @@ class PolicyCoreRNN(PolicyCoreBase):
             head_output = head_output.unsqueeze(0)
 
         if self.rnn_num_layers > 1:
-            rnn_states = rnn_states.view(rnn_states.size(0), self.cfg.rnn_num_layers, -1)
+            rnn_states = rnn_states.view(
+                rnn_states.size(0), self.cfg.rnn_num_layers, -1
+            )
             rnn_states = rnn_states.permute(1, 0, 2)
         else:
             rnn_states = rnn_states.unsqueeze(0)
@@ -421,7 +461,9 @@ class ActionParameterizationDefault(ActionsParameterizationBase):
     def forward(self, actor_core_output):
         """Just forward the FC layer and generate the distribution object."""
         action_distribution_params = self.distribution_linear(actor_core_output)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        action_distribution = get_action_distribution(
+            self.action_space, raw_logits=action_distribution_params
+        )
         return action_distribution_params, action_distribution
 
 
@@ -432,8 +474,9 @@ class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterizationB
         super().__init__(cfg, action_space)
 
         assert not cfg.adaptive_stddev
-        assert is_continuous_action_space(self.action_space), \
-            'Non-adaptive stddev makes sense only for continuous action spaces'
+        assert is_continuous_action_space(
+            self.action_space
+        ), "Non-adaptive stddev makes sense only for continuous action spaces"
 
         num_action_outputs = calc_num_logits(action_space)
 
@@ -451,5 +494,7 @@ class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterizationB
         batch_size = action_means.shape[0]
         action_stddevs = self.learned_stddev.repeat(batch_size, 1)
         action_distribution_params = torch.cat((action_means, action_stddevs), dim=1)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        action_distribution = get_action_distribution(
+            self.action_space, raw_logits=action_distribution_params
+        )
         return action_distribution_params, action_distribution

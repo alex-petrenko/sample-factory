@@ -8,12 +8,12 @@ from sample_factory.utils.utils import log
 
 
 class TestMinigrid(TestCase):
-    @unittest.skipUnless(minigrid_available(), 'Gym minigrid not installed')
+    @unittest.skipUnless(minigrid_available(), "Gym minigrid not installed")
     def test_minigrid_env(self):
-        env_name = 'MiniGrid-Empty-Random-5x5-v0'
+        env_name = "MiniGrid-Empty-Random-5x5-v0"
         env = create_env(env_name, cfg=default_cfg(env=env_name))
-        log.info('Env action space: %r', env.action_space)
-        log.info('Env obs space: %r', env.observation_space)
+        log.info("Env action space: %r", env.action_space)
+        log.info("Env obs space: %r", env.observation_space)
 
         env.reset()
         total_rew = 0
@@ -22,4 +22,3 @@ class TestMinigrid(TestCase):
             total_rew += rew
             if done:
                 env.reset()
-

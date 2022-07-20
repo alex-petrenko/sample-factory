@@ -31,8 +31,8 @@ def custom_parse_args(argv=None, evaluation=False):
 
 
 def make_gym_env_func(full_env_name, cfg=None, env_config=None):
-    assert full_env_name.startswith('gym_')
-    gym_env_name = full_env_name.split('gym_')[1]
+    assert full_env_name.startswith("gym_")
+    gym_env_name = full_env_name.split("gym_")[1]
     return gym.make(gym_env_name)
 
 
@@ -48,7 +48,7 @@ def override_default_params_func(env, parser):
 
 def register_custom_components():
     global_env_registry().register_env(
-        env_name_prefix='gym_',
+        env_name_prefix="gym_",
         make_env_func=make_gym_env_func,
         add_extra_params_func=add_extra_params_func,
         override_default_params_func=override_default_params_func,
@@ -63,5 +63,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

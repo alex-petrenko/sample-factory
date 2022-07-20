@@ -1,4 +1,5 @@
 import gym
+
 # noinspection PyUnresolvedReferences
 import gym_minigrid
 
@@ -12,12 +13,12 @@ class RenameImageObsWrapper(gym.ObservationWrapper):
         super().__init__(env)
 
         self.observation_space = env.observation_space
-        self.observation_space.spaces['obs'] = self.observation_space.spaces['image']
-        self.observation_space.spaces.pop('image')
+        self.observation_space.spaces["obs"] = self.observation_space.spaces["image"]
+        self.observation_space.spaces.pop("image")
 
     def observation(self, observation):
-        observation['obs'] = observation['image']
-        observation.pop('image')
+        observation["obs"] = observation["image"]
+        observation.pop("image")
         return observation
 
 
@@ -28,7 +29,7 @@ class MinigridRecordingWrapper(RecordingWrapper):
     # noinspection PyMethodOverriding
     def render(self, mode, **kwargs):
         self.env.render()
-        frame = self.env.render('rgb_array')
+        frame = self.env.render("rgb_array")
         self._record(frame)
         return frame
 
@@ -43,10 +44,10 @@ def make_minigrid_env(env_name, cfg=None, **kwargs):
     env = gym.make(env_name)
     env = RenameImageObsWrapper(env)
 
-    if 'record_to' in cfg and cfg.record_to is not None:
+    if "record_to" in cfg and cfg.record_to is not None:
         env = MinigridRecordingWrapper(env, cfg.record_to)
 
-    if cfg.pixel_format == 'CHW':
+    if cfg.pixel_format == "CHW":
         env = PixelFormatChwWrapper(env)
 
     return env

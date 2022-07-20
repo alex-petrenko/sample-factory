@@ -1,6 +1,7 @@
-import psutil
 import time
 from collections import deque
+
+import psutil
 
 from sample_factory.algorithms.utils.algo_utils import EPS
 from sample_factory.utils.utils import AttrDict, log
@@ -12,7 +13,7 @@ class AvgTime:
 
     def __str__(self):
         avg_time = sum(self.values) / max(1, len(self.values))
-        return f'{avg_time:.4f}'
+        return f"{avg_time:.4f}"
 
 
 class TimingContext:
@@ -33,7 +34,9 @@ class TimingContext:
             else:
                 self._timer[self._key] = 0
 
-        time_passed = max(time.time() - self._time_enter, EPS)  # EPS to prevent div by zero
+        time_passed = max(
+            time.time() - self._time_enter, EPS
+        )  # EPS to prevent div by zero
 
         if self._additive:
             self._timer[self._key] += time_passed
@@ -54,18 +57,18 @@ class Timing(AttrDict):
         return TimingContext(self, key, average=average)
 
     def __str__(self):
-        s = ''
+        s = ""
         i = 0
         for key, value in self.items():
-            str_value = f'{value:.4f}' if isinstance(value, float) else str(value)
-            s += f'{key}: {str_value}'
+            str_value = f"{value:.4f}" if isinstance(value, float) else str(value)
+            s += f"{key}: {str_value}"
             if i < len(self) - 1:
-                s += ', '
+                s += ", "
             i += 1
         return s
 
 
 def init_global_profiler(t):
     global TIMING
-    log.info('Setting global profiler in process %r', psutil.Process())
+    log.info("Setting global profiler in process %r", psutil.Process())
     TIMING = t

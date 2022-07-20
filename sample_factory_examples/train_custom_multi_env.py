@@ -16,7 +16,10 @@ from sample_factory.algorithms.appo.model_utils import register_custom_encoder
 from sample_factory.algorithms.utils.arguments import parse_args
 from sample_factory.envs.env_registry import global_env_registry
 from sample_factory.run_algorithm import run_algorithm
-from sample_factory_examples.train_custom_env_custom_model import CustomEncoder, override_default_params_func
+from sample_factory_examples.train_custom_env_custom_model import (
+    CustomEncoder,
+    override_default_params_func,
+)
 
 
 class CustomMultiEnv(gym.Env):
@@ -31,9 +34,13 @@ class CustomMultiEnv(gym.Env):
         self.cfg = cfg
         self.curr_episode_steps = 0
         self.res = 8  # 8x8 images
-        self.channels = 1  # it's easier when the channel dimension is present, even if it's 1
+        self.channels = (
+            1  # it's easier when the channel dimension is present, even if it's 1
+        )
 
-        self.observation_space = gym.spaces.Box(0, 1, (self.channels, self.res, self.res))
+        self.observation_space = gym.spaces.Box(
+            0, 1, (self.channels, self.res, self.res)
+        )
         self.action_space = gym.spaces.Discrete(2)
 
         self.num_agents = 2
@@ -42,7 +49,10 @@ class CustomMultiEnv(gym.Env):
         self.inactive_steps = 0
 
     def _obs(self):
-        return [np.float32(np.random.rand(self.channels, self.res, self.res)) for _ in range(self.num_agents)]
+        return [
+            np.float32(np.random.rand(self.channels, self.res, self.res))
+            for _ in range(self.num_agents)
+        ]
 
     def reset(self):
         self.curr_episode_steps = 0
@@ -61,17 +71,22 @@ class CustomMultiEnv(gym.Env):
             self.inactive_steps -= 1
         else:
             if random.random() < self.cfg.inactive_segment_prob:
-                self.inactive_steps = random.randint(self.cfg.inactive_segment_min_len, self.cfg.inactive_segment_max_len)
+                self.inactive_steps = random.randint(
+                    self.cfg.inactive_segment_min_len, self.cfg.inactive_segment_max_len
+                )
 
         # fixed actions for inactive agents
         for agent_idx in range(self.num_agents):
-            infos[agent_idx]['is_active'] = self.inactive_steps == 0
+            infos[agent_idx]["is_active"] = self.inactive_steps == 0
 
         self.curr_episode_steps += 1
 
         payout_matrix = [
             [(-0.1, -0.1), (-0.2, -0.2)],
-            [(-0.2, -0.25), (-0.1, -0.1)],  # make it asymmetric for easy learning, this is only a test after all
+            [
+                (-0.2, -0.25),
+                (-0.1, -0.1),
+            ],  # make it asymmetric for easy learning, this is only a test after all
         ]
 
         rewards = list(payout_matrix[actions[0]][actions[1]])
@@ -86,7 +101,7 @@ class CustomMultiEnv(gym.Env):
 
         return obs, rewards, dones, infos
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass
 
 
@@ -99,21 +114,41 @@ def add_extra_params_func(env, parser):
     Specify any additional command line arguments for this family of custom environments.
     """
     p = parser
-    p.add_argument('--custom_env_episode_len', default=10, type=int, help='Number of steps in the episode')
-    p.add_argument('--inactive_segment_prob', default=0.02, type=float, help='Probability of inactive segment')
-    p.add_argument('--inactive_segment_min_len', default=1, type=int, help='Inactive segment min len')
-    p.add_argument('--inactive_segment_max_len', default=40, type=int, help='Inactive segment max len')
+    p.add_argument(
+        "--custom_env_episode_len",
+        default=10,
+        type=int,
+        help="Number of steps in the episode",
+    )
+    p.add_argument(
+        "--inactive_segment_prob",
+        default=0.02,
+        type=float,
+        help="Probability of inactive segment",
+    )
+    p.add_argument(
+        "--inactive_segment_min_len",
+        default=1,
+        type=int,
+        help="Inactive segment min len",
+    )
+    p.add_argument(
+        "--inactive_segment_max_len",
+        default=40,
+        type=int,
+        help="Inactive segment max len",
+    )
 
 
 def register_custom_components():
     global_env_registry().register_env(
-        env_name_prefix='my_custom_multi_env_',
+        env_name_prefix="my_custom_multi_env_",
         make_env_func=make_custom_multi_env_func,
         add_extra_params_func=add_extra_params_func,
         override_default_params_func=override_default_params_func,
     )
 
-    register_custom_encoder('custom_env_encoder', CustomEncoder)
+    register_custom_encoder("custom_env_encoder", CustomEncoder)
 
 
 def main():
@@ -124,5 +159,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

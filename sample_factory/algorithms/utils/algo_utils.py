@@ -1,6 +1,5 @@
 import numpy as np
 
-
 EPS = 1e-8
 
 
@@ -25,8 +24,8 @@ class RunningMeanStd(object):
     """
 
     def __init__(self, max_past_samples=None, epsilon=1e-4, shape=()):
-        self.mean = np.zeros(shape, 'float64')
-        self.var = np.ones(shape, 'float64')
+        self.mean = np.zeros(shape, "float64")
+        self.var = np.ones(shape, "float64")
         self.count = epsilon
         self.max_past_samples = max_past_samples
 
@@ -38,11 +37,19 @@ class RunningMeanStd(object):
 
     def update_from_moments(self, batch_mean, batch_var, batch_count):
         self.mean, self.var, self.count = update_mean_var_count_from_moments(
-            self.mean, self.var, self.count, batch_mean, batch_var, batch_count, self.max_past_samples,
+            self.mean,
+            self.var,
+            self.count,
+            batch_mean,
+            batch_var,
+            batch_count,
+            self.max_past_samples,
         )
 
 
-def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count, max_past_samples):
+def update_mean_var_count_from_moments(
+    mean, var, count, batch_mean, batch_var, batch_count, max_past_samples
+):
     """Courtesy of OpenAI Baselines."""
     if max_past_samples is not None:
         # pretend we never have more than n past samples, this will guarantee a constant convergence rate
@@ -62,7 +69,7 @@ def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, 
 
 
 def main_observation(data):
-    obs = maybe_extract_key(data, 'obs')
+    obs = maybe_extract_key(data, "obs")
     if obs is None:
         return data
     else:
@@ -70,7 +77,7 @@ def main_observation(data):
 
 
 def goal_observation(data):
-    return maybe_extract_key(data, 'goal')
+    return maybe_extract_key(data, "goal")
 
 
 def maybe_extract_key(data, key):
@@ -105,7 +112,9 @@ def calculate_discounted_sum(x, dones, discount, x_last=None):
     :param discount: float in range [0,1]
     :param x_last: iterable of shape [num_envs], value at the end of trajectory. None interpreted as zero(s).
     """
-    x_last = np.zeros_like(x[0]) if x_last is None else np.array(x_last, dtype=np.float32)
+    x_last = (
+        np.zeros_like(x[0]) if x_last is None else np.array(x_last, dtype=np.float32)
+    )
     cumulative = x_last
 
     discounted_sum = np.zeros_like(x)
@@ -146,7 +155,7 @@ def num_env_steps(infos):
 
     total_num_frames = 0
     for info in infos:
-        total_num_frames += info.get('num_frames', 1)
+        total_num_frames += info.get("num_frames", 1)
     return total_num_frames
 
 
@@ -154,9 +163,9 @@ def list_to_string(x, limit=6):
     if len(x) <= limit:
         return str(x)
     else:
-        res = str(x[:3]).replace(']', ',')
-        res += ' ... ,'
-        res += str(x[-2:]).replace('[', ' ')
+        res = str(x[:3]).replace("]", ",")
+        res += " ... ,"
+        res += str(x[-2:]).replace("[", " ")
         return res
 
 

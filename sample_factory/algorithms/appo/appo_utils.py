@@ -5,18 +5,34 @@ from collections import OrderedDict, deque
 import gym
 import numpy as np
 import torch
-from gym import spaces, Wrapper
+from gym import Wrapper, spaces
 
-from sample_factory.algorithms.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
+from sample_factory.algorithms.utils.multi_agent_wrapper import (
+    MultiAgentWrapper,
+    is_multiagent_env,
+)
 from sample_factory.envs.create_env import create_env
-from sample_factory.utils.get_available_gpus import get_gpus_without_triggering_pytorch_cuda_initialization
+from sample_factory.utils.get_available_gpus import (
+    get_gpus_without_triggering_pytorch_cuda_initialization,
+)
 from sample_factory.utils.utils import log, memory_consumption_mb
 
-CUDA_ENVVAR = 'CUDA_VISIBLE_DEVICES'
+CUDA_ENVVAR = "CUDA_VISIBLE_DEVICES"
 
 
 class TaskType:
-    INIT, TERMINATE, RESET, ROLLOUT_STEP, POLICY_STEP, TRAIN, INIT_MODEL, PBT, UPDATE_ENV_STEPS, EMPTY = range(10)
+    (
+        INIT,
+        TERMINATE,
+        RESET,
+        ROLLOUT_STEP,
+        POLICY_STEP,
+        TRAIN,
+        INIT_MODEL,
+        PBT,
+        UPDATE_ENV_STEPS,
+        EMPTY,
+    ) = range(10)
 
 
 class DictObservationsWrapper(Wrapper):
@@ -112,24 +128,28 @@ def extend_array_by(x, extra_len):
 
 
 def set_global_cuda_envvars(cfg):
-    if cfg.device == 'cpu':
-        available_gpus = ''
+    if cfg.device == "cpu":
+        available_gpus = ""
     else:
-        available_gpus = get_gpus_without_triggering_pytorch_cuda_initialization(os.environ)
+        available_gpus = get_gpus_without_triggering_pytorch_cuda_initialization(
+            os.environ
+        )
 
     if CUDA_ENVVAR not in os.environ:
         os.environ[CUDA_ENVVAR] = available_gpus
-    os.environ[f'{CUDA_ENVVAR}_backup_'] = os.environ[CUDA_ENVVAR]
-    os.environ[CUDA_ENVVAR] = ''
+    os.environ[f"{CUDA_ENVVAR}_backup_"] = os.environ[CUDA_ENVVAR]
+    os.environ[CUDA_ENVVAR] = ""
 
 
 def get_available_gpus():
-    orig_visible_devices = os.environ[f'{CUDA_ENVVAR}_backup_']
-    available_gpus = [int(g) for g in orig_visible_devices.split(',') if g]
+    orig_visible_devices = os.environ[f"{CUDA_ENVVAR}_backup_"]
+    available_gpus = [int(g) for g in orig_visible_devices.split(",") if g]
     return available_gpus
 
 
-def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_mask=None):
+def set_gpus_for_process(
+    process_idx, num_gpus_per_process, process_type, gpu_mask=None
+):
     available_gpus = get_available_gpus()
     if gpu_mask is not None:
         assert len(available_gpus) >= len(available_gpus)
@@ -138,20 +158,23 @@ def set_gpus_for_process(process_idx, num_gpus_per_process, process_type, gpu_ma
     gpus_to_use = []
 
     if num_gpus == 0:
-        os.environ[CUDA_ENVVAR] = ''
-        log.debug('Not using GPUs for %s process %d', process_type, process_idx)
+        os.environ[CUDA_ENVVAR] = ""
+        log.debug("Not using GPUs for %s process %d", process_type, process_idx)
     else:
         first_gpu_idx = process_idx * num_gpus_per_process
         for i in range(num_gpus_per_process):
             index_mod_num_gpus = (first_gpu_idx + i) % num_gpus
             gpus_to_use.append(available_gpus[index_mod_num_gpus])
 
-        os.environ[CUDA_ENVVAR] = ','.join([str(g) for g in gpus_to_use])
+        os.environ[CUDA_ENVVAR] = ",".join([str(g) for g in gpus_to_use])
         log.info(
-            'Set environment var %s to %r for %s process %d',
-            CUDA_ENVVAR, os.environ[CUDA_ENVVAR], process_type, process_idx,
+            "Set environment var %s to %r for %s process %d",
+            CUDA_ENVVAR,
+            os.environ[CUDA_ENVVAR],
+            process_type,
+            process_idx,
         )
-        log.debug('Visible devices: %r', torch.cuda.device_count())
+        log.debug("Visible devices: %r", torch.cuda.device_count())
 
     return gpus_to_use
 
@@ -162,11 +185,13 @@ def cuda_envvars_for_policy(policy_id, process_type):
 
 def memory_stats(process, device):
     memory_mb = memory_consumption_mb()
-    stats = {f'memory_{process}': memory_mb}
-    if device.type != 'cpu':
+    stats = {f"memory_{process}": memory_mb}
+    if device.type != "cpu":
         gpu_mem_mb = torch.cuda.memory_allocated(device) / 1e6
         gpu_cache_mb = torch.cuda.memory_reserved(device) / 1e6
-        stats.update({f'gpu_mem_{process}': gpu_mem_mb, f'gpu_cache_{process}': gpu_cache_mb})
+        stats.update(
+            {f"gpu_mem_{process}": gpu_mem_mb, f"gpu_cache_{process}": gpu_cache_mb}
+        )
 
     return stats
 
@@ -192,26 +217,34 @@ class TensorBatcher:
             old_batch_size = tensor_batch_size(tensor_batch)
             if old_batch_size != macro_batch_size:
                 # this can happen due to PBT changing batch size during the experiment
-                log.warning('Tensor macro-batch size changed from %d to %d!', old_batch_size, macro_batch_size)
-                log.warning('Discarding the cached tensor batch!')
+                log.warning(
+                    "Tensor macro-batch size changed from %d to %d!",
+                    old_batch_size,
+                    macro_batch_size,
+                )
+                log.warning("Discarding the cached tensor batch!")
                 del tensor_batch
                 tensor_batch = None
 
         if tensor_batch is None:
             tensor_batch = copy_dict_structure(dict_of_arrays)
-            log.info('Allocating new CPU tensor batch (could not get from the pool)')
+            log.info("Allocating new CPU tensor batch (could not get from the pool)")
 
-            for d1, cache_d, key, arr, _ in iter_dicts_recursively(dict_of_arrays, tensor_batch):
+            for d1, cache_d, key, arr, _ in iter_dicts_recursively(
+                dict_of_arrays, tensor_batch
+            ):
                 cache_d[key] = torch.from_numpy(arr)
                 if use_pinned_memory:
                     cache_d[key] = cache_d[key].pin_memory()
         else:
-            with timing.add_time('batcher_mem'):
+            with timing.add_time("batcher_mem"):
                 # this is slower than the older version where we copied trajectories to the cached tensor one-by-one
                 # this will only affect CPU-based envs with pixel observations, and won't matter after
                 # Sample Factory 2.0 is released. Tradeoff is that the batching code is a lot more simple and
                 # easier to modify.
-                for d1, cache_d, key, arr, cache_t in iter_dicts_recursively(dict_of_arrays, tensor_batch):
+                for d1, cache_d, key, arr, cache_t in iter_dicts_recursively(
+                    dict_of_arrays, tensor_batch
+                ):
                     t = torch.as_tensor(arr)
                     cache_t.copy_(t)
 

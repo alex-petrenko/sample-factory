@@ -1,15 +1,22 @@
 import contextlib
 import math
-from typing import Optional, List
+from typing import List, Optional
 
 import faster_fifo
 import numpy as np
 import torch
 from gym import spaces
 
-from sample_factory.algorithms.appo.appo_utils import copy_dict_structure, iter_dicts_recursively, iterate_recursively
+from sample_factory.algorithms.appo.appo_utils import (
+    copy_dict_structure,
+    iter_dicts_recursively,
+    iterate_recursively,
+)
 from sample_factory.algorithms.appo.model_utils import get_hidden_size
-from sample_factory.algorithms.utils.action_distributions import calc_num_logits, calc_num_actions
+from sample_factory.algorithms.utils.action_distributions import (
+    calc_num_actions,
+    calc_num_logits,
+)
 from sample_factory.utils.utils import log
 
 
@@ -61,38 +68,44 @@ class SharedBuffers:
 
         hidden_size = get_hidden_size(self.cfg)
 
-        log.debug('Allocating shared memory for trajectories')
+        log.debug("Allocating shared memory for trajectories")
         self._tensors = TensorDict()
 
         # policy inputs
         obs_dict = TensorDict()
-        self._tensors['obs'] = obs_dict
+        self._tensors["obs"] = obs_dict
         if isinstance(obs_space, spaces.Dict):
             for space_name, space in obs_space.spaces.items():
                 obs_dict[space_name] = self.init_tensor(space.dtype, space.shape)
         else:
-            raise Exception('Only Dict observations spaces are supported')
+            raise Exception("Only Dict observations spaces are supported")
 
         # env outputs
-        self._tensors['rewards'] = self.init_tensor(torch.float32, [1])
-        self._tensors['rewards'].fill_(-42.42)  # if we're using uninitialized values it will be obvious
-        self._tensors['dones'] = self.init_tensor(torch.bool, [1])
-        self._tensors['dones'].fill_(True)
-        self._tensors['policy_id'] = self.init_tensor(torch.int, [1])
-        self._tensors['policy_id'].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
+        self._tensors["rewards"] = self.init_tensor(torch.float32, [1])
+        self._tensors["rewards"].fill_(
+            -42.42
+        )  # if we're using uninitialized values it will be obvious
+        self._tensors["dones"] = self.init_tensor(torch.bool, [1])
+        self._tensors["dones"].fill_(True)
+        self._tensors["policy_id"] = self.init_tensor(torch.int, [1])
+        self._tensors["policy_id"].fill_(
+            -1
+        )  # -1 is an invalid policy index, experience from policy "-1" is always ignored
 
         # policy outputs
         policy_outputs = [
-            ('actions', num_actions),
-            ('action_logits', num_action_logits),
-            ('log_prob_actions', 1),
-            ('values', 1),
-            ('policy_version', 1),
-            ('rnn_states', hidden_size)
+            ("actions", num_actions),
+            ("action_logits", num_action_logits),
+            ("log_prob_actions", 1),
+            ("values", 1),
+            ("policy_version", 1),
+            ("rnn_states", hidden_size),
         ]
 
         policy_outputs = [PolicyOutput(*po) for po in policy_outputs]
-        policy_outputs = sorted(policy_outputs, key=lambda policy_output: policy_output.name)
+        policy_outputs = sorted(
+            policy_outputs, key=lambda policy_output: policy_output.name
+        )
 
         for po in policy_outputs:
             self._tensors[po.name] = self.init_tensor(torch.float32, [po.size])
@@ -117,7 +130,9 @@ class SharedBuffers:
         ]
 
         self.policy_outputs = policy_outputs
-        self._policy_output_tensors = torch.zeros(policy_outputs_shape, dtype=torch.float32)
+        self._policy_output_tensors = torch.zeros(
+            policy_outputs_shape, dtype=torch.float32
+        )
         self._policy_output_tensors.share_memory_()
         self.policy_output_tensors = self._policy_output_tensors.numpy()
 
@@ -127,15 +142,21 @@ class SharedBuffers:
 
         # a list of boolean flags to be shared among components that indicate that experience collection should be
         # temporarily stopped (e.g. due to too much experience accumulated on the learner)
-        self._stop_experience_collection = torch.ones([self.cfg.num_policies], dtype=torch.bool)
+        self._stop_experience_collection = torch.ones(
+            [self.cfg.num_policies], dtype=torch.bool
+        )
         self._stop_experience_collection.share_memory_()
         self.stop_experience_collection = self._stop_experience_collection.numpy()
 
-        queue_max_size_bytes = self.num_traj_buffers * 40  # 40 bytes to encode an int should be enough?
+        queue_max_size_bytes = (
+            self.num_traj_buffers * 40
+        )  # 40 bytes to encode an int should be enough?
         self.free_buffers_queue = faster_fifo.Queue(max_size_bytes=queue_max_size_bytes)
 
         # since all buffers are initially free, we add all buffer indices to the queue
-        self.free_buffers_queue.put_many_nowait([int(i) for i in np.arange(self.num_traj_buffers)])
+        self.free_buffers_queue.put_many_nowait(
+            [int(i) for i in np.arange(self.num_traj_buffers)]
+        )
 
     def calc_num_trajectory_buffers(self):
         """
@@ -151,7 +172,9 @@ class SharedBuffers:
         """
 
         # Add a traj buffer for each agent
-        num_traj_buffers = (self.cfg.num_workers + 1) * self.cfg.num_envs_per_worker * self.num_agents
+        num_traj_buffers = (
+            (self.cfg.num_workers + 1) * self.cfg.num_envs_per_worker * self.num_agents
+        )
 
         max_minibatches_to_accumulate = self.cfg.num_minibatches_to_accumulate
         if max_minibatches_to_accumulate == -1:
@@ -159,7 +182,9 @@ class SharedBuffers:
             max_minibatches_to_accumulate = 2 * self.cfg.num_batches_per_iteration
 
         # Let each learner accumulate enough full sets of experience to pause learning
-        max_experience_on_learners = max_minibatches_to_accumulate * self.cfg.batch_size * self.cfg.num_policies
+        max_experience_on_learners = (
+            max_minibatches_to_accumulate * self.cfg.batch_size * self.cfg.num_policies
+        )
         num_traj_buffers += max_experience_on_learners / self.cfg.rollout
 
         # Configurable excess ratio to be safe
@@ -168,7 +193,7 @@ class SharedBuffers:
 
         num_traj_buffers = int(math.ceil(num_traj_buffers))
 
-        log.info('Using a total of %d trajectory buffers', num_traj_buffers)
+        log.info("Using a total of %d trajectory buffers", num_traj_buffers)
         return num_traj_buffers
 
     def init_tensor(self, tensor_type, tensor_shape):
@@ -183,7 +208,9 @@ class SharedBuffers:
 
     def tensor_dict_to_numpy(self):
         numpy_dict = copy_dict_structure(self._tensors)
-        for d1, d2, key, curr_t, value2 in iter_dicts_recursively(self._tensors, numpy_dict):
+        for d1, d2, key, curr_t, value2 in iter_dicts_recursively(
+            self._tensors, numpy_dict
+        ):
             assert isinstance(curr_t, torch.Tensor)
             assert value2 is None
             d2[key] = curr_t.numpy()
@@ -200,13 +227,22 @@ class SharedBuffers:
         block = False
 
         while len(indices) < num_buffers:
-            with timing.add_time('wait_buffers') if timing is not None else contextlib.suppress():
+            with timing.add_time(
+                "wait_buffers"
+            ) if timing is not None else contextlib.suppress():
                 try:
-                    indices.extend(self.free_buffers_queue.get_many(
-                        max_messages_to_get=num_buffers - len(indices), timeout=5, block=block,
-                    ))
+                    indices.extend(
+                        self.free_buffers_queue.get_many(
+                            max_messages_to_get=num_buffers - len(indices),
+                            timeout=5,
+                            block=block,
+                        )
+                    )
                 except faster_fifo.Empty:
-                    log.warning('Waiting for %d trajectory buffers...', num_buffers - len(indices))
+                    log.warning(
+                        "Waiting for %d trajectory buffers...",
+                        num_buffers - len(indices),
+                    )
 
                 if len(indices) < num_buffers:
                     block = True
@@ -249,7 +285,7 @@ class TensorDict(dict):
             elif isinstance(new_data, np.ndarray):
                 t = torch.from_numpy(new_data)
             else:
-                raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+                raise Exception(f"Type {type(new_data)} not supported in set_data_func")
 
             x[index].copy_(t)
 
@@ -259,6 +295,6 @@ class TensorDict(dict):
             elif isinstance(new_data, np.ndarray):
                 n = new_data
             else:
-                raise Exception(f'Type {type(new_data)} not supported in set_data_func')
+                raise Exception(f"Type {type(new_data)} not supported in set_data_func")
 
             x[index] = n

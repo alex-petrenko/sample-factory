@@ -19,5 +19,7 @@ def create_env(full_env_name, cfg=None, env_config=None):
 
     env_registry = global_env_registry()
     env_registry_entry = env_registry.resolve_env_name(full_env_name)
-    env = env_registry_entry.make_env_func(full_env_name, cfg=cfg, env_config=env_config)
+    env = env_registry_entry.make_env_func(
+        full_env_name, cfg=cfg, env_config=env_config
+    )
     return env

@@ -11,12 +11,12 @@ import gym
 import numpy as np
 from filelock import FileLock, Timeout
 from gym.utils import seeding
-from vizdoom.vizdoom import ScreenResolution, DoomGame, Mode, AutomapMode
+from vizdoom.vizdoom import AutomapMode, DoomGame, Mode, ScreenResolution
 
 from sample_factory.algorithms.utils.spaces.discretized import Discretized
+from sample_factory.envs.doom.fixRender import SimpleImageViewer
 from sample_factory.utils.utils import log, project_tmp_dir
 
-from sample_factory.envs.doom.fixRender import SimpleImageViewer
 
 def doom_lock_file(max_parallel):
     """
@@ -30,7 +30,7 @@ def doom_lock_file(max_parallel):
 
     This also has an advantage of working across completely independent process groups, e.g. different experiments.
     """
-    lock_filename = f'doom_{random.randrange(0, max_parallel):03d}.lockfile'
+    lock_filename = f"doom_{random.randrange(0, max_parallel):03d}.lockfile"
 
     tmp_dir = project_tmp_dir()
     lock_path = join(tmp_dir, lock_filename)
@@ -39,20 +39,20 @@ def doom_lock_file(max_parallel):
 
 def key_to_action_default(key):
     """
-        MOVE_FORWARD
-        MOVE_BACKWARD
-        MOVE_RIGHT
-        MOVE_LEFT
-        SELECT_WEAPON1
-        SELECT_WEAPON2
-        SELECT_WEAPON3
-        SELECT_WEAPON4
-        SELECT_WEAPON5
-        SELECT_WEAPON6
-        SELECT_WEAPON7
-        ATTACK
-        SPEED
-        TURN_LEFT_RIGHT_DELTA
+    MOVE_FORWARD
+    MOVE_BACKWARD
+    MOVE_RIGHT
+    MOVE_LEFT
+    SELECT_WEAPON1
+    SELECT_WEAPON2
+    SELECT_WEAPON3
+    SELECT_WEAPON4
+    SELECT_WEAPON5
+    SELECT_WEAPON6
+    SELECT_WEAPON7
+    ATTACK
+    SPEED
+    TURN_LEFT_RIGHT_DELTA
     """
     from pynput.keyboard import Key
 
@@ -79,16 +79,17 @@ def key_to_action_default(key):
 
 
 class VizdoomEnv(gym.Env):
-
-    def __init__(self,
-                 action_space,
-                 config_file,
-                 coord_limits=None,
-                 max_histogram_length=200,
-                 show_automap=False,
-                 skip_frames=1,
-                 async_mode=False,
-                 record_to=None):
+    def __init__(
+        self,
+        action_space,
+        config_file,
+        coord_limits=None,
+        max_histogram_length=200,
+        show_automap=False,
+        skip_frames=1,
+        async_mode=False,
+        record_to=None,
+    ):
         self.initialized = False
 
         # essential game data
@@ -113,19 +114,20 @@ class VizdoomEnv(gym.Env):
         # provided as a part of environment definition, since these depend on the scenario and
         # can be quite complex multi-discrete spaces
         self.action_space = action_space
-        self.composite_action_space = hasattr(self.action_space, 'spaces')
+        self.composite_action_space = hasattr(self.action_space, "spaces")
 
         self.delta_actions_scaling_factor = 7.5
 
         if os.path.isabs(config_file):
             self.config_path = config_file
         else:
-            scenarios_dir = join(os.path.dirname(__file__), 'scenarios')
+            scenarios_dir = join(os.path.dirname(__file__), "scenarios")
             self.config_path = join(scenarios_dir, config_file)
             if not os.path.isfile(self.config_path):
                 log.warning(
-                    'File %s not found in scenarios dir %s. Consider providing absolute path?',
-                    config_file, scenarios_dir,
+                    "File %s not found in scenarios dir %s. Consider providing absolute path?",
+                    config_file,
+                    scenarios_dir,
                 )
 
         self.variable_indices = self._parse_variable_indices(self.config_path)
@@ -143,8 +145,8 @@ class VizdoomEnv(gym.Env):
         self.max_histogram_length = max_histogram_length
         self.current_histogram, self.previous_histogram = None, None
         if self.coord_limits:
-            x = (self.coord_limits[2] - self.coord_limits[0])
-            y = (self.coord_limits[3] - self.coord_limits[1])
+            x = self.coord_limits[2] - self.coord_limits[0]
+            y = self.coord_limits[3] - self.coord_limits[1]
             if x > y:
                 len_x = self.max_histogram_length
                 len_y = int((y / x) * self.max_histogram_length)
@@ -164,7 +166,7 @@ class VizdoomEnv(gym.Env):
 
         self._num_episodes = 0
 
-        self.mode = 'algo'
+        self.mode = "algo"
 
         self.seed()
 
@@ -174,14 +176,18 @@ class VizdoomEnv(gym.Env):
         return [self.curr_seed, self.rng]
 
     def calc_observation_space(self):
-        self.observation_space = gym.spaces.Box(0, 255, (self.screen_h, self.screen_w, self.channels), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(
+            0, 255, (self.screen_h, self.screen_w, self.channels), dtype=np.uint8
+        )
 
     def _set_game_mode(self, mode):
-        if mode == 'replay':
+        if mode == "replay":
             self.game.set_mode(Mode.PLAYER)
         else:
             if self.async_mode:
-                log.info('Starting in async mode! Use this only for testing, otherwise PLAYER mode is much faster')
+                log.info(
+                    "Starting in async mode! Use this only for testing, otherwise PLAYER mode is much faster"
+                )
                 self.game.set_mode(Mode.ASYNC_PLAYER)
             else:
                 self.game.set_mode(Mode.PLAYER)
@@ -193,13 +199,13 @@ class VizdoomEnv(gym.Env):
         self.game.set_screen_resolution(self.screen_resolution)
         self.game.set_seed(self.rng.randint(0, 2**32 - 1))
 
-        if mode == 'algo':
+        if mode == "algo":
             self.game.set_window_visible(False)
-        elif mode == 'human' or mode == 'replay':
-            self.game.add_game_args('+freelook 1')
+        elif mode == "human" or mode == "replay":
+            self.game.add_game_args("+freelook 1")
             self.game.set_window_visible(True)
         else:
-            raise Exception('Unsupported mode')
+            raise Exception("Unsupported mode")
 
         self._set_game_mode(mode)
 
@@ -223,11 +229,17 @@ class VizdoomEnv(gym.Env):
             except Timeout:
                 if with_locking:
                     log.debug(
-                        'Another process currently holds the lock %s, attempt: %d', lock_file, init_attempt,
+                        "Another process currently holds the lock %s, attempt: %d",
+                        lock_file,
+                        init_attempt,
                     )
             except Exception as exc:
-                log.warning('VizDoom game.init() threw an exception %r. Terminate process...', exc)
+                log.warning(
+                    "VizDoom game.init() threw an exception %r. Terminate process...",
+                    exc,
+                )
                 from sample_factory.envs.env_utils import EnvCriticalError
+
                 raise EnvCriticalError()
 
     def initialize(self):
@@ -242,15 +254,15 @@ class VizdoomEnv(gym.Env):
 
             # self.game.add_game_args("+am_restorecolors")
             # self.game.add_game_args("+am_followplayer 1")
-            background_color = 'ffffff'
-            self.game.add_game_args('+viz_am_center 1')
-            self.game.add_game_args('+am_backcolor ' + background_color)
-            self.game.add_game_args('+am_tswallcolor dddddd')
+            background_color = "ffffff"
+            self.game.add_game_args("+viz_am_center 1")
+            self.game.add_game_args("+am_backcolor " + background_color)
+            self.game.add_game_args("+am_tswallcolor dddddd")
             # self.game.add_game_args("+am_showthingsprites 0")
-            self.game.add_game_args('+am_yourcolor ' + background_color)
-            self.game.add_game_args('+am_cheat 0')
-            self.game.add_game_args('+am_thingcolor 0000ff')  # player color
-            self.game.add_game_args('+am_thingcolor_item 00ff00')
+            self.game.add_game_args("+am_yourcolor " + background_color)
+            self.game.add_game_args("+am_cheat 0")
+            self.game.add_game_args("+am_thingcolor 0000ff")  # player color
+            self.game.add_game_args("+am_thingcolor_item 00ff00")
             # self.game.add_game_args("+am_thingcolor_citem 00ff00")
 
         self._game_init()
@@ -262,22 +274,22 @@ class VizdoomEnv(gym.Env):
 
     @staticmethod
     def _parse_variable_indices(config):
-        with open(config, 'r') as config_file:
+        with open(config, "r") as config_file:
             lines = config_file.readlines()
         lines = [l.strip() for l in lines]
 
         variable_indices = {}
 
         for line in lines:
-            if line.startswith('#'):
+            if line.startswith("#"):
                 continue  # comment
 
-            variables_syntax = r'available_game_variables[\s]*=[\s]*\{(.*)\}'
+            variables_syntax = r"available_game_variables[\s]*=[\s]*\{(.*)\}"
             match = re.match(variables_syntax, line)
             if match is not None:
                 variables_str = match.groups()[0]
                 variables_str = variables_str.strip()
-                variables = variables_str.split(' ')
+                variables = variables_str.split(" ")
                 for i, variable in enumerate(variables):
                     variable_indices[variable] = i
                 break
@@ -297,7 +309,7 @@ class VizdoomEnv(gym.Env):
         return variables
 
     def demo_path(self, episode_idx):
-        demo_name = f'e{episode_idx:03d}.lmp'
+        demo_name = f"e{episode_idx:03d}.lmp"
         demo_path = join(self.record_to, demo_name)
         demo_path = os.path.normpath(demo_path)
         return demo_path
@@ -311,7 +323,7 @@ class VizdoomEnv(gym.Env):
                 os.makedirs(self.record_to)
 
             demo_path = self.demo_path(self._num_episodes)
-            log.warning('Recording episode demo to %s', demo_path)
+            log.warning("Recording episode demo to %s", demo_path)
             self.game.new_episode(demo_path)
         else:
             if self._num_episodes > 0:
@@ -327,7 +339,9 @@ class VizdoomEnv(gym.Env):
             pass
 
         if img is None:
-            log.error('Game returned None screen buffer! This is not supposed to happen!')
+            log.error(
+                "Game returned None screen buffer! This is not supposed to happen!"
+            )
             img = self._black_screen()
 
         # Swap current and previous histogram
@@ -353,8 +367,8 @@ class VizdoomEnv(gym.Env):
             spaces = self.action_space.spaces
         else:
             # simple action space, e.g. Discrete. We still treat it like composite of length 1
-            spaces = (self.action_space, )
-            actions = (actions, )
+            spaces = (self.action_space,)
+            actions = (actions,)
 
         actions_flattened = []
         for i, action in enumerate(actions):
@@ -370,24 +384,30 @@ class VizdoomEnv(gym.Env):
                 num_non_idle_actions = spaces[i].n - 1
                 action_one_hot = np.zeros(num_non_idle_actions, dtype=np.uint8)
                 if action > 0:
-                    action_one_hot[action - 1] = 1  # 0th action in each subspace is a no-op
+                    action_one_hot[
+                        action - 1
+                    ] = 1  # 0th action in each subspace is a no-op
 
                 actions_flattened.extend(action_one_hot)
             elif isinstance(spaces[i], gym.spaces.Box):
                 # continuous action
-                actions_flattened.extend(list(action * self.delta_actions_scaling_factor))
+                actions_flattened.extend(
+                    list(action * self.delta_actions_scaling_factor)
+                )
             else:
-                raise NotImplementedError(f'Action subspace type {type(spaces[i])} is not supported!')
+                raise NotImplementedError(
+                    f"Action subspace type {type(spaces[i])} is not supported!"
+                )
 
         return actions_flattened
 
     def _vizdoom_variables_bug_workaround(self, info, done):
         """Some variables don't get reset to zero on game.new_episode(). This fixes it (also check overflow?)."""
-        if done and 'DAMAGECOUNT' in info:
-            log.info('DAMAGECOUNT value on done: %r', info.get('DAMAGECOUNT'))
+        if done and "DAMAGECOUNT" in info:
+            log.info("DAMAGECOUNT value on done: %r", info.get("DAMAGECOUNT"))
 
         if self._last_episode_info is not None:
-            bugged_vars = ['DEATHCOUNT', 'HITCOUNT', 'DAMAGECOUNT']
+            bugged_vars = ["DEATHCOUNT", "HITCOUNT", "DAMAGECOUNT"]
             for v in bugged_vars:
                 if v in info:
                     info[v] -= self._last_episode_info.get(v, 0)
@@ -421,7 +441,7 @@ class VizdoomEnv(gym.Env):
         else:
             actions_flattened = self._convert_actions(actions)
 
-        default_info = {'num_frames': self.skip_frames}
+        default_info = {"num_frames": self.skip_frames}
         reward = self.game.make_action(actions_flattened, self.skip_frames)
         state = self.game.get_state()
         done = self.game.is_episode_finished()
@@ -429,11 +449,11 @@ class VizdoomEnv(gym.Env):
         observation, done, info = self._process_game_step(state, done, default_info)
         return observation, reward, done, info
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         try:
             img = self.game.get_state().screen_buffer
             img = np.transpose(img, [1, 2, 0])
-            if mode == 'rgb_array':
+            if mode == "rgb_array":
                 return img
 
             h, w = img.shape[:2]
@@ -444,8 +464,8 @@ class VizdoomEnv(gym.Env):
                 img = cv2.resize(img, (render_w, render_h))
 
             if self.viewer is None:
-                #from gym.envs.classic_control import rendering
-                #self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
+                # from gym.envs.classic_control import rendering
+                # self.viewer = rendering.SimpleImageViewer(maxwidth=render_w)
                 self.viewer = SimpleImageViewer(maxwidth=render_w)
             self.viewer.imshow(img)
             return img
@@ -457,7 +477,7 @@ class VizdoomEnv(gym.Env):
             if self.game is not None:
                 self.game.close()
         except RuntimeError as exc:
-            log.warning('Runtime error in VizDoom game close(): %r', exc)
+            log.warning("Runtime error in VizDoom game close(): %r", exc)
 
         if self.viewer is not None:
             self.viewer.close()
@@ -466,7 +486,7 @@ class VizdoomEnv(gym.Env):
         if variables is None:
             variables = self._game_variables_dict(self.game.get_state())
 
-        info_dict = {'pos': self.get_positions(variables)}
+        info_dict = {"pos": self.get_positions(variables)}
         info_dict.update(variables)
         return info_dict
 
@@ -475,7 +495,7 @@ class VizdoomEnv(gym.Env):
             variables = self._game_variables_dict(self.game.get_state())
         info = self.get_info(variables)
         if self.previous_histogram is not None:
-            info['previous_histogram'] = self.previous_histogram
+            info["previous_histogram"] = self.previous_histogram
         return info
 
     def get_positions(self, variables):
@@ -484,7 +504,7 @@ class VizdoomEnv(gym.Env):
     @staticmethod
     def _get_positions(variables):
         have_coord_data = True
-        required_vars = ['POSITION_X', 'POSITION_Y', 'ANGLE']
+        required_vars = ["POSITION_X", "POSITION_Y", "ANGLE"]
         for required_var in required_vars:
             if required_var not in variables:
                 have_coord_data = False
@@ -492,11 +512,11 @@ class VizdoomEnv(gym.Env):
 
         x = y = a = np.nan
         if have_coord_data:
-            x = variables['POSITION_X']
-            y = variables['POSITION_Y']
-            a = variables['ANGLE']
+            x = variables["POSITION_X"]
+            y = variables["POSITION_Y"]
+            a = variables["ANGLE"]
 
-        return {'agent_x': x, 'agent_y': y, 'agent_a': a}
+        return {"agent_x": x, "agent_y": y, "agent_a": a}
 
     def get_automap_buffer(self):
         if self.game.is_episode_finished():
@@ -510,11 +530,15 @@ class VizdoomEnv(gym.Env):
     def _update_histogram(self, info, eps=1e-8):
         if self.current_histogram is None:
             return
-        agent_x, agent_y = info['pos']['agent_x'], info['pos']['agent_y']
+        agent_x, agent_y = info["pos"]["agent_x"], info["pos"]["agent_y"]
 
         # Get agent coordinates normalized to [0, 1]
-        dx = (agent_x - self.coord_limits[0]) / (self.coord_limits[2] - self.coord_limits[0])
-        dy = (agent_y - self.coord_limits[1]) / (self.coord_limits[3] - self.coord_limits[1])
+        dx = (agent_x - self.coord_limits[0]) / (
+            self.coord_limits[2] - self.coord_limits[0]
+        )
+        dy = (agent_y - self.coord_limits[1]) / (
+            self.coord_limits[3] - self.coord_limits[1]
+        )
 
         # Rescale coordinates to histogram dimensions
         # Subtract eps to exclude upper bound of dx, dy
@@ -524,13 +548,14 @@ class VizdoomEnv(gym.Env):
         self.current_histogram[dx, dy] += 1
 
     def _key_to_action(self, key):
-        if hasattr(self.action_space, 'key_to_action'):
+        if hasattr(self.action_space, "key_to_action"):
             return self.action_space.key_to_action(key)
         else:
             return key_to_action_default(key)
 
     def _keyboard_on_press(self, key):
         from pynput.keyboard import Key
+
         if key == Key.esc:
             self._terminate = True
             return False
@@ -556,14 +581,16 @@ class VizdoomEnv(gym.Env):
 
         # noinspection PyProtectedMember
         def start_listener():
-            with Listener(on_press=doom._keyboard_on_press, on_release=doom._keyboard_on_release) as listener:
+            with Listener(
+                on_press=doom._keyboard_on_press, on_release=doom._keyboard_on_release
+            ) as listener:
                 listener.join()
 
         listener_thread = Thread(target=start_listener)
         listener_thread.start()
 
         for episode in range(num_episodes):
-            doom.mode = 'human'
+            doom.mode = "human"
             env.reset()
             last_render_time = time.time()
             time_between_frames = 1.0 / 35.0
@@ -577,12 +604,18 @@ class VizdoomEnv(gym.Env):
                 actions = [0] * num_actions
                 for action in doom._current_actions:
                     if isinstance(action, int):
-                        actions[action] = 1  # 1 for buttons currently pressed, 0 otherwise
+                        actions[
+                            action
+                        ] = 1  # 1 for buttons currently pressed, 0 otherwise
                     else:
-                        if action == 'turn_left':
-                            actions[turn_delta_action_idx] = -doom.delta_actions_scaling_factor
-                        elif action == 'turn_right':
-                            actions[turn_delta_action_idx] = doom.delta_actions_scaling_factor
+                        if action == "turn_left":
+                            actions[
+                                turn_delta_action_idx
+                            ] = -doom.delta_actions_scaling_factor
+                        elif action == "turn_right":
+                            actions[
+                                turn_delta_action_idx
+                            ] = doom.delta_actions_scaling_factor
 
                 for frame in range(skip_frames):
                     doom._actions_flattened = actions
@@ -590,7 +623,7 @@ class VizdoomEnv(gym.Env):
 
                     new_total_rew = total_rew + rew
                     if new_total_rew != total_rew:
-                        log.info('Reward: %.3f, total: %.3f', rew, new_total_rew)
+                        log.info("Reward: %.3f, total: %.3f", rew, new_total_rew)
                     total_rew = new_total_rew
                     state = doom.game.get_state()
 
@@ -598,7 +631,8 @@ class VizdoomEnv(gym.Env):
                     if state is not None and verbose:
                         info = doom.get_info()
                         print(
-                            'Health:', info['HEALTH'],
+                            "Health:",
+                            info["HEALTH"],
                             # 'Weapon:', info['SELECTED_WEAPON'],
                             # 'ready:', info['ATTACK_READY'],
                             # 'ammo:', info['SELECTED_WEAPON_AMMO'],
@@ -613,7 +647,7 @@ class VizdoomEnv(gym.Env):
                         map_ = state.automap_buffer
                         map_ = np.swapaxes(map_, 0, 2)
                         map_ = np.swapaxes(map_, 0, 1)
-                        cv2.imshow('ViZDoom Automap Buffer', map_)
+                        cv2.imshow("ViZDoom Automap Buffer", map_)
                         if time_wait > 0:
                             cv2.waitKey(int(time_wait) * 1000)
                     else:
@@ -625,14 +659,14 @@ class VizdoomEnv(gym.Env):
             if doom.show_automap:
                 cv2.destroyAllWindows()
 
-        log.debug('Press ESC to exit...')
+        log.debug("Press ESC to exit...")
         listener_thread.join()
 
     # noinspection PyProtectedMember
     @staticmethod
     def replay(env, rec_path):
         doom = env.unwrapped
-        doom.mode = 'replay'
+        doom.mode = "replay"
         doom._ensure_initialized()
         doom.game.replay_episode(rec_path)
 
@@ -643,7 +677,11 @@ class VizdoomEnv(gym.Env):
             doom.game.advance_action()
             r = doom.game.get_last_reward()
             episode_reward += r
-            log.info('Episode reward: %.3f, time so far: %.1f s', episode_reward, time.time() - start)
+            log.info(
+                "Episode reward: %.3f, time so far: %.1f s",
+                episode_reward,
+                time.time() - start,
+            )
 
-        log.info('Finishing replay')
+        log.info("Finishing replay")
         doom.close()

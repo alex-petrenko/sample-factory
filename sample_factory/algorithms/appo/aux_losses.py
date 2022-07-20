@@ -5,7 +5,10 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from sample_factory.algorithms.utils.action_distributions import calc_num_actions, calc_num_logits
+from sample_factory.algorithms.utils.action_distributions import (
+    calc_num_actions,
+    calc_num_logits,
+)
 
 
 class CPCA(nn.Module):
@@ -49,7 +52,9 @@ class CPCA(nn.Module):
         )
 
     def _build_mask_and_subsample(
-        self, not_dones, valids,
+        self,
+        not_dones,
+        valids,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
         t = not_dones.size(1)
 
@@ -62,7 +67,7 @@ class CPCA(nn.Module):
 
         time_subsample = torch.randperm(
             t - 1, device=valid_mask.device, dtype=torch.long
-        )[0:self.time_subsample]
+        )[0 : self.time_subsample]
 
         forward_mask = (
             torch.cumprod(valid_mask_unfolded.index_select(2, time_subsample), dim=0)
@@ -72,7 +77,9 @@ class CPCA(nn.Module):
 
         max_k = forward_mask.flatten(1).any(-1).nonzero().max().item() + 1
 
-        unroll_subsample = torch.randperm(max_k, dtype=torch.long)[0:self.forward_subsample]
+        unroll_subsample = torch.randperm(max_k, dtype=torch.long)[
+            0 : self.forward_subsample
+        ]
 
         max_k = unroll_subsample.max().item() + 1
 
@@ -86,7 +93,12 @@ class CPCA(nn.Module):
         t = actions.size(1)
 
         mask_res = self._build_mask_and_subsample(not_dones, valids)
-        (forward_mask, unroll_subsample, time_subsample, max_k,) = mask_res
+        (
+            forward_mask,
+            unroll_subsample,
+            time_subsample,
+            max_k,
+        ) = mask_res
 
         actions = self.embed_actions(actions.long())
         actions_unfolded = self._build_unfolded(actions[:, :-1], max_k).index_select(
@@ -108,12 +120,18 @@ class CPCA(nn.Module):
 
         positives = self.predictor(torch.cat((forward_preds, forward_targets), dim=-1))
         positive_loss = F.binary_cross_entropy_with_logits(
-            positives, torch.broadcast_tensors(positives, positives.new_ones(()))[1], reduction='none'
+            positives,
+            torch.broadcast_tensors(positives, positives.new_ones(()))[1],
+            reduction="none",
         )
         positive_loss = torch.masked_select(positive_loss, forward_mask).mean()
 
         forward_negatives = torch.randint(
-            0, n * t, size=(self.forward_subsample * self.time_subsample * n * 20,), dtype=torch.long, device=actions.device
+            0,
+            n * t,
+            size=(self.forward_subsample * self.time_subsample * n * 20,),
+            dtype=torch.long,
+            device=actions.device,
         )
         forward_negatives = (
             rnn_inputs.flatten(0, 1)
@@ -123,15 +141,18 @@ class CPCA(nn.Module):
         negatives = self.predictor(
             torch.cat(
                 (
-                    forward_preds.view(self.forward_subsample, self.time_subsample * n, 1, -1)
-                        .expand(-1, -1, 20, -1),
+                    forward_preds.view(
+                        self.forward_subsample, self.time_subsample * n, 1, -1
+                    ).expand(-1, -1, 20, -1),
                     forward_negatives,
                 ),
                 dim=-1,
             )
         )
         negative_loss = F.binary_cross_entropy_with_logits(
-            negatives, torch.broadcast_tensors(negatives, negatives.new_zeros(()))[1], reduction='none'
+            negatives,
+            torch.broadcast_tensors(negatives, negatives.new_zeros(()))[1],
+            reduction="none",
         )
         negative_loss = torch.masked_select(
             negative_loss, forward_mask.unsqueeze(2)

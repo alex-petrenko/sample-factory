@@ -1,6 +1,7 @@
 from unittest import TestCase
-from sample_factory.utils.utils import cores_for_worker_process
+
 from sample_factory.utils.network import is_udp_port_available
+from sample_factory.utils.utils import cores_for_worker_process
 
 
 class TestUtils(TestCase):
@@ -23,5 +24,3 @@ class TestUtils(TestCase):
                 self.assertEqual(cores, [10, 11, 12, 13, 14])
             elif i == 43:
                 self.assertEqual(cores, [15, 16, 17, 18, 19])
-
-

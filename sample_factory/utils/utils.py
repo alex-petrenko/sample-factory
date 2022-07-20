@@ -8,20 +8,19 @@ import os
 import pwd
 import tempfile
 import time
-from _queue import Empty
 from os.path import join
 from queue import Full
-from subprocess import check_output, run, SubprocessError
+from subprocess import SubprocessError, check_output, run
 from sys import platform
 
 import numpy as np
 import psutil
+from _queue import Empty
 from colorlog import ColoredFormatter
-
 
 # Logging
 
-log = logging.getLogger('rl')
+log = logging.getLogger("rl")
 log.setLevel(logging.DEBUG)
 log.handlers = []  # No duplicated handlers
 log.propagate = False  # workaround for duplicated logs in ipython
@@ -31,33 +30,36 @@ stream_handler = logging.StreamHandler()
 stream_handler.setLevel(log_level)
 
 stream_formatter = ColoredFormatter(
-    '%(log_color)s[%(asctime)s][%(process)05d] %(message)s',
+    "%(log_color)s[%(asctime)s][%(process)05d] %(message)s",
     datefmt=None,
     reset=True,
     log_colors={
-        'DEBUG': 'cyan',
-        'INFO': 'white,bold',
-        'INFOV': 'cyan,bold',
-        'WARNING': 'yellow',
-        'ERROR': 'red,bold',
-        'CRITICAL': 'red,bg_white',
+        "DEBUG": "cyan",
+        "INFO": "white,bold",
+        "INFOV": "cyan,bold",
+        "WARNING": "yellow",
+        "ERROR": "red,bold",
+        "CRITICAL": "red,bg_white",
     },
     secondary_log_colors={},
-    style='%'
+    style="%",
 )
 stream_handler.setFormatter(stream_formatter)
 log.addHandler(stream_handler)
 
 
 def init_file_logger(experiment_dir_):
-    file_handler = logging.FileHandler(join(experiment_dir_, 'sf_log.txt'))
+    file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
     file_handler.setLevel(log_level)
-    file_formatter = logging.Formatter(fmt='[%(asctime)s][%(process)05d] %(message)s', datefmt=None, style='%')
+    file_formatter = logging.Formatter(
+        fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%"
+    )
     file_handler.setFormatter(file_formatter)
     log.addHandler(file_handler)
 
 
 # general Python utilities
+
 
 def is_module_available(module_name):
     try:
@@ -117,31 +119,40 @@ def static_vars(**kwargs):
         for k in kwargs:
             setattr(func, k, kwargs[k])
         return func
+
     return decorate
 
 
-def safe_get(q, timeout=1e6, msg='Queue timeout'):
+def safe_get(q, timeout=1e6, msg="Queue timeout"):
     """Using queue.get() with timeout is necessary, otherwise KeyboardInterrupt is not handled."""
     while True:
         try:
             return q.get(timeout=timeout)
         except Empty:
-            log.info('Queue timed out (%s), timeout %.3f', msg, timeout)
+            log.info("Queue timed out (%s), timeout %.3f", msg, timeout)
 
 
-def safe_put(q, msg, attempts=3, queue_name=''):
+def safe_put(q, msg, attempts=3, queue_name=""):
     safe_put_many(q, [msg], attempts, queue_name)
 
 
-def safe_put_many(q, msgs, attempts=3, queue_name=''):
+def safe_put_many(q, msgs, attempts=3, queue_name=""):
     for attempt in range(attempts):
         try:
             q.put_many(msgs)
             return
         except Full:
-            log.warning('Could not put msgs to queue, the queue %s is full! Attempt %d', queue_name, attempt)
+            log.warning(
+                "Could not put msgs to queue, the queue %s is full! Attempt %d",
+                queue_name,
+                attempt,
+            )
 
-    log.error('Failed to put msgs to queue %s after %d attempts. Messages are lost!', queue_name, attempts)
+    log.error(
+        "Failed to put msgs to queue %s after %d attempts. Messages are lost!",
+        queue_name,
+        attempts,
+    )
 
 
 def retry(times, exceptions):
@@ -154,6 +165,7 @@ def retry(times, exceptions):
     :param exceptions: Lists of exceptions that trigger a retry attempt
     :type exceptions: Tuple of Exceptions
     """
+
     def decorator(func):
         def newfn(*args, **kwargs):
             attempt = 0
@@ -161,29 +173,35 @@ def retry(times, exceptions):
                 try:
                     return func(*args, **kwargs)
                 except exceptions:
-                    log.warning(f'Exception thrown when attempting to run {func}, attempt {attempt} out of {times}')
-                    time.sleep(min(2 ** attempt, 10))
+                    log.warning(
+                        f"Exception thrown when attempting to run {func}, attempt {attempt} out of {times}"
+                    )
+                    time.sleep(min(2**attempt, 10))
                     attempt += 1
 
             return func(*args, **kwargs)
+
         return newfn
+
     return decorator
 
 
 # CLI args
 
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
-    if isinstance(v, str) and v.lower() in ('true', ):
+    if isinstance(v, str) and v.lower() in ("true",):
         return True
-    elif isinstance(v, str) and v.lower() in ('false', ):
+    elif isinstance(v, str) and v.lower() in ("false",):
         return False
     else:
-        raise argparse.ArgumentTypeError('Boolean value expected')
+        raise argparse.ArgumentTypeError("Boolean value expected")
 
 
 # numpy stuff
+
 
 def numpy_all_the_way(list_of_arrays):
     """Turn a list of numpy arrays into a 2D numpy array."""
@@ -199,12 +217,13 @@ def numpy_flatten(list_of_arrays):
 
 
 def ensure_contigious(x):
-    if not x.flags['C_CONTIGUOUS']:
+    if not x.flags["C_CONTIGUOUS"]:
         x = np.ascontiguousarray(x)
     return x
 
 
 # matplotlib
+
 
 def figure_to_numpy(figure):
     """
@@ -227,6 +246,7 @@ def figure_to_numpy(figure):
 
 # os-related stuff
 
+
 def get_free_disk_space_mb(cfg):
     statvfs = os.statvfs(experiments_dir(cfg))
     return statvfs.f_frsize * statvfs.f_bfree / (1024 * 1024)
@@ -248,9 +268,9 @@ def kill(proc_pid):
 def join_or_kill(process, timeout=1.0):
     process.join(timeout)
     if process.is_alive():
-        log.warning('Process %r could not join, kill it with fire!', process)
+        log.warning("Process %r could not join, kill it with fire!", process)
         process.kill()
-        log.warning('Process %r is dead (%r)', process, process.is_alive())
+        log.warning("Process %r is dead (%r)", process, process.is_alive())
 
 
 def list_child_processes():
@@ -271,7 +291,7 @@ def list_child_processes():
 def kill_processes(processes):
     # do not kill to avoid permanent memleaks
     # https://pytorch.org/docs/stable/multiprocessing.html#file-system-file-system
-    processes_to_save = ['torch_shm', 'resource_tracker', 'semaphore_tracker']
+    processes_to_save = ["torch_shm", "resource_tracker", "semaphore_tracker"]
 
     for p in processes:
         try:
@@ -283,9 +303,11 @@ def kill_processes(processes):
             if not kill_proc:
                 continue
 
-            log.debug('Child process name %d %r %r %r', p.pid, p.name(), p.exe(), p.cmdline())
+            log.debug(
+                "Child process name %d %r %r %r", p.pid, p.name(), p.exe(), p.cmdline()
+            )
             if p.is_running():
-                log.debug('Killing process %s...', p.name())
+                log.debug("Killing process %s...", p.name())
                 p.kill()
         except psutil.NoSuchProcess:
             # log.debug('Process %d is already dead', p.pid)
@@ -315,14 +337,20 @@ def cores_for_worker_process(worker_idx, num_workers, cpu_count):
         remaining_workers = num_workers % cpu_count
         if cpu_count % remaining_workers == 0:
             cores_to_use = cpu_count // remaining_workers
-            cores = list(range(worker_idx_modulo * cores_to_use, (worker_idx_modulo + 1) * cores_to_use, 1))
+            cores = list(
+                range(
+                    worker_idx_modulo * cores_to_use,
+                    (worker_idx_modulo + 1) * cores_to_use,
+                    1,
+                )
+            )
 
     return cores
 
 
 def set_process_cpu_affinity(worker_idx, num_workers):
-    if platform == 'darwin':
-        log.debug('On MacOS, not setting affinity')
+    if platform == "darwin":
+        log.debug("On MacOS, not setting affinity")
         return
 
     curr_process = psutil.Process()
@@ -333,10 +361,11 @@ def set_process_cpu_affinity(worker_idx, num_workers):
         curr_process_cores = [available_cores[c] for c in core_indices]
         curr_process.cpu_affinity(curr_process_cores)
 
-    log.debug('Worker %d uses CPU cores %r', worker_idx, curr_process.cpu_affinity())
+    log.debug("Worker %d uses CPU cores %r", worker_idx, curr_process.cpu_affinity())
 
 
 # working with filesystem
+
 
 def ensure_dir_exists(path):
     if not os.path.exists(path):
@@ -367,7 +396,7 @@ def get_username():
 
 
 def project_tmp_dir():
-    tmp_dir_name = f'sample_factory_{get_username()}'
+    tmp_dir_name = f"sample_factory_{get_username()}"
     return ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name))
 
 
@@ -388,20 +417,20 @@ def experiment_dir(cfg):
 
 
 def model_dir(experiment_dir_):
-    return ensure_dir_exists(join(experiment_dir_, '.model'))
+    return ensure_dir_exists(join(experiment_dir_, ".model"))
 
 
 def summaries_dir(experiment_dir_):
-    return ensure_dir_exists(join(experiment_dir_, '.summary'))
+    return ensure_dir_exists(join(experiment_dir_, ".summary"))
 
 
 def cfg_file(cfg):
-    params_file = join(experiment_dir(cfg=cfg), 'cfg.json')
+    params_file = join(experiment_dir(cfg=cfg), "cfg.json")
     return params_file
 
 
 def done_filename(cfg):
-    return join(experiment_dir(cfg=cfg), 'done')
+    return join(experiment_dir(cfg=cfg), "done")
 
 
 def git_root():
@@ -412,7 +441,7 @@ def git_root():
     curr_dir = cwd
     max_depth = 20
     for _ in range(max_depth):
-        if '.git' in os.listdir(curr_dir):
+        if ".git" in os.listdir(curr_dir):
             return curr_dir
 
         parent_dir = os.path.dirname(curr_dir)
@@ -424,16 +453,30 @@ def git_root():
 
 
 def get_git_commit_hash():
-    git_hash = 'unknown'
-    git_repo_name = 'not a git repository'
+    git_hash = "unknown"
+    git_repo_name = "not a git repository"
 
     git_root_dir = git_root()
     if git_root_dir:
         try:
-            git_hash = check_output(['git', 'rev-parse', 'HEAD'], cwd=git_root_dir, timeout=1).strip().decode('ascii')
-            git_repo_name = check_output(['git', 'config', '--get', 'remote.origin.url'], cwd=git_root_dir, timeout=1).strip().decode('ascii')
+            git_hash = (
+                check_output(["git", "rev-parse", "HEAD"], cwd=git_root_dir, timeout=1)
+                .strip()
+                .decode("ascii")
+            )
+            git_repo_name = (
+                check_output(
+                    ["git", "config", "--get", "remote.origin.url"],
+                    cwd=git_root_dir,
+                    timeout=1,
+                )
+                .strip()
+                .decode("ascii")
+            )
         except SubprocessError:
-            log.debug('Could not query the git revision for the logs, perhaps git is not available')
+            log.debug(
+                "Could not query the git revision for the logs, perhaps git is not available"
+            )
 
     return git_hash, git_repo_name
 
@@ -442,7 +485,7 @@ def save_git_diff(directory):
     git_root_dir = git_root()
     if git_root_dir:
         try:
-            with open(join(directory, 'git.diff'), 'w') as outfile:
-                run(['git', 'diff'], stdout=outfile, cwd=git_root_dir, timeout=1)
+            with open(join(directory, "git.diff"), "w") as outfile:
+                run(["git", "diff"], stdout=outfile, cwd=git_root_dir, timeout=1)
         except SubprocessError:
             pass

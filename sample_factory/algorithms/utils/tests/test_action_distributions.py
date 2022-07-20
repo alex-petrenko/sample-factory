@@ -7,8 +7,11 @@ import numpy as np
 import torch
 from torch.distributions import Categorical
 
-from sample_factory.algorithms.utils.action_distributions import get_action_distribution, calc_num_logits, \
-    sample_actions_log_probs
+from sample_factory.algorithms.utils.action_distributions import (
+    calc_num_logits,
+    get_action_distribution,
+    sample_actions_log_probs,
+)
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
@@ -22,7 +25,9 @@ class TestActionDistributions(TestCase):
         self.assertEqual(simple_num_logits, simple_action_space.n)
 
         simple_logits = torch.rand(self.batch_size, simple_num_logits)
-        simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
+        simple_action_distribution = get_action_distribution(
+            simple_action_space, simple_logits
+        )
 
         simple_actions = simple_action_distribution.sample()
         self.assertEqual(list(simple_actions.shape), [self.batch_size])
@@ -42,14 +47,16 @@ class TestActionDistributions(TestCase):
         with torch.no_grad():
             action_space = gym.spaces.Discrete(8)
             num_logits = calc_num_logits(action_space)
-            device_type = 'cpu'
+            device_type = "cpu"
             device = torch.device(device_type)
             logits = torch.rand(self.batch_size, num_logits, device=device) * 10.0 - 5.0
 
-            if device_type == 'cuda':
+            if device_type == "cuda":
                 torch.cuda.synchronize(device)
 
-            count_gumbel, count_multinomial = np.zeros([action_space.n]), np.zeros([action_space.n])
+            count_gumbel, count_multinomial = np.zeros([action_space.n]), np.zeros(
+                [action_space.n]
+            )
 
             # estimate probability mass by actually sampling both ways
             num_samples = 20000
@@ -58,7 +65,7 @@ class TestActionDistributions(TestCase):
             sample_actions_log_probs(action_distribution)
             action_distribution.sample_gumbel()
 
-            with timing.add_time('gumbel'):
+            with timing.add_time("gumbel"):
                 for i in range(num_samples):
                     action_distribution = get_action_distribution(action_space, logits)
                     samples_gumbel = action_distribution.sample_gumbel()
@@ -67,7 +74,7 @@ class TestActionDistributions(TestCase):
             action_distribution = get_action_distribution(action_space, logits)
             action_distribution.sample()
 
-            with timing.add_time('multinomial'):
+            with timing.add_time("multinomial"):
                 for i in range(num_samples):
                     action_distribution = get_action_distribution(action_space, logits)
                     samples_multinomial = action_distribution.sample()
@@ -76,9 +83,9 @@ class TestActionDistributions(TestCase):
             estimated_probs_gumbel = count_gumbel / float(num_samples)
             estimated_probs_multinomial = count_multinomial / float(num_samples)
 
-            log.debug('Gumbel estimated probs: %r', estimated_probs_gumbel)
-            log.debug('Multinomial estimated probs: %r', estimated_probs_multinomial)
-            log.debug('Sampling timing: %s', timing)
+            log.debug("Gumbel estimated probs: %r", estimated_probs_gumbel)
+            log.debug("Multinomial estimated probs: %r", estimated_probs_multinomial)
+            log.debug("Sampling timing: %s", timing)
             time.sleep(0.1)  # to finish logging
 
     def test_tuple_distribution(self):
@@ -129,20 +136,28 @@ class TestActionDistributions(TestCase):
         categorical = get_action_distribution(action_space, raw_logits)
 
         torch_categorical = Categorical(logits=raw_logits)
-        torch_categorical_log_probs = torch_categorical.log_prob(torch.tensor([0, 1, 2]))
+        torch_categorical_log_probs = torch_categorical.log_prob(
+            torch.tensor([0, 1, 2])
+        )
 
         entropy = categorical.entropy()
         torch_entropy = torch_categorical.entropy()
         self.assertTrue(np.allclose(entropy.numpy(), torch_entropy))
 
-        log_probs = [categorical.log_prob(torch.tensor([action])) for action in [0, 1, 2]]
+        log_probs = [
+            categorical.log_prob(torch.tensor([action])) for action in [0, 1, 2]
+        ]
         log_probs = torch.cat(log_probs)
 
-        self.assertTrue(np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy()))
+        self.assertTrue(
+            np.allclose(torch_categorical_log_probs.numpy(), log_probs.numpy())
+        )
 
         probs = torch.exp(log_probs)
 
-        expected_probs = np.array([0.09003057317038046, 0.24472847105479764, 0.6652409557748219])
+        expected_probs = np.array(
+            [0.09003057317038046, 0.24472847105479764, 0.6652409557748219]
+        )
 
         self.assertTrue(np.allclose(probs.numpy(), expected_probs))
 
@@ -155,4 +170,6 @@ class TestActionDistributions(TestCase):
                 action = torch.tensor([[a1, a2]])
                 log_prob = tuple_distr.log_prob(action)
                 probability = torch.exp(log_prob)[0].item()
-                self.assertAlmostEqual(probability, expected_probs[a1] * expected_probs[a2], delta=1e-6)
+                self.assertAlmostEqual(
+                    probability, expected_probs[a1] * expected_probs[a2], delta=1e-6
+                )

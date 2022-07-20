@@ -1,6 +1,10 @@
 import sys
 
-from sample_factory.algorithms.utils.arguments import maybe_load_from_checkpoint, get_algo_class, parse_args
+from sample_factory.algorithms.utils.arguments import (
+    get_algo_class,
+    maybe_load_from_checkpoint,
+    parse_args,
+)
 
 
 def run_algorithm(cfg):
@@ -20,5 +24,5 @@ def main():
     return status
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

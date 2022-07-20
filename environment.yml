@@ -7,11 +7,14 @@ dependencies:
   - _libgcc_mutex=0.1=main
   - blas=1.0=mkl
   - bzip2=1.0.8=h516909a_2
-  - ca-certificates=2020.6.24=0
+  - ca-certificates=2022.6.15=ha878542_0
   - cairo=1.16.0=hcf35c78_1003
-  - certifi=2020.6.20=py38_0
+  - certifi=2022.6.15=py38h578d9bd_0
+  - cfgv=3.3.1=pyhd8ed1ab_0
   - cudatoolkit=10.2.89=hfd86e86_1
   - dbus=1.13.6=he372182_0
+  - distlib=0.3.5=pyhd8ed1ab_0
+  - editdistance=0.5.3=py38h950e882_2
   - expat=2.2.9=he1b5a44_2
   - ffmpeg=4.3.1=h167e202_0
   - fontconfig=2.13.1=h86ecdb6_1001
@@ -26,6 +29,7 @@ dependencies:
   - harfbuzz=2.4.0=h9f30f68_3
   - hdf5=1.10.6=nompi_h3c11f04_101
   - icu=64.2=he1b5a44_1
+  - identify=2.1.4=pyhd8ed1ab_0
   - intel-openmp=2020.1=217
   - jasper=1.900.1=h07fcdf6_1006
   - jpeg=9d=h516909a_0
@@ -60,6 +64,7 @@ dependencies:
   - ncurses=6.2=he6710b0_1
   - nettle=3.4.1=h1bed415_1002
   - ninja=1.10.0=py38hfd86e86_0
+  - nodeenv=1.7.0=pyhd8ed1ab_0
   - nspr=4.27=he1b5a44_1
   - nss=3.55=he751ad9_0
   - numpy=1.19.1=py38hbc911f0_0
@@ -67,23 +72,29 @@ dependencies:
   - olefile=0.46=py_0
   - opencv=4.4.0=py38_2
   - openh264=2.1.1=h8b12597_0
-  - openssl=1.1.1g=h516909a_1
+  - openssl=1.1.1h=h516909a_0
   - pcre=8.44=he1b5a44_0
   - pillow=7.2.0=py38hb39fc2d_0
   - pip=20.2.1=py38_0
   - pixman=0.38.0=h516909a_1003
+  - platformdirs=2.5.2=pyhd8ed1ab_1
+  - pre-commit=2.20.0=py38h578d9bd_0
+  - pre_commit=2.20.0=hd8ed1ab_0
   - pthread-stubs=0.4=h14c3975_1001
   - py-opencv=4.4.0=py38h23f93f0_2
   - python=3.8.5=h4d41432_2_cpython
   - python_abi=3.8=1_cp38
   - pytorch=1.6.0=py3.8_cuda10.2.89_cudnn7.6.5_0
+  - pyyaml=5.3.1=py38h8df0ef7_1
   - qt=5.12.5=hd8c4c69_1
   - readline=8.0=h7b6447c_0
   - setuptools=49.2.0=py38_0
   - six=1.15.0=py_0
   - sqlite=3.32.3=h62c20be_0
   - tk=8.6.10=hbc83047_0
+  - toml=0.10.2=pyhd8ed1ab_0
   - torchvision=0.7.0=py38_cu102
+  - virtualenv=20.15.1=py38h578d9bd_0
   - wheel=0.34.2=py38_0
   - x264=1!152.20180806=h14c3975_0
   - xorg-kbproto=1.0.7=h14c3975_1002
@@ -98,15 +109,17 @@ dependencies:
   - xorg-xextproto=7.3.0=h14c3975_1002
   - xorg-xproto=7.0.31=h14c3975_1007
   - xz=5.2.5=h7b6447c_0
+  - yaml=0.2.5=h516909a_0
   - zlib=1.2.11=h7b6447c_3
   - zstd=1.4.5=h9ceee32_0
   - pip:
-    - atari-py==0.2.6
     - absl-py==0.9.0
+    - atari-py==0.2.6
     - cloudpickle==1.3.0
     - colorlog==4.2.1
+    - cython==0.29.30
+    - faster-fifo==1.4.0
     - filelock==3.0.12
-    - future==0.18.2
     - grpcio==1.31.0
     - gym==0.17.2
     - markdown==3.2.2
@@ -118,4 +131,4 @@ dependencies:
     - tensorboardx==2.0
     - threadpoolctl==2.1.0
     - werkzeug==1.0.1
-    - faster-fifo
+prefix: /home/rana/miniconda3/envs/sample-factory

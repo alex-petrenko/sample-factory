@@ -1,6 +1,5 @@
-import numpy as np
-
 import gym
+import numpy as np
 
 
 # noinspection PyProtectedMember
@@ -11,14 +10,14 @@ class StepHumanInput(gym.Wrapper):
         super(StepHumanInput, self).__init__(env)
 
     def reset(self):
-        self.unwrapped.mode = 'human'
+        self.unwrapped.mode = "human"
         self.unwrapped._ensure_initialized()
         return self.env.reset()
 
     def step(self, action):
         del action  # we actually ignore action and take input from keyboard
 
-        self.unwrapped.mode = 'human'
+        self.unwrapped.mode = "human"
         self.unwrapped._ensure_initialized()
 
         doom_env = self.unwrapped
@@ -33,6 +32,6 @@ class StepHumanInput(gym.Wrapper):
         else:
             observation = np.uint8(np.zeros(self.observation_space.shape))
 
-        info = {'dummy': 0}
+        info = {"dummy": 0}
 
         return observation, reward, done, info

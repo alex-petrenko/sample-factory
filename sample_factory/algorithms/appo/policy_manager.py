@@ -27,7 +27,9 @@ class PolicyManager:
         num_requests = self.env_policy_requests.get(env_idx, 0)
         if num_requests % (self.num_agents * self.resample_env_policy_every) == 0:
             if self.mix_policies_in_one_env:
-                self.env_policies[env_idx] = [self._sample_policy() for _ in range(self.num_agents)]
+                self.env_policies[env_idx] = [
+                    self._sample_policy() for _ in range(self.num_agents)
+                ]
             else:
                 policy = self._sample_policy()
                 self.env_policies[env_idx] = [policy] * self.num_agents

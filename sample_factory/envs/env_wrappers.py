@@ -10,18 +10,19 @@ from os.path import join
 import cv2
 import gym
 import numpy as np
+
 # noinspection PyProtectedMember
-from gym import spaces, RewardWrapper, ObservationWrapper
+from gym import ObservationWrapper, RewardWrapper, spaces
 
 from sample_factory.algorithms.utils.algo_utils import num_env_steps
-from sample_factory.utils.utils import numpy_all_the_way, ensure_dir_exists, log
+from sample_factory.utils.utils import ensure_dir_exists, log, numpy_all_the_way
 
 
 def reset_with_info(env):
     """Sometimes we want to get info with the very first frame."""
     obs = env.reset()
     info = {}
-    if hasattr(env.unwrapped, 'get_info_all'):
+    if hasattr(env.unwrapped, "get_info_all"):
         info = env.unwrapped.get_info_all()  # info for the new episode
     return obs, info
 
@@ -35,7 +36,7 @@ def is_goal_based_env(env):
     if not dict_obs:
         return False
 
-    for key in ['obs', 'goal']:
+    for key in ["obs", "goal"]:
         if key not in env.observation_space.spaces:
             return False
 
@@ -43,8 +44,8 @@ def is_goal_based_env(env):
 
 
 def main_observation_space(env):
-    if hasattr(env.observation_space, 'spaces'):
-        return env.observation_space.spaces['obs']
+    if hasattr(env.observation_space, "spaces"):
+        return env.observation_space.spaces["obs"]
     else:
         return env.observation_space
 
@@ -60,10 +61,12 @@ class StackFramesWrapper(gym.core.Wrapper):
     Useful for training feed-forward agents on dynamic games.
     """
 
-    def __init__(self, env, stack_past_frames, channel_config='HWC'):
+    def __init__(self, env, stack_past_frames, channel_config="HWC"):
         super(StackFramesWrapper, self).__init__(env)
         if len(env.observation_space.shape) not in [1, 2]:
-            raise Exception('Stack frames works with vector observations and 2D single channel images')
+            raise Exception(
+                "Stack frames works with vector observations and 2D single channel images"
+            )
         self._stack_past = stack_past_frames
         self._frames = None
 
@@ -71,12 +74,12 @@ class StackFramesWrapper(gym.core.Wrapper):
 
         self.channel_config = channel_config
         if self._image_obs:
-            if self.channel_config == 'CHW':
+            if self.channel_config == "CHW":
                 new_obs_space_shape = (stack_past_frames,) + env.observation_space.shape
-            elif self.channel_config == 'HWC':
+            elif self.channel_config == "HWC":
                 new_obs_space_shape = env.observation_space.shape + (stack_past_frames,)
             else:
-                raise Exception(f'Unknown channel config {self.channel_config}')
+                raise Exception(f"Unknown channel config {self.channel_config}")
         else:
             new_obs_space_shape = list(env.observation_space.shape)
             new_obs_space_shape[0] *= stack_past_frames
@@ -93,12 +96,12 @@ class StackFramesWrapper(gym.core.Wrapper):
             # stack past frames along first dimension
             img = numpy_all_the_way(self._frames)
 
-            if self.channel_config == 'CHW':
+            if self.channel_config == "CHW":
                 return img
-            elif self.channel_config == 'HWC':
+            elif self.channel_config == "HWC":
                 return np.transpose(img, axes=[1, 2, 0])
             else:
-                raise Exception(f'Unknown channel config {self.channel_config}')
+                raise Exception(f"Unknown channel config {self.channel_config}")
         else:
             return np.array(self._frames).flatten()
 
@@ -137,15 +140,17 @@ class SkipFramesWrapper(gym.core.Wrapper):
             if done:
                 break
 
-        info['num_frames'] = num_frames
+        info["num_frames"] = num_frames
         return new_observation, total_reward, done, info
 
 
 class SkipAndStackFramesWrapper(StackFramesWrapper):
     """Wrapper for action repeat + stack multiple frames to capture dynamics."""
 
-    def __init__(self, env, skip_frames=4, stack_frames=4, channel_config='HWC'):
-        super().__init__(env, stack_past_frames=stack_frames, channel_config=channel_config)
+    def __init__(self, env, skip_frames=4, stack_frames=4, channel_config="HWC"):
+        super().__init__(
+            env, stack_past_frames=stack_frames, channel_config=channel_config
+        )
         self._skip_frames = skip_frames
 
     def step(self, action):
@@ -161,7 +166,7 @@ class SkipAndStackFramesWrapper(StackFramesWrapper):
             if done:
                 break
 
-        info['num_frames'] = num_frames
+        info["num_frames"] = num_frames
         return self._render_stacked_frames(), total_reward, done, info
 
 
@@ -174,7 +179,7 @@ class NormalizeWrapper(gym.core.Wrapper):
     def __init__(self, env):
         super(NormalizeWrapper, self).__init__(env)
         if len(env.observation_space.shape) != 1:
-            raise Exception('NormalizeWrapper only works with lowdimensional envs')
+            raise Exception("NormalizeWrapper only works with lowdimensional envs")
 
         self.wrapped_env = env
         self._normalize_to = 1.0
@@ -183,7 +188,10 @@ class NormalizeWrapper(gym.core.Wrapper):
         self._max = env.observation_space.high
 
         self.observation_space = spaces.Box(
-            -self._normalize_to, self._normalize_to, shape=env.observation_space.shape, dtype=np.float32,
+            -self._normalize_to,
+            self._normalize_to,
+            shape=env.observation_space.shape,
+            dtype=np.float32,
         )
 
     def _normalize(self, obs):
@@ -207,7 +215,9 @@ class NormalizeWrapper(gym.core.Wrapper):
 class ResizeWrapper(gym.core.Wrapper):
     """Resize observation frames to specified (w,h) and convert to grayscale."""
 
-    def __init__(self, env, w, h, grayscale=True, add_channel_dim=False, area_interpolation=False):
+    def __init__(
+        self, env, w, h, grayscale=True, add_channel_dim=False, area_interpolation=False
+    ):
         super(ResizeWrapper, self).__init__(env)
 
         self.w = w
@@ -229,13 +239,17 @@ class ResizeWrapper(gym.core.Wrapper):
         low, high = old_space.low.flat[0], old_space.high.flat[0]
 
         if self.grayscale:
-            new_shape = [self.h, self.w, 1] if self.add_channel_dim else [self.h, self.w]
+            new_shape = (
+                [self.h, self.w, 1] if self.add_channel_dim else [self.h, self.w]
+            )
         else:
             if len(old_space.shape) > 2:
                 channels = old_space.shape[-1]
                 new_shape = [self.h, self.w, channels]
             else:
-                new_shape = [self.h, self.w, 1] if self.add_channel_dim else [self.h, self.w]
+                new_shape = (
+                    [self.h, self.w, 1] if self.add_channel_dim else [self.h, self.w]
+                )
 
         return spaces.Box(low, high, shape=new_shape, dtype=old_space.dtype)
 
@@ -288,7 +302,7 @@ class VerticalCropWrapper(ObservationWrapper):
         h = observation.shape[0]
         crop_top = (h - self.crop_h) // 2
         crop_bottom = h - self.crop_h - crop_top
-        cropped_obs = observation[crop_top:h - crop_bottom, :, :]
+        cropped_obs = observation[crop_top : h - crop_bottom, :, :]
         return cropped_obs
 
 
@@ -303,7 +317,7 @@ class RewardScalingWrapper(RewardWrapper):
 
 
 class TimeLimitWrapper(gym.core.Wrapper):
-    terminated_by_timer = 'terminated_by_timer'
+    terminated_by_timer = "terminated_by_timer"
 
     def __init__(self, env, limit, random_variation_steps=0):
         super(TimeLimitWrapper, self).__init__(env)
@@ -313,7 +327,10 @@ class TimeLimitWrapper(gym.core.Wrapper):
         self._terminate_in = self._random_limit()
 
     def _random_limit(self):
-        return np.random.randint(-self._variation_steps, self._variation_steps + 1) + self._limit
+        return (
+            np.random.randint(-self._variation_steps, self._variation_steps + 1)
+            + self._limit
+        )
 
     def reset(self):
         self._num_steps = 0
@@ -343,16 +360,20 @@ class RemainingTimeWrapper(ObservationWrapper):
         super(RemainingTimeWrapper, self).__init__(env)
 
         # adding an additional input dimension to indicate time left before the end of episode
-        self.observation_space = spaces.Dict({
-            'timer': spaces.Box(0.0, 1.0, shape=[1], dtype=np.float32),
-            'obs': env.observation_space,
-        })
+        self.observation_space = spaces.Dict(
+            {
+                "timer": spaces.Box(0.0, 1.0, shape=[1], dtype=np.float32),
+                "obs": env.observation_space,
+            }
+        )
 
         wrapped_env = env
         while not isinstance(wrapped_env, TimeLimitWrapper):
             wrapped_env = wrapped_env.env
             if not isinstance(wrapped_env, gym.core.Wrapper):
-                raise Exception('RemainingTimeWrapper is supposed to wrap TimeLimitWrapper')
+                raise Exception(
+                    "RemainingTimeWrapper is supposed to wrap TimeLimitWrapper"
+                )
         self.time_limit_wrapper = wrapped_env
 
     # noinspection PyProtectedMember
@@ -361,8 +382,8 @@ class RemainingTimeWrapper(ObservationWrapper):
         terminate_in = self.time_limit_wrapper._terminate_in
 
         dict_obs = {
-            'timer': num_steps / terminate_in,
-            'obs': observation,
+            "timer": num_steps / terminate_in,
+            "obs": observation,
         }
         return dict_obs
 
@@ -374,38 +395,46 @@ class PixelFormatChwWrapper(ObservationWrapper):
         super().__init__(env)
 
         if isinstance(env.observation_space, gym.spaces.Dict):
-            img_obs_space = env.observation_space['obs']
+            img_obs_space = env.observation_space["obs"]
             self.dict_obs_space = True
         else:
             img_obs_space = env.observation_space
             self.dict_obs_space = False
 
         if not has_image_observations(img_obs_space):
-            raise Exception('Pixel format wrapper only works with image-based envs')
+            raise Exception("Pixel format wrapper only works with image-based envs")
 
         obs_shape = img_obs_space.shape
         max_num_img_channels = 4
 
         if len(obs_shape) <= 2:
-            raise Exception('Env obs do not have channel dimension?')
+            raise Exception("Env obs do not have channel dimension?")
 
         if obs_shape[0] <= max_num_img_channels:
-            raise Exception('Env obs already in CHW format?')
+            raise Exception("Env obs already in CHW format?")
 
         h, w, c = obs_shape
         low, high = img_obs_space.low.flat[0], img_obs_space.high.flat[0]
         new_shape = [c, h, w]
 
         if self.dict_obs_space:
-            dtype = env.observation_space.spaces['obs'].dtype if env.observation_space.spaces['obs'].dtype is not None else np.float32
+            dtype = (
+                env.observation_space.spaces["obs"].dtype
+                if env.observation_space.spaces["obs"].dtype is not None
+                else np.float32
+            )
         else:
-            dtype = env.observation_space.dtype if env.observation_space.dtype is not None else np.float32
+            dtype = (
+                env.observation_space.dtype
+                if env.observation_space.dtype is not None
+                else np.float32
+            )
 
         new_img_obs_space = spaces.Box(low, high, shape=new_shape, dtype=dtype)
 
         if self.dict_obs_space:
             self.observation_space = env.observation_space
-            self.observation_space.spaces['obs'] = new_img_obs_space
+            self.observation_space.spaces["obs"] = new_img_obs_space
         else:
             self.observation_space = new_img_obs_space
 
@@ -420,7 +449,7 @@ class PixelFormatChwWrapper(ObservationWrapper):
             return observation
 
         if self.dict_obs_space:
-            observation['obs'] = self._transpose(observation['obs'])
+            observation["obs"] = self._transpose(observation["obs"])
         else:
             observation = self._transpose(observation)
         return observation
@@ -456,19 +485,25 @@ class RecordingWrapper(gym.core.Wrapper):
     def reset(self):
         if self._episode_recording_dir is not None and self._record_id > 0:
             # save actions to text file
-            with open(join(self._episode_recording_dir, 'actions.json'), 'w') as actions_file:
+            with open(
+                join(self._episode_recording_dir, "actions.json"), "w"
+            ) as actions_file:
                 json.dump(self._recorded_actions, actions_file)
 
             # rename previous episode dir
-            reward = self._recorded_episode_reward + self._recorded_episode_shaping_reward
-            new_dir_name = self._episode_recording_dir + f'_r{reward:.2f}'
+            reward = (
+                self._recorded_episode_reward + self._recorded_episode_shaping_reward
+            )
+            new_dir_name = self._episode_recording_dir + f"_r{reward:.2f}"
             os.rename(self._episode_recording_dir, new_dir_name)
             log.info(
-                'Finished recording %s (rew %.3f, shaping %.3f)',
-                new_dir_name, reward, self._recorded_episode_shaping_reward,
+                "Finished recording %s (rew %.3f, shaping %.3f)",
+                new_dir_name,
+                reward,
+                self._recorded_episode_shaping_reward,
             )
 
-        dir_name = f'ep_{self._record_id:03d}_p{self._player_id}'
+        dir_name = f"ep_{self._record_id:03d}_p{self._player_id}"
         self._episode_recording_dir = join(self._record_to, dir_name)
         ensure_dir_exists(self._episode_recording_dir)
 
@@ -482,7 +517,7 @@ class RecordingWrapper(gym.core.Wrapper):
         return self.env.reset()
 
     def _record(self, img):
-        frame_name = f'{self._frame_id:05d}.png'
+        frame_name = f"{self._frame_id:05d}.png"
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(join(self._episode_recording_dir, frame_name), img)
         self._frame_id += 1
@@ -499,8 +534,10 @@ class RecordingWrapper(gym.core.Wrapper):
 
         self._record(observation)
         self._recorded_episode_reward += reward
-        if hasattr(self.env.unwrapped, '_total_shaping_reward'):
+        if hasattr(self.env.unwrapped, "_total_shaping_reward"):
             # noinspection PyProtectedMember
-            self._recorded_episode_shaping_reward = self.env.unwrapped._total_shaping_reward
+            self._recorded_episode_shaping_reward = (
+                self.env.unwrapped._total_shaping_reward
+            )
 
         return observation, reward, done, info

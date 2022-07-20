@@ -1,13 +1,17 @@
 import logging
 import shutil
 from os.path import join, split
+from unittest import TestCase
 
 import numpy as np
 
-from unittest import TestCase
-
 from sample_factory.runner.run import runner_argparser
-from sample_factory.runner.run_description import ParamGrid, ParamList, Experiment, RunDescription
+from sample_factory.runner.run_description import (
+    Experiment,
+    ParamGrid,
+    ParamList,
+    RunDescription,
+)
 from sample_factory.runner.run_processes import run
 from sample_factory.utils.utils import ensure_dir_exists, project_tmp_dir
 
@@ -15,8 +19,8 @@ from sample_factory.utils.utils import ensure_dir_exists, project_tmp_dir
 class TestParams(TestCase):
     def test_param_list(self):
         params = [
-            {'p1': 1, 'p2': 'a'},
-            {'p2': 'b', 'p4': 'test'},
+            {"p1": 1, "p2": "a"},
+            {"p2": "b", "p4": "test"},
         ]
         param_list = ParamList(params)
         param_combinations = list(param_list.generate_params(randomize=False))
@@ -25,64 +29,78 @@ class TestParams(TestCase):
             self.assertEqual(combination, param_combinations[i])
 
     def test_param_grid(self):
-        grid = ParamGrid([
-            ('p1', [0, 1]),
-            ('p2', ['a', 'b', 'c']),
-            ('p3', [None, {}]),
-        ])
+        grid = ParamGrid(
+            [
+                ("p1", [0, 1]),
+                ("p2", ["a", "b", "c"]),
+                ("p3", [None, {}]),
+            ]
+        )
 
         param_combinations = grid.generate_params(randomize=True)
         for p in param_combinations:
-            for key in ('p1', 'p2', 'p3'):
+            for key in ("p1", "p2", "p3"):
                 self.assertIn(key, p)
 
         param_combinations = list(grid.generate_params(randomize=False))
-        self.assertEqual(param_combinations[0], {'p1': 0, 'p2': 'a', 'p3': None})
-        self.assertEqual(param_combinations[1], {'p1': 0, 'p2': 'a', 'p3': {}})
-        self.assertEqual(param_combinations[-2], {'p1': 1, 'p2': 'c', 'p3': None})
-        self.assertEqual(param_combinations[-1], {'p1': 1, 'p2': 'c', 'p3': {}})
+        self.assertEqual(param_combinations[0], {"p1": 0, "p2": "a", "p3": None})
+        self.assertEqual(param_combinations[1], {"p1": 0, "p2": "a", "p3": {}})
+        self.assertEqual(param_combinations[-2], {"p1": 1, "p2": "c", "p3": None})
+        self.assertEqual(param_combinations[-1], {"p1": 1, "p2": "c", "p3": {}})
 
 
 class TestRunner(TestCase):
     def test_experiment(self):
-        params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
-        cmd = 'python super_rl.py'
-        ex = Experiment('test', cmd, params.generate_params(randomize=False))
-        cmds = ex.generate_experiments('train_dir', customize_experiment_name=True, param_prefix='--')
+        params = ParamGrid([("p1", [3.14, 2.71]), ("p2", ["a", "b", "c"])])
+        cmd = "python super_rl.py"
+        ex = Experiment("test", cmd, params.generate_params(randomize=False))
+        cmds = ex.generate_experiments(
+            "train_dir", customize_experiment_name=True, param_prefix="--"
+        )
         for index, value in enumerate(cmds):
             command, name = value
             self.assertTrue(command.startswith(cmd))
-            self.assertTrue(name.startswith(f'0{index}_test'))
+            self.assertTrue(name.startswith(f"0{index}_test"))
 
     def test_descr(self):
-        params = ParamGrid([('p1', [3.14, 2.71]), ('p2', ['a', 'b', 'c'])])
+        params = ParamGrid([("p1", [3.14, 2.71]), ("p2", ["a", "b", "c"])])
         experiments = [
-            Experiment('test1', 'python super_rl1.py', params.generate_params(randomize=False)),
-            Experiment('test2', 'python super_rl2.py', params.generate_params(randomize=False)),
+            Experiment(
+                "test1", "python super_rl1.py", params.generate_params(randomize=False)
+            ),
+            Experiment(
+                "test2", "python super_rl2.py", params.generate_params(randomize=False)
+            ),
         ]
-        rd = RunDescription('test_run', experiments)
-        cmds = rd.generate_experiments('train_dir')
+        rd = RunDescription("test_run", experiments)
+        cmds = rd.generate_experiments("train_dir")
         for command, name, root_dir, env_vars in cmds:
             exp_name = split(root_dir)[-1]
-            self.assertIn('--experiment', command)
-            self.assertIn('--experiments_root', command)
+            self.assertIn("--experiment", command)
+            self.assertIn("--experiments_root", command)
             self.assertTrue(exp_name in name)
-            self.assertTrue(root_dir.startswith('test_run'))
+            self.assertTrue(root_dir.startswith("test_run"))
 
     def test_simple_cmd(self):
         logging.disable(logging.INFO)
 
-        echo_params = ParamGrid([
-            ('p1', [3.14, 2.71]),
-            ('p2', ['a', 'b', 'c']),
-            ('p3', list(np.arange(3))),
-        ])
+        echo_params = ParamGrid(
+            [
+                ("p1", [3.14, 2.71]),
+                ("p2", ["a", "b", "c"]),
+                ("p3", list(np.arange(3))),
+            ]
+        )
         experiments = [
-            Experiment('test_echo1', 'echo', echo_params.generate_params(randomize=True)),
-            Experiment('test_echo2', 'echo', echo_params.generate_params(randomize=False)),
+            Experiment(
+                "test_echo1", "echo", echo_params.generate_params(randomize=True)
+            ),
+            Experiment(
+                "test_echo2", "echo", echo_params.generate_params(randomize=False)
+            ),
         ]
-        train_dir = ensure_dir_exists(join(project_tmp_dir(), 'tests'))
-        root_dir_name = '__test_run__'
+        train_dir = ensure_dir_exists(join(project_tmp_dir(), "tests"))
+        root_dir_name = "__test_run__"
         rd = RunDescription(root_dir_name, experiments)
 
         args = runner_argparser().parse_args([])
@@ -92,7 +110,13 @@ class TestRunner(TestCase):
 
         run(rd, args)
 
-        rd2 = RunDescription(root_dir_name, experiments, experiment_dirs_sf_format=False, experiment_arg_name='--experiment_tst', experiment_dir_arg_name='--dir')
+        rd2 = RunDescription(
+            root_dir_name,
+            experiments,
+            experiment_dirs_sf_format=False,
+            experiment_arg_name="--experiment_tst",
+            experiment_dir_arg_name="--dir",
+        )
         run(rd2, args)
 
         logging.disable(logging.NOTSET)

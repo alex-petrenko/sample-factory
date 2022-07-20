@@ -3,8 +3,8 @@ import math
 import gym
 import numpy as np
 import torch
-from torch.distributions import Normal, Independent
 import torch.nn.functional as F
+from torch.distributions import Independent, Normal
 
 from sample_factory.utils.utils import log
 
@@ -16,11 +16,15 @@ def calc_num_actions(action_space):
         return len(action_space.spaces)
     elif isinstance(action_space, gym.spaces.Box):
         if len(action_space.shape) != 1:
-            raise Exception('Non-trivial shape Box action spaces not currently supported. Try to flatten it.')
+            raise Exception(
+                "Non-trivial shape Box action spaces not currently supported. Try to flatten it."
+            )
 
         return action_space.shape[0]
     else:
-        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+        raise NotImplementedError(
+            f"Action space type {type(action_space)} not supported!"
+        )
 
 
 def calc_num_logits(action_space):
@@ -33,7 +37,9 @@ def calc_num_logits(action_space):
         # regress one mean and one standard deviation for every action
         return np.prod(action_space.shape) * 2
     else:
-        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+        raise NotImplementedError(
+            f"Action space type {type(action_space)} not supported!"
+        )
 
 
 def is_continuous_action_space(action_space):
@@ -56,7 +62,9 @@ def get_action_distribution(action_space, raw_logits):
     elif isinstance(action_space, gym.spaces.Box):
         return ContinuousActionDistribution(params=raw_logits)
     else:
-        raise NotImplementedError(f'Action space type {type(action_space)} not supported!')
+        raise NotImplementedError(
+            f"Action space type {type(action_space)} not supported!"
+        )
 
 
 def sample_actions_log_probs(distribution):
@@ -92,7 +100,10 @@ class CategoricalActionDistribution:
         return self.log_p
 
     def sample_gumbel(self):
-        sample = torch.argmax(self.raw_logits - torch.empty_like(self.raw_logits).exponential_().log_(), -1)
+        sample = torch.argmax(
+            self.raw_logits - torch.empty_like(self.raw_logits).exponential_().log_(),
+            -1,
+        )
         return sample
 
     def sample(self):
@@ -129,8 +140,10 @@ class CategoricalActionDistribution:
         uniform_prob = 1 / num_categories
         log_uniform_prob = math.log(uniform_prob)
 
-        return 0.5 * ((probs * (log_probs - log_uniform_prob)).sum(dim=-1)
-                      + (uniform_prob * (log_uniform_prob - log_probs)).sum(dim=-1))
+        return 0.5 * (
+            (probs * (log_probs - log_uniform_prob)).sum(dim=-1)
+            + (uniform_prob * (log_uniform_prob - log_probs)).sum(dim=-1)
+        )
 
     def kl_divergence(self, other):
         return self._kl(other.log_probs)
@@ -144,9 +157,9 @@ class CategoricalActionDistribution:
             max_prob=self.probs.max(),
         )
 
-        msg = ''
+        msg = ""
         for key, value in dbg_info.items():
-            msg += f'{key}={value.cpu().item():.3f} '
+            msg += f"{key}={value.cpu().item():.3f} "
         log.debug(msg)
 
 
@@ -166,6 +179,7 @@ class TupleActionDistribution:
     Entropy of such a distribution is just a sum of entropies of individual distributions.
 
     """
+
     def __init__(self, action_space, logits_flat):
         self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
@@ -173,7 +187,9 @@ class TupleActionDistribution:
 
         self.distributions = []
         for i, space in enumerate(action_space.spaces):
-            self.distributions.append(get_action_distribution(space, self.split_logits[i]))
+            self.distributions.append(
+                get_action_distribution(space, self.split_logits[i])
+            )
 
     @staticmethod
     def _flatten_actions(list_of_action_batches):
@@ -182,7 +198,9 @@ class TupleActionDistribution:
 
     def _calc_log_probs(self, list_of_action_batches):
         # calculate batched log probs for every distribution
-        log_probs = [d.log_prob(a) for d, a in zip(self.distributions, list_of_action_batches)]
+        log_probs = [
+            d.log_prob(a) for d, a in zip(self.distributions, list_of_action_batches)
+        ]
         log_probs = [lp.unsqueeze(dim=1) for lp in log_probs]
 
         # concatenate and calculate sum of individual log-probs
@@ -219,8 +237,7 @@ class TupleActionDistribution:
     def kl_divergence(self, other):
         kls = [
             d.kl_divergence(other_d).unsqueeze(dim=1)
-            for d, other_d
-            in zip(self.distributions, other.distributions)
+            for d, other_d in zip(self.distributions, other.distributions)
         ]
 
         kls = torch.cat(kls, dim=1)
@@ -228,7 +245,10 @@ class TupleActionDistribution:
         return kl
 
     def symmetric_kl_with_uniform_prior(self):
-        sym_kls = [d.symmetric_kl_with_uniform_prior().unsqueeze(dim=1) for d in self.distributions]
+        sym_kls = [
+            d.symmetric_kl_with_uniform_prior().unsqueeze(dim=1)
+            for d in self.distributions
+        ]
         sym_kls = torch.cat(sym_kls, dim=1)
         sym_kl = sym_kls.sum(dim=1)
         return sym_kl
@@ -263,11 +283,9 @@ class ContinuousActionDistribution(Independent):
             action_mean=self.means.mean(),
             action_mean_min=self.means.min(),
             action_mean_max=self.means.max(),
-
             action_log_std_mean=self.log_std.mean(),
             action_log_std_min=self.log_std.min(),
             action_log_std_max=self.log_std.max(),
-
             action_stddev_mean=self.stddev.mean(),
             action_stddev_min=self.stddev.min(),
             action_stddev_max=self.stddev.max(),

@@ -1,10 +1,17 @@
 import torch
 from torch import nn
 
-from sample_factory.algorithms.appo.model_utils import create_encoder, create_core, \
-    ActionParameterizationContinuousNonAdaptiveStddev, \
-    ActionParameterizationDefault, normalize_obs
-from sample_factory.algorithms.utils.action_distributions import sample_actions_log_probs, is_continuous_action_space
+from sample_factory.algorithms.appo.model_utils import (
+    ActionParameterizationContinuousNonAdaptiveStddev,
+    ActionParameterizationDefault,
+    create_core,
+    create_encoder,
+    normalize_obs,
+)
+from sample_factory.algorithms.utils.action_distributions import (
+    is_continuous_action_space,
+    sample_actions_log_probs,
+)
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict
 
@@ -19,12 +26,18 @@ class _ActorCriticBase(nn.Module):
         self.cores = []
 
     def get_action_parameterization(self, core_output_size):
-        if not self.cfg.adaptive_stddev and is_continuous_action_space(self.action_space):
+        if not self.cfg.adaptive_stddev and is_continuous_action_space(
+            self.action_space
+        ):
             action_parameterization = ActionParameterizationContinuousNonAdaptiveStddev(
-                self.cfg, core_output_size, self.action_space,
+                self.cfg,
+                core_output_size,
+                self.action_space,
             )
         else:
-            action_parameterization = ActionParameterizationDefault(self.cfg, core_output_size, self.action_space)
+            action_parameterization = ActionParameterizationDefault(
+                self.cfg, core_output_size, self.action_space
+            )
 
         return action_parameterization
 
@@ -40,10 +53,12 @@ class _ActorCriticBase(nn.Module):
         # gain = nn.init.calculate_gain(self.cfg.nonlinearity)
         gain = self.cfg.policy_init_gain
 
-        if hasattr(layer, 'bias') and isinstance(layer.bias, torch.nn.parameter.Parameter):
+        if hasattr(layer, "bias") and isinstance(
+            layer.bias, torch.nn.parameter.Parameter
+        ):
             layer.bias.data.fill_(0)
 
-        if self.cfg.policy_initialization == 'orthogonal':
+        if self.cfg.policy_initialization == "orthogonal":
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.orthogonal_(layer.weight.data, gain=gain)
             else:
@@ -52,12 +67,12 @@ class _ActorCriticBase(nn.Module):
                 # I never noticed much difference between different initialization schemes, and here it seems safer to
                 # go with default initialization,
                 pass
-        elif self.cfg.policy_initialization == 'xavier_uniform':
+        elif self.cfg.policy_initialization == "xavier_uniform":
             if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.xavier_uniform_(layer.weight.data, gain=gain)
             else:
                 pass
-        elif self.cfg.policy_initialization == 'torch_default':
+        elif self.cfg.policy_initialization == "torch_default":
             # do nothing
             pass
 
@@ -93,17 +108,21 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
     def forward_tail(self, core_output, with_action_distribution=False):
         values = self.critic_linear(core_output)
 
-        action_distribution_params, action_distribution = self.action_parameterization(core_output)
+        action_distribution_params, action_distribution = self.action_parameterization(
+            core_output
+        )
 
         # for non-trivial action spaces it is faster to do these together
         actions, log_prob_actions = sample_actions_log_probs(action_distribution)
 
-        result = AttrDict(dict(
-            actions=actions,
-            action_logits=action_distribution_params,  # perhaps `action_logits` is not the best name here since we now support continuous actions
-            log_prob_actions=log_prob_actions,
-            values=values,
-        ))
+        result = AttrDict(
+            dict(
+                actions=actions,
+                action_logits=action_distribution_params,  # perhaps `action_logits` is not the best name here since we now support continuous actions
+                log_prob_actions=log_prob_actions,
+                values=values,
+            )
+        )
 
         if with_action_distribution:
             result.action_distribution = action_distribution
@@ -135,7 +154,9 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
 
         self.critic_linear = nn.Linear(self.critic_core.get_core_out_size(), 1)
 
-        self.action_parameterization = self.get_action_parameterization(self.critic_core.get_core_out_size())
+        self.action_parameterization = self.get_action_parameterization(
+            self.critic_core.get_core_out_size()
+        )
 
         self.apply(self.initialize_weights)
 
@@ -182,19 +203,23 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         core_outputs = core_output.chunk(len(self.cores), dim=1)
 
         # first core output corresponds to the actor
-        action_distribution_params, action_distribution = self.action_parameterization(core_outputs[0])
+        action_distribution_params, action_distribution = self.action_parameterization(
+            core_outputs[0]
+        )
         # for non-trivial action spaces it is faster to do these together
         actions, log_prob_actions = sample_actions_log_probs(action_distribution)
 
         # second core output corresponds to the critic
         values = self.critic_linear(core_outputs[1])
 
-        result = AttrDict(dict(
-            actions=actions,
-            action_logits=action_distribution_params,
-            log_prob_actions=log_prob_actions,
-            values=values,
-        ))
+        result = AttrDict(
+            dict(
+                actions=actions,
+                action_logits=action_distribution_params,
+                log_prob_actions=log_prob_actions,
+                values=values,
+            )
+        )
 
         if with_action_distribution:
             result.action_distribution = action_distribution
@@ -220,6 +245,10 @@ def create_actor_critic(cfg, obs_space, action_space, timing=None):
         return create_core(cfg, encoder.get_encoder_out_size())
 
     if cfg.actor_critic_share_weights:
-        return _ActorCriticSharedWeights(make_encoder, make_core, action_space, cfg, timing)
+        return _ActorCriticSharedWeights(
+            make_encoder, make_core, action_space, cfg, timing
+        )
     else:
-        return _ActorCriticSeparateWeights(make_encoder, make_core, action_space, cfg, timing)
+        return _ActorCriticSeparateWeights(
+            make_encoder, make_core, action_space, cfg, timing
+        )

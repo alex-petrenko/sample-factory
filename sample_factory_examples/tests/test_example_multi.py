@@ -13,9 +13,9 @@ from sample_factory_examples.train_custom_multi_env import register_custom_compo
 
 
 @unittest.skipIf(
-    'SKIP_TESTS_THAT_REQUIRE_A_SEPARATE_PROCESS' in os.environ,
-    'this test should be executed in a separate process because of how PyTorch works: '
-    'https://github.com/pytorch/pytorch/issues/33248',
+    "SKIP_TESTS_THAT_REQUIRE_A_SEPARATE_PROCESS" in os.environ,
+    "this test should be executed in a separate process because of how PyTorch works: "
+    "https://github.com/pytorch/pytorch/issues/33248",
 )
 class TestExampleMulti(TestCase):
     """
@@ -26,18 +26,24 @@ class TestExampleMulti(TestCase):
     """
 
     def test_example_multi(self):
-        experiment_name = 'test_example_multi'
+        experiment_name = "test_example_multi"
 
         register_custom_components()
 
         # test training for a few thousand frames
-        cfg = parse_args(argv=['--algo=APPO', '--env=my_custom_multi_env_v1', f'--experiment={experiment_name}'])
+        cfg = parse_args(
+            argv=[
+                "--algo=APPO",
+                "--env=my_custom_multi_env_v1",
+                f"--experiment={experiment_name}",
+            ]
+        )
         cfg.num_workers = 6
         cfg.train_for_env_steps = 350000
         cfg.save_every_sec = 1
         cfg.decorrelate_experience_max_seconds = 0
         cfg.seed = 0
-        cfg.device = 'cpu'
+        cfg.device = "cpu"
         cfg.num_policies = 2
 
         status = run_algorithm(cfg)
@@ -45,7 +51,12 @@ class TestExampleMulti(TestCase):
 
         # then test the evaluation of the saved model
         cfg = parse_args(
-            argv=['--algo=APPO', '--env=my_custom_multi_env_v1', f'--experiment={experiment_name}', '--device=cpu'],
+            argv=[
+                "--algo=APPO",
+                "--env=my_custom_multi_env_v1",
+                f"--experiment={experiment_name}",
+                "--device=cpu",
+            ],
             evaluation=True,
         )
         status, avg_reward = enjoy(cfg, max_num_frames=200)

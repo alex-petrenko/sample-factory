@@ -13,7 +13,7 @@ class DoomGatheringRewardShaping(gym.Wrapper):
         if info is None or done:
             return 0.0
 
-        curr_health = info.get('HEALTH', 0.0)
+        curr_health = info.get("HEALTH", 0.0)
         reward = 0.0
 
         if self._prev_health is not None:
@@ -36,6 +36,6 @@ class DoomGatheringRewardShaping(gym.Wrapper):
 
         if done:
             true_reward = self.orig_env_reward
-            info['true_reward'] = true_reward
+            info["true_reward"] = true_reward
 
         return observation, reward, done, info

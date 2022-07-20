@@ -1,4 +1,4 @@
-# fix gym.env.classic_control.render is missing 
+# fix gym.env.classic_control.render is missing
 # code is borrow from
 # https://github.com/openai/gym/blob/06e16dd586b010d1987eb37e499d1a291a183341/gym/envs/classic_control/rendering.py
 
@@ -35,6 +35,8 @@ except ImportError as e:
     'xvfb-run -s \"-screen 0 1400x900x24\" python <your_script.py>'
     """
     )
+
+
 def get_display(spec):
     """Convert a display specification (such as :0) into an actual Display
     object.
@@ -70,6 +72,7 @@ def get_window(width, height, display, **kwargs):
         context=context,
         **kwargs
     )
+
 
 class SimpleImageViewer(object):
     def __init__(self, display=None, maxwidth=500):

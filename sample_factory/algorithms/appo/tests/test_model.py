@@ -12,11 +12,10 @@ from sample_factory.utils.utils import log
 
 
 class TestModel(TestCase):
-
     @staticmethod
     def forward_pass(device_type):
-        env_name = 'atari_breakout'
-        cfg = default_cfg(algo='APPO', env=env_name)
+        env_name = "atari_breakout"
+        cfg = default_cfg(algo="APPO", env=env_name)
         cfg.actor_critic_share_weights = True
         cfg.hidden_size = 128
         cfg.use_rnn = True
@@ -32,25 +31,25 @@ class TestModel(TestCase):
         actor_critic.to(device)
 
         timing = Timing()
-        with timing.timeit('all'):
+        with timing.timeit("all"):
             batch = 128
-            with timing.add_time('input'):
+            with timing.add_time("input"):
                 # better avoid hardcoding here...
                 observations = dict(obs=torch.rand([batch, 4, 84, 84]).to(device))
                 rnn_states = torch.rand([batch, get_hidden_size(cfg)]).to(device)
 
             n = 200
             for i in range(n):
-                with timing.add_time('forward'):
+                with timing.add_time("forward"):
                     output = actor_critic(observations, rnn_states)
 
-                log.debug('Progress %d/%d', i, n)
+                log.debug("Progress %d/%d", i, n)
 
-        log.debug('Timing: %s', timing)
+        log.debug("Timing: %s", timing)
 
     def test_forward_pass_cpu(self):
-        self.forward_pass('cpu')
+        self.forward_pass("cpu")
 
-    @unittest.skipUnless(torch.cuda.is_available(), 'This test requires a GPU')
+    @unittest.skipUnless(torch.cuda.is_available(), "This test requires a GPU")
     def test_forward_pass_gpu(self):
-        self.forward_pass('cuda')
+        self.forward_pass("cuda")
