@@ -67,17 +67,19 @@ def push_model_to_repo(dir_path: str, repo_name: str):
     # Upload folders
     folders = ["checkpoint_p0", ".summary"]
     for f in folders:
-        upload_folder(
-            repo_id=repo_name,
-            folder_path=os.path.join(dir_path, f),
-            path_in_repo=f,
-        )
+        if os.path.exists(os.path.join(dir_path, f)):
+            upload_folder(
+                repo_id=repo_name,
+                folder_path=os.path.join(dir_path, f),
+                path_in_repo=f,
+            )
 
     # Upload files
     files = ["cfg.json", "README.md", "replay.mp4"]
     for f in files:
-        upload_file(
-            repo_id=repo_name,
-            path_or_fileobj=os.path.join(dir_path, f),
-            path_in_repo=f,
-        )
+        if os.path.exists(os.path.join(dir_path, f)):
+            upload_file(
+                repo_id=repo_name,
+                path_or_fileobj=os.path.join(dir_path, f),
+                path_in_repo=f,
+            )

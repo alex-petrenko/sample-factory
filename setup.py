@@ -41,6 +41,7 @@ setup(
         "filelock",
         "opencv-python",
         "wandb>=0.12.9",
+        "huggingface-hub<1.0",
     ],
     extras_require={
         "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit"],
