@@ -9,6 +9,7 @@ from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, buil
 # noinspection PyPep8Naming
 class TestPackedSequences:
     def check_packed_version_matching_loopy_version(self, T, N, D, random_dones, norm_tolerance=2e-6):
+        # changing this file for so I can commit and PR
         rnn = nn.GRU(D, D, 1)
 
         for _ in range(100):
