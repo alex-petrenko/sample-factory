@@ -85,7 +85,12 @@ def test_non_batched_two_discrete_action_dists():
     """Script entry point."""
     register_test_components()
 
-    argv = ["--algo=APPO", "--env=non_batched_two_discete_dist_env", "--experiment=test_non_batched_two_discete_dists"]
+    argv = [
+        "--algo=APPO",
+        "--env=non_batched_two_discete_dist_env",
+        "--experiment=test_non_batched_two_discete_dists",
+        "--device=cpu",
+    ]
 
     parser, cfg = parse_sf_args(argv=argv)
     override_defaults(parser)
