@@ -12,10 +12,19 @@ from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
+from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.utils.huggingface_utils import generate_model_card, generate_replay_video, push_model_to_repo
 from sample_factory.utils.utils import AttrDict, experiment_dir, log
+
+
+def render_frame(cfg, env, video_frames, num_frames):
+    if cfg.save_video:
+        frame = env.render(mode="rgb_array")
+        if num_frames < cfg.video_frames:
+            video_frames.append(frame)
+    else:
+        env.render()
 
 
 def enjoy(cfg):
@@ -104,14 +113,8 @@ def enjoy(cfg):
                         time.sleep(time_wait)
 
                     last_render_start = time.time()
-                    # TODO to render atari, need to add mode, will totally fix it in one week
-                    # env.render(mode='rgb_array')
-                    if cfg.save_video:
-                        frame = env.render(mode="rgb_array")
-                        if num_frames < cfg.video_frames:
-                            video_frames.append(frame)
-                    else:
-                        env.render()
+
+                    render_frame(cfg, env, video_frames, num_frames)
 
                 obs, rew, dones, infos = env.step(actions)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
@@ -149,14 +152,7 @@ def enjoy(cfg):
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
                     if not cfg.no_render:
-                        # TODO to render atari, need to add mode, will totally fix it in one week
-                        # env.render(mode='rgb_array')
-                        if cfg.save_video:
-                            frame = env.render(mode="rgb_array")
-                            if num_frames < cfg.video_frames:
-                                video_frames.append(frame)
-                        else:
-                            env.render()
+                        render_frame(cfg, env, video_frames, num_frames)
                     time.sleep(0.05)
 
                 if all(finished_episode):
@@ -200,7 +196,7 @@ def enjoy(cfg):
         generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps)
 
     if cfg.push_to_hub:
-        generate_model_card(cfg, reward_list)
-        push_model_to_repo(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", policy_id)
+        generate_model_card(experiment_dir(cfg=cfg), cfg.algo, cfg.env, reward_list)
+        push_to_hf(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", cfg.num_policies)
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)

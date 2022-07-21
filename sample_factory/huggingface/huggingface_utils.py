@@ -2,13 +2,13 @@ import os
 
 import cv2
 import numpy as np
-from huggingface_hub import HfApi, repocard, upload_file, upload_folder
+from huggingface_hub import HfApi, Repository, repocard, upload_file, upload_folder
 
-from sample_factory.utils.utils import experiment_dir
+from sample_factory.utils.utils import experiment_dir, log, project_tmp_dir
 
 
 def generate_replay_video(dir_path: str, frames: list, fps: int):
-    tmp_name = "/tmp/replay.mp4"
+    tmp_name = os.path.join(project_tmp_dir(), "replay.mp4")
     video_name = os.path.join(dir_path, "replay.mp4")
     frame_size = (frames[0].shape[0], frames[0].shape[1])
 
@@ -19,11 +19,11 @@ def generate_replay_video(dir_path: str, frames: list, fps: int):
     os.system(f"ffmpeg -y -i {tmp_name} -vcodec libx264 {video_name}")
 
 
-def generate_model_card(cfg, rewards: list):
-    readme_path = os.path.join(experiment_dir(cfg=cfg), "README.md")
+def generate_model_card(dir_path: str, algo: str, env: str, rewards: list = None):
+    readme_path = os.path.join(dir_path, "README.md")
 
     readme = f"""
-A(n) **{cfg.algo}** model trained on the **{cfg.env}** environment.
+A(n) **{algo}** model trained on the **{env}** environment.
 This model was trained using Sample Factory 2.0: https://github.com/alex-petrenko/sample-factory
     """
 
@@ -38,34 +38,37 @@ This model was trained using Sample Factory 2.0: https://github.com/alex-petrenk
         "sample-factory",
     ]
 
-    mean_reward = np.mean(rewards)
-    std_reward = np.std(rewards)
+    if rewards is not None:
+        mean_reward = np.mean(rewards)
+        std_reward = np.std(rewards)
 
-    eval = repocard.metadata_eval_result(
-        model_pretty_name=cfg.algo,
-        task_pretty_name="reinforcement-learning",
-        task_id="reinforcement-learning",
-        metrics_pretty_name="mean_reward",
-        metrics_id="mean_reward",
-        metrics_value=f"{mean_reward:.2f} +/- {std_reward:.2f}",
-        dataset_pretty_name=cfg.env,
-        dataset_id=cfg.env,
-    )
+        eval = repocard.metadata_eval_result(
+            model_pretty_name=algo,
+            task_pretty_name="reinforcement-learning",
+            task_id="reinforcement-learning",
+            metrics_pretty_name="mean_reward",
+            metrics_id="mean_reward",
+            metrics_value=f"{mean_reward:.2f} +/- {std_reward:.2f}",
+            dataset_pretty_name=env,
+            dataset_id=env,
+        )
 
-    metadata = {**metadata, **eval}
+        metadata = {**metadata, **eval}
 
     repocard.metadata_save(readme_path, metadata)
 
 
-def push_model_to_repo(dir_path: str, repo_name: str, policy_id: int):
-    HfApi().create_repo(
+def push_to_hf(dir_path: str, repo_name: str, num_policies: int = 1):
+    repo_url = HfApi().create_repo(
         repo_id=repo_name,
         private=False,
         exist_ok=True,
     )
 
     # Upload folders
-    folders = [f"checkpoint_p{policy_id}", ".summary"]
+    folders = [".summary"]
+    for policy_id in range(num_policies):
+        folders.append(f"checkpoint_p{policy_id}")
     for f in folders:
         if os.path.exists(os.path.join(dir_path, f)):
             upload_folder(
@@ -83,3 +86,14 @@ def push_model_to_repo(dir_path: str, repo_name: str, policy_id: int):
                 path_or_fileobj=os.path.join(dir_path, f),
                 path_in_repo=f,
             )
+
+    log.info(f"The model has been pushed to {repo_url}")
+
+
+def load_from_hf(dir_path: str, repo_id: str):
+    temp = repo_id.split("/")
+    repo_name = temp[1]
+
+    local_dir = os.path.join(dir_path, repo_name)
+    Repository(local_dir, repo_id)
+    log.info(f"The repository {repo_id} has been cloned to {local_dir}")
