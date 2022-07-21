@@ -9,6 +9,8 @@
 
 Codebase for high throughput asynchronous reinforcement learning.
 
+**Version 2.0 of the library is in active development on branch sf2. Expect new features, many environment integrations and examples, documentation, better CI and code formatting and more. Consider switching to sf2 branch if you're starting a new project.**
+
 **Paper:** https://arxiv.org/abs/2006.11751
 
 **Cite:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
