@@ -25,12 +25,16 @@ code_folders = ./
 
 
 # Format source code automatically
+.PHONY: format
+
 format:
 	black $(line_len_arg) -t py38 $(code_folders)
 	isort $(line_len_arg) --py 38 --profile black $(code_folders)
 
 
 # Check that source code meets quality standards
+.PHONY: check-codestyle
+
 check-codestyle:
 	black --check $(line_len_arg) -t py38 $(code_folders)
 	isort --check-only $(line_len_arg) --py 38 --profile black $(code_folders)
@@ -39,10 +43,14 @@ check-codestyle:
 
 
 # Run tests for the library
+.PHONY: test
+
 test:
 	pytest -s
 
 
 # Run code coverage test
+.PHONY: test-cov
+
 test-cov:
 	pytest --cov=./ -v
