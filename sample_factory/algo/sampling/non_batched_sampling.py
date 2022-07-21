@@ -473,7 +473,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         # a simulation step right away, without waiting for all other actions to be calculated.
         return all_actors_ready
 
-    def _process_rewards(self, rewards, env_i):
+    def _process_rewards(self, rewards, infos, env_i):
         """
         Pretty self-explanatory, here we record the episode reward and apply the optional clipping and
         scaling of rewards.
@@ -481,6 +481,15 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         for agent_i, r in enumerate(rewards):
             self.actor_states[env_i][agent_i].last_episode_reward += r
 
+        # assert len(rewards) == len(infos)
+        # rewards = []
+        # for ind, item in enumerate(infos):
+        #     rewards.append(0)
+
+        # assert len(rewards) == len(infos)
+        # for ind, item in enumerate(infos):
+        #     if "episode" in item.keys():
+        #         rewards[ind] = item["episode"]["r"]
         rewards = np.asarray(rewards, dtype=np.float32)
         rewards = rewards * self.cfg.reward_scale
         rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
@@ -498,7 +507,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         episodic_stats = []
         env_actor_states = self.actor_states[env_i]
 
-        rewards = self._process_rewards(rewards, env_i)
+        rewards = self._process_rewards(rewards, infos, env_i)
 
         for agent_i in range(self.num_agents):
             actor_state = env_actor_states[agent_i]

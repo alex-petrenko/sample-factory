@@ -190,7 +190,10 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.curr_episode_reward += rewards
 
         # multiply by frameskip so we record the actual number of simulated steps
-        self.curr_episode_len += self.env_info.frameskip
+        if self.cfg.multiply_frameskip:
+            self.curr_episode_len += self.env_info.frameskip
+        else:
+            self.curr_episode_len += 1
 
         reports = []
         if num_dones > 0:

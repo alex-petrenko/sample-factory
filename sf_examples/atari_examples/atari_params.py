@@ -15,7 +15,7 @@ def atari_override_defaults(env, parser):
 
 def atari_benchmark_defaults(env, parser):
     parser.set_defaults(
-        multiply_frameskip=False,
+        # multiply_frameskip=False,
         encoder_type="conv",
         encoder_subtype="convnet_atari",
         hidden_size=512,
@@ -57,6 +57,7 @@ def atari_benchmark_defaults(env, parser):
         serial_mode=False,
         async_rl=False,
         experiment_summaries_interval=3,
+        adam_eps=1e-5,
     )
 
 
