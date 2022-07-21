@@ -2,9 +2,10 @@ import random
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
+import gym
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.policy_manager import PolicyManager
@@ -136,17 +137,26 @@ class ActorState:
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
         actions = ensure_numpy_array(self.last_actions)
-        if self.env_info.integer_actions:
-            actions = actions.astype(np.int32)
 
-        if actions.ndim == 0:
-            if self.env_info.integer_actions:
-                actions = actions.item()
-            else:
-                # envs with continuous actions typically expect a vector of actions (i.e. Mujoco)
-                # if there's only one action (i.e. Mujoco pendulum) then we need to make it a 1D vector
-                actions = np.expand_dims(actions, -1)
-        return actions
+        if self.env_info.all_discrete or isinstance(self.env_info.action_space, gym.spaces.Discrete):
+            return self.calculate_actions(actions, True)
+
+        if isinstance(self.env_info.action_space, gym.spaces.Box):
+            return self.calculate_actions(actions, False)
+
+        if isinstance(self.env_info.action_space, gym.spaces.Tuple):
+            out_actions = []
+            for split, space in zip(np.split(actions, self.env_info.action_splits), self.env_info.action_space):
+                is_discete = isinstance(space, gym.spaces.Discrete)
+                out_actions.append(self.calculate_actions(split, is_discete))
+            return out_actions
+
+        raise NotImplementedError
+
+    def calculate_actions(self, actions: np.ndarray, is_discete: bool) -> np.ndarray:
+        if is_discete:
+            actions = actions.astype(np.int32)
+        return fix_action_shape(actions, is_discete)
 
     def record_env_step(self, reward, done, info, rollout_step):
         """

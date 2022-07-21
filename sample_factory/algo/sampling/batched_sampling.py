@@ -3,6 +3,7 @@ from __future__ import annotations
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
+import gym
 import numpy as np
 import torch
 from torch import Tensor
@@ -24,23 +25,35 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     because in this case the action is usually expected to be a scalar.
 
     """
-    if env_info.integer_actions:
-        actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
 
-    if not env_info.gpu_actions:
+    if env_info.all_discrete or isinstance(env_info.action_space, gym.spaces.Discrete):
+        return process_action_space(actions, env_info.gpu_actions, True)
+
+    if isinstance(env_info.action_space, gym.spaces.Box):
+        return process_action_space(actions, env_info.gpu_actions, False)
+
+    if isinstance(env_info.action_space, gym.spaces.Tuple):
+        # input is (B, N)
+        out_actions = []
+        for split, space in zip(torch.split(actions, env_info.action_splits, 1), env_info.action_space):
+            out_actions.append(
+                process_action_space(split, env_info.gpu_actions, isinstance(space, gym.spaces.Discrete))
+            )
+        # this line can be used to transpose the actions, perhaps add as an option ?
+        # out_actions = list(zip(*out_actions)) # transpose
+        return out_actions
+
+    raise NotImplementedError
+
+
+def process_action_space(actions, gpu_actions, is_discrete):
+    if actions.ndim > 1 and is_discrete:
+        actions = actions.squeeze(dim=1)
+    if is_discrete:
+        actions = actions.to(torch.int32)
+    if not gpu_actions:
         actions = actions.cpu().numpy()
-
-    # action tensor/array should have two dimensions (num_agents, num_actions) where num_agents is a number of
-    # individual actors in a vectorized environment (whether actually different agents or separate envs - does not
-    # matter)
-    # While continuous action envs generally expect an array/tensor of actions, even when there's just one action,
-    # discrete action envs typically expect to get the action index when there's only one action. So we squeeze the
-    # second dimension for integer action envs.
-    assert actions.ndim == 2, f"Expected actions to have two dimensions, got {actions}"
-    if env_info.integer_actions and actions.shape[1] == 1:
-        actions = actions.squeeze(-1)
-
-    return actions
+    return fix_action_shape(actions, is_discrete)
 
 
 class BatchedVectorEnvRunner(VectorEnvRunner):
