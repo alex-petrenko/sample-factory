@@ -4,10 +4,12 @@ import os
 import pickle
 from dataclasses import dataclass
 from os.path import join
+from typing import List
 
 import gym
 from gym.spaces import Discrete
 
+from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.spaces.discretized import Discretized
@@ -36,7 +38,8 @@ class EnvInfo:
     action_space: gym.Space
     num_agents: int
     gpu_actions: bool  # whether actions provided by the agent should be on GPU or not
-    integer_actions: bool  # whether actions returned by the policy should be cast to int32 (i.e. for discrete action envs)
+    action_splits: List[int]  # in the case of tuple actions, the splits for the actions
+    all_discrete: List[int]  # in the case of tuple actions, whether the actions are all discrete
     frameskip: int
 
 
@@ -44,7 +47,8 @@ def extract_env_info(env, cfg):
     obs_space = env.observation_space
     action_space = env.action_space
     num_agents = env.num_agents
-    integer_actions = is_integer_action_env(action_space)
+
+    # integer_actions = is_integer_action_env(action_space)
     gpu_actions = cfg.env_gpu_actions
 
     frameskip = cfg.env_frameskip
@@ -53,9 +57,30 @@ def extract_env_info(env, cfg):
     # self.reward_shaping_scheme = None
     # if self.cfg.with_pbt:
     #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
+    action_splits = None
+    all_discrete = None
+    if isinstance(action_space, gym.spaces.Tuple):
+        action_splits = [calc_num_actions(space) for space in action_space]
+        all_discrete = is_all_discrete(action_space)
 
-    env_info = EnvInfo(obs_space, action_space, num_agents, gpu_actions, integer_actions, frameskip)
+    env_info = EnvInfo(
+        obs_space=obs_space,
+        action_space=action_space,
+        num_agents=num_agents,
+        gpu_actions=gpu_actions,
+        action_splits=action_splits,
+        all_discrete=all_discrete,
+        frameskip=frameskip,
+    )
     return env_info
+
+
+def is_all_discrete(action_space: gym.spaces.Tuple) -> bool:
+    all_discrete = True
+    for space in action_space:
+        all_discrete = all_discrete and isinstance(space, gym.spaces.Discrete)
+
+    return all_discrete
 
 
 def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
