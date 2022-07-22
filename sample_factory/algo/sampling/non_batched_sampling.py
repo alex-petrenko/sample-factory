@@ -83,6 +83,9 @@ class ActorState:
         self.last_episode_reward = 0
         self.last_episode_duration = 0
 
+        self.episode_return = 0
+        self.episode_length = 0
+
         # dictionary with current training progress per policy
         # values are approximate because we get updates from the master process once every few seconds
         self.approx_env_steps = {}
@@ -258,7 +261,8 @@ class ActorState:
             self.reset_rnn_state()
 
     def episodic_stats(self, last_episode_true_objective, last_episode_extra_stats):
-        stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
+        # stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
+        stats = dict(reward=self.episode_return, len=self.episode_length)
 
         stats["true_objective"] = last_episode_true_objective
         stats["episode_extra_stats"] = last_episode_extra_stats
@@ -481,15 +485,11 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         for agent_i, r in enumerate(rewards):
             self.actor_states[env_i][agent_i].last_episode_reward += r
 
-        # assert len(rewards) == len(infos)
-        # rewards = []
-        # for ind, item in enumerate(infos):
-        #     rewards.append(0)
+        for agent_i, item in enumerate(infos):
+            if "episode" in item.keys():
+                self.actor_states[env_i][agent_i].episode_return = item["episode"]["r"]
+                self.actor_states[env_i][agent_i].episode_length = item["episode"]["l"]
 
-        # assert len(rewards) == len(infos)
-        # for ind, item in enumerate(infos):
-        #     if "episode" in item.keys():
-        #         rewards[ind] = item["episode"]["r"]
         rewards = np.asarray(rewards, dtype=np.float32)
         rewards = rewards * self.cfg.reward_scale
         rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
