@@ -1,9 +1,13 @@
+import shutil
+from os.path import isdir
+
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
 from sf_examples.atari_examples.train_atari import parse_atari_args
+from tests.utils import clean_test_dir
 
 
 class TestAtariEnv:
@@ -39,8 +43,11 @@ class TestAtariEnv:
         cfg.seed = 0
         cfg.device = "cpu"
 
+        directory = clean_test_dir(cfg)
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
+        assert isdir(directory)
+        shutil.rmtree(directory, ignore_errors=True)
 
     @pytest.mark.parametrize(
         "env_name",

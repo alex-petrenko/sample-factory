@@ -47,6 +47,7 @@ check-codestyle:
 
 test:
 	pytest -s
+# ; echo "Tests finished. You might need to type 'reset' and press Enter to fix the terminal window"
 
 
 # Run code coverage test
@@ -54,3 +55,4 @@ test:
 
 test-cov:
 	pytest --cov=./ -v
+# ; echo "Tests finished. You might need to type 'reset' and press Enter to fix the terminal window"

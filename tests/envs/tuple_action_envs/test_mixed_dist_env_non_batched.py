@@ -1,5 +1,6 @@
-import sys
-from typing import List, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import List, Tuple, Union
 
 import gym
 import numpy as np
@@ -7,6 +8,14 @@ import numpy as np
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
+
+MixedActions = Union[List, Tuple[int, np.ndarray]]
+
+
+def mixed_actions_get_reward(action: MixedActions, state, eps) -> float:
+    discrete_reward = 1.0 if np.argmax(state) == action[0] else 0.0
+    continuous_reward = 1.0 if (np.argmax(state) - eps) <= sum(action[1]) <= (np.argmax(state) + eps) else 0.0
+    return discrete_reward + continuous_reward
 
 
 class IdentityEnvMixedActions(gym.Env):
@@ -18,21 +27,14 @@ class IdentityEnvMixedActions(gym.Env):
         self.ep_length = 10
         self.num_resets = -1  # Becomes 0 after __init__ exits.
         self.eps = 0.05
+        self.current_step = 0
         self.reset()
 
-    def reset(self):
+    def reset(self, **kwargs):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
         return self.state
-
-    def _get_reward(self, action: Union[int, np.ndarray]) -> float:
-        discrete_reward = 1.0 if np.argmax(self.state) == action[0] else 0.0
-        continuous_reward = (
-            1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
-        )
-
-        return discrete_reward + continuous_reward
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -40,18 +42,18 @@ class IdentityEnvMixedActions(gym.Env):
         state[index] = 1.0
         self.state = state
 
-    def step(self, action: List[np.ndarray]):
-        reward = self._get_reward(action)
+    def step(self, action: MixedActions):
+        reward = mixed_actions_get_reward(action, self.state, self.eps)
         self._choose_next_state()
         self.current_step += 1
         done = self.current_step >= self.ep_length
         return self.state, reward, done, {}
 
-    def close(self):
+    def render(self, mode="human"):
         pass
 
-    def seed(self, value):
-        return
+    def close(self):
+        pass
 
 
 def override_defaults(parser):
@@ -68,10 +70,11 @@ def override_defaults(parser):
         env_frameskip=1,
         nonlinearity="tanh",
         batch_size=1024,
+        decorrelate_experience_max_seconds=0,
     )
 
 
-def make_env(env_name, cfg, cfg_env):
+def make_env(_env_name, _cfg, _cfg_env):
     return IdentityEnvMixedActions(4)
 
 

@@ -8,6 +8,7 @@ from sample_factory.train import run_rl
 from sample_factory.utils.utils import experiment_dir, log
 from sf_examples.mujoco_examples.mujoco.mujoco_utils import mujoco_available
 from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
+from tests.utils import clean_test_dir
 
 
 @pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
@@ -46,11 +47,7 @@ class TestMujoco:
         cfg.seed = 0
         cfg.device = "cpu"
 
-        directory = experiment_dir(cfg=cfg, mkdir=False)
-        if isdir(directory):
-            # remove any previous unfinished test dirs so they don't interfere with this test
-            shutil.rmtree(directory, ignore_errors=True)
-
+        directory = clean_test_dir(cfg)
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
         assert isdir(directory)

@@ -1,5 +1,6 @@
-import sys
-from typing import List, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import List
 
 import gym
 import numpy as np
@@ -7,32 +8,26 @@ import numpy as np
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
+from tests.envs.tuple_action_envs.test_two_discrete_action_dist_env_non_batched import DiscreteActions, get_reward
 
 
-class IdentityEnvMixedActions(gym.Env):
+class IdentityEnvTwoDiscreteActions(gym.Env):
     def __init__(self, size=4):
         self.observation_space = gym.spaces.Box(-1, 1, shape=(size,))
         self._observation_space = gym.spaces.Discrete(size)
 
-        self.action_space = gym.spaces.Tuple([gym.spaces.Discrete(size), gym.spaces.Box(-1, 1, shape=(size,))])
+        self.action_space = gym.spaces.Tuple([gym.spaces.Discrete(size), gym.spaces.Discrete(size * 3)])
         self.ep_length = 10
         self.num_resets = -1  # Becomes 0 after __init__ exits.
         self.eps = 0.05
+        self.current_step = 0
         self.reset()
 
-    def reset(self):
+    def reset(self, **kwargs):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
         return self.state
-
-    def _get_reward(self, action: Union[int, np.ndarray]) -> float:
-        discrete_reward = 1.0 if np.argmax(self.state) == action[0] else 0.0
-        continuous_reward = (
-            1.0 if (np.argmax(self.state) - self.eps) <= sum(action[1]) <= (np.argmax(self.state) + self.eps) else 0.0
-        )
-
-        return discrete_reward + continuous_reward
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -40,24 +35,24 @@ class IdentityEnvMixedActions(gym.Env):
         state[index] = 1.0
         self.state = state
 
-    def step(self, action: List[np.ndarray]):
-        reward = self._get_reward(action)
+    def step(self, action: DiscreteActions):
+        reward = get_reward(action, self.state)
         self._choose_next_state()
         self.current_step += 1
         done = self.current_step >= self.ep_length
         return self.state, reward, done, {}
 
+    def render(self, mode="human"):
+        pass
+
     def close(self):
         pass
 
-    def seed(self, value):
-        return
 
-
-class BatchedIdentityEnvMixedActions(gym.Env):
+class BatchedIdentityEnvTwoDiscreteActions(gym.Env):
     def __init__(self, size=4) -> None:
         n_envs = 4
-        self.envs = [IdentityEnvMixedActions(size) for _ in range(n_envs)]
+        self.envs = [IdentityEnvTwoDiscreteActions(size) for _ in range(n_envs)]
         self.num_agents = n_envs
 
         super().__init__()
@@ -70,19 +65,18 @@ class BatchedIdentityEnvMixedActions(gym.Env):
     def action_space(self):
         return self.envs[0].action_space
 
-    def reset(self):
+    def reset(self, **kwargs):
         obss = []
         for i, env in enumerate(self.envs):
             obs = env.reset()
-
             obss.append(obs)
         return obss
 
-    def step(self, action: List[np.ndarray]):
+    def step(self, action: List[DiscreteActions] | np.ndarray):
         obss, rewards, dones, infos = [], [], [], []
 
         for i, env in enumerate(self.envs):
-            obs, reward, done, info = env.step([action[0][i], action[1][i]])
+            obs, reward, done, info = env.step([action[i][0], action[i][1]])
             obss.append(obs),
             rewards.append(reward)
             dones.append(done)
@@ -90,11 +84,11 @@ class BatchedIdentityEnvMixedActions(gym.Env):
 
         return obss, rewards, dones, infos
 
-    def close(self):
+    def render(self, mode="human"):
         pass
 
-    def seed(self, value):
-        return
+    def close(self):
+        pass
 
 
 def override_defaults(parser):
@@ -111,24 +105,30 @@ def override_defaults(parser):
         env_frameskip=1,
         nonlinearity="tanh",
         batch_size=1024,
+        decorrelate_envs_on_one_worker=False,
     )
 
 
-def make_env(env_name, cfg, cfg_env):
-    return BatchedIdentityEnvMixedActions(4)
+def make_env(_env_name, _cfg, _cfg_env):
+    return BatchedIdentityEnvTwoDiscreteActions(4)
 
 
 def register_test_components():
     register_env(
-        "batched_mix_dist_env",
+        "batched_two_discrete_dist_env",
         make_env,
     )
 
 
-def test_batched_mixed_action_dists():
+def test_batched_two_discrete_action_dists():
     """Script entry point."""
     register_test_components()
-    argv = ["--algo=APPO", "--env=batched_mix_dist_env", "--experiment=test_batched_mixed_action_dists", "--device=cpu"]
+    argv = [
+        "--algo=APPO",
+        "--env=batched_two_discrete_dist_env",
+        "--experiment=test_batched_two_discrete_dists",
+        "--device=cpu",
+    ]
     parser, cfg = parse_sf_args(argv=argv)
 
     override_defaults(parser)

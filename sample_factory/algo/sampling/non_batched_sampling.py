@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 import random
 from queue import Empty
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import gym
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.policy_manager import PolicyManager
@@ -132,31 +134,39 @@ class ActorState:
     def reset_rnn_state(self):
         self.last_rnn_state[:] = 0.0
 
-    def curr_actions(self) -> np.ndarray:
+    def curr_actions(self) -> np.ndarray | List | Any:
         """
         :return: the latest set of actions for this actor, calculated by the policy worker for the last observation
         """
         actions = ensure_numpy_array(self.last_actions)
 
         if self.env_info.all_discrete or isinstance(self.env_info.action_space, gym.spaces.Discrete):
-            return self.calculate_actions(actions, True)
-
-        if isinstance(self.env_info.action_space, gym.spaces.Box):
-            return self.calculate_actions(actions, False)
-
-        if isinstance(self.env_info.action_space, gym.spaces.Tuple):
+            return self._process_action_space(actions, is_discrete=True)
+        elif isinstance(self.env_info.action_space, gym.spaces.Box):
+            return self._process_action_space(actions, is_discrete=False)
+        elif isinstance(self.env_info.action_space, gym.spaces.Tuple):
             out_actions = []
             for split, space in zip(np.split(actions, self.env_info.action_splits), self.env_info.action_space):
-                is_discete = isinstance(space, gym.spaces.Discrete)
-                out_actions.append(self.calculate_actions(split, is_discete))
+                is_discrete = isinstance(space, gym.spaces.Discrete)
+                out_actions.append(self._process_action_space(split, is_discrete))
             return out_actions
 
-        raise NotImplementedError
+        raise NotImplementedError(f"Unknown action space type: {type(self.env_info.action_space)}")
 
-    def calculate_actions(self, actions: np.ndarray, is_discete: bool) -> np.ndarray:
-        if is_discete:
+    @staticmethod
+    def _process_action_space(actions: np.ndarray, is_discrete: bool) -> np.ndarray | Any:
+        if is_discrete:
             actions = actions.astype(np.int32)
-        return fix_action_shape(actions, is_discete)
+            if actions.size == 1:
+                # this will turn a 1-element array into single Python scalar (int). Works for 0-D and 1-D arrays.
+                actions = actions.item()
+        else:
+            if actions.ndim == 0:
+                # envs with continuous actions typically expect a vector of actions (i.e. Mujoco)
+                # if there's only one action (i.e. Mujoco pendulum) then we need to make it a 1D vector
+                actions = np.expand_dims(actions, -1)
+
+        return actions
 
     def record_env_step(self, reward, done, info, rollout_step):
         """
