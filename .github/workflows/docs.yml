@@ -2,7 +2,7 @@ name: docs
 on:
   push:
     branches:
-      - sf2-mujoco-docs
+      - sf2
 jobs:
   deploy:
     runs-on: ubuntu-latest
