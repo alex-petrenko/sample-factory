@@ -32,7 +32,7 @@ class BatchedDictObservationsWrapper(_DictObservationsWrapper):
 
 
 class NonBatchedDictObservationsWrapper(_DictObservationsWrapper):
-    """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
+    """Guarantees that the environment returns observations as lists of dictionaries."""
 
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)

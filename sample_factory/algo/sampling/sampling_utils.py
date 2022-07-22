@@ -47,15 +47,3 @@ class VectorEnvRunner(Configurable):
 
     def close(self):
         raise NotImplementedError()
-
-
-def fix_action_shape(actions: Tensor | np.ndarray, integer_actions: bool) -> Tensor | np.ndarray:
-    if actions.ndim == 0:
-        if integer_actions:
-            actions = actions.item()
-        else:
-            # envs with continuous actions typically expect a vector of actions (i.e. Mujoco)
-            # if there's only one action (i.e. Mujoco pendulum) then we need to make it a 1D vector
-            actions = unsqueeze_tensor(actions, -1)
-
-    return actions

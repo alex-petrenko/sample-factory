@@ -1,7 +1,5 @@
 import time
 
-import pytest
-
 from sample_factory.utils.network import is_udp_port_available
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import cores_for_worker_process, log
