@@ -77,14 +77,14 @@ Various APPO models trained on MuJoCo environments are uploaded to the HuggingFa
 
 Below are some video examples of agents in various MuJoCo envioronments. Videos for all enviornments can be found in the HuggingFace Hub pages linked above.
 
-##### HalfCheetah
+##### HalfCheetah-v4
 <p align="center">
-<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-halfcheetah/resolve/main/replay.mp4 width=500 height=510></iframe></p>
+<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-halfcheetah/resolve/main/replay.mp4 width=500 height=505></iframe></p>
 
-##### Ant
+##### Ant-v4
 <p align="center">
-<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-ant/resolve/main/replay.mp4 width=500 height=510></iframe></p>
+<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-ant/resolve/main/replay.mp4 width=500 height=505></iframe></p>
 
-##### InvertedDoublePendulum
+##### InvertedDoublePendulum-v4
 <p align="center">
-<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-doublependulum/resolve/main/replay.mp4 width=500 height=510></iframe></p>
+<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-doublependulum/resolve/main/replay.mp4 width=500 height=505></iframe></p>
