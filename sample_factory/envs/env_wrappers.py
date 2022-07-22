@@ -723,16 +723,6 @@ class FrameStack(gym.ObservationWrapper):
         high = np.repeat(self.observation_space.high[np.newaxis, ...], num_stack, axis=0)
         self.observation_space = Box(low=low, high=high, dtype=self.observation_space.dtype)
 
-    # def observation(self, observation):
-    #     """Converts the wrappers current frames to lazy frames.
-    #     Args:
-    #         observation: Ignored
-    #     Returns:
-    #         :class:`LazyFrames` object for the wrapper's frame buffer,  :attr:`self.frames`
-    #     """
-    #     assert len(self.frames) == self.num_stack, (len(self.frames), self.num_stack)
-    #     return LazyFrames(list(self.frames), self.lz4_compress)
-
     def step(self, action):
         """Steps through the environment, appending the observation to the frame buffer.
         Args:

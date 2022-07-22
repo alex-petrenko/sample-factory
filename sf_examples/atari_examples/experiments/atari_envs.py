@@ -6,21 +6,18 @@ _params = ParamGrid(
         (
             "env",
             [
-                # "atari_breakout",
+                "atari_breakout",
                 "atari_pong",
-                # "atari_beamrider",
+                "atari_beamrider",
             ],
         ),
-        # (
-        #   "adam_eps", [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
-        # ),
     ]
 )
 
 _experiments = [
     Experiment(
-        "atari_test_run",
-        "python -m sf_examples.atari_examples.experiments.benchmark_atari --algo=APPO --with_wandb=True --wandb_user=wmFrank --wandb_project=atari-benchmark --wandb_group=atari_pong --wandb_tags run3",
+        "atari_envs",
+        "python -m sf_examples.atari_examples.experiments.benchmark_atari --algo=APPO --with_wandb=True --wandb_project=atari-benchmark --wandb_group=atari_all --wandb_tags run3",
         _params.generate_params(randomize=False),
     ),
 ]

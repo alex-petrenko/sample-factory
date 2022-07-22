@@ -547,6 +547,12 @@ def add_default_env_args(p: ArgumentParser):
     p.add_argument(
         "--multiply_frameskip", default=True, type=str2bool, help="Whether to multiply frameskip for training steps"
     )
+    p.add_argument(
+        "--use_record_episode_statistics",
+        default=False,
+        type=str2bool,
+        help="Whether to use gym RecordEpisodeStatistics wrapper to keep track of reward",
+    )
 
 
 def add_eval_args(parser):

@@ -3,8 +3,8 @@ import sys
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
-from sf_examples.atari_examples.atari_params import add_atari_env_args, atari_benchmark_defaults
-from sf_examples.atari_examples.atari_utils import ATARI_ENVS, make_atari_env
+from sf_examples.atari_examples.atari.atari_params import add_atari_env_args, atari_benchmark_defaults
+from sf_examples.atari_examples.atari.atari_utils import ATARI_ENVS, make_atari_env
 
 
 def register_atari_envs():

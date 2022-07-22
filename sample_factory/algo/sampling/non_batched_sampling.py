@@ -261,8 +261,10 @@ class ActorState:
             self.reset_rnn_state()
 
     def episodic_stats(self, last_episode_true_objective, last_episode_extra_stats):
-        # stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
-        stats = dict(reward=self.episode_return, len=self.episode_length)
+        if self.cfg.use_record_episode_statistics:
+            stats = dict(reward=self.episode_return, len=self.episode_length)
+        else:
+            stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
 
         stats["true_objective"] = last_episode_true_objective
         stats["episode_extra_stats"] = last_episode_extra_stats
@@ -485,10 +487,11 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         for agent_i, r in enumerate(rewards):
             self.actor_states[env_i][agent_i].last_episode_reward += r
 
-        for agent_i, item in enumerate(infos):
-            if "episode" in item.keys():
-                self.actor_states[env_i][agent_i].episode_return = item["episode"]["r"]
-                self.actor_states[env_i][agent_i].episode_length = item["episode"]["l"]
+        if self.cfg.use_record_episode_statistics:
+            for agent_i, item in enumerate(infos):
+                if "episode" in item.keys():
+                    self.actor_states[env_i][agent_i].episode_return = item["episode"]["r"]
+                    self.actor_states[env_i][agent_i].episode_length = item["episode"]["l"]
 
         rewards = np.asarray(rewards, dtype=np.float32)
         rewards = rewards * self.cfg.reward_scale

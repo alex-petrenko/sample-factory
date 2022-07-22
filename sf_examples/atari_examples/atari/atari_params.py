@@ -16,6 +16,7 @@ def atari_override_defaults(env, parser):
 def atari_benchmark_defaults(env, parser):
     parser.set_defaults(
         multiply_frameskip=False,
+        use_record_episode_statistics=True,
         encoder_type="conv",
         encoder_subtype="convnet_atari",
         hidden_size=512,
@@ -23,7 +24,6 @@ def atari_benchmark_defaults(env, parser):
         obs_subtract_mean=0.0,
         obs_scale=255.0,
         gamma=0.99,
-        # reward_clip=1.0,  # same as APE-X paper
         env_frameskip=4,
         env_framestack=4,
         exploration_loss_coeff=0.01,
@@ -35,7 +35,6 @@ def atari_benchmark_defaults(env, parser):
         kl_loss_coeff=0.0,
         use_rnn=False,
         adaptive_stddev=False,
-        # policy_initialization="torch_default",
         reward_scale=1.0,
         with_vtrace=False,
         recurrence=1,
