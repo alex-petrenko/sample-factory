@@ -5,6 +5,7 @@ _params = ParamGrid([("seed", [1111])])
 vstr = "dmlab30"
 
 cli = (
+    "python -m sf_examples.dmlab_examples.train_dmlab "
     "--env=dmlab_30 "
     "--train_for_seconds=3600000 "
     "--algo=APPO "
@@ -43,5 +44,5 @@ _experiments = [
 RUN_DESCRIPTION = RunDescription(f"{vstr}", experiments=_experiments)
 
 
-# Run locally: python -m sample_factory.runner.run --runner=processes --max_parallel=2 --experiments_per_gpu=2 --num_gpus=1 --run=sf_examples.dmlab_examples.experiments.dmlab30
+# Run locally: python -m sample_factory.runner.run --runner=processes --max_parallel=1 --experiments_per_gpu=1 --num_gpus=1 --run=sf_examples.dmlab_examples.experiments.dmlab30
 # Run on Slurm: python -m sample_factory.runner.run --runner=slurm --slurm_workdir=./slurm_isaacgym --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/runner/slurm/sbatch_template.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.dmlab_examples.experiments.dmlab30
