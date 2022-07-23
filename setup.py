@@ -47,6 +47,7 @@ setup(
         "atari": ["gym[atari, accept-rom-license]"],
         "mujoco": ["gym[mujoco]"],
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
+        # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },
     package_dir={"": "./"},
     packages=setuptools.find_packages(where="./", include="sample_factory*"),

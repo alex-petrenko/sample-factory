@@ -11,6 +11,7 @@ from torch import Tensor
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
+from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.dicts import get_first_present
@@ -244,7 +245,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             for key, value in stats.items():
                 if isinstance(value, Tensor):
                     stats[key] = value.cpu().numpy()
-            reports.append(dict(episodic=stats, policy_id=self.policy_id))
+            reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
 
             self.curr_episode_reward[finished] = 0
             self.curr_episode_len[finished] = 0

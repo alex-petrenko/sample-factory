@@ -10,6 +10,7 @@ import numpy as np
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
+from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.policy_manager import PolicyManager
 from sample_factory.algo.utils.tensor_dict import to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
@@ -284,7 +285,7 @@ class ActorState:
         stats["true_objective"] = last_episode_true_objective
         stats["episode_extra_stats"] = last_episode_extra_stats
 
-        report = dict(episodic=stats, policy_id=self.curr_policy_id)
+        report = {EPISODIC: stats, POLICY_ID_KEY: self.curr_policy_id}
         self.last_episode_reward = self.last_episode_duration = 0
         return report
 

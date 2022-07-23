@@ -1,10 +1,11 @@
+import argparse
 import os
 from os.path import join
 
 from sample_factory.utils.utils import str2bool
 
 
-def dmlab_override_defaults(env, parser):
+def dmlab_override_defaults(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(
         encoder_type="conv",
         encoder_subtype="convnet_impala",
@@ -16,8 +17,7 @@ def dmlab_override_defaults(env, parser):
     )
 
 
-# noinspection PyUnusedLocal
-def add_dmlab_env_args(env, parser):
+def add_dmlab_env_args(parser: argparse.ArgumentParser) -> None:
     p = parser
 
     p.add_argument("--res_w", default=96, type=int, help="Game frame width after resize")
