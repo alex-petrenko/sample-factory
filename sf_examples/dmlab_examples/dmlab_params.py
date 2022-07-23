@@ -9,11 +9,16 @@ def dmlab_override_defaults(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(
         encoder_type="conv",
         encoder_subtype="convnet_impala",
-        encoder_custom=None,
-        hidden_size=512,
+        encoder_custom="dmlab_instructions",
+        hidden_size=256,
         obs_subtract_mean=0.0,
         obs_scale=255.0,
         env_frameskip=4,
+        nonlinearity="relu",
+        rollout=32,
+        recurrence=32,
+        rnn_type="lstm",
+        num_epochs=1,
     )
 
 

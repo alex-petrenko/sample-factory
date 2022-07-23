@@ -862,12 +862,15 @@ class Learner(EventLoopObject, Configurable):
             buff = copy.copy(self.batcher.training_batches[batch_idx])
 
             if (buff["actions"] == -42).nonzero().shape[0] > 0:
-                # TODO: remove this after we fix everything
+                # TODO: remove this after we test everything
                 # currently this can happen in envs with inactive agents
                 log.warning("Found invalid actions in batch %d", batch_idx)
                 raise ValueError("Found invalid actions in batch")
 
-            # TODO: how about device_and_type_for_input_tensor? This is needed for DMLab to work properly (small LSTM is faster on the CPU)
+            for k, v in buff["obs"].items():
+                device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
+                if device != v.device or dtype != v.dtype:
+                    buff["obs"][k] = v.detach().to(device, copy=True).type(dtype)
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
