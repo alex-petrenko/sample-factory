@@ -18,7 +18,6 @@ from torch import nn
 from sample_factory.algo.utils.misc import EPS
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace, running_mean_std_summaries
 from sample_factory.algo.utils.tensor_dict import clone_tensordict
-from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
 
 
 class ObservationNormalizer(nn.Module):
@@ -30,9 +29,7 @@ class ObservationNormalizer(nn.Module):
 
         self.running_mean_std = None
         if cfg.normalize_input:
-            self.running_mean_std = RunningMeanStdDictInPlace(obs_space)
-            # comment this out for debugging (i.e. to be able to step through normalizer code)
-            self.running_mean_std = torch.jit.script(self.running_mean_std)
+            self.running_mean_std = RunningMeanStdDictInPlace(obs_space, cfg.normalize_input_keys)
 
         self.should_sub_mean = abs(self.sub_mean) > EPS
         self.should_scale = abs(self.scale - 1.0) > EPS

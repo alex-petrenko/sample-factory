@@ -328,11 +328,18 @@ def add_rl_args(p: ArgumentParser):
         type=str2bool,
         help="Whether to use running mean and standard deviation to normalize observations",
     )
+    p.add_argument(
+        "--normalize_input_keys",
+        default=None,
+        type=str,
+        nargs="*",
+        help="Which observation keys to use for normalization. If None, all observation keys are used",
+    )
 
     # decorrelating experience on startup (optional)
     p.add_argument(
         "--decorrelate_experience_max_seconds",
-        default=10,
+        default=0,
         type=int,
         help='Decorrelating experience serves two benefits. First: this is better for learning because samples from workers come from random moments in the episode, becoming more "i.i.d".'
         "Second, and more important one: this is good for environments with highly non-uniform one-step times, including long and expensive episode resets. If experience is not decorrelated"
