@@ -215,11 +215,13 @@ class DmlabGymEnv(gym.Env):
         if self.last_observation is None and self.dmlab.is_running():
             self.last_observation = self.dmlab.observations()
 
-        img = self.last_observation[self.main_observation]
+        img = self.last_observation["obs"]
         if mode == "rgb_array":
             return img
         elif mode != "human":
             raise Exception(f"Rendering mode {mode} not supported")
+
+        img = np.transpose(img, (1, 2, 0))  # CHW to HWC
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 

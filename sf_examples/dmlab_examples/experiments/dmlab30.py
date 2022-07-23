@@ -29,14 +29,10 @@ cli = (
     "--nonlinearity=relu "
     "--rnn_type=lstm "
     "--dmlab_extended_action_set=True "
-    "--num_policies=1 "
+    "--num_policies=1"
 )
 _experiments = [
-    Experiment(
-        "dm30",
-        cli,
-        _params.generate_params(False),
-    ),
+    Experiment("dm30", cli, _params.generate_params(False)),
 ]
 
 RUN_DESCRIPTION = RunDescription(f"{vstr}", experiments=_experiments)
