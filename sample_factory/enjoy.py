@@ -1,8 +1,10 @@
 import time
 from collections import deque
+from typing import Dict
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
@@ -15,6 +17,33 @@ from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.utils import AttrDict, log
+
+
+def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
+    """
+    Display actual policy inputs after all wrappers and normalizations using OpenCV imshow.
+    """
+    import cv2
+
+    if "obs" not in normalized_obs.keys():
+        return
+
+    obs = normalized_obs["obs"]
+    # visualize obs only for the 1st agent
+    obs = obs[0]
+    if obs.dim() != 3:
+        # this function is only for RGB images
+        return
+
+    # convert to HWC
+    obs = obs.permute(1, 2, 0)
+    # convert to numpy
+    obs = obs.cpu().numpy()
+    # resize
+    scale = 5
+    obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale))
+    # show the image
+    cv2.imshow("Policy Inputs", obs)
 
 
 def enjoy(cfg, max_num_frames=1e9):
@@ -71,6 +100,7 @@ def enjoy(cfg, max_num_frames=1e9):
                 obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
 
             normalized_obs = actor_critic.normalize_obs(obs)
+            visualize_policy_inputs(normalized_obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
