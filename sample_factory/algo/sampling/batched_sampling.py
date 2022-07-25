@@ -10,7 +10,7 @@ from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
+from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
@@ -137,7 +137,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
         """
-        envs = []
+        envs: List[BatchedVecEnv] = []
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
 
@@ -152,7 +152,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
-            env = make_env_func_batched(self.cfg, env_config=env_config)
+            env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config=env_config)
 
             env.seed(env_id)
             envs.append(env)

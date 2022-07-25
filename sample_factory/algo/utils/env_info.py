@@ -9,7 +9,7 @@ import gym
 
 from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
-from sample_factory.algo.utils.make_env import make_env_func_batched
+from sample_factory.algo.utils.make_env import BatchedVecEnv, make_env_func_batched
 from sample_factory.utils.utils import AttrDict, experiment_dir, log
 
 
@@ -24,7 +24,7 @@ class EnvInfo:
     frameskip: int
 
 
-def extract_env_info(env, cfg):
+def extract_env_info(env: BatchedVecEnv, cfg):
     obs_space = env.observation_space
     action_space = env.action_space
     num_agents = env.num_agents
@@ -60,7 +60,7 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     set_global_context(sf_context)
 
     tmp_env = make_env_func_batched(cfg, env_config=None)
-    env_info = extract_env_info(tmp_env, cfg)  # TODO type errors
+    env_info = extract_env_info(tmp_env, cfg)
     tmp_env.close()
     del tmp_env
 
