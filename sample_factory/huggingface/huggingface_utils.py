@@ -4,16 +4,26 @@ import cv2
 import numpy as np
 from huggingface_hub import HfApi, Repository, repocard, upload_file, upload_folder
 
-from sample_factory.utils.utils import experiment_dir, log, project_tmp_dir
+from sample_factory.utils.utils import log, project_tmp_dir
+
+MIN_FRAME_SIZE = 200
 
 
 def generate_replay_video(dir_path: str, frames: list, fps: int):
     tmp_name = os.path.join(project_tmp_dir(), "replay.mp4")
     video_name = os.path.join(dir_path, "replay.mp4")
     frame_size = (frames[0].shape[0], frames[0].shape[1])
+    resize = False
+
+    if min(frame_size) < MIN_FRAME_SIZE:
+        resize = True
+        scaling_factor = MIN_FRAME_SIZE / min(frame_size)
+        frame_size = (int(frame_size[0] * scaling_factor), int(frame_size[1] * scaling_factor))
 
     video = cv2.VideoWriter(tmp_name, cv2.VideoWriter_fourcc(*"mp4v"), fps, frame_size)
     for frame in frames:
+        if resize:
+            frame = cv2.resize(frame, frame_size, interpolation=cv2.INTER_AREA)
         video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     video.release()
     os.system(f"ffmpeg -y -i {tmp_name} -vcodec libx264 {video_name}")
