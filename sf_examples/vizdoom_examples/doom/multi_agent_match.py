@@ -14,7 +14,7 @@ from os.path import join
 import numpy as np
 import torch
 
-from sample_factory.algo.utils.multi_agent_wrapper import MultiAgentWrapper, is_multiagent_env
+from sample_factory.algo.utils.make_env import NonBatchedMultiAgentWrapper, is_multiagent_env
 from sample_factory.algorithms.appo.learner import LearnerWorker
 from sample_factory.cfg.arguments import load_from_checkpoint, parse_args
 from sample_factory.envs.create_env import create_env
@@ -94,7 +94,7 @@ def multi_agent_match(policy_indices, max_num_episodes=int(1e9), max_num_frames=
 
     is_multiagent = is_multiagent_env(env)
     if not is_multiagent:
-        env = MultiAgentWrapper(env)
+        env = NonBatchedMultiAgentWrapper(env)
     else:
         assert env.num_agents == len(RIVALS)
 

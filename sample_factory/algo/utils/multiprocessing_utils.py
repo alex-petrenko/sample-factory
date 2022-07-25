@@ -1,6 +1,7 @@
 import multiprocessing
 import os
 import time
+from multiprocessing.context import BaseContext
 from queue import Empty, Queue
 
 
@@ -64,7 +65,7 @@ def get_lock(serial=False, mp_ctx=None):
         return get_mp_lock(mp_ctx)
 
 
-def get_mp_lock(mp_ctx=None):
+def get_mp_lock(mp_ctx: BaseContext = None):
     lock_cls = multiprocessing.Lock if mp_ctx is None else mp_ctx.Lock
     return lock_cls()
 

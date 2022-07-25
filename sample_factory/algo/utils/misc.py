@@ -5,6 +5,16 @@ from sample_factory.utils.utils import memory_consumption_mb
 EPS = 1e-8
 
 
+# stats dictionary keys
+EPISODIC = "episodic"
+LEARNER_ENV_STEPS = "learner_env_steps"
+TRAIN_STATS = "train"
+TIMING_STATS = "timing"
+STATS_KEY = "stats"
+SAMPLES_COLLECTED = "samples_collected"
+POLICY_ID_KEY = "policy_id"
+
+
 class ExperimentStatus:
     SUCCESS, FAILURE, INTERRUPTED = range(3)
 

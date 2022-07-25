@@ -1,10 +1,16 @@
 import os
 from collections import deque
+from typing import Dict, Optional
 
 import numpy as np
+from tensorboardX import SummaryWriter
 
-from sample_factory.algorithms.utils.algo_utils import EXTRA_EPISODIC_STATS_PROCESSING, EXTRA_PER_POLICY_SUMMARIES
-from sample_factory.envs.dmlab.dmlab30 import (
+from sample_factory.algo.runners.runner import Runner
+from sample_factory.algo.utils.misc import EPISODIC
+from sample_factory.envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
+from sample_factory.utils.typing import PolicyID
+from sample_factory.utils.utils import log, static_vars
+from sf_examples.dmlab_examples.dmlab30 import (
     DMLAB30_LEVELS,
     DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE,
     HUMAN_SCORES,
@@ -12,14 +18,9 @@ from sample_factory.envs.dmlab.dmlab30 import (
     RANDOM_SCORES,
     dmlab30_level_name_to_level,
 )
-from sample_factory.envs.dmlab.dmlab_gym import DmlabGymEnv, dmlab_level_to_level_name
-from sample_factory.envs.dmlab.dmlab_level_cache import dmlab_ensure_global_cache_initialized
-from sample_factory.envs.dmlab.dmlab_model import dmlab_register_models
-from sample_factory.envs.dmlab.wrappers.reward_shaping import RAW_SCORE_SUMMARY_KEY_SUFFIX, DmlabRewardShapingWrapper
-from sample_factory.envs.env_wrappers import PixelFormatChwWrapper, RecordingWrapper
-from sample_factory.utils.utils import experiment_dir, log, static_vars
-
-DMLAB_INITIALIZED = False
+from sf_examples.dmlab_examples.dmlab_gym import DmlabGymEnv, dmlab_level_to_level_name
+from sf_examples.dmlab_examples.dmlab_level_cache import DmlabLevelCache, DmlabLevelCaches
+from sf_examples.dmlab_examples.wrappers.reward_shaping import RAW_SCORE_SUMMARY_KEY_SUFFIX, DmlabRewardShapingWrapper
 
 
 def get_dataset_path(cfg):
@@ -49,6 +50,7 @@ DMLAB_ENVS = [
     DmLabSpec("dmlab_sparse_doors", "contributed/dmlab30/explore_obstructed_goals_large"),
     DmLabSpec("dmlab_nonmatch", "contributed/dmlab30/rooms_select_nonmatching_object"),
     DmLabSpec("dmlab_watermaze", "contributed/dmlab30/rooms_watermaze"),
+    DmLabSpec("dmlab_collect_good_objects", "contributed/dmlab30/rooms_collect_good_objects_train"),
 ]
 
 
@@ -102,8 +104,9 @@ def list_all_levels_for_experiment(env_name):
         raise Exception("spec level is either string or a list/tuple")
 
 
-# noinspection PyUnusedLocal
-def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
+def make_dmlab_env_impl(
+    spec, cfg, env_config, dmlab_level_caches_per_policy: Dict[PolicyID, DmlabLevelCache] = None, **kwargs
+):
     skip_frames = cfg.env_frameskip
 
     gpu_idx = 0
@@ -128,9 +131,9 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
         get_dataset_path(cfg),
         cfg.dmlab_with_instructions,
         cfg.dmlab_extended_action_set,
-        cfg.dmlab_use_level_cache,
         cfg.dmlab_level_cache_path,
         gpu_idx,
+        dmlab_level_caches_per_policy,
         spec.extra_cfg,
     )
 
@@ -147,37 +150,35 @@ def make_dmlab_env_impl(spec, cfg, env_config, **kwargs):
     return env
 
 
-def make_dmlab_env(env_name, cfg=None, **kwargs):
-    ensure_initialized(cfg, env_name)
-
+def make_dmlab_env(env_name, cfg, env_config, dmlab_level_caches_per_policy: Optional[DmlabLevelCaches] = None):
     spec = dmlab_env_by_name(env_name)
-    return make_dmlab_env_impl(spec, cfg=cfg, **kwargs)
+    return make_dmlab_env_impl(spec, cfg, env_config, dmlab_level_caches_per_policy)
 
 
 @static_vars(new_level_returns=dict(), env_spec=None)
-def dmlab_extra_episodic_stats_processing(policy_id, stat_key, stat_value, cfg):
-    if RAW_SCORE_SUMMARY_KEY_SUFFIX not in stat_key:
-        return
+def dmlab_extra_episodic_stats_processing(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
+    episode_stats = msg[EPISODIC].get("episode_extra_stats", {})
+    for stat_key, stat_value in episode_stats.items():
+        if RAW_SCORE_SUMMARY_KEY_SUFFIX in stat_key:
+            new_level_returns = dmlab_extra_episodic_stats_processing.new_level_returns
+            if policy_id not in new_level_returns:
+                new_level_returns[policy_id] = dict()
 
-    new_level_returns = dmlab_extra_episodic_stats_processing.new_level_returns
-    if policy_id not in new_level_returns:
-        new_level_returns[policy_id] = dict()
+            if dmlab_extra_episodic_stats_processing.env_spec is None:
+                dmlab_extra_episodic_stats_processing.env_spec = dmlab_env_by_name(runner.cfg.env)
 
-    if dmlab_extra_episodic_stats_processing.env_spec is None:
-        dmlab_extra_episodic_stats_processing.env_spec = dmlab_env_by_name(cfg.env)
+            task_id = int(stat_key.split("_")[1])  # this is a bit hacky but should do the job
+            level = task_id_to_level(task_id, dmlab_extra_episodic_stats_processing.env_spec)
+            level_name = dmlab_level_to_level_name(level)
 
-    task_id = int(stat_key.split("_")[1])  # this is a bit hacky but should do the job
-    level = task_id_to_level(task_id, dmlab_extra_episodic_stats_processing.env_spec)
-    level_name = dmlab_level_to_level_name(level)
+            if level_name not in new_level_returns[policy_id]:
+                new_level_returns[policy_id][level_name] = []
 
-    if level_name not in new_level_returns[policy_id]:
-        new_level_returns[policy_id][level_name] = []
-
-    new_level_returns[policy_id][level_name].append(stat_value)
+            new_level_returns[policy_id][level_name].append(stat_value)
 
 
 @static_vars(all_levels=None)
-def dmlab_extra_summaries(policy_id, policy_avg_stats, env_steps, summary_writer, cfg):
+def dmlab_extra_summaries(runner: Runner, policy_id: PolicyID, env_steps: int, summary_writer: SummaryWriter) -> None:
     """
     We precisely follow IMPALA repo (scalable_agent) here for the reward calculation.
 
@@ -194,6 +195,7 @@ def dmlab_extra_summaries(policy_id, policy_avg_stats, env_steps, summary_writer
 
     """
 
+    cfg = runner.cfg
     new_level_returns = dmlab_extra_episodic_stats_processing.new_level_returns
     if policy_id not in new_level_returns:
         return
@@ -246,27 +248,8 @@ def dmlab_extra_summaries(policy_id, policy_avg_stats, env_steps, summary_writer
 
     # add a new stat that PBT can track
     target_objective_stat = "dmlab_target_objective"
+    policy_avg_stats = runner.policy_avg_stats
     if target_objective_stat not in policy_avg_stats:
         policy_avg_stats[target_objective_stat] = [deque(maxlen=1) for _ in range(cfg.num_policies)]
 
     policy_avg_stats[target_objective_stat][policy_id].append(capped_mean_normalized_score)
-
-
-def ensure_initialized(cfg, env_name):
-    global DMLAB_INITIALIZED
-    if DMLAB_INITIALIZED:
-        return
-
-    dmlab_register_models()
-
-    if env_name == "dmlab_30":
-        # extra functions to calculate human-normalized score etc.
-        EXTRA_EPISODIC_STATS_PROCESSING.append(dmlab_extra_episodic_stats_processing)
-        EXTRA_PER_POLICY_SUMMARIES.append(dmlab_extra_summaries)
-
-    num_policies = cfg.num_policies if hasattr(cfg, "num_policies") else 1
-    all_levels = list_all_levels_for_experiment(env_name)
-    level_cache_dir = cfg.dmlab_level_cache_path
-    dmlab_ensure_global_cache_initialized(experiment_dir(cfg=cfg), all_levels, num_policies, level_cache_dir)
-
-    DMLAB_INITIALIZED = True

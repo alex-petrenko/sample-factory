@@ -41,12 +41,14 @@ setup(
         "filelock",
         "opencv-python",
         "wandb>=0.12.9",
+        "huggingface-hub<1.0",
     ],
     extras_require={
         "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"],
         "atari": ["gym[atari, accept-rom-license]"],
         "mujoco": ["gym[mujoco]"],
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
+        # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },
     package_dir={"": "./"},
     packages=setuptools.find_packages(where="./", include="sample_factory*"),

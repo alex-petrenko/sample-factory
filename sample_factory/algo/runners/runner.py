@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 import json
 import math
-import multiprocessing
 import shutil
 import time
 from collections import OrderedDict, deque
+from multiprocessing.context import BaseContext
 from os.path import isdir, join
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -15,17 +17,25 @@ from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
-from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.algo.utils.misc import (
+    EPISODIC,
+    LEARNER_ENV_STEPS,
+    SAMPLES_COLLECTED,
+    STATS_KEY,
+    TIMING_STATS,
+    TRAIN_STATS,
+    ExperimentStatus,
+)
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.cfg.arguments import cfg_dict, cfg_str
+from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import MpQueue, PolicyID
+from sample_factory.utils.typing import MpQueue, PolicyID, StatusCode
 from sample_factory.utils.utils import (
     AttrDict,
     cfg_file,
@@ -39,61 +49,9 @@ from sample_factory.utils.utils import (
 )
 from sample_factory.utils.wandb_utils import init_wandb
 
-StatusCode = int
-
-
-# class Callback:
-#     def __init__(self, func):
-#         self.func = func
-#
-#     def conditions_met(self, runner):
-#         raise NotImplementedError()
-#
-#     def __call__(self, runner):
-#         self.func(runner)
-#
-#
-# class PeriodicTimerCallback(Callback):
-#     def __init__(self, func, period_sec):
-#         super().__init__(func)
-#         self.period_sec = period_sec
-#         self.last_call = time.time() - period_sec  # so we call this callback as soon as the app starts
-#
-#     def conditions_met(self, runner):
-#         return time.time() - self.last_call > self.period_sec
-#
-#     def __call__(self, runner):
-#         self.last_call = time.time()
-#         super().__call__(runner)
-#
-#
-# class PeriodicCallbackEnvSteps(Callback):
-#     def __init__(self, func, period_env_steps):
-#         super().__init__(func)
-#         self.period_env_steps = period_env_steps
-#         self.last_call = 0
-#
-#     def conditions_met(self, runner):
-#         env_steps_since_last_call = runner.total_env_steps_since_resume - self.last_call
-#         return env_steps_since_last_call >= self.period_env_steps
-#
-#     def __call__(self, runner):
-#         self.last_call = runner.total_env_steps_since_resume
-#         super().__call__(runner)
-#
-#
-# class PeriodicCallbackEnvStepsPerPolicy(PeriodicCallbackEnvSteps):
-#     def __init__(self, func, period_env_steps, policy_id):
-#         super().__init__(func, period_env_steps)
-#         self.policy_id = policy_id
-#
-#     def conditions_met(self, runner):
-#         env_steps_since_last_call = runner.env_steps[self.policy_id] - self.last_call
-#         return env_steps_since_last_call >= self.period_env_steps
-#
-#     def __call__(self, runner):
-#         self.last_call = runner.env_steps[self.policy_id]
-#         self.func(runner, self.policy_id)
+MsgHandler = Callable[["Runner", dict], None]
+PolicyMsgHandler = Callable[["Runner", dict, PolicyID], None]
+SummaryHandler = Callable[["Runner", PolicyID, int, SummaryWriter], None]
 
 
 class Runner(EventLoopObject, Configurable):
@@ -124,7 +82,7 @@ class Runner(EventLoopObject, Configurable):
         self.timing = Timing("Runner profile")
 
         # env_steps counts total number of simulation steps per policy (including frameskipped)
-        self.env_steps = dict()
+        self.env_steps: Dict[PolicyID, int] = dict()
 
         # samples_collected counts the total number of observations processed by the algorithm
         self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
@@ -147,8 +105,10 @@ class Runner(EventLoopObject, Configurable):
         self.stats = dict()  # regular (non-averaged) stats
         self.avg_stats = dict()
 
-        self.policy_avg_stats = dict()
+        self.policy_avg_stats: Dict[str, List[Deque]] = dict()
         self.policy_lag = [dict() for _ in range(self.cfg.num_policies)]
+
+        self._handle_restart()
 
         init_wandb(self.cfg)  # should be done before writers are initialized
 
@@ -159,18 +119,20 @@ class Runner(EventLoopObject, Configurable):
             self.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=20)
 
         # global msg handlers for messages from algo components
-        self.msg_handlers = dict(
-            timing=[self._timing_msg_handler],
-            stats=[self._stats_msg_handler],
-        )
+        self.msg_handlers: Dict[str, List[MsgHandler]] = {
+            TIMING_STATS: [self._timing_msg_handler],
+            STATS_KEY: [self._stats_msg_handler],
+        }
 
         # handlers for policy-specific messages
-        self.policy_msg_handlers = dict(
-            learner_env_steps=[self._learner_steps_handler],
-            episodic=[self._episodic_stats_handler],
-            train=[self._train_stats_handler],
-            samples_collected=[self._samples_stats_handler],
-        )
+        self.policy_msg_handlers: Dict[str, List[PolicyMsgHandler]] = {
+            LEARNER_ENV_STEPS: [self._learner_steps_handler],
+            EPISODIC: [self._episodic_stats_handler],
+            TRAIN_STATS: [self._train_stats_handler],
+            SAMPLES_COLLECTED: [self._samples_stats_handler],
+        }
+
+        self.extra_summary_handlers: List[SummaryHandler] = []
 
         def periodic(period, cb):
             return Timer(self.event_loop, period).timeout.connect(cb)
@@ -186,7 +148,7 @@ class Runner(EventLoopObject, Configurable):
         self.components_to_stop: List[EventLoopObject] = []
         self.component_profiles: List[Tuple[str, Timing]] = []
 
-    # singals emitted by the runner
+    # signals emitted by the runner
     @signal
     def inference_workers_initialized(self):
         pass
@@ -199,17 +161,41 @@ class Runner(EventLoopObject, Configurable):
     def save_best(self):
         pass
 
-    """Emitted when we're about to stop the experiment."""
-
     @signal
     def stop(self):
+        """Emitted when we're about to stop the experiment."""
         pass
 
     @signal
     def all_components_stopped(self):
         pass
 
-    def multiprocessing_context(self) -> Optional[multiprocessing.context.BaseContext]:
+    def _handle_restart(self):
+        exp_dir = experiment_dir(self.cfg, mkdir=False)
+        if isdir(exp_dir):
+            log.debug(f"Experiment dir {exp_dir} already exists!")
+            if self.cfg.restart_behavior == "resume":
+                log.debug(f"Resuming existing experiment from {exp_dir}...")
+            else:
+                if self.cfg.restart_behavior == "restart":
+                    attempt = 0
+                    old_exp_dir = exp_dir
+                    while isdir(old_exp_dir):
+                        attempt += 1
+                        old_exp_dir = f"{exp_dir}_old{attempt:04d}"
+
+                    # move the existing experiment dir to a new one with a suffix
+                    log.debug(f"Moving the existing experiment dir to {old_exp_dir}...")
+                    shutil.move(exp_dir, old_exp_dir)
+                elif self.cfg.restart_behavior == "overwrite":
+                    log.debug(f"Overwriting the existing experiment dir {exp_dir}...")
+                    shutil.rmtree(exp_dir)
+                else:
+                    raise ValueError(f"Unknown restart behavior {self.cfg.restart_behavior}")
+
+                log.debug(f"Starting training in {exp_dir}...")
+
+    def multiprocessing_context(self) -> Optional[BaseContext]:
         raise NotImplementedError()
 
     def _process_msg(self, msgs):
@@ -225,10 +211,10 @@ class Runner(EventLoopObject, Configurable):
             policy_id = msg.get("policy_id", None)
 
             for key in msg:
-                for handler in self.msg_handlers.get(key, []):
+                for handler in self.msg_handlers.get(key, ()):
                     handler(self, msg)
                 if policy_id is not None:
-                    for handler in self.policy_msg_handlers.get(key, []):
+                    for handler in self.policy_msg_handlers.get(key, ()):
                         handler(self, msg, policy_id)
 
     @staticmethod
@@ -243,15 +229,16 @@ class Runner(EventLoopObject, Configurable):
         runner.stats.update(msg["stats"])
 
     @staticmethod
-    def _learner_steps_handler(runner, msg, policy_id):
+    def _learner_steps_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
+        env_steps: int = msg[LEARNER_ENV_STEPS]
         if policy_id in runner.env_steps:
-            delta = msg["learner_env_steps"] - runner.env_steps[policy_id]
+            delta = env_steps - runner.env_steps[policy_id]
             runner.total_env_steps_since_resume += delta
-        runner.env_steps[policy_id] = msg["learner_env_steps"]
+        runner.env_steps[policy_id] = env_steps
 
     @staticmethod
-    def _episodic_stats_handler(runner, msg, policy_id):
-        s = msg["episodic"]
+    def _episodic_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
+        s = msg[EPISODIC]
         for _, key, value in iterate_recursively(s):
             if key not in runner.policy_avg_stats:
                 runner.policy_avg_stats[key] = [
@@ -267,26 +254,20 @@ class Runner(EventLoopObject, Configurable):
             else:
                 runner.policy_avg_stats[key][policy_id].append(value)
 
-            # for extra_stat_func in EXTRA_EPISODIC_STATS_PROCESSING:  # TODO: replace this with an extra handler
-            #     extra_stat_func(policy_id, key, value, runner.cfg)
-
     @staticmethod
-    def _train_stats_handler(runner, msg, policy_id):
+    def _train_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
         """We write the train summaries to disk right away instead of accumulating them."""
-        for key, scalar in msg["train"].items():
+        train_stats = msg[TRAIN_STATS]
+        for key, scalar in train_stats.items():
             runner.writers[policy_id].add_scalar(f"train/{key}", scalar, runner.env_steps[policy_id])
 
         for key in ["version_diff_min", "version_diff_max", "version_diff_avg"]:
-            if key in msg["train"]:
-                runner.policy_lag[policy_id][key] = msg["train"][key]
+            if key in train_stats:
+                runner.policy_lag[policy_id][key] = train_stats[key]
 
     @staticmethod
     def _samples_stats_handler(runner, msg, policy_id):
-        runner.samples_collected[policy_id] += msg["samples_collected"]
-
-    @staticmethod
-    def _register_msg_handler(handlers_dict, key, func):
-        handlers_dict[key] = func
+        runner.samples_collected[policy_id] += msg[SAMPLES_COLLECTED]
 
     def _get_perf_stats(self):
         # total env steps simulated across all policies
@@ -370,27 +351,27 @@ class Runner(EventLoopObject, Configurable):
 
         default_policy = 0
         for policy_id, env_steps in self.env_steps.items():
+            writer = self.writers[policy_id]
             if policy_id == default_policy:
                 if not math.isnan(fps):
-                    self.writers[policy_id].add_scalar("perf/_fps", fps, env_steps)
+                    writer.add_scalar("perf/_fps", fps, env_steps)
 
-                self.writers[policy_id].add_scalar("stats/master_process_memory_mb", float(memory_mb), env_steps)
+                writer.add_scalar("stats/master_process_memory_mb", float(memory_mb), env_steps)
                 for key, value in self.avg_stats.items():
                     if len(value) >= value.maxlen or (len(value) > 10 and self.total_train_seconds > 300):
-                        self.writers[policy_id].add_scalar(f"stats/{key}", np.mean(value), env_steps)
+                        writer.add_scalar(f"stats/{key}", np.mean(value), env_steps)
 
                 for key, value in self.stats.items():
-                    self.writers[policy_id].add_scalar(f"stats/{key}", value, env_steps)
+                    writer.add_scalar(f"stats/{key}", value, env_steps)
 
             if not math.isnan(sample_throughput[policy_id]):
-                self.writers[policy_id].add_scalar("perf/_sample_throughput", sample_throughput[policy_id], env_steps)
+                writer.add_scalar("perf/_sample_throughput", sample_throughput[policy_id], env_steps)
 
             for key, stat in self.policy_avg_stats.items():
                 if len(stat[policy_id]) >= stat[policy_id].maxlen or (
                     len(stat[policy_id]) > 10 and self.total_train_seconds > 300
                 ):
                     stat_value = np.mean(stat[policy_id])
-                    writer = self.writers[policy_id]
 
                     if "/" in key:
                         # custom summaries have their own sections in tensorboard
@@ -414,10 +395,8 @@ class Runner(EventLoopObject, Configurable):
                         writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
                         writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 
-            # for extra_summaries_func in EXTRA_PER_POLICY_SUMMARIES:  # TODO: replace with extra callbacks/handlers
-            #     extra_summaries_func(
-            #         policy_id, self.policy_avg_stats, env_steps, self.writers[policy_id], self.cfg,
-            #     )
+            for extra_summaries_func in self.extra_summary_handlers:
+                extra_summaries_func(self, policy_id, env_steps, writer)
 
         for w in self.writers.values():
             w.flush()
@@ -456,11 +435,21 @@ class Runner(EventLoopObject, Configurable):
                     avg_metric = np.mean(stats)
                     self.save_best.emit(policy_id, metric, avg_metric)
 
+    @staticmethod
+    def _register_msg_handler(handlers_dict, key, func):
+        handlers_dict[key] = func
+
     def register_msg_handler(self, key, func):
         self._register_msg_handler(self.msg_handlers, key, func)
 
     def register_policy_msg_handler(self, key, func):
         self._register_msg_handler(self.policy_msg_handlers, key, func)
+
+    def register_episodic_stats_handler(self, func: PolicyMsgHandler):
+        self.policy_msg_handlers[EPISODIC].append(func)
+
+    def register_summary_handler(self, func: SummaryHandler):
+        self.extra_summary_handlers.append(func)
 
     def _save_cfg(self):
         fname = cfg_file(self.cfg)
@@ -491,40 +480,22 @@ class Runner(EventLoopObject, Configurable):
     def _make_rollout_worker(self, event_loop, worker_idx: int):
         return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info)
 
-    def init(self):
+    def init(self) -> StatusCode:
+        # check for any incompatible arguments
+        if not verify_cfg(self.cfg):
+            return ExperimentStatus.FAILURE
+
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
 
         init_file_logger(experiment_dir(self.cfg))
-        exp_dir = experiment_dir(self.cfg, mkdir=False)
-        if isdir(exp_dir):
-            log.debug(f"Experiment dir {exp_dir} already exists!")
-            if self.cfg.restart_behavior == "resume":
-                log.debug(f"Resuming existing experiment from {exp_dir}...")
-            else:
-                if self.cfg.restart_behavior == "restart":
-                    attempt = 0
-                    old_exp_dir = exp_dir
-                    while isdir(old_exp_dir):
-                        attempt += 1
-                        old_exp_dir = f"{exp_dir}_old{attempt:04d}"
-
-                    # move the existing experiment dir to a new one with a suffix
-                    log.debug(f"Moving the existing experiment dir to {old_exp_dir}...")
-                    shutil.move(exp_dir, old_exp_dir)
-                elif self.cfg.restart_behavior == "overwrite":
-                    log.debug(f"Overwriting the existing experiment dir {exp_dir}...")
-                    shutil.rmtree(exp_dir)
-                else:
-                    raise ValueError(f"Unknown restart behavior {self.cfg.restart_behavior}")
-
-                log.debug(f"Starting training in {exp_dir}...")
-
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
 
         set_global_cuda_envvars(self.cfg)
         self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
+
+        return ExperimentStatus.SUCCESS
 
     def _on_start(self):
         pass

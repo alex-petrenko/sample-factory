@@ -17,7 +17,7 @@ from torch import nn
 
 from sample_factory.algo.utils.misc import EPS
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdDictInPlace, running_mean_std_summaries
-from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
+from sample_factory.algo.utils.tensor_dict import clone_tensordict
 
 
 class ObservationNormalizer(nn.Module):
@@ -29,24 +29,11 @@ class ObservationNormalizer(nn.Module):
 
         self.running_mean_std = None
         if cfg.normalize_input:
-            self.running_mean_std = RunningMeanStdDictInPlace(obs_space)
-            # comment this out for debugging (i.e. to be able to step through normalizer code)
-            self.running_mean_std = torch.jit.script(self.running_mean_std)
+            self.running_mean_std = RunningMeanStdDictInPlace(obs_space, cfg.normalize_input_keys)
 
         self.should_sub_mean = abs(self.sub_mean) > EPS
         self.should_scale = abs(self.scale - 1.0) > EPS
         self.should_normalize = self.should_sub_mean or self.should_scale or self.running_mean_std is not None
-
-    @staticmethod
-    def _clone_tensordict(obs_dict):
-        obs_clone = copy_dict_structure(obs_dict)  # creates an identical dict but with empty values
-        for d, d_clone, k, x, _ in iter_dicts_recursively(obs_dict, obs_clone):
-            if x.dtype != torch.float:
-                d_clone[k] = x.float()  # this will create a copy of a tensor
-            else:
-                d_clone[k] = x.clone()  # otherwise, we explicitly clone it
-
-        return obs_clone
 
     def forward(self, obs_dict):
         if not self.should_normalize:
@@ -54,7 +41,7 @@ class ObservationNormalizer(nn.Module):
 
         with torch.no_grad():
             # since we are creating a clone, it is safe to use in-place operations
-            obs_clone = self._clone_tensordict(obs_dict)
+            obs_clone = clone_tensordict(obs_dict)
 
             # subtraction of mean and scaling is only applied to default "obs"
             # this should be modified for custom obs dicts
