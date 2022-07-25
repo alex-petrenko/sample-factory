@@ -13,7 +13,7 @@ import torch
 
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.misc import memory_stats
+from sample_factory.algo.utils.misc import POLICY_ID_KEY, SAMPLES_COLLECTED, STATS_KEY, TIMING_STATS, memory_stats
 from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
@@ -195,7 +195,6 @@ class InferenceWorker(EventLoopObject, Configurable):
                 for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
                     index = [traj_buffer_idx, rollout_step]
                     indices.append(index)
-                    self.total_num_samples += 1
 
             indices = tuple(np.array(indices).T)
             traj_tensors = self.traj_tensors[device]  # TODO: multiple sampling devices?
@@ -348,12 +347,12 @@ class InferenceWorker(EventLoopObject, Configurable):
             stats["avg_request_count"] = np.mean(self.request_count)
 
         self.report_msg.emit(
-            dict(
-                timing=timing_stats,
-                samples_collected=samples_since_last_report,
-                policy_id=self.policy_id,
-                stats=stats,
-            )
+            {
+                TIMING_STATS: timing_stats,
+                SAMPLES_COLLECTED: samples_since_last_report,
+                POLICY_ID_KEY: self.policy_id,
+                STATS_KEY: stats,
+            }
         )
 
     def _cache_cleanup(self):

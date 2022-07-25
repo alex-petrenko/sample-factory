@@ -7,6 +7,8 @@ from sample_factory.utils.utils import AttrDict
 
 Config = Union[argparse.Namespace, AttrDict]
 
+StatusCode = int
+
 PolicyID = int
 Device = str
 

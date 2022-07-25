@@ -12,6 +12,7 @@
 
 # Sample Factory
 
+<span style="color:blue">some *blue* text</span>
 Codebase for high throughput asynchronous reinforcement learning.
 
 **Paper:** https://arxiv.org/abs/2006.11751

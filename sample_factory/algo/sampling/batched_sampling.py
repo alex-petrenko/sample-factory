@@ -3,13 +3,15 @@ from __future__ import annotations
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
+import gym
 import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner, fix_action_shape
+from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.make_env import SequentialVectorizeWrapper, make_env_func_batched
+from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
+from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.dicts import get_first_present
@@ -17,17 +19,38 @@ from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
 
 
-def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray:
+def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray | List:
     """
     We expect actions to have shape [num_envs, num_actions].
     For environments that require only one action per step we just squeeze the second dimension,
     because in this case the action is usually expected to be a scalar.
 
+    A potential way to reduce this complexity: demand all environments to have a Tuple action space even if they
+    only have a single Discrete or Box action space.
     """
-    if env_info.integer_actions:
-        actions = actions.to(torch.int32)  # is it faster to do on GPU or CPU?
 
-    if not env_info.gpu_actions:
+    if env_info.all_discrete or isinstance(env_info.action_space, gym.spaces.Discrete):
+        return process_action_space(actions, env_info.gpu_actions, is_discrete=True)
+    elif isinstance(env_info.action_space, gym.spaces.Box):
+        return process_action_space(actions, env_info.gpu_actions, is_discrete=False)
+    elif isinstance(env_info.action_space, gym.spaces.Tuple):
+        # input is (num_envs, num_actions)
+        out_actions = []
+        for split, space in zip(torch.split(actions, env_info.action_splits, 1), env_info.action_space):
+            out_actions.append(
+                process_action_space(split, env_info.gpu_actions, isinstance(space, gym.spaces.Discrete))
+            )
+        # this line can be used to transpose the actions, perhaps add as an option ?
+        # out_actions = list(zip(*out_actions)) # transpose
+        return out_actions
+
+    raise NotImplementedError(f"Unknown action space type: {env_info.action_space}")
+
+
+def process_action_space(actions: torch.Tensor, gpu_actions: bool, is_discrete: bool):
+    if is_discrete:
+        actions = actions.to(torch.int32)
+    if not gpu_actions:
         actions = actions.cpu().numpy()
 
     # action tensor/array should have two dimensions (num_agents, num_actions) where num_agents is a number of
@@ -37,7 +60,7 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     # discrete action envs typically expect to get the action index when there's only one action. So we squeeze the
     # second dimension for integer action envs.
     assert actions.ndim == 2, f"Expected actions to have two dimensions, got {actions}"
-    if env_info.integer_actions and actions.shape[1] == 1:
+    if is_discrete and actions.shape[1] == 1:
         actions = actions.squeeze(-1)
 
     return actions
@@ -114,7 +137,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
         """
-        envs = []
+        envs: List[BatchedVecEnv] = []
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
 
@@ -129,7 +152,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
-            env = make_env_func_batched(self.cfg, env_config=env_config)
+            env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config=env_config)
 
             env.seed(env_id)
             envs.append(env)
@@ -222,7 +245,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             for key, value in stats.items():
                 if isinstance(value, Tensor):
                     stats[key] = value.cpu().numpy()
-            reports.append(dict(episodic=stats, policy_id=self.policy_id))
+            reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
 
             self.curr_episode_reward[finished] = 0
             self.curr_episode_len[finished] = 0
