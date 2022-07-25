@@ -66,7 +66,8 @@ def run_test_env(
         evaluation=True,
     )
     cfg.device = "cpu"
-    status, avg_reward = enjoy(cfg, max_num_frames=1000)
+    cfg.max_num_frames = 1000
+    status, avg_reward = enjoy(cfg)
 
     assert isdir(directory)
     shutil.rmtree(directory, ignore_errors=True)
