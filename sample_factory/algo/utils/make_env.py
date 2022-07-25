@@ -15,7 +15,7 @@ from sample_factory.utils.dicts import dict_of_lists_append
 class _DictObservationsWrapper(Wrapper):
     def __init__(self, env):
         super().__init__(env)
-        self.num_agents = env.num_agents
+        self.num_agents = env.num_agents if hasattr(env, "num_agents") else 1
         self.observation_space = gym.spaces.Dict(dict(obs=self.observation_space))
 
 
