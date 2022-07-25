@@ -6,7 +6,7 @@ from huggingface_hub import HfApi, Repository, repocard, upload_file, upload_fol
 
 from sample_factory.utils.utils import log, project_tmp_dir
 
-MIN_FRAME_SIZE = 200
+MIN_FRAME_SIZE = 160
 
 
 def generate_replay_video(dir_path: str, frames: list, fps: int):
