@@ -6,10 +6,12 @@ This doc contains instructions for running Sample-Factory v2 using slurm
 
 Login to your slurm login node using ssh with your username and password.
 
-Start an interactive job with `srun -c40 --gres=gpu:1 --pty bash` to install files to your NFS. 
-Note that you may get a message `groups: cannot find name for group ID XXXX`
+Start an interactive job with `srun` to install files to your NFS. 
+```
+srun -c40 --gres=gpu:1 --pty bash
+```
 
-Git clone Sample-Factory
+Note that you may get a message `groups: cannot find name for group ID XXXX`
 
 Install Miniconda
 - Download installer using `wget` from https://docs.conda.io/en/latest/miniconda.html#linux-installers
@@ -17,10 +19,13 @@ Install Miniconda
 
 Make new conda environment `conda create --name sf2` then `conda activate sf2`
 
-Install dependencies for sf2
-- `cd sample-factory`
-- `git checkout sf2`
-- `pip install -e .`
+Download Sample-Factory and install dependencies for SF2
+```
+git clone https://github.com/alex-petrenko/sample-factory.git
+cd sample-factory
+git checkout sf2
+pip install -e .
+```
 
 ### Necessary scripts in SF2
 
