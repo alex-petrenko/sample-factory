@@ -1,16 +1,18 @@
+from typing import Tuple
+
+from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.runners.runner_parallel import ParallelRunner
 from sample_factory.algo.runners.runner_serial import SerialRunner
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import maybe_load_from_checkpoint, verify_cfg
+from sample_factory.cfg.arguments import maybe_load_from_checkpoint
+from sample_factory.utils.typing import Config
 
 
-def run_rl(cfg):
+def make_runner(cfg: Config) -> Tuple[Config, Runner]:
     if cfg.restart_behavior == "resume":
+        # if we're resuming from checkpoint, we load all of the config parameters from the checkpoint
+        # unless they're explicitly specified in the command line
         cfg = maybe_load_from_checkpoint(cfg)
-
-    # check for any incompatible arguments
-    if not verify_cfg(cfg):
-        return ExperimentStatus.FAILURE
 
     if cfg.serial_mode:
         runner_cls = SerialRunner
@@ -18,6 +20,17 @@ def run_rl(cfg):
         runner_cls = ParallelRunner
 
     runner = runner_cls(cfg)
-    runner.init()
-    status = runner.run()
+    return cfg, runner
+
+
+def run_rl(cfg: Config):
+    cfg, runner = make_runner(cfg)
+
+    # here we can register additional message or summary handlers
+    # see sf_examples/dmlab_examples/train_dmlab.py for example
+
+    status = runner.init()
+    if status == ExperimentStatus.SUCCESS:
+        status = runner.run()
+
     return status

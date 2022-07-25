@@ -7,13 +7,13 @@ import psutil
 from sample_factory.algorithms.dummy_sampler import DummySampler
 from sample_factory.cfg.arguments import maybe_load_from_checkpoint, parse_args
 from sample_factory.envs.create_env import create_env
-from sample_factory.envs.dmlab import dmlab_level_cache
-from sample_factory.envs.dmlab.dmlab30 import (
+from sample_factory.utils.timing import Timing
+from sample_factory.utils.utils import AttrDict, get_free_disk_space_mb, log
+from sf_examples.dmlab_examples import dmlab_level_cache
+from sf_examples.dmlab_examples.dmlab30 import (
     DMLAB30_APPROX_NUM_EPISODES_PER_BILLION_FRAMES,
     DMLAB30_LEVELS_THAT_USE_LEVEL_CACHE,
 )
-from sample_factory.utils.timing import Timing
-from sample_factory.utils.utils import AttrDict, get_free_disk_space_mb, log
 
 DESIRED_TRAINING_LENGTH = int(15e9)
 

@@ -3,7 +3,7 @@ PyTorch module that keeps track of tensor statistics and uses it to normalize da
 All credit goes to https://github.com/Denys88/rl_games (only slightly changed here, mostly with in-place operations)
 Thanks a lot, great module!
 """
-from typing import Dict, Final, Union
+from typing import Dict, Final, List, Optional, Union
 
 import gym
 import torch
@@ -116,7 +116,13 @@ class RunningMeanStdInPlace(nn.Module):
 
 class RunningMeanStdDictInPlace(nn.Module):
     def __init__(
-        self, obs_space: gym.spaces.Dict, epsilon=_NORM_EPS, clip=_DEFAULT_CLIP, per_channel=False, norm_only=False
+        self,
+        obs_space: gym.spaces.Dict,
+        keys_to_normalize: Optional[List[str]] = None,
+        epsilon=_NORM_EPS,
+        clip=_DEFAULT_CLIP,
+        per_channel=False,
+        norm_only=False,
     ):
         super(RunningMeanStdDictInPlace, self).__init__()
         self.obs_space: Final = obs_space
@@ -124,6 +130,7 @@ class RunningMeanStdDictInPlace(nn.Module):
             {
                 k: RunningMeanStdInPlace(space.shape, epsilon, clip, per_channel, norm_only)
                 for k, space in obs_space.spaces.items()
+                if keys_to_normalize is None or k in keys_to_normalize
             }
         )
 
