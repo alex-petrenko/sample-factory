@@ -5,11 +5,11 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import AttrDict, log
 
 
-def eval_env_performance(make_env, env_type, verbose=False):
+def eval_env_performance(make_env, env_type, verbose=False, eval_frames=10_000):
     t = Timing()
     with t.timeit("init"):
         env = make_env(AttrDict({"worker_index": 0, "vector_index": 0}))
-        total_num_frames, frames = 10000, 0
+        total_num_frames, frames = eval_frames, 0
 
     with t.timeit("first_reset"):
         env.reset()

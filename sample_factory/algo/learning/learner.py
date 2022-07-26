@@ -17,7 +17,7 @@ from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, build_rnn_inputs
 from sample_factory.algo.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
-from sample_factory.algo.utils.misc import memory_stats
+from sample_factory.algo.utils.misc import LEARNER_ENV_STEPS, POLICY_ID_KEY, STATS_KEY, TRAIN_STATS, memory_stats
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages
@@ -862,12 +862,15 @@ class Learner(EventLoopObject, Configurable):
             buff = copy.copy(self.batcher.training_batches[batch_idx])
 
             if (buff["actions"] == -42).nonzero().shape[0] > 0:
-                # TODO: remove this after we fix everything
+                # TODO: remove this after we test everything
                 # currently this can happen in envs with inactive agents
                 log.warning("Found invalid actions in batch %d", batch_idx)
                 raise ValueError("Found invalid actions in batch")
 
-            # TODO: how about device_and_type_for_input_tensor? This is needed for DMLab to work properly (small LSTM is faster on the CPU)
+            for k, v in buff["obs"].items():
+                device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
+                if device != v.device or dtype != v.dtype:
+                    buff["obs"][k] = v.detach().to(device, copy=True).type(dtype)
 
             # calculate estimated value for the next step (T+1)
             self.actor_critic.eval()
@@ -951,10 +954,10 @@ class Learner(EventLoopObject, Configurable):
         else:
             self.env_steps += experience_size
 
-        stats = dict(learner_env_steps=self.env_steps, policy_id=self.policy_id)
+        stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
         if train_stats is not None:
-            stats["train"] = train_stats
-            stats["stats"] = memory_stats("learner", self.device)
+            stats[TRAIN_STATS] = train_stats
+            stats[STATS_KEY] = memory_stats("learner", self.device)
 
         return stats
 

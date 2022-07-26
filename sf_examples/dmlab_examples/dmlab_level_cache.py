@@ -1,11 +1,14 @@
 import ctypes
-import multiprocessing
 import os
 import random
 import shutil
+from multiprocessing.context import BaseContext
 from os.path import join
 from pathlib import Path
+from typing import Dict
 
+from sample_factory.algo.utils.multiprocessing_utils import get_mp_lock
+from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import ensure_dir_exists, log, safe_ensure_dir_exists
 
 LEVEL_SEEDS_FILE_EXT = "dm_lvl_seeds"
@@ -47,7 +50,7 @@ def read_seeds_file(filename, has_keys):
     return seeds
 
 
-class DmlabLevelCacheGlobal:
+class DmlabLevelCache:
     """
     This is a global DMLab level cache designed to be shared across multiple worker processes.
     Here's how it works:
@@ -73,7 +76,7 @@ class DmlabLevelCacheGlobal:
 
     """
 
-    def __init__(self, cache_dir, experiment_dir, all_levels_for_experiment, policy_idx):
+    def __init__(self, cache_dir, experiment_dir, all_levels_for_experiment, policy_idx, mp_ctx: BaseContext):
         self.cache_dir = cache_dir
         self.experiment_dir = experiment_dir
         self.policy_idx = policy_idx
@@ -87,8 +90,8 @@ class DmlabLevelCacheGlobal:
         for lvl in all_levels_for_experiment:
             self.all_seeds[lvl] = []
             self.available_seeds[lvl] = []
-            self.num_seeds_used_in_current_run[lvl] = multiprocessing.RawValue(ctypes.c_int32, 0)
-            self.locks[lvl] = multiprocessing.Lock()
+            self.num_seeds_used_in_current_run[lvl] = mp_ctx.RawValue(ctypes.c_int32, 0)
+            self.locks[lvl] = get_mp_lock(mp_ctx)
 
         log.debug("Reading the DMLab level cache...")
         cache_dir = ensure_dir_exists(cache_dir)
@@ -215,18 +218,19 @@ class DmlabLevelCacheGlobal:
             # anymore in this experiment
 
 
-def dmlab_ensure_global_cache_initialized(experiment_dir, all_levels_for_experiment, num_policies, level_cache_dir):
-    global DMLAB_GLOBAL_LEVEL_CACHE
+DmlabLevelCaches = Dict[PolicyID, DmlabLevelCache]
 
-    assert (
-        multiprocessing.current_process().name == "MainProcess"
-    ), "make sure you initialize DMLab cache before child processes are forked"
 
-    DMLAB_GLOBAL_LEVEL_CACHE = []
+def make_dmlab_caches(
+    experiment_dir,
+    all_levels_for_experiment,
+    num_policies,
+    level_cache_dir,
+    mp_ctx: BaseContext,
+) -> DmlabLevelCaches:
+    caches = dict()
     for policy_id in range(num_policies):
-        # level cache is of course shared between independently training policies
-        # it's easiest to achieve
-
         log.info("Initializing level cache for policy %d...", policy_id)
-        cache = DmlabLevelCacheGlobal(level_cache_dir, experiment_dir, all_levels_for_experiment, policy_id)
-        DMLAB_GLOBAL_LEVEL_CACHE.append(cache)
+        cache = DmlabLevelCache(level_cache_dir, experiment_dir, all_levels_for_experiment, policy_id, mp_ctx)
+        caches[policy_id] = cache
+    return caches

@@ -1,8 +1,10 @@
 import time
 from collections import deque
+from typing import Dict
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
@@ -12,12 +14,49 @@ from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
+from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import AttrDict, experiment_dir, log
 
 
-def enjoy(cfg, max_num_frames=1e9):
+def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
+    """
+    Display actual policy inputs after all wrappers and normalizations using OpenCV imshow.
+    """
+    import cv2
+
+    if "obs" not in normalized_obs.keys():
+        return
+
+    obs = normalized_obs["obs"]
+    # visualize obs only for the 1st agent
+    obs = obs[0]
+    if obs.dim() != 3:
+        # this function is only for RGB images
+        return
+
+    # convert to HWC
+    obs = obs.permute(1, 2, 0)
+    # convert to numpy
+    obs = obs.cpu().numpy()
+    # resize
+    scale = 5
+    obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale))
+    # show the image
+    cv2.imshow("Policy Inputs", obs)
+
+
+def render_frame(cfg, env, video_frames, num_frames):
+    if cfg.save_video:
+        frame = env.render(mode="rgb_array")
+        if num_frames < cfg.video_frames:
+            video_frames.append(frame)
+    else:
+        env.render()
+
+
+def enjoy(cfg):
     cfg = load_from_checkpoint(cfg)
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
@@ -57,12 +96,16 @@ def enjoy(cfg, max_num_frames=1e9):
     last_render_start = time.time()
 
     def max_frames_reached(frames):
-        return max_num_frames is not None and frames > max_num_frames
+        return cfg.max_num_frames is not None and frames > cfg.max_num_frames
+
+    reward_list = []
 
     obs = env.reset()
     rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False] * env.num_agents
+
+    video_frames = []
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
@@ -71,6 +114,8 @@ def enjoy(cfg, max_num_frames=1e9):
                 obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
 
             normalized_obs = actor_critic.normalize_obs(obs)
+            if not cfg.no_render:
+                visualize_policy_inputs(normalized_obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
@@ -99,9 +144,8 @@ def enjoy(cfg, max_num_frames=1e9):
                         time.sleep(time_wait)
 
                     last_render_start = time.time()
-                    # TODO to render atari, need to add mode, will totally fix it in one week
-                    # env.render(mode='rgb_array')
-                    env.render()
+
+                    render_frame(cfg, env, video_frames, num_frames)
 
                 obs, rew, dones, infos = env.step(actions)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
@@ -119,6 +163,7 @@ def enjoy(cfg, max_num_frames=1e9):
                         finished_episode[agent_i] = True
                         rew = episode_reward[agent_i].item()
                         episode_rewards[agent_i].append(rew)
+                        reward_list.append(rew)
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):
@@ -138,9 +183,7 @@ def enjoy(cfg, max_num_frames=1e9):
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
                     if not cfg.no_render:
-                        # TODO to render atari, need to add mode, will totally fix it in one week
-                        # env.render(mode='rgb_array')
-                        env.render()
+                        render_frame(cfg, env, video_frames, num_frames)
                     time.sleep(0.05)
 
                 if all(finished_episode):
@@ -175,5 +218,16 @@ def enjoy(cfg, max_num_frames=1e9):
                 #         log.debug('Score for player %d: %r', player, infos[0][key])
 
     env.close()
+
+    if cfg.save_video:
+        if cfg.fps > 0:
+            fps = cfg.fps
+        else:
+            fps = 20
+        generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps)
+
+    if cfg.push_to_hub:
+        generate_model_card(experiment_dir(cfg=cfg), cfg.algo, cfg.env, reward_list)
+        push_to_hf(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", cfg.num_policies)
 
     return ExperimentStatus.SUCCESS, np.mean(episode_rewards)

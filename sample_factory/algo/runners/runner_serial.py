@@ -2,7 +2,9 @@ import multiprocessing
 from typing import Optional
 
 from sample_factory.algo.runners.runner import Runner
+from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
+from sample_factory.utils.typing import StatusCode
 
 
 class SerialRunner(Runner):
@@ -13,10 +15,12 @@ class SerialRunner(Runner):
     def multiprocessing_context(self) -> Optional[multiprocessing.context.BaseContext]:
         return None
 
-    def init(self):
+    def init(self) -> StatusCode:
         # in serial mode everything will be happening in the main process, so we need to initialize cuda
         init_torch_runtime(self.cfg, max_num_threads=None)
-        super().init()
+        status = super().init()
+        if status != ExperimentStatus.SUCCESS:
+            return status
 
         for policy_id in range(self.cfg.num_policies):
             self.batchers[policy_id] = self._make_batcher(self.event_loop, policy_id)
@@ -34,3 +38,5 @@ class SerialRunner(Runner):
             self.rollout_workers.append(rollout_worker)
 
         self.connect_components()
+
+        return status

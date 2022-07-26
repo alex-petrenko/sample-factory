@@ -328,11 +328,18 @@ def add_rl_args(p: ArgumentParser):
         type=str2bool,
         help="Whether to use running mean and standard deviation to normalize observations",
     )
+    p.add_argument(
+        "--normalize_input_keys",
+        default=None,
+        type=str,
+        nargs="*",
+        help="Which observation keys to use for normalization. If None, all observation keys are used",
+    )
 
     # decorrelating experience on startup (optional)
     p.add_argument(
         "--decorrelate_experience_max_seconds",
-        default=10,
+        default=0,
         type=int,
         help='Decorrelating experience serves two benefits. First: this is better for learning because samples from workers come from random moments in the episode, becoming more "i.i.d".'
         "Second, and more important one: this is good for environments with highly non-uniform one-step times, including long and expensive episode resets. If experience is not decorrelated"
@@ -573,6 +580,16 @@ def add_eval_args(parser):
         help="Repeat an action that many frames during evaluation. By default uses the value from env config (used during training).",
     )
     parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
+
+    parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
+    parser.add_argument("--video_frames", default=0, type=int, help="Number of frames to render for the video")
+    parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
+    parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
+
+    parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
+    parser.add_argument("--hf_username", default=None, type=str, help="HuggingFace username")
+    parser.add_argument("--hf_repository", default=None, type=str, help="Name of HuggingFace repository")
+
     parser.add_argument(
         "--policy_index", default=0, type=int, help="Policy to evaluate in case of multi-policy training"
     )

@@ -6,7 +6,9 @@ from sample_factory.algo.learning.learner import init_learner_process
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.sampling.rollout_worker import init_rollout_worker_process
 from sample_factory.algo.utils.context import sf_global_context
+from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopProcess
+from sample_factory.utils.typing import StatusCode
 from sample_factory.utils.utils import log
 
 
@@ -18,8 +20,10 @@ class ParallelRunner(Runner):
     def multiprocessing_context(self) -> Optional[multiprocessing.context.BaseContext]:
         return multiprocessing.get_context("spawn")
 
-    def init(self):
-        super().init()
+    def init(self) -> StatusCode:
+        status = super().init()
+        if status != ExperimentStatus.SUCCESS:
+            return status
 
         for policy_id in range(self.cfg.num_policies):
             batcher_event_loop = EventLoop("batcher_evt_loop")
@@ -55,6 +59,8 @@ class ParallelRunner(Runner):
             self.rollout_workers.append(rollout_worker)
 
         self.connect_components()
+
+        return status
 
     def _on_start(self):
         self._start_processes()

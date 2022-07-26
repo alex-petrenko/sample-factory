@@ -3,16 +3,18 @@ import random
 import shutil
 import time
 from os.path import join
+from typing import Dict
 
 import cv2
 import deepmind_lab
 import gym
 import numpy as np
 
-from sample_factory.envs.dmlab import dmlab_level_cache
-from sample_factory.envs.dmlab.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
-from sample_factory.envs.dmlab.dmlab_utils import string_to_hash_bucket
+from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import ensure_dir_exists, log
+from sf_examples.dmlab_examples.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_MAX_INSTRUCTION_LEN, DMLAB_VOCABULARY_SIZE
+from sf_examples.dmlab_examples.dmlab_level_cache import DmlabLevelCache
+from sf_examples.dmlab_examples.dmlab_utils import string_to_hash_bucket
 
 ACTION_SET = (
     (0, 0, 0, 1, 0, 0, 0),  # Forward
@@ -64,9 +66,9 @@ class DmlabGymEnv(gym.Env):
         dataset_path,
         with_instructions,
         extended_action_set,
-        use_level_cache,
         level_cache_path,
         gpu_index,
+        dmlab_level_caches_per_policy: Dict[PolicyID, DmlabLevelCache] = None,
         extra_cfg=None,
     ):
         self.width = res_w
@@ -87,7 +89,11 @@ class DmlabGymEnv(gym.Env):
 
         # the policy index which currently acts in the environment
         self.curr_policy_idx = 0
-        self.curr_cache = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE[self.curr_policy_idx]
+        self.dmlab_level_caches_per_policy = dmlab_level_caches_per_policy
+        self.use_level_cache = self.dmlab_level_caches_per_policy is not None
+        self.curr_cache = None
+        if self.use_level_cache:
+            self.curr_cache = self.dmlab_level_caches_per_policy[self.curr_policy_idx]
 
         self.instructions = np.zeros([DMLAB_MAX_INSTRUCTION_LEN], dtype=np.int32)
 
@@ -106,20 +112,13 @@ class DmlabGymEnv(gym.Env):
             config.update(extra_cfg)
         config = {k: str(v) for k, v in config.items()}
 
-        self.use_level_cache = use_level_cache
         self.level_cache_path = ensure_dir_exists(level_cache_path)
 
-        env_level_cache = self if use_level_cache else None
+        # this object provides fetch and write methods, hence using "self" for env level cache
+        env_level_cache = self if self.use_level_cache else None
+
         self.env_uses_level_cache = False  # will be set to True when this env instance queries the cache
         self.last_reset_seed = None
-
-        if env_level_cache is not None:
-            if not isinstance(self.curr_cache, dmlab_level_cache.DmlabLevelCacheGlobal):
-                raise Exception(
-                    "DMLab global level cache object is not initialized! Make sure to call"
-                    "dmlab_ensure_global_cache_initialized() in the main thread before you fork any child processes"
-                    "or create any DMLab envs"
-                )
 
         self.dmlab = deepmind_lab.Lab(
             level,
@@ -184,9 +183,9 @@ class DmlabGymEnv(gym.Env):
 
         return env_obs_dict
 
-    def reset(self):
+    def reset(self, **kwargs):
         if self.use_level_cache:
-            self.curr_cache = dmlab_level_cache.DMLAB_GLOBAL_LEVEL_CACHE[self.curr_policy_idx]
+            self.curr_cache = self.dmlab_level_caches_per_policy[self.curr_policy_idx]
             self.last_reset_seed = self.curr_cache.get_unused_seed(self.level, self.random_state)
         else:
             self.last_reset_seed = self.random_state.randint(0, 2**31 - 1)
@@ -216,17 +215,19 @@ class DmlabGymEnv(gym.Env):
         if self.last_observation is None and self.dmlab.is_running():
             self.last_observation = self.dmlab.observations()
 
-        img = self.last_observation[self.main_observation]
+        img = self.last_observation["obs"]
         if mode == "rgb_array":
             return img
         elif mode != "human":
             raise Exception(f"Rendering mode {mode} not supported")
 
+        img = np.transpose(img, (1, 2, 0))  # CHW to HWC
+
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
         scale = self.render_scale
         img_big = cv2.resize(img, (self.width * scale, self.height * scale), interpolation=cv2.INTER_NEAREST)
-        cv2.imshow("dmlab", img_big)
+        cv2.imshow("dmlab_examples", img_big)
 
         since_last_frame = time.time() - self.last_frame
         wait_time_sec = max(1.0 / self.render_fps - since_last_frame, 0.001)
@@ -255,5 +256,6 @@ class DmlabGymEnv(gym.Env):
 
     def write(self, key, pk3_path):
         """Environment object itself acts as a proxy to the global level cache."""
-        log.debug("Add new level to cache! Level %s seed %r key %s", self.level_name, self.last_reset_seed, key)
-        self.curr_cache.add_new_level(self.level, self.last_reset_seed, key, pk3_path)
+        if self.use_level_cache:
+            log.debug("Add new level to cache! Level %s seed %r key %s", self.level_name, self.last_reset_seed, key)
+            self.curr_cache.add_new_level(self.level, self.last_reset_seed, key, pk3_path)
