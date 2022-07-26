@@ -114,7 +114,8 @@ def enjoy(cfg):
                 obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
 
             normalized_obs = actor_critic.normalize_obs(obs)
-            visualize_policy_inputs(normalized_obs)
+            if not cfg.no_render:
+                visualize_policy_inputs(normalized_obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
