@@ -67,6 +67,7 @@ def run_test_env(
     )
     cfg.device = "cpu"
     cfg.max_num_frames = 1000
+    cfg.no_render = True
     status, avg_reward = enjoy(cfg)
 
     assert isdir(directory)
