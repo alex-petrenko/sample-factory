@@ -86,8 +86,9 @@ class ActorState:
         self.last_episode_reward = 0
         self.last_episode_duration = 0
 
-        self.episode_return = 0
-        self.episode_length = 0
+        if self.cfg.use_record_episode_statistics:
+            self.episode_return = 0
+            self.episode_length = 0
 
         # dictionary with current training progress per policy
         # values are approximate because we get updates from the master process once every few seconds
@@ -193,7 +194,7 @@ class ActorState:
         self.has_rollout_data = self.has_rollout_data or self.is_active
 
         # multiply by frameskip to get the episode lenghts matching the actual number of simulated steps
-        if self.cfg.multiply_frameskip:
+        if self.cfg.summaries_use_frameskip:
             self.last_episode_duration += self.env_info.frameskip
         else:
             self.last_episode_duration += 1

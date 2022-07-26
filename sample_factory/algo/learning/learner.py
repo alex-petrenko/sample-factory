@@ -946,7 +946,7 @@ class Learner(EventLoopObject, Configurable):
 
         # multiply the number of samples by frameskip so that FPS metrics reflect the number
         # of environment steps actually simulated
-        if self.cfg.multiply_frameskip:
+        if self.cfg.summaries_use_frameskip:
             self.env_steps += experience_size * self.env_info.frameskip
         else:
             self.env_steps += experience_size

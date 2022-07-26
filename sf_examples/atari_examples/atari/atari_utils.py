@@ -58,5 +58,4 @@ def make_atari_env(env_name, cfg, env_config, **kwargs):
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayScaleObservation(env)
     env = FrameStack(env, cfg.env_framestack)
-    # env = gym.wrappers.FrameStack(env, 4)
     return env

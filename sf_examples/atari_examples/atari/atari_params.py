@@ -15,7 +15,7 @@ def atari_override_defaults(env, parser):
 
 def atari_benchmark_defaults(env, parser):
     parser.set_defaults(
-        multiply_frameskip=False,
+        summaries_use_frameskip=False,
         use_record_episode_statistics=True,
         encoder_type="conv",
         encoder_subtype="convnet_atari",
@@ -50,7 +50,7 @@ def atari_benchmark_defaults(env, parser):
         lr_schedule="linear_decay",
         shuffle_minibatches=False,
         gae_lambda=0.95,
-        batched_sampling=False,
+        batched_sampling=True,
         normalize_input=False,
         normalize_returns=False,
         serial_mode=False,

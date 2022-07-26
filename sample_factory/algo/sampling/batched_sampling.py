@@ -127,6 +127,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward = self.curr_episode_len = None
 
+        if self.cfg.use_record_episode_statistics:
+            self.episode_return = self.episode_length = None
+
         self.pbt_reward_shaping = pbt_reward_shaping  # TODO
 
         self.min_raw_rewards = self.max_raw_rewards = None
@@ -177,6 +180,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward = torch.zeros(self.vec_env.num_agents)
         self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
+        if self.cfg.use_record_episode_statistics:
+            self.episode_return = torch.zeros(self.vec_env.num_agents)
+            self.episode_length = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
         self.min_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
         self.max_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
 
@@ -211,8 +217,14 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward += rewards
 
+        if self.cfg.use_record_episode_statistics:
+            for agent_i, item in enumerate(infos):
+                if "episode" in item.keys():
+                    self.episode_return[agent_i] = torch.tensor(item["episode"]["r"])
+                    self.episode_length[agent_i] = torch.tensor(item["episode"]["l"], dtype=torch.int32)
+
         # multiply by frameskip so we record the actual number of simulated steps
-        if self.cfg.multiply_frameskip:
+        if self.cfg.summaries_use_frameskip:
             self.curr_episode_len += self.env_info.frameskip
         else:
             self.curr_episode_len += 1
@@ -222,8 +234,12 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             finished = dones.nonzero(as_tuple=True)[0]
 
             stats = dict(
-                reward=self.curr_episode_reward[finished],
-                len=self.curr_episode_len[finished],
+                reward=self.curr_episode_reward[finished]
+                if not self.cfg.use_record_episode_statistics
+                else self.episode_return[finished],
+                len=self.curr_episode_len[finished]
+                if not self.cfg.use_record_episode_statistics
+                else self.episode_length[finished],
                 min_raw_reward=self.min_raw_rewards[finished],
                 max_raw_reward=self.max_raw_rewards[finished],
             )
