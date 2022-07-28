@@ -373,11 +373,12 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--force_envs_single_thread",
-        default=True,
-        type=str2bool,  # TODO: set to False?
+        default=False,
+        type=str2bool,
         help="Some environments may themselves use parallel libraries such as OpenMP or MKL. Since we parallelize environments on the level of workers, there is no need to keep this parallel semantic."
         "This flag uses threadpoolctl to force libraries such as OpenMP and MKL to use only a single thread within the environment."
-        "Default value (True) is recommended unless you are running fewer workers than CPU cores.",
+        "Enabling this is recommended unless you are running fewer workers than CPU cores. "
+        "threadpoolctl has caused a bunch of crashes in the past, so this feature is disabled by default at this moment.",
     )
     p.add_argument(
         "--default_niceness",

@@ -10,7 +10,8 @@ import gym
 from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
 from sample_factory.algo.utils.make_env import BatchedVecEnv, make_env_func_batched
-from sample_factory.utils.utils import AttrDict, experiment_dir, log
+from sample_factory.utils.typing import Config
+from sample_factory.utils.utils import experiment_dir, log
 
 
 @dataclass
@@ -68,7 +69,7 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     res_queue.put(env_info)
 
 
-def obtain_env_info_in_a_separate_process(cfg: AttrDict):
+def obtain_env_info_in_a_separate_process(cfg: Config):
     cache_filename = join(experiment_dir(cfg=cfg), f"env_info_{cfg.env}")
     if os.path.isfile(cache_filename):
         with open(cache_filename, "rb") as fobj:
