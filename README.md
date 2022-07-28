@@ -1,7 +1,6 @@
 [![Build Status](https://travis-ci.com/alex-petrenko/sample-factory.svg?branch=master)](https://travis-ci.com/github/alex-petrenko/sample-factory)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/alex-petrenko/sample-factory/blob/master/LICENSE)
 [![Downloads](https://pepy.tech/badge/sample-factory)](https://pepy.tech/project/sample-factory)
-[![wakatime](https://wakatime.com/badge/github/alex-petrenko/sample-factory.svg)](https://wakatime.com/badge/github/alex-petrenko/sample-factory)
 [<img src="https://img.shields.io/discord/987232982798598164?label=discord">](https://discord.gg/BCfHWaSMkr)
 <!-- [![codecov](https://codecov.io/gh/alex-petrenko/sample-factory/branch/master/graph/badge.svg)](https://codecov.io/gh/alex-petrenko/sample-factory) -->
 
