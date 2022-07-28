@@ -10,6 +10,7 @@ from os.path import isdir, join
 from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
+from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.learning.batcher import Batcher
@@ -29,7 +30,6 @@ from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
@@ -553,8 +553,8 @@ class Runner(EventLoopObject, Configurable):
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
                 del self.components_to_stop[i]
-                if self.components_to_stop:
-                    log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
+                # if self.components_to_stop:
+                #     log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
                 break
 
         self.component_profiles.update(component_profiles)

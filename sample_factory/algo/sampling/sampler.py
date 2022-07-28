@@ -1,17 +1,19 @@
 from abc import ABC
 from typing import Callable, Dict, List
 
+from signal_slot.queue_utils import get_queue
+from signal_slot.signal_slot import BoundMethod, EventLoop, EventLoopObject, EventLoopProcess, signal
+
 from sample_factory.algo.sampling.inference_worker import InferenceWorker, init_inference_process
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker, init_rollout_worker_process
 from sample_factory.algo.utils.context import sf_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import advance_rollouts_signal, new_trajectories_signal
 from sample_factory.algo.utils.model_sharing import ParameterServer
-from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx, get_queue
+from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import BoundMethod, EventLoop, EventLoopObject, EventLoopProcess, signal
 from sample_factory.utils.typing import Config, MpQueue, PolicyID
 from sample_factory.utils.utils import log
 

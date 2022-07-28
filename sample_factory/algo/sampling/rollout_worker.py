@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple
 
 import psutil
 import torch
+from signal_slot.signal_slot import EventLoopObject, signal
 
 from sample_factory.algo.sampling.batched_sampling import BatchedVectorEnvRunner
 from sample_factory.algo.sampling.non_batched_sampling import NonBatchedVectorEnvRunner
@@ -16,7 +17,6 @@ from sample_factory.algo.utils.misc import new_trajectories_signal
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import inference_context
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
 from sample_factory.utils.gpu_utils import gpus_for_process, set_gpus_for_process
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import MpQueue, PolicyID
@@ -42,7 +42,8 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
         available_cores = curr_process.cpu_affinity()
         desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, len(available_cores))
     else:
-        desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, psutil.cpu_count(logical=False))
+        desired_cores = cores_for_worker_process(worker.worker_idx, cfg.num_workers, psutil.cpu_count(logical=True))
+
     if desired_cores is not None and len(desired_cores) == 1 and cfg.force_envs_single_thread:
         from threadpoolctl import threadpool_limits
 

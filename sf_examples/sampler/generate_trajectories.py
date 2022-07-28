@@ -2,6 +2,8 @@ import sys
 import time
 from typing import Dict, Iterable, Optional
 
+from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, StatusCode, Timer, signal
+
 from sample_factory.algo.sampling.sampler import AbstractSampler, ParallelSampler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.misc import ExperimentStatus
@@ -9,14 +11,6 @@ from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import (
-    EventLoop,
-    EventLoopObject,
-    EventLoopStatus,
-    StatusCode,
-    Timer,
-    signal,
-)
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.typing import Config, PolicyID
 from sample_factory.utils.utils import log

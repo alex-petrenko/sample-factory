@@ -1,4 +1,5 @@
-from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, signal
+from signal_slot.signal_slot import EventLoop, EventLoopObject, signal
+
 from sample_factory.utils.utils import log
 
 

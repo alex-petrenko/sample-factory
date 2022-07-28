@@ -1,12 +1,13 @@
 from typing import List
 
+from signal_slot.signal_slot import EventLoop, EventLoopProcess
+
 from sample_factory.algo.learning.learner import init_learner_process
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.sampling.sampler import ParallelSampler
 from sample_factory.algo.utils.context import sf_global_context
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
-from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopProcess
 from sample_factory.utils.typing import StatusCode
 from sample_factory.utils.utils import log
 

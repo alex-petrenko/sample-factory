@@ -11,6 +11,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
+from signal_slot.signal_slot import EventLoopObject, signal
 from torch import Tensor
 
 from sample_factory.algo.learning.batcher import Batcher
@@ -26,7 +27,6 @@ from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
-from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
