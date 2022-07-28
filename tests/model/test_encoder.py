@@ -14,7 +14,7 @@ def test_default_encoder():
     cfg.encoder_type = "default"
     obs_space = Dict(
         {
-            "obs_1d": Box(-1, 1, shape=(1,)),
+            "obs_1d": Box(-1, 1, shape=(21,)),
             "obs_3d": Box(-1, 1, shape=(3, 84, 84)),
             "obs_3d_2": Box(-1, 1, shape=(3, 64, 64)),
         }
