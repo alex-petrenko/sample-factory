@@ -69,11 +69,12 @@ def get_obs_shape(obs_space):
 
 
 class EncoderBase(nn.Module):
-    def __init__(self, cfg, timing):
+    def __init__(self, cfg, timing, obs_key):
         super().__init__()
 
         self.cfg = cfg
         self.timing = timing
+        self.obs_key = obs_key
 
         self.fc_after_enc = None
         self.encoder_out_size = -1  # to be initialized in the constuctor of derived class
@@ -142,7 +143,7 @@ class ConvEncoder(EncoderBase):
                     raise NotImplementedError(f"Layer {layer} not supported!")
 
             self.conv_head = nn.Sequential(*conv_layers)
-            self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+            self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape)
 
             fc_layers = []
             for i in range(encoder_extra_fc_layers):
@@ -157,11 +158,11 @@ class ConvEncoder(EncoderBase):
             x = self.fc_layers(x)
             return x
 
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+    def __init__(self, cfg, obs_key, obs_space, timing):
+        super().__init__(cfg, timing, obs_key)
 
-        obs_shape = get_obs_shape(obs_space)
-        input_ch = obs_shape.obs[0]
+        obs_shape = get_obs_shape(obs_space)[obs_key]
+        input_ch = obs_shape[0]
         log.debug("Num input channels: %d", input_ch)
 
         # TODO: make a proper model builder
@@ -179,11 +180,11 @@ class ConvEncoder(EncoderBase):
         enc = self.ConvEncoderImpl(activation, conv_filters, fc_layer_size, encoder_extra_fc_layers, obs_shape)
         self.enc = torch.jit.script(enc)
 
-        self.encoder_out_size = calc_num_elements(self.enc, obs_shape.obs)
+        self.encoder_out_size = calc_num_elements(self.enc, obs_shape)
         log.debug("Encoder output size: %r", self.encoder_out_size)
 
     def forward(self, obs_dict):
-        return self.enc(obs_dict["obs"])
+        return self.enc(obs_dict[self.obs_key])
 
 
 class ResBlock(nn.Module):
@@ -211,11 +212,11 @@ class ResBlock(nn.Module):
 
 
 class ResnetEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+    def __init__(self, cfg, obs_key, obs_space, timing):
+        super().__init__(cfg, timing, obs_key)
 
         obs_shape = get_obs_shape(obs_space)
-        input_ch = obs_shape.obs[0]
+        input_ch = obs_shape[0]
         log.debug("Num input channels: %d", input_ch)
 
         if cfg.encoder_subtype == "resnet_impala":
@@ -242,30 +243,35 @@ class ResnetEncoder(EncoderBase):
         layers.append(nonlinearity(cfg))
 
         self.conv_head = nn.Sequential(*layers)
-        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape)
         log.debug("Convolutional layer output size: %r", self.conv_head_out_size)
 
         self.init_fc_blocks(self.conv_head_out_size)
 
     def forward(self, obs_dict):
-        x = self.conv_head(obs_dict["obs"])
+        x = self.conv_head(obs_dict[self.obs_key])
         x = x.contiguous().view(-1, self.conv_head_out_size)
 
         x = self.forward_fc_blocks(x)
         return x
 
 
-class MlpEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+class DefaultEncoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
 
-        obs_shape = get_obs_shape(obs_space)
-        assert len(obs_shape.obs) == 1
+
+class MlpEncoder(EncoderBase):
+    def __init__(self, cfg, obs_key, obs_space, timing):
+        super().__init__(cfg, timing, obs_key)
+
+        obs_shape = get_obs_shape(obs_space)[obs_key]
+        assert len(obs_shape) == 1
 
         if cfg.encoder_subtype == "mlp_mujoco":
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
-                nn.Linear(obs_shape.obs[0], fc_encoder_layer),
+                nn.Linear(obs_shape[0], fc_encoder_layer),
                 nonlinearity(cfg),
                 nn.Linear(fc_encoder_layer, fc_encoder_layer),
                 nonlinearity(cfg),
@@ -277,7 +283,7 @@ class MlpEncoder(EncoderBase):
         self.init_fc_blocks(fc_encoder_layer)
 
     def forward(self, obs_dict):
-        x = self.mlp_head(obs_dict["obs"])
+        x = self.mlp_head(obs_dict[self.obs_key])
         x = self.forward_fc_blocks(x)
         return x
 
@@ -298,17 +304,56 @@ def create_encoder(cfg, obs_space, timing):
     return encoder
 
 
+def create_decoder(cfg, decoder_input_size):
+    if cfg.decoder_type == "identity":
+        return IdentityDecoder(cfg, decoder_input_size)
+    if cfg.decoder_type == "mlp":
+        return MLPDecoder(cfg, decoder_input_size)
+
+    raise Exception("Decoder type not supported")
+
+
 def create_standard_encoder(cfg, obs_space, timing):
-    if cfg.encoder_type == "conv":
-        encoder = ConvEncoder(cfg, obs_space, timing)
+    if cfg.encoder_type == "default":
+        encoder = DefaultEncoder(cfg, obs_space, timing)
+    elif cfg.encoder_type == "conv":
+        encoder = ConvEncoder(cfg, "obs", obs_space, timing)
     elif cfg.encoder_type == "resnet":
-        encoder = ResnetEncoder(cfg, obs_space, timing)
+        encoder = ResnetEncoder(cfg, "obs", obs_space, timing)
     elif cfg.encoder_type == "mlp":
-        encoder = MlpEncoder(cfg, obs_space, timing)
+        encoder = MlpEncoder(cfg, "obs", obs_space, timing)
     else:
         raise Exception("Encoder type not supported")
 
     return encoder
+
+
+class IdentityDecoder(nn.Module):
+    def __init__(self, cfg, decoder_input_size) -> None:
+        super().__init__()
+        self.decoder_output_size = decoder_input_size
+
+    def forward(self, core_outputs):
+        return core_outputs
+
+
+class MLPDecoder(nn.Module):
+    def __init__(self, cfg, decoder_input_size):
+        super().__init__(cfg, decoder_input_size)
+
+        fc_decorder_layer = cfg.hidden_size
+        decoder_layers = [
+            nn.Linear(decoder_input_size, fc_decorder_layer),
+            nonlinearity(cfg),
+            nn.Linear(fc_decorder_layer, fc_decorder_layer),
+            nonlinearity(cfg),
+        ]
+        self.decoder_output_size = fc_decorder_layer
+
+        self.mlp_head = nn.Sequential(*decoder_layers)
+
+    def forward(self, decoder_input):
+        return self.mlp_head(decoder_input)
 
 
 class PolicyCoreBase(nn.Module):

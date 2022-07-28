@@ -12,6 +12,7 @@ from sample_factory.model.model_utils import (
     ActionParameterizationContinuousNonAdaptiveStddev,
     ActionParameterizationDefault,
     create_core,
+    create_decoder,
     create_encoder,
 )
 from sample_factory.utils.normalize import ObservationNormalizer
@@ -111,7 +112,7 @@ class _ActorCriticBase(nn.Module):
 
 
 class _ActorCriticSharedWeights(_ActorCriticBase):
-    def __init__(self, make_encoder, make_core, obs_space, action_space, cfg, timing):
+    def __init__(self, make_encoder, make_core, make_decoder, obs_space, action_space, cfg, timing):
         super().__init__(obs_space, action_space, cfg, timing)
 
         # in case of shared weights we're using only a single encoder and a single core
@@ -121,10 +122,10 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         self.core = make_core(self.encoder)
         self.cores = [self.core]
 
-        core_out_size = self.core.get_core_out_size()
-        self.critic_linear = nn.Linear(core_out_size, 1)
+        self.decoder = make_decoder(self.core)
 
-        self.action_parameterization = self.get_action_parameterization(core_out_size)
+        self.critic_linear = nn.Linear(self.decoder.decoder_output_size, 1)
+        self.action_parameterization = self.get_action_parameterization(self.decoder.decoder_output_size)
 
         self.apply(self.initialize_weights)
 
@@ -136,14 +137,17 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
         x, new_rnn_states = self.core(head_output, rnn_states)
         return x, new_rnn_states
 
-    def calc_value(self, core_output):
-        values = self.critic_linear(core_output).squeeze()
+    def calc_value(self, decoder_output):
+        values = self.critic_linear(decoder_output).squeeze()
         return values
 
-    def forward_tail(self, core_output, sample_actions=True) -> TensorDict:
-        values = self.calc_value(core_output)
+    def forward_decoder(self, core_output):
+        return self.decoder(core_output)
 
-        action_distribution_params, self.last_action_distribution = self.action_parameterization(core_output)
+    def forward_tail(self, decoder_output, sample_actions=True) -> TensorDict:
+        values = self.calc_value(decoder_output)
+
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(decoder_output)
 
         result = TensorDict(
             action_logits=action_distribution_params,
@@ -157,7 +161,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
     def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
         x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-
+        x = self.forward_decoder(x)
         if values_only:
             return TensorDict(values=self.calc_value(x))
         else:
@@ -167,7 +171,7 @@ class _ActorCriticSharedWeights(_ActorCriticBase):
 
 
 class _ActorCriticSeparateWeights(_ActorCriticBase):
-    def __init__(self, make_encoder, obs_space, make_core, action_space, cfg, timing):
+    def __init__(self, make_encoder, obs_space, make_core, make_decoder, action_space, cfg, timing):
         super().__init__(obs_space, action_space, cfg, timing)
 
         self.actor_encoder = make_encoder()
@@ -179,11 +183,14 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
         self.encoders = [self.actor_encoder, self.critic_encoder]
         self.cores = [self.actor_core, self.critic_core]
 
+        self.actor_decoder = make_decoder(self.actor_core)
+        self.critic_decoder = make_decoder(self.critic_core)
+
         self.core_func = self._core_rnn if self.cfg.use_rnn else self._core_empty
 
-        self.critic_linear = nn.Linear(self.critic_core.get_core_out_size(), 1)
+        self.critic_linear = nn.Linear(self.critic_decoder.get_out_size(), 1)
 
-        self.action_parameterization = self.get_action_parameterization(self.critic_core.get_core_out_size())
+        self.action_parameterization = self.get_action_parameterization(self.actor_decoder.get_out_size())
 
         self.apply(self.initialize_weights)
 
@@ -222,14 +229,21 @@ class _ActorCriticSeparateWeights(_ActorCriticBase):
     def forward_core(self, head_output, rnn_states):
         return self.core_func(head_output, rnn_states)
 
-    def forward_tail(self, core_output, sample_actions=True) -> TensorDict:
-        core_outputs = core_output.chunk(len(self.cores), dim=1)
+    def forward_decoder(self, core_output):
+        decoder_outputs = []
+        for i, d in enumerate(self.decoders):
+            decoder_outputs.append(d(core_output[i]))
+
+        return torch.cat(decoder_outputs, dim=1)
+
+    def forward_tail(self, decoder_output, sample_actions=True) -> TensorDict:
+        decoder_outputs = decoder_output.chunk(len(self.cores), dim=1)
 
         # first core output corresponds to the actor
-        action_distribution_params, self.last_action_distribution = self.action_parameterization(core_outputs[0])
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(decoder_outputs[0])
 
         # second core output corresponds to the critic
-        values = self.critic_linear(core_outputs[1]).squeeze()
+        values = self.critic_linear(decoder_outputs[1]).squeeze()
 
         result = TensorDict(
             action_logits=action_distribution_params,
@@ -266,7 +280,10 @@ def create_actor_critic(cfg, obs_space, action_space, timing=None):
     def make_core(encoder):
         return create_core(cfg, encoder.get_encoder_out_size())
 
+    def make_decoder(core):
+        return create_decoder(cfg, core.get_encoder_out_size())
+
     if cfg.actor_critic_share_weights:
-        return _ActorCriticSharedWeights(make_encoder, make_core, obs_space, action_space, cfg, timing)
+        return _ActorCriticSharedWeights(make_encoder, make_core, make_decoder, obs_space, action_space, cfg, timing)
     else:
-        return _ActorCriticSeparateWeights(make_encoder, make_core, obs_space, action_space, cfg, timing)
+        return _ActorCriticSeparateWeights(make_encoder, make_core, make_decoder, obs_space, action_space, cfg, timing)

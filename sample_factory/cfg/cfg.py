@@ -454,7 +454,13 @@ def add_model_args(p: ArgumentParser):
         "--encoder_type",
         default="conv",
         type=str,
-        help="Type of the encoder. Supported: conv, mlp, resnet (feel free to define more)",
+        help="Type of the encoder. Supported: default, conv, mlp, resnet (feel free to define more)",
+    )
+    p.add_argument(
+        "--decoder_type",
+        default="identity",
+        type=str,
+        help="Type of the decord. Supported: identity, mlp (feel free to define more)",
     )
     p.add_argument(
         "--encoder_subtype", default="convnet_simple", type=str, help="Specific encoder design (see model.py)"
