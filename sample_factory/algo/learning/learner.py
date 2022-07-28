@@ -22,6 +22,7 @@ from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages
 from sample_factory.algo.utils.shared_buffers import policy_device
+from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
@@ -139,7 +140,7 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
         raise RuntimeError(f"Unknown scheduler {cfg.lr_schedule}")
 
 
-class Learner(EventLoopObject, Configurable):
+class Learner(StoppableEventLoopObject, Configurable):
     def __init__(self, evt_loop, cfg, env_info, buffer_mgr, batcher: Batcher, policy_id: PolicyID, mp_ctx):
         Configurable.__init__(self, cfg)
 
@@ -182,27 +183,27 @@ class Learner(EventLoopObject, Configurable):
 
     @signal
     def initialized(self):
-        pass
+        ...
 
     @signal
     def model_initialized(self):
-        pass
+        ...
 
     @signal
     def report_msg(self):
-        pass
+        ...
 
     @signal
     def training_batch_released(self):
-        pass
+        ...
 
     @signal
     def finished_training_iteration(self):
-        pass
+        ...
 
     @signal
     def stop(self):
-        pass
+        ...
 
     def init(self):
         if not self.cfg.serial_mode:
@@ -239,45 +240,46 @@ class Learner(EventLoopObject, Configurable):
         self.device = policy_device(self.cfg, self.policy_id)
 
         log.debug("Initializing actor-critic model on device %s", self.device)
-        with self.param_server.policy_lock:
-            # trainable torch module
-            self.actor_critic = create_actor_critic(
-                self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
-            )
-            self.actor_critic.model_to_device(self.device)
-            self.actor_critic.share_memory()  # TODO: This line does not work with pytorch 1.12.0
-            self.actor_critic.train()
 
-            params = list(self.actor_critic.parameters())
+        # trainable torch module
+        self.actor_critic = create_actor_critic(
+            self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
+        )
+        self.actor_critic.model_to_device(self.device)
+        self.actor_critic.share_memory()
+        self.actor_critic.train()
 
-            optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
-            if self.cfg.optimizer not in optimizer_cls:
-                raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
+        params = list(self.actor_critic.parameters())
 
-            optimizer_cls = optimizer_cls[self.cfg.optimizer]
-            log.debug(f"Using optimizer {optimizer_cls}")
+        optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+        if self.cfg.optimizer not in optimizer_cls:
+            raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
 
-            self.optimizer = optimizer_cls(
-                params,
-                lr=self.cfg.learning_rate,
-                betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
-                eps=self.cfg.adam_eps,
-            )
+        optimizer_cls = optimizer_cls[self.cfg.optimizer]
+        log.debug(f"Using optimizer {optimizer_cls}")
 
-            self.lr_scheduler = get_lr_scheduler(self.cfg)
+        self.optimizer = optimizer_cls(
+            params,
+            lr=self.cfg.learning_rate,
+            betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+            eps=self.cfg.adam_eps,
+        )
 
-            self.load_from_checkpoint(self.policy_id)
-            self.param_server.init(self.actor_critic, self.train_step)
+        self.lr_scheduler = get_lr_scheduler(self.cfg)
 
-            # in serial mode we will just use the same actor_critic directly
-            state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
-            model_state = (
-                state_dict,
-                self.device,
-                self.train_step,
-            )  # TODO: probably should not send device since we set CUDA vars to only have one device visible
-            # signal other components that the model is ready
-            self.model_initialized.emit(model_state)
+        self.load_from_checkpoint(self.policy_id)
+
+        self.param_server.init(self.actor_critic, self.train_step)
+
+        # in serial mode we will just use the same actor_critic directly
+        state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
+        model_state = (
+            state_dict,
+            self.device,
+            self.train_step,
+        )
+        # signal other components that the model is ready
+        self.model_initialized.emit(model_state)
 
         self.is_initialized = True
         self.initialized.emit()
@@ -690,6 +692,7 @@ class Learner(EventLoopObject, Configurable):
 
                     targets = targets.to(self.device)
                     old_values = mb.values
+                    # noinspection PyTypeChecker
                     value_loss = self._value_loss(values, old_values, targets, clip_value, valids)
                     critic_loss = value_loss
 
@@ -965,17 +968,14 @@ class Learner(EventLoopObject, Configurable):
 
         self.finished_training_iteration.emit()
 
-    def on_stop(self, *_):
+    def on_stop(self, *args):
         self.save()
         log.debug(f"Stopping {self.object_id}...")
 
         if not self.cfg.serial_mode:
             self.join_batcher_thread()
 
-        self.stop.emit(self.object_id, self.timing)
+        self.stop.emit(self.object_id, {self.object_id: self.timing})
 
-        if self.event_loop.owner is self:
-            self.event_loop.stop()
-            del self.actor_critic
-
-        self.detach()  # remove from the current event loop
+        super().on_stop(*args)
+        del self.actor_critic

@@ -3,6 +3,19 @@ import os
 import time
 from multiprocessing.context import BaseContext
 from queue import Empty, Queue
+from typing import Optional
+
+from sample_factory.utils.utils import static_vars
+
+
+@static_vars(mp_ctx=None)
+def get_mp_ctx(serial: bool) -> Optional[BaseContext]:
+    if serial:
+        return None
+
+    if get_mp_ctx.mp_ctx is None:
+        get_mp_ctx.mp_ctx = multiprocessing.get_context("spawn")
+    return get_mp_ctx.mp_ctx
 
 
 def get_queue(serial=False, buffer_size_bytes=1_000_000):
@@ -65,7 +78,7 @@ def get_lock(serial=False, mp_ctx=None):
         return get_mp_lock(mp_ctx)
 
 
-def get_mp_lock(mp_ctx: BaseContext = None):
+def get_mp_lock(mp_ctx: Optional[BaseContext] = None):
     lock_cls = multiprocessing.Lock if mp_ctx is None else mp_ctx.Lock
     return lock_cls()
 

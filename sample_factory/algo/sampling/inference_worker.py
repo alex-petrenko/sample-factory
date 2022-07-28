@@ -5,7 +5,7 @@ import os
 import time
 from collections import deque
 from queue import Empty
-from typing import Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, Tuple
 
 import numpy as np
 import psutil
@@ -13,9 +13,17 @@ import torch
 
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.misc import POLICY_ID_KEY, SAMPLES_COLLECTED, STATS_KEY, TIMING_STATS, memory_stats
+from sample_factory.algo.utils.misc import (
+    POLICY_ID_KEY,
+    SAMPLES_COLLECTED,
+    STATS_KEY,
+    TIMING_STATS,
+    advance_rollouts_signal,
+    memory_stats,
+)
 from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
 from sample_factory.algo.utils.shared_buffers import policy_device
+from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
 from sample_factory.algo.utils.tensor_utils import cat_tensors, dict_of_lists_cat, ensure_torch_tensor
 from sample_factory.algo.utils.torch_utils import inference_context, init_torch_runtime
@@ -50,7 +58,7 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     init_torch_runtime(cfg)
 
 
-class InferenceWorker(EventLoopObject, Configurable):
+class InferenceWorker(StoppableEventLoopObject, Configurable):
     def __init__(
         self,
         event_loop,
@@ -120,22 +128,21 @@ class InferenceWorker(EventLoopObject, Configurable):
 
     @signal
     def initialized(self):
-        pass
+        ...
 
     @signal
     def report_msg(self):
-        pass
+        ...
 
-    @signal
-    def stop(self):
-        pass
-
-    def init(self, initial_model_state):
+    def init(self, initial_model_state: Optional[Tuple[Any, torch.device, int]]):
         if "cpu" in self.traj_tensors:
             self.traj_tensors["cpu"] = to_numpy(self.traj_tensors["cpu"])
             self.policy_output_tensors["cpu"] = to_numpy(self.policy_output_tensors["cpu"])
 
-        state_dict, self.device, policy_version = initial_model_state
+        state_dict = None
+        policy_version = 0
+        if initial_model_state is not None:
+            state_dict, self.device, policy_version = initial_model_state
         self.param_client.on_weights_initialized(state_dict, self.device, policy_version)
 
         # we can create and connect Timers and EventLoopObjects here because they all interact within one loop
@@ -299,7 +306,7 @@ class InferenceWorker(EventLoopObject, Configurable):
 
             with timing.add_time("send_messages"):
                 for actor_idx, split_idx in outputs_ready:
-                    self.emit(f"advance{actor_idx}", (split_idx, self.policy_id))
+                    self.emit(advance_rollouts_signal(actor_idx), (split_idx, self.policy_id))
 
             self.requests = []
 
@@ -331,7 +338,7 @@ class InferenceWorker(EventLoopObject, Configurable):
             self.param_client.ensure_weights_updated()
 
         with self.timing.timeit("one_step"), self.timing.add_time("handle_policy_step"):
-            self.request_count.append(len(self.requests))  # TODO: count requests properly when we use slices
+            self.request_count.append(len(self.requests))
             self._handle_policy_steps(self.timing)
 
     def _report_stats(self):
@@ -363,15 +370,10 @@ class InferenceWorker(EventLoopObject, Configurable):
         if self.total_num_samples > 1000:
             self.cache_cleanup_timer.set_interval(300.0)
 
-    def on_stop(self, *_):
+    def on_stop(self, *args):
         if self.is_initialized:
             self.param_client.cleanup()
             del self.param_client
 
-        log.debug(f"Stopping {self.object_id}...")
-        self.stop.emit(self.object_id, self.timing)
-
-        if self.event_loop.owner is self:
-            self.event_loop.stop()
-
-        self.detach()  # remove from the current event loop
+        self.stop.emit(self.object_id, {self.object_id: self.timing})
+        super().on_stop(*args)

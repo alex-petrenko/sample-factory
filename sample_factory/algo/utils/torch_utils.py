@@ -11,6 +11,7 @@ def init_torch_runtime(cfg: AttrDict, max_num_threads: Optional[int] = 1):
     if max_num_threads is not None:
         torch.set_num_threads(max_num_threads)
     if cfg.device == "gpu":
+        # noinspection PyUnresolvedReferences
         torch.backends.cudnn.benchmark = True
 
 

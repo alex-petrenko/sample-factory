@@ -1,5 +1,6 @@
 import torch
 
+from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import memory_consumption_mb
 
 EPS = 1e-8
@@ -13,6 +14,15 @@ TIMING_STATS = "timing"
 STATS_KEY = "stats"
 SAMPLES_COLLECTED = "samples_collected"
 POLICY_ID_KEY = "policy_id"
+
+
+# custom signal names
+def new_trajectories_signal(policy_id: PolicyID) -> str:
+    return f"p{policy_id}_trajectories"
+
+
+def advance_rollouts_signal(rollout_worker_idx: int) -> str:
+    return f"advance{rollout_worker_idx}"
 
 
 class ExperimentStatus:

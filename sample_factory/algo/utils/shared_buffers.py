@@ -216,17 +216,10 @@ class BufferMgr(Configurable):
                 device,
                 share,
             )
-            (
-                self.policy_output_tensors_torch[device],
-                self.output_names,
-                self.output_sizes,
-            ) = alloc_policy_output_tensors(
-                cfg,
-                self.env_info,
-                hidden_size,
-                device,
-                share,
+            self.policy_output_tensors_torch[device], output_names, output_sizes = alloc_policy_output_tensors(
+                cfg, self.env_info, hidden_size, device, share
             )
+            self.output_names, self.output_sizes = output_names, output_sizes
 
             if cfg.batched_sampling:
                 # big trajectory batches (slices) for batched sampling

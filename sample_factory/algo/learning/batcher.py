@@ -5,9 +5,10 @@ import torch
 
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.shared_buffers import alloc_trajectory_tensors, policy_device
+from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, signal
+from sample_factory.signal_slot.signal_slot import EventLoop, signal
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, PolicyID
 from sample_factory.utils.utils import AttrDict, debug_log_every_n
@@ -84,7 +85,7 @@ class SliceMerger:
         return None
 
 
-class Batcher(EventLoopObject):
+class Batcher(StoppableEventLoopObject):
     def __init__(self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr, cfg: AttrDict, env_info: EnvInfo):
         unique_name = f"{Batcher.__name__}_{policy_id}"
         super().__init__(evt_loop, unique_name)
@@ -117,27 +118,27 @@ class Batcher(EventLoopObject):
 
     @signal
     def initialized(self):
-        pass
+        ...
 
     @signal
     def trajectory_buffers_available(self):
-        pass
+        ...
 
     @signal
     def training_batches_available(self):
-        pass
+        ...
 
     @signal
     def stop_experience_collection(self):
-        pass
+        ...
 
     @signal
     def resume_experience_collection(self):
-        pass
+        ...
 
     @signal
     def stop(self):
-        pass
+        ...
 
     def init(self):
         device = policy_device(self.cfg, self.policy_id)
@@ -260,8 +261,6 @@ class Batcher(EventLoopObject):
             self.traj_buffer_queues[device].put_many(batches)
         self.trajectory_buffers_available.emit()
 
-    def on_stop(self, *_):
-        self.stop.emit(self.object_id, self.timing)
-        if self.event_loop.owner is self:
-            self.event_loop.stop()
-        self.detach()  # remove from the current event loop
+    def on_stop(self, *args):
+        self.stop.emit(self.object_id, {self.object_id: self.timing})
+        super().on_stop(*args)

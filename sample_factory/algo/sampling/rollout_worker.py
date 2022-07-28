@@ -12,6 +12,8 @@ from sample_factory.algo.sampling.non_batched_sampling import NonBatchedVectorEn
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.misc import new_trajectories_signal
+from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import inference_context
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.signal_slot.signal_slot import EventLoopObject, signal
@@ -76,7 +78,7 @@ def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
     return sampling_device
 
 
-class RolloutWorker(EventLoopObject, Configurable):
+class RolloutWorker(StoppableEventLoopObject, Configurable):
     def __init__(
         self, event_loop, worker_idx: int, buffer_mgr, inference_queues: Dict[PolicyID, MpQueue], cfg, env_info: EnvInfo
     ):
@@ -108,11 +110,7 @@ class RolloutWorker(EventLoopObject, Configurable):
 
     @signal
     def report_msg(self):
-        pass
-
-    @signal
-    def stop(self):
-        pass
+        ...
 
     def init(self):
         for split_idx in range(self.num_splits):
@@ -183,10 +181,10 @@ class RolloutWorker(EventLoopObject, Configurable):
             rollouts_per_policy[policy_id].append(rollout)
 
         for policy_id, rollouts in rollouts_per_policy.items():
-            self.emit(f"p{policy_id}_trajectories", rollouts, self.sampling_device)
+            self.emit(new_trajectories_signal(policy_id), rollouts, self.sampling_device)
 
     def advance_rollouts(self, data: Tuple):
-        # TODO: comment
+        # TODO: update comment
         """
         Process incoming request from policy worker. Use the data (policy outputs, actions) to advance the simulation
         by one step on the corresponding VectorEnvRunner.
@@ -230,17 +228,12 @@ class RolloutWorker(EventLoopObject, Configurable):
         for split_idx in range(self.num_splits):
             self._maybe_send_policy_request(self.env_runners[split_idx])
 
-    # TODO: base class for this to avoid repeating this code everywhere
-    def on_stop(self, *_):
-        log.debug(f"Stopping {self.object_id}...")
-
+    def on_stop(self, *args):
         for env_runner in self.env_runners:
             env_runner.close()
 
-        timing = self.timing if self.worker_idx in [0, self.cfg.num_workers - 1] else None
-        self.stop.emit(self.object_id, timing)
-
-        if self.event_loop.owner is self:
-            self.event_loop.stop()
-
-        self.detach()  # remove from the current event loop
+        timings = dict()
+        if self.worker_idx in [0, self.cfg.num_workers - 1]:
+            timings[self.object_id] = self.timing
+        self.stop.emit(self.object_id, timings)
+        super().on_stop(*args)
