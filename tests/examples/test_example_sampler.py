@@ -13,7 +13,9 @@ class TestSampler:
     def test_sampler(self):
         # test on Mujoco because why not
         register_mujoco_components()
-        cfg = parse_mujoco_cfg(argv=["--env=mujoco_halfcheetah", "--decorrelate_envs_on_one_worker=False"])
+        cfg = parse_mujoco_cfg(
+            argv=["--env=mujoco_halfcheetah", "--decorrelate_envs_on_one_worker=False", "--device=cpu"]
+        )
 
         tmp_env = make_env_func_batched(cfg, env_config=None)
         env_info = extract_env_info(tmp_env, cfg)
