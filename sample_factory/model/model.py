@@ -281,7 +281,7 @@ def create_actor_critic(cfg, obs_space, action_space, timing=None):
         return create_core(cfg, encoder.get_encoder_out_size())
 
     def make_decoder(core):
-        return create_decoder(cfg, core.get_encoder_out_size())
+        return create_decoder(cfg, core.get_core_out_size())
 
     if cfg.actor_critic_share_weights:
         return _ActorCriticSharedWeights(make_encoder, make_core, make_decoder, obs_space, action_space, cfg, timing)

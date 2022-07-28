@@ -463,7 +463,10 @@ def add_model_args(p: ArgumentParser):
         help="Type of the decord. Supported: identity, mlp (feel free to define more)",
     )
     p.add_argument(
-        "--encoder_subtype", default="convnet_simple", type=str, help="Specific encoder design (see model.py)"
+        "--mlp_encoder_subtype", default="mlp_mujoco", type=str, help="Specific encoder design (see model.py)"
+    )
+    p.add_argument(
+        "--conv_encoder_subtype", default="convnet_simple", type=str, help="Specific encoder design (see model.py)"
     )
     p.add_argument(
         "--encoder_custom",

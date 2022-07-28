@@ -166,12 +166,12 @@ class ConvEncoder(EncoderBase):
         log.debug("Num input channels: %d", input_ch)
 
         # TODO: make a proper model builder
-        if cfg.encoder_subtype == "convnet_simple":
+        if cfg.conv_encoder_subtype == "convnet_simple":
             conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
-        elif cfg.encoder_subtype == "convnet_impala":
+        elif cfg.conv_encoder_subtype == "convnet_impala":
             conv_filters = [[input_ch, 16, 8, 4], [16, 32, 4, 2]]
         else:
-            raise NotImplementedError(f"Unknown encoder {cfg.encoder_subtype}")
+            raise NotImplementedError(f"Unknown encoder {cfg.conv_encoder_subtype}")
 
         activation = nonlinearity(self.cfg)
         fc_layer_size = fc_after_encoder_size(self.cfg)
@@ -219,11 +219,11 @@ class ResnetEncoder(EncoderBase):
         input_ch = obs_shape[0]
         log.debug("Num input channels: %d", input_ch)
 
-        if cfg.encoder_subtype == "resnet_impala":
+        if cfg.conv_encoder_subtype == "resnet_impala":
             # configuration from the IMPALA paper
             resnet_conf = [[16, 2], [32, 2], [32, 2]]
         else:
-            raise NotImplementedError(f"Unknown resnet subtype {cfg.encoder_subtype}")
+            raise NotImplementedError(f"Unknown resnet subtype {cfg.conv_encoder_subtype}")
 
         curr_input_channels = input_ch
         layers = []
@@ -256,9 +256,38 @@ class ResnetEncoder(EncoderBase):
         return x
 
 
-class DefaultEncoder(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
+class DefaultEncoder(EncoderBase):
+    def __init__(self, cfg, obs_space, timing) -> None:
+        super().__init__(cfg, timing, None)
+
+        self.obs_keys = list(sorted(obs_space.keys()))  # always the same order
+
+        self.encoders = nn.ModuleDict()
+        out_size = 0
+
+        for obs_key in self.obs_keys:
+            shape = obs_space[obs_key].shape
+            if len(shape) > 1:
+                encoder = ConvEncoder
+            else:
+                encoder = MlpEncoder
+
+            self.encoders[obs_key] = encoder(cfg, obs_key, obs_space, timing)
+            out_size += self.encoders[obs_key].get_encoder_out_size()
+
+        self.encoder_out_size = out_size
+
+    def forward(self, obs_dict):
+        if len(self.obs_keys) == 1:
+            key = self.obs_keys[0]
+            return self.encoders[key](obs_dict)
+
+        encodings = []
+        for key in self.obs_keys:
+            x = self.encoders[key](obs_dict)
+            encodings.append(x)
+
+        return torch.cat(encodings, 1)
 
 
 class MlpEncoder(EncoderBase):
@@ -268,7 +297,7 @@ class MlpEncoder(EncoderBase):
         obs_shape = get_obs_shape(obs_space)[obs_key]
         assert len(obs_shape) == 1
 
-        if cfg.encoder_subtype == "mlp_mujoco":
+        if cfg.mlp_encoder_subtype == "mlp_mujoco":
             fc_encoder_layer = cfg.hidden_size
             encoder_layers = [
                 nn.Linear(obs_shape[0], fc_encoder_layer),
@@ -277,7 +306,7 @@ class MlpEncoder(EncoderBase):
                 nonlinearity(cfg),
             ]
         else:
-            raise NotImplementedError(f"Unknown mlp encoder {cfg.encoder_subtype}")
+            raise NotImplementedError(f"Unknown mlp encoder {cfg.mlp_encoder_subtype}")
 
         self.mlp_head = nn.Sequential(*encoder_layers)
         self.init_fc_blocks(fc_encoder_layer)
