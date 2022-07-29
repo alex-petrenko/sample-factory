@@ -553,7 +553,7 @@ def add_default_env_args(p: ArgumentParser):
         "Frameskip=1 (default) means no frameskip, we process every frame.",
     )
     p.add_argument(
-        "--env_framestack", default=4, type=int, help="Frame stacking (only used in Atari?)"
+        "--env_framestack", default=1, type=int, help="Frame stacking (only used in Atari, and it is usually set to 4)"
     )  # <-- this probably should be moved to environment-specific scripts
     p.add_argument(
         "--pixel_format", default="CHW", type=str, help="PyTorch expects CHW by default, Ray & TensorFlow expect HWC"
