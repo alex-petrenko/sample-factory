@@ -8,7 +8,7 @@ from sf_examples.dmlab_examples.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_VOCABUL
 
 class DmlabEncoder(EncoderBase):
     def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+        super().__init__(cfg, timing, "obs")
 
         self.basic_encoder = create_standard_encoder(cfg, obs_space, timing)
         self.encoder_out_size = self.basic_encoder.encoder_out_size
