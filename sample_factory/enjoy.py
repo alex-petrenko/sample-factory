@@ -45,11 +45,9 @@ def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
     obs = cv2.normalize(
         obs, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8UC1
     )  # this will be different frame-by-frame but probably good enough to give us an idea?
-    # resize
     scale = 5
     obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale), interpolation=cv2.INTER_NEAREST)
-    # show the image
-    cv2.imshow("Policy Inputsom", obs)
+    cv2.imshow("policy inputs", obs)
 
 
 def render_frame(cfg, env, video_frames, num_frames):
