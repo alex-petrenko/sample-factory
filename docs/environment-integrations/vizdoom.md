@@ -75,3 +75,11 @@ python -m sf_examples.vizdoom_examples.train_vizdoom --env=doom_benchmark --algo
 
 #### Models
 
+| Environment | HuggingFace Hub Models | Evaluation Metrics |
+| ----------- | ---------------------- | ------------------ |
+| Battle      | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle | 59.37 +/- 3.93 |
+
+#### Videos
+
+<p align="center">
+<video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
