@@ -23,6 +23,7 @@ from sample_factory.algo.utils.misc import (
     memory_stats,
 )
 from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
+from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
@@ -283,18 +284,13 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
             num_samples = rnn_states.shape[0]
             self.total_num_samples += num_samples
 
-            with timing.add_time("obs_to_device"):
+            with timing.add_time("obs_to_device_normalize"):
                 actor_critic = self.param_client.actor_critic
                 if actor_critic.training:
                     actor_critic.eval()  # need to call this because we can be in serial mode
 
-                for key, x in obs.items():
-                    device, dtype = actor_critic.device_and_type_for_input_tensor(key)
-                    obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+                normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
                 rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
-
-            with self.timing.add_time("norm"):
-                normalized_obs = actor_critic.normalize_obs(obs)
 
             with timing.add_time("forward"):
                 policy_outputs = actor_critic(normalized_obs, rnn_states)

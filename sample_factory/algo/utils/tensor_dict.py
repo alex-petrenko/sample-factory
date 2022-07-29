@@ -68,6 +68,17 @@ def clone_tensordict(d: TensorDict) -> TensorDict:
     return d_clone
 
 
+def shallow_recursive_copy(d: TensorDict) -> TensorDict:
+    """
+    Returns a shallow copy of the tensordict. Different dictionary object (recursively) but referencing
+    the same tensors.
+    """
+    d_copy = copy_dict_structure(d)
+    for d1, d2, key, v1, v2 in iter_dicts_recursively(d, d_copy):
+        d2[key] = v1
+    return d_copy
+
+
 def tensor_dict_to_numpy(d: TensorDict) -> TensorDict:
     numpy_dict = copy_dict_structure(d)
     for d1, d2, key, curr_t, value2 in iter_dicts_recursively(d, numpy_dict):

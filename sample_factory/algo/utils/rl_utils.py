@@ -1,7 +1,22 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Dict, Optional
 
 import torch
 from torch import Tensor
+from torch.nn import Module
+
+from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor
+
+
+def prepare_and_normalize_obs(model: Module, obs: TensorDict | Dict[str, Tensor]) -> TensorDict | Dict[str, Tensor]:
+    for key, x in obs.items():
+        obs[key] = ensure_torch_tensor(x).to(model.device_for_input_tensor(key))
+    normalized_obs = model.normalize_obs(obs)
+    for key, x in normalized_obs.items():
+        normalized_obs[key] = x.type(model.type_for_input_tensor(key))
+    return normalized_obs
 
 
 # noinspection NonAsciiCharacters

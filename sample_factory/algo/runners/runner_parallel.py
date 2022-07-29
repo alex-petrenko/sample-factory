@@ -48,6 +48,7 @@ class ParallelRunner(Runner):
 
     def _on_start(self):
         self._start_processes()
+        super()._on_start()
 
     def _start_processes(self):
         log.debug("Starting all processes...")

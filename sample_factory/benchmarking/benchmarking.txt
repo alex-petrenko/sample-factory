@@ -478,3 +478,36 @@ Version V1.123.0
 [2022-07-28 15:11:46,450][12474] Train loop timing: init: 1.6059, train_wait: 0.4062, epoch_init: 0.0012, minibatch_init: 0.0007, forward_head: 0.2276, bptt_initial: 2.7156, bptt_forward_core: 0.2942, bptt: 0.3058, tail: 0.1498, vtrace: 0.8308, losses: 0.4001, kl_divergence: 0.0523, clip: 0.2922, update: 1.9485, after_optimizer: 0.3269, train: 7.3532
 [2022-07-28 15:11:46,573][12413] Collected {0: 2015232}, FPS: 45141.6
 [2022-07-28 15:11:46,574][12413] Timing: experience: 44.4610
+
+Version v2.0.0.v68
+python -m sf_examples.vizdoom_examples.train_vizdoom --env=doom_benchmark --algo=APPO --env_frameskip=4 --train_for_env_steps=4000000 --use_rnn=True --num_workers=20 --num_envs_per_worker=16 --num_policies=1 --num_epochs=1 --rollout=32 --recurrence=32 --batch_size=2048 --experiment=doom_battle_appo_sf2_v68 --benchmark=True --decorrelate_envs_on_one_worker=False --res_w=128 --res_h=72 --wide_aspect_ratio=True --policy_workers_per_policy=1 --worker_num_splits=2 --batched_sampling=False --serial_mode=False --async_rl=True --policy_workers_per_policy=1
+[2022-07-28 18:19:11,303][104459] Batcher 0 profile tree view:
+batching: 8.6766, releasing_batches: 0.0027
+[2022-07-28 18:19:11,303][104459] InferenceWorker_p0-w0 profile tree view:
+wait_policy: 0.0001
+  wait_policy_total: 31.3772
+update_model: 1.2661
+  weight_update: 0.0008
+one_step: 0.0065
+  handle_policy_step: 62.8428
+    deserialize: 7.0385, stack: 0.4377, obs_to_device_normalize: 16.4141, forward: 20.8333, to_cpu: 6.6601, save_outputs: 4.0125, send_messages: 3.9671
+[2022-07-28 18:19:11,303][104459] Learner 0 profile tree view:
+prepare_batch: 2.4887
+train: 12.8213
+  prepare_train: 0.0440, epoch_init: 0.0024, minibatch_init: 0.0035, forward_head: 0.3349, bptt_initial: 4.3416, tail: 0.2685, vtrace: 1.7941, losses: 0.8301, kl_divergence: 0.1001, after_optimizer: 0.4033
+  bptt: 0.6011
+    bptt_forward_core: 0.5777
+  update: 3.5810
+    clip: 0.5906
+[2022-07-28 18:19:11,303][104459] RolloutWorker_w0 profile tree view:
+wait_for_trajectories: 0.0420, prepare_next_step: 1.8627, env_step: 79.7330, overhead: 5.2951, complete_rollouts: 0.0860, enqueue_policy_requests: 0.6666
+save_policy_outputs: 2.8068
+  split_output_tensors: 1.2981
+[2022-07-28 18:19:11,303][104459] RolloutWorker_w19 profile tree view:
+wait_for_trajectories: 0.0361, prepare_next_step: 1.6234, enqueue_policy_requests: 0.5363, env_step: 66.1775, overhead: 4.7318, complete_rollouts: 0.0831
+save_policy_outputs: 2.3827
+  split_output_tensors: 1.1068
+[2022-07-28 18:19:11,304][104459] Runner profile tree view:
+main_loop: 104.3648
+[2022-07-28 18:19:11,304][104459] Collected {0: 4005888}, FPS: 38305.0   <-- this is calculated differently now and includes startup time
+Actual training FPS: (10 sec: 45875.1, 60 sec: 45602.4, 300 sec: 44422.8)

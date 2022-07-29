@@ -12,7 +12,8 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
+from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
+from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.model import create_actor_critic
@@ -40,11 +41,15 @@ def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
     obs = obs.permute(1, 2, 0)
     # convert to numpy
     obs = obs.cpu().numpy()
+    # convert to uint8
+    obs = cv2.normalize(
+        obs, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8UC1
+    )  # this will be different frame-by-frame but probably good enough to give us an idea?
     # resize
     scale = 5
-    obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale))
+    obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale), interpolation=cv2.INTER_NEAREST)
     # show the image
-    cv2.imshow("Policy Inputs", obs)
+    cv2.imshow("Policy Inputsom", obs)
 
 
 def render_frame(cfg, env, video_frames, num_frames):
@@ -109,11 +114,8 @@ def enjoy(cfg):
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
-            for key, x in obs.items():
-                device, dtype = actor_critic.device_and_type_for_input_tensor(key)
-                obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+            normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
 
-            normalized_obs = actor_critic.normalize_obs(obs)
             if not cfg.no_render:
                 visualize_policy_inputs(normalized_obs)
             policy_outputs = actor_critic(normalized_obs, rnn_states)

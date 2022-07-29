@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import glob
 import os
 import time
@@ -21,9 +20,10 @@ from sample_factory.algo.utils.context import SampleFactoryContext, set_global_c
 from sample_factory.algo.utils.misc import LEARNER_ENV_STEPS, POLICY_ID_KEY, STATS_KEY, TRAIN_STATS, memory_stats
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
-from sample_factory.algo.utils.rl_utils import gae_advantages
+from sample_factory.algo.utils.rl_utils import gae_advantages, prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
+from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
 from sample_factory.algo.utils.torch_utils import init_torch_runtime, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
@@ -858,11 +858,27 @@ class Learner(StoppableEventLoopObject, Configurable):
 
         return stats
 
+    def _prepare_and_normalize_obs(self, obs: TensorDict) -> TensorDict:
+        og_shape = dict()
+
+        # assuming obs is a flat dict, collapse time and envs dimensions into a single batch dimension
+        for key, x in obs.items():
+            og_shape[key] = x.shape
+            obs[key] = x.view((x.shape[0] * x.shape[1],) + x.shape[2:])
+
+        normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
+
+        # restore original shape
+        for key, x in normalized_obs.items():
+            normalized_obs[key] = x.view(og_shape[key])
+
+        return normalized_obs
+
     def _prepare_batch(self, batch_idx: int):
         with torch.no_grad():
             # create a shallow copy so we can modify the dictionary
             # we still reference the same buffers though
-            buff = copy.copy(self.batcher.training_batches[batch_idx])
+            buff = shallow_recursive_copy(self.batcher.training_batches[batch_idx])
 
             if (buff["actions"] == -42).nonzero().shape[0] > 0:
                 # TODO: remove this after we test everything
@@ -870,14 +886,17 @@ class Learner(StoppableEventLoopObject, Configurable):
                 log.warning("Found invalid actions in batch %d", batch_idx)
                 raise ValueError("Found invalid actions in batch")
 
-            for k, v in buff["obs"].items():
-                device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
-                if device != v.device or dtype != v.dtype:
-                    buff["obs"][k] = v.detach().to(device, copy=True).type(dtype)
+            # ensure we're in train mode so that normalization statistics are updated
+            if not self.actor_critic.training:
+                self.actor_critic.train()
+
+            # hold the lock while we alter the state of the normalizer since they can be used in other processes too
+            with self.param_server.policy_lock:
+                buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
+            del buff["obs"]  # don't need non-normalized anymore
 
             # calculate estimated value for the next step (T+1)
-            self.actor_critic.eval()
-            normalized_last_obs = self.actor_critic.normalize_obs(buff["obs"][:, -1])
+            normalized_last_obs = buff["normalized_obs"][:, -1]
             next_values = self.actor_critic(normalized_last_obs, buff["rnn_states"][:, -1], values_only=True)["values"]
             buff["values"][:, -1] = next_values
 
@@ -917,29 +936,20 @@ class Learner(StoppableEventLoopObject, Configurable):
                 buff["returns"] = buff["advantages"] + denormalized_values[:, :-1]
 
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
-            for key in ["obs", "rnn_states", "values"]:
+            for key in ["normalized_obs", "rnn_states", "values"]:
                 buff[key] = buff[key][:, :-1]
 
             experience_size = self.cfg.batch_size * self.cfg.num_batches_per_epoch
-
             for d, k, v in iterate_recursively(buff):
                 # collapse first two dimensions
-                shape = (experience_size,) + tuple(v.shape[2:])
-                d[k] = v.reshape(shape)
+                d[k] = v.reshape((experience_size,) + tuple(v.shape[2:]))
 
             buff["dones_cpu"] = buff["dones"].to("cpu", copy=True, dtype=torch.float, non_blocking=True)
             buff["rewards_cpu"] = buff["rewards"].to("cpu", copy=True, dtype=torch.float, non_blocking=True)
 
-            # normalize obs and record data statistics (hence the "train" mode)
-            self.actor_critic.train()
-
-            # hold the lock while we alter the state of the normalizers since they can be used in other processes too
-            with self.param_server.policy_lock:
-                buff["normalized_obs"] = self.actor_critic.normalize_obs(buff["obs"])
-                if self.cfg.normalize_returns:
-                    self.actor_critic.returns_normalizer(buff["returns"])  # in-place
-
-            del buff["obs"]  # we don't need the regular obs anymore
+            # return normalization parameters are only used on the learner, no need to lock the mutex
+            if self.cfg.normalize_returns:
+                self.actor_critic.returns_normalizer(buff["returns"])  # in-place
 
             return buff, experience_size
 

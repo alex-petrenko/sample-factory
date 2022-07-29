@@ -479,7 +479,7 @@ class Runner(EventLoopObject, Configurable):
 
     def _on_start(self):
         """Override this in a subclass to do something right when the experiment is started."""
-        pass
+        self.sampler.init()
 
     def _setup_component_heartbeat(self):
         # TODO!!!
@@ -494,8 +494,6 @@ class Runner(EventLoopObject, Configurable):
         self.event_loop.start.connect(self._on_start)
 
         sampler = self.sampler
-        self.event_loop.start.connect(sampler.init)
-
         for policy_id in range(self.cfg.num_policies):
             # when runner is ready we initialize the learner first and then all other components in a chain
             learner = self.learners[policy_id]

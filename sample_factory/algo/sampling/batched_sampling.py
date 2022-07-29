@@ -167,6 +167,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.update_trajectory_buffers(timing)
         assert self.curr_traj is not None and self.curr_traj_slice is not None
 
+        log.debug(f"EnvRunner {self.worker_idx}-{self.split_idx} resetting...")
         self.last_obs = self.vec_env.reset()
         self.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
         self.last_rnn_state[:] = 0.0

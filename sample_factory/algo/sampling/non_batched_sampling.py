@@ -399,6 +399,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         self.update_trajectory_buffers(timing, block=True)
         assert self.need_trajectory_buffers == 0
 
+        log.debug(f"{NonBatchedVectorEnvRunner.__name__} {self.worker_idx}-{self.split_idx} resetting envs...")
         policy_request = self._reset(timing)
         return policy_request
 
