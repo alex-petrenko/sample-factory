@@ -2,7 +2,7 @@ from sample_factory.runner.run_description import Experiment, ParamGrid, RunDesc
 
 _params = ParamGrid(
     [
-        ("seed", [000, 111, 222, 333]),
+        ("seed", [00, 11, 22, 33]),
         (
             "env",
             [
@@ -17,7 +17,7 @@ _params = ParamGrid(
 _experiments = [
     Experiment(
         "atari_envs",
-        "python -m sf_examples.atari_examples.experiments.benchmark_atari --algo=APPO --with_wandb=True --wandb_project=atari-benchmark --wandb_group=atari_all --wandb_tags run3",
+        "python -m sf_examples.atari_examples.train_atari --algo=APPO --with_wandb=True --wandb_project=atari-benchmark --wandb_group=atari_all --wandb_tags run6",
         _params.generate_params(randomize=False),
     ),
 ]

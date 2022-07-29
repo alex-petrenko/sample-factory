@@ -56,6 +56,13 @@ def render_frame(cfg, env, video_frames, num_frames):
         env.render()
 
 
+def process_stack(cfg_framestack, obs):
+    if cfg_framestack != 1:
+        ob_stack = [obs["obs"] for i in range(cfg_framestack)]
+        obs["obs"] = torch.stack(ob_stack, dim=1)
+    return obs
+
+
 def enjoy(cfg):
     cfg = load_from_checkpoint(cfg)
 
@@ -116,7 +123,7 @@ def enjoy(cfg):
             normalized_obs = actor_critic.normalize_obs(obs)
             if not cfg.no_render:
                 visualize_policy_inputs(normalized_obs)
-            policy_outputs = actor_critic(normalized_obs, rnn_states)
+            policy_outputs = actor_critic(process_stack(cfg.env_framestack, normalized_obs), rnn_states)
 
             # sample actions from the distribution by default
             actions = policy_outputs["actions"]
@@ -163,7 +170,11 @@ def enjoy(cfg):
                         finished_episode[agent_i] = True
                         rew = episode_reward[agent_i].item()
                         episode_rewards[agent_i].append(rew)
-                        reward_list.append(rew)
+                        if cfg.use_record_episode_statistics:
+                            if "episode" in infos[agent_i].keys():
+                                reward_list.append(infos[agent_i]["episode"]["r"])
+                        else:
+                            reward_list.append(rew)
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):
