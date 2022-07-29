@@ -5,12 +5,12 @@ from typing import Dict, List, Tuple
 
 import torch
 from gym import spaces
+from signal_slot.queue_utils import get_queue
 from torch import Tensor
 
 from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
 from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import to_torch_dtype
 from sample_factory.cfg.configurable import Configurable
@@ -216,17 +216,10 @@ class BufferMgr(Configurable):
                 device,
                 share,
             )
-            (
-                self.policy_output_tensors_torch[device],
-                self.output_names,
-                self.output_sizes,
-            ) = alloc_policy_output_tensors(
-                cfg,
-                self.env_info,
-                hidden_size,
-                device,
-                share,
+            self.policy_output_tensors_torch[device], output_names, output_sizes = alloc_policy_output_tensors(
+                cfg, self.env_info, hidden_size, device, share
             )
+            self.output_names, self.output_sizes = output_names, output_sizes
 
             if cfg.batched_sampling:
                 # big trajectory batches (slices) for batched sampling

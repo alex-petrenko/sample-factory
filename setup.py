@@ -38,6 +38,7 @@ setup(
         "threadpoolctl>=2.0.0",
         "colorlog",
         "faster-fifo>=1.4.2,<2.0",
+        "signal-slot-mp<2.0",
         "filelock",
         "opencv-python",
         "wandb>=0.12.9",

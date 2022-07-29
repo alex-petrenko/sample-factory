@@ -15,13 +15,13 @@ Run MuJoCo experiments with the scripts in `sf_examples.mujoco_examples`. The de
 To train a model in the `Ant-v4` enviornment:
 
 ```
-python -m sf_examples.mujoco_examples.train_mujoco --algo=APPO --env=mujoco_ant --experiment="Experiment Name"
+python -m sf_examples.mujoco_examples.train_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
 ```
 
 To visualize the training results, use the `enjoy_mujoco` script:
 
 ```
-python -m sf_examples.mujoco_examples.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment="Experiment Name"
+python -m sf_examples.mujoco_examples.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
 ```
 
 Multiple experiments can be run in parallel with the runner module. `mujoco_all_envs` is an example runner script that runs all mujoco envs with 10 seeds. 
@@ -79,12 +79,12 @@ Below are some video examples of agents in various MuJoCo envioronments. Videos 
 
 ##### HalfCheetah-v4
 <p align="center">
-<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-halfcheetah/resolve/main/replay.mp4 width=500 height=505></iframe></p>
+<video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-halfcheetah/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
 
 ##### Ant-v4
 <p align="center">
-<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-ant/resolve/main/replay.mp4 width=500 height=505></iframe></p>
+<video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-ant/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
 
 ##### InvertedDoublePendulum-v4
 <p align="center">
-<iframe src=https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-doublependulum/resolve/main/replay.mp4 width=500 height=505></iframe></p>
+<video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-doublependulum/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>

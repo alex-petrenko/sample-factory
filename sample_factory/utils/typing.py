@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Protocol, Union
 
 from sample_factory.utils.utils import AttrDict
 

@@ -10,12 +10,12 @@ from os.path import isdir, join
 from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
+from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from tensorboardX import SummaryWriter
 
-from sample_factory.algo.inference.inference_worker import InferenceWorker
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.sampling.rollout_worker import RolloutWorker
+from sample_factory.algo.sampling.sampler import AbstractSampler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.misc import (
     EPISODIC,
@@ -26,16 +26,14 @@ from sample_factory.algo.utils.misc import (
     TRAIN_STATS,
     ExperimentStatus,
 )
-from sample_factory.algo.utils.model_sharing import ParameterServer
-from sample_factory.algo.utils.multiprocessing_utils import get_queue
 from sample_factory.algo.utils.shared_buffers import BufferMgr
+from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import MpQueue, PolicyID, StatusCode
+from sample_factory.utils.typing import PolicyID, StatusCode
 from sample_factory.utils.utils import (
     AttrDict,
     cfg_file,
@@ -68,16 +66,9 @@ class Runner(EventLoopObject, Configurable):
         self.env_info: Optional[EnvInfo] = None
         self.buffer_mgr = None
 
-        self.mp_ctx = self.multiprocessing_context()
-
-        self.inference_queues: Dict[PolicyID, MpQueue] = {
-            p: get_queue(cfg.serial_mode) for p in range(self.cfg.num_policies)
-        }
-
         self.learners: Dict[PolicyID, Learner] = dict()
         self.batchers: Dict[PolicyID, Batcher] = dict()
-        self.inference_workers: Dict[PolicyID, List[InferenceWorker]] = dict()
-        self.rollout_workers: List[RolloutWorker] = []
+        self.sampler: Optional[AbstractSampler] = None
 
         self.timing = Timing("Runner profile")
 
@@ -146,29 +137,25 @@ class Runner(EventLoopObject, Configurable):
         periodic(5, self._propagate_training_info)
 
         self.components_to_stop: List[EventLoopObject] = []
-        self.component_profiles: List[Tuple[str, Timing]] = []
+        self.component_profiles: Dict[str, Timing] = dict()
 
     # signals emitted by the runner
     @signal
-    def inference_workers_initialized(self):
-        pass
-
-    @signal
     def save_periodic(self):
-        pass
+        ...
 
     @signal
     def save_best(self):
-        pass
+        ...
 
     @signal
     def stop(self):
         """Emitted when we're about to stop the experiment."""
-        pass
+        ...
 
     @signal
     def all_components_stopped(self):
-        pass
+        ...
 
     def _handle_restart(self):
         exp_dir = experiment_dir(self.cfg, mkdir=False)
@@ -194,9 +181,6 @@ class Runner(EventLoopObject, Configurable):
                     raise ValueError(f"Unknown restart behavior {self.cfg.restart_behavior}")
 
                 log.debug(f"Starting training in {exp_dir}...")
-
-    def multiprocessing_context(self) -> Optional[BaseContext]:
-        raise NotImplementedError()
 
     def _process_msg(self, msgs):
         if isinstance(msgs, (dict, OrderedDict)):
@@ -460,25 +444,21 @@ class Runner(EventLoopObject, Configurable):
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
 
-    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
+    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher, mp_ctx: Optional[BaseContext]):
         return Learner(
-            event_loop, self.cfg, self.env_info, self.buffer_mgr, batcher, policy_id=policy_id, mp_ctx=self.mp_ctx
-        )
-
-    def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
-        return InferenceWorker(
             event_loop,
-            policy_id,
-            worker_idx,
-            self.buffer_mgr,
-            param_server,
-            self.inference_queues[policy_id],
             self.cfg,
             self.env_info,
+            self.buffer_mgr,
+            batcher,
+            policy_id=policy_id,
+            mp_ctx=mp_ctx,
         )
 
-    def _make_rollout_worker(self, event_loop, worker_idx: int):
-        return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info)
+    def _make_sampler(self, sampler_cls: type, event_loop: EventLoop):
+        assert len(self.learners) == self.cfg.num_policies, "Learners not created yet"
+        param_servers = {policy: self.learners[policy].param_server for policy in self.learners}
+        return sampler_cls(event_loop, self.buffer_mgr, param_servers, self.cfg, self.env_info)
 
     def init(self) -> StatusCode:
         # check for any incompatible arguments
@@ -498,101 +478,61 @@ class Runner(EventLoopObject, Configurable):
         return ExperimentStatus.SUCCESS
 
     def _on_start(self):
+        """Override this in a subclass to do something right when the experiment is started."""
         pass
 
     def _setup_component_heartbeat(self):
         # TODO!!!
         pass
 
-    # noinspection PyUnresolvedReferences
-    def _setup_component_termination(self, stop_trigger_obj: EventLoopObject, component_to_stop: EventLoopObject):
-        stop_trigger_obj.stop.connect(component_to_stop.on_stop)
+    def _setup_component_termination(self, stop_signal: signal, component_to_stop: StoppableEventLoopObject):
+        stop_signal.connect(component_to_stop.on_stop)
         self.components_to_stop.append(component_to_stop)
         component_to_stop.stop.connect(self._component_stopped)
 
     def connect_components(self):
-        # runner initialization
         self.event_loop.start.connect(self._on_start)
 
+        sampler = self.sampler
+        self.event_loop.start.connect(sampler.init)
+
         for policy_id in range(self.cfg.num_policies):
-            # when runner is ready we initialize the learner first
+            # when runner is ready we initialize the learner first and then all other components in a chain
             learner = self.learners[policy_id]
             batcher = self.batchers[policy_id]
-            self.event_loop.start.connect(learner.init)  # TODO: base class with init()
+            self.event_loop.start.connect(learner.init)
             learner.initialized.connect(batcher.init)
+            sampler.connect_model_initialized(policy_id, learner.model_initialized)
 
-            for i in range(self.cfg.policy_workers_per_policy):
-                inference_worker = self.inference_workers[policy_id][i]
-
-                # once learner is initialized and the model is ready, we initialize inference workers
-                learner.model_initialized.connect(inference_worker.init)
-
-                # inference workers signal when their initialization is complete
-                inference_worker.initialized.connect(self.inference_worker_ready)
-
-                # stop and start experience collection to throttle sampling speed if it is faster than learning
-                batcher.stop_experience_collection.connect(inference_worker.should_stop_experience_collection)
-                batcher.resume_experience_collection.connect(inference_worker.should_resume_experience_collection)
+            # key connections - sampler and batcher exchanging connections back and forth
+            sampler.connect_on_new_trajectories(policy_id, batcher.on_new_trajectories)
+            sampler.connect_trajectory_buffers_available(batcher.trajectory_buffers_available)
 
             # batcher gives learner batches of trajectories ready for learning
             batcher.training_batches_available.connect(learner.on_new_training_batch)
             # once learner is done with a training batch, it is given back to the batcher
             learner.training_batch_released.connect(batcher.on_training_batch_released)
 
+            # signals that allow us to throttle the sampler if the learner can't keep up
+            sampler.connect_stop_experience_collection(batcher.stop_experience_collection)
+            sampler.connect_resume_experience_collection(batcher.resume_experience_collection)
+
             # auxiliary connections, such as summary reporting and checkpointing
-            for i in range(self.cfg.policy_workers_per_policy):
-                self.inference_workers[policy_id][i].report_msg.connect(self._process_msg)
             learner.finished_training_iteration.connect(self._after_training_iteration)
             learner.report_msg.connect(self._process_msg)
+            sampler.connect_report_msg(self._process_msg)
             self.save_periodic.connect(learner.save)
             self.save_best.connect(learner.save_best)
 
             # stop components when needed
-            self._setup_component_termination(self, batcher)
-            self._setup_component_termination(batcher, learner)
-            for i in range(self.cfg.policy_workers_per_policy):
-                self._setup_component_termination(learner, self.inference_workers[policy_id][i])
+            self._setup_component_termination(self.stop, batcher)
+            self._setup_component_termination(batcher.stop, learner)
 
-        for rollout_worker_idx in range(self.cfg.num_workers):
-            # once all learners and inference workers are initialized, we can initialize rollout workers
-            rollout_worker = self.rollout_workers[rollout_worker_idx]
-            self.inference_workers_initialized.connect(rollout_worker.init)
-
-            # inference worker signals to advance rollouts when actions are ready
-            for policy_id in range(self.cfg.num_policies):
-                for inference_worker_idx in range(self.cfg.policy_workers_per_policy):
-                    self.inference_workers[policy_id][inference_worker_idx].connect(
-                        f"advance{rollout_worker_idx}", rollout_worker.advance_rollouts
-                    )
-
-                # rollout workers send new trajectories to batchers
-                rollout_worker.connect(f"p{policy_id}_trajectories", self.batchers[policy_id].on_new_trajectories)
-                # wake up rollout workers when trajectory buffers are released
-                self.batchers[policy_id].trajectory_buffers_available.connect(
-                    rollout_worker.on_trajectory_buffers_available
-                )
-
-            rollout_worker.report_msg.connect(self._process_msg)
-
-            # stop rollout workers
-            self._setup_component_termination(self, rollout_worker)
+        for sampler_component in sampler.stoppable_components():
+            self._setup_component_termination(self.stop, sampler_component)
 
         # final cleanup
         self.all_components_stopped.connect(self._on_everything_stopped)
-
-    def inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
-        assert not self.inference_workers[policy_id][worker_idx].is_ready
-        log.info(f"Inference worker {policy_id}-{worker_idx} is ready!")
-        self.inference_workers[policy_id][worker_idx].is_ready = True
-
-        # check if all workers for all policies are ready
-        all_ready = True
-        for policy_id in range(self.cfg.num_policies):
-            all_ready &= all(w.is_ready for w in self.inference_workers[policy_id])
-
-        if all_ready:
-            log.info("All inference workers are ready! Signal rollout workers to start!")
-            self.inference_workers_initialized.emit()
 
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
@@ -607,25 +547,24 @@ class Runner(EventLoopObject, Configurable):
             self.stop.emit(self.object_id)
             self.stopped = True
 
-    def _component_stopped(self, component_obj_id, component_profile: Timing):
+    def _component_stopped(self, component_obj_id, component_profiles: Dict[str, Timing]):
         log.debug(f"Component {component_obj_id} stopped!")
 
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
                 del self.components_to_stop[i]
-                if self.components_to_stop:
-                    log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
+                # if self.components_to_stop:
+                #     log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
                 break
 
-        if component_profile is not None:
-            self.component_profiles.append((component_obj_id, component_profile))
+        self.component_profiles.update(component_profiles)
 
         if not self.components_to_stop:
             self.all_components_stopped.emit()
 
     def _on_everything_stopped(self):
-        # sort profiles by first element in the tuple
-        self.component_profiles = sorted(self.component_profiles, key=lambda x: x[0])
+        # sort profiles by name
+        self.component_profiles = sorted(list(self.component_profiles.items()), key=lambda x: x[0])
         for component, profile in self.component_profiles:
             log.info(profile)
 
