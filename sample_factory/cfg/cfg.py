@@ -571,9 +571,15 @@ def add_eval_args(parser):
     parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
 
     parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
-    parser.add_argument("--video_frames", default=0, type=int, help="Number of frames to render for the video")
+    parser.add_argument(
+        "--video_frames",
+        default=-1,
+        type=int,
+        help="Number of frames to render for the video. Defaults to -1 which renders an entire episode",
+    )
     parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
     parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
+    parser.add_argument("--max_num_episodes", default=1e9, type=int, help="Maximum number of episodes to render")
 
     parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
     parser.add_argument("--hf_username", default=None, type=str, help="HuggingFace username")
