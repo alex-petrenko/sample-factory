@@ -78,7 +78,7 @@ class Runner(EventLoopObject, Configurable):
         # samples_collected counts the total number of observations processed by the algorithm
         self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
 
-        self.total_env_steps_since_resume = 0
+        self.total_env_steps_since_resume: Optional[int] = None
 
         # currently, this applies only to the current run, not experiment as a whole
         # to change this behavior we'd need to save the state of the main loop to a filesystem
@@ -218,6 +218,9 @@ class Runner(EventLoopObject, Configurable):
         if policy_id in runner.env_steps:
             delta = env_steps - runner.env_steps[policy_id]
             runner.total_env_steps_since_resume += delta
+        elif runner.total_env_steps_since_resume is None:
+            runner.total_env_steps_since_resume = 0
+
         runner.env_steps[policy_id] = env_steps
 
     @staticmethod
@@ -315,6 +318,9 @@ class Runner(EventLoopObject, Configurable):
 
         # don't have enough statistic from the learners yet
         if len(self.env_steps) < self.cfg.num_policies:
+            return
+
+        if self.total_env_steps_since_resume is None:
             return
 
         now = time.time()

@@ -20,7 +20,12 @@ def run_test_env_multi(train_steps: int, num_workers: int, expected_reward_at_le
 class TestExampleMulti:
     def test_sanity(self):
         run_test_env_multi(
-            train_steps=128, num_workers=1, serial_mode=True, async_rl=False, expected_reward_at_least=-1000
+            train_steps=128,
+            num_workers=1,
+            batch_size=128,
+            serial_mode=True,
+            async_rl=False,
+            expected_reward_at_least=-1000,
         )
 
     @pytest.mark.skip(reason="TODO: fix this test")

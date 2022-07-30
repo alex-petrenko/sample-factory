@@ -268,6 +268,8 @@ class Learner(StoppableEventLoopObject, Configurable):
         self.lr_scheduler = get_lr_scheduler(self.cfg)
 
         self.load_from_checkpoint(self.policy_id)
+        # runner should know the number of env steps in case we resume from a checkpoint
+        self.report_msg.emit({LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id})
 
         self.param_server.init(self.actor_critic, self.train_step)
 
