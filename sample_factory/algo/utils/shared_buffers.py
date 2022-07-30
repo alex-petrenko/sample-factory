@@ -11,6 +11,7 @@ from torch import Tensor
 from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
 from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.rl_utils import trajectories_per_training_iteration
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import to_torch_dtype
 from sample_factory.cfg.configurable import Configurable
@@ -154,15 +155,13 @@ class BufferMgr(Configurable):
             sampling_device = str(rollout_worker_device(i, cfg))
             log.debug(f"Rollout worker {i} uses device {sampling_device}")
 
-            num_buffers = self.env_info.num_agents * cfg.num_envs_per_worker
+            num_buffers = env_info.num_agents * cfg.num_envs_per_worker
             buffers_for_device = self.buffers_per_device.get(sampling_device, 0) + num_buffers
             self.buffers_per_device[sampling_device] = buffers_for_device
 
         hidden_size = get_hidden_size(cfg)  # in case we have RNNs
 
-        rollout = cfg.rollout
-        self.trajectories_per_minibatch = cfg.batch_size // rollout
-        self.trajectories_per_training_iteration = cfg.num_batches_per_epoch * self.trajectories_per_minibatch
+        self.trajectories_per_training_iteration = trajectories_per_training_iteration(cfg)
 
         if cfg.batched_sampling:
             worker_traj_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
@@ -172,9 +171,6 @@ class BufferMgr(Configurable):
             self.sampling_trajectories_per_iteration = worker_traj_per_iteration
         else:
             self.sampling_trajectories_per_iteration = -1
-
-        # TODO: need extra checks for sync RL, i.e. we should have enough buffers to feed the learner
-        # i.e. 1 worker 10 envs with batch size of 32 trajectories does not work
 
         share = not cfg.serial_mode
 
@@ -208,15 +204,15 @@ class BufferMgr(Configurable):
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
 
             self.traj_tensors_torch[device] = alloc_trajectory_tensors(
-                self.env_info,
+                env_info,
                 num_buffers,
-                rollout,
+                cfg.rollout,
                 hidden_size,
                 device,
                 share,
             )
             self.policy_output_tensors_torch[device], output_names, output_sizes = alloc_policy_output_tensors(
-                cfg, self.env_info, hidden_size, device, share
+                cfg, env_info, hidden_size, device, share
             )
             self.output_names, self.output_sizes = output_names, output_sizes
 

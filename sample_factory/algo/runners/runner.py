@@ -544,7 +544,7 @@ class Runner(EventLoopObject, Configurable):
         end |= self.total_train_seconds > self.cfg.train_for_seconds
         return end
 
-    def _after_training_iteration(self):
+    def _after_training_iteration(self, _training_iteration_since_resume: int):
         if self._should_end_training() and not self.stopped:
             self._save_policy()
             self._save_best_policy()

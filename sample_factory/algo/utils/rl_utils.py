@@ -6,8 +6,30 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 
+from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor
+from sample_factory.utils.typing import Config
+
+
+def trajectories_per_minibatch(cfg: Config) -> int:
+    return cfg.batch_size // cfg.rollout
+
+
+def trajectories_per_training_iteration(cfg: Config) -> int:
+    return cfg.num_batches_per_epoch * trajectories_per_minibatch(cfg)
+
+
+def total_num_envs(cfg: Config) -> int:
+    return cfg.num_workers * cfg.num_envs_per_worker
+
+
+def total_num_agents(cfg: Config, env_info: EnvInfo) -> int:
+    return total_num_envs(cfg) * env_info.num_agents
+
+
+def num_agents_per_worker(cfg: Config, env_info: EnvInfo) -> int:
+    return cfg.num_envs_per_worker * env_info.num_agents
 
 
 def prepare_and_normalize_obs(model: Module, obs: TensorDict | Dict[str, Tensor]) -> TensorDict | Dict[str, Tensor]:

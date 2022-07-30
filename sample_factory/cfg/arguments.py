@@ -6,6 +6,7 @@ import sys
 from typing import List, Optional, Tuple
 
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.rl_utils import total_num_agents
 from sample_factory.cfg.cfg import (
     add_basic_cli_args,
     add_default_env_args,
@@ -103,7 +104,15 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
     cfg: the configuration to verify
     returns: True if the configuration is valid, False otherwise.
     """
-    good_config = True
+    good_config: bool = True
+
+    if cfg.num_envs_per_worker % cfg.worker_num_splits != 0:
+        log.error(
+            f"{cfg.num_envs_per_worker=} must be a multiple of {cfg.worker_num_splits=}"
+            f" (for double-buffered sampling you need to use even number of envs per worker)"
+        )
+        good_config = False
+
     if cfg.normalize_returns and cfg.with_vtrace:
         # When we use vtrace the logic for calculating returns is different - we need to recalculate them
         # on every minibatch, because important sampling depends on the trained policy.
@@ -125,10 +134,16 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
 
     sync_rl = not cfg.async_rl
     samples_per_training_iteration = cfg.num_batches_per_epoch * cfg.batch_size
-    samples_from_all_workers_per_rollout = cfg.num_workers * env_info.num_agents * cfg.num_envs_per_worker * cfg.rollout
+    samples_from_all_workers_per_rollout = total_num_agents(cfg, env_info) * cfg.rollout
 
     if sync_rl:
-        if samples_per_training_iteration % samples_from_all_workers_per_rollout != 0:
+        if (
+            samples_per_training_iteration % samples_from_all_workers_per_rollout == 0
+            and samples_per_training_iteration >= samples_from_all_workers_per_rollout
+        ):
+            # everything is fine
+            pass
+        else:
             log.error(
                 "In sync mode the goal is to avoid policy lag. In order to achieve this we "
                 "alternate between collecting experience and training on it.\nThus sync mode requires "

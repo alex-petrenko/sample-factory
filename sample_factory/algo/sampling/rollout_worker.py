@@ -14,6 +14,7 @@ from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import new_trajectories_signal
+from sample_factory.algo.utils.rl_utils import total_num_agents, trajectories_per_training_iteration
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import inference_context
 from sample_factory.cfg.configurable import Configurable
@@ -105,9 +106,30 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
 
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
-        self.num_complete_rollouts = 0
+        self.training_iteration: int = 0
 
-        self.is_initialized = False
+        if cfg.async_rl:
+            rollouts_per_iteration = int(1e10)
+        else:
+            # In sync mode we use this mechanism to stop experience collection when the total number of rollouts
+            # across all workers is sufficient to saturate the learner for one iteration.
+            # This guarantees that all experience will be on policy when the learner starts training on it.
+            # In async mode we don't care so initialize this to a large number.
+            trajectories_training_iteration = trajectories_per_training_iteration(cfg)
+            sampling_trajectories = total_num_agents(cfg, env_info)
+
+            # we do similar checks in verify_cfg() but let's throw in a check here just to be sure
+            assert trajectories_training_iteration >= sampling_trajectories
+            assert trajectories_training_iteration % sampling_trajectories == 0
+            rollouts_per_iteration = trajectories_training_iteration // sampling_trajectories
+            assert rollouts_per_iteration > 0
+
+        # log.debug(f"Rollout worker {worker_idx} rollouts per iteration: {rollouts_per_iteration}")
+        self.rollouts_per_iteration: int = rollouts_per_iteration
+        self.remaining_rollouts: List[int] = [self.rollouts_per_iteration for _ in range(self.num_splits)]
+
+        self.experience_decorrelated: bool = False
+        self.is_initialized: bool = False
 
     @signal
     def report_msg(self):
@@ -156,11 +178,20 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             log.info("Worker %d awakens!", self.worker_idx)
 
     def _maybe_send_policy_request(self, runner: VectorEnvRunner):
-        if runner.update_trajectory_buffers(self.timing):
-            policy_request = runner.generate_policy_request(self.timing)
-            with self.timing.add_time("enqueue_policy_requests"):
-                if policy_request is not None:
-                    self._enqueue_policy_request(runner.split_idx, policy_request)
+        if self.remaining_rollouts[runner.split_idx] <= 0:
+            # This should only happen in sync mode -- means we completed a sufficient number of rollouts
+            # to saturate the learner for one iteration. We will wait for the next iteration to start before
+            # we can continue sampling.
+            return
+
+        if not runner.update_trajectory_buffers(self.timing):
+            # could not get a buffer, wait for one to be freed
+            return
+
+        policy_request = runner.generate_policy_request(self.timing)
+        with self.timing.add_time("enqueue_policy_requests"):
+            if policy_request is not None:
+                self._enqueue_policy_request(runner.split_idx, policy_request)
 
     def _enqueue_policy_request(self, split_idx, policy_inputs):
         """Distribute action requests to their corresponding queues."""
@@ -211,11 +242,13 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             with self.timing.add_time("complete_rollouts"):
                 if complete_rollouts:
                     self._enqueue_complete_rollouts(complete_rollouts)
-                    if self.num_complete_rollouts == 0 and not self.cfg.benchmark:
+                    if not self.experience_decorrelated and not self.cfg.benchmark:
                         # we just finished our first complete rollouts, perfect time to wait for experience derorrelation
                         # this guarantees that there won't be any obsolete trajectories when we awaken
                         self._decorrelate_experience()
-                    self.num_complete_rollouts += len(complete_rollouts)
+                        self.experience_decorrelated = True
+
+                    self.remaining_rollouts[split_idx] -= 1
 
             if episodic_stats:
                 self.report_msg.emit(episodic_stats)
@@ -225,7 +258,17 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             # we are ready to enqueue inference request
             self._maybe_send_policy_request(runner)
 
-    def on_trajectory_buffers_available(self):
+    def on_trajectory_buffers_available(self, training_iteration: int):
+        if not self.cfg.async_rl:
+            # in sync mode we progress one iteration at a time
+            assert training_iteration - self.training_iteration in (0, 1)
+
+        if training_iteration > self.training_iteration:
+            # allow runners to collect the next portion of rollouts
+            self.remaining_rollouts = [self.rollouts_per_iteration for _ in range(self.num_splits)]
+
+        self.training_iteration = training_iteration
+
         # we can receive this signal during batcher initialization, before the worker is initialized
         # this is fine, we just ignore it and get the trajectory buffers from the queue later after we do env.reset()
         if not self.is_initialized:

@@ -644,7 +644,6 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
                     buffers = self.traj_buffer_queue.get_many(
                         block=False,
                         max_messages_to_get=self.need_trajectory_buffers,
-                        timeout=1e9,
                     )
                     i = 0
                     for env_i in range(self.num_envs):

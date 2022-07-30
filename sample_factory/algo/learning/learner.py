@@ -161,7 +161,11 @@ class Learner(StoppableEventLoopObject, Configurable):
 
         self.lr_scheduler: Optional[LearningRateScheduler] = None
 
-        self.train_step = self.env_steps = 0
+        self.train_step: int = 0  # total number of SGD steps
+        self.env_steps: int = 0  # total number of environment steps consumed by the learner
+        # total number of full training iterations (potentially multiple minibatches/epochs per iteration)
+        self.training_iteration_since_resume: int = 0
+
         self.best_performance = -1e9
 
         # decay rate at which summaries are collected
@@ -332,7 +336,7 @@ class Learner(StoppableEventLoopObject, Configurable):
         self.actor_critic.load_state_dict(checkpoint_dict["model"])
         self.optimizer.load_state_dict(checkpoint_dict["optimizer"])
 
-        log.info("Loaded experiment state at training iteration %d, env step %d", self.train_step, self.env_steps)
+        log.info(f"Loaded experiment state at {self.train_step=}, {self.env_steps=}")
 
     def load_from_checkpoint(self, policy_id):
         name_prefix = dict(latest="checkpoint", best="best")[self.cfg.load_checkpoint_kind]
@@ -975,10 +979,11 @@ class Learner(StoppableEventLoopObject, Configurable):
 
     def on_new_training_batch(self, batch_idx: int):
         stats = self.train(batch_idx, self.timing)
-        self.training_batch_released.emit(batch_idx)
-        self.report_msg.emit(stats)
 
-        self.finished_training_iteration.emit()
+        self.training_iteration_since_resume += 1
+        self.training_batch_released.emit(batch_idx, self.training_iteration_since_resume)
+        self.report_msg.emit(stats)
+        self.finished_training_iteration.emit(self.training_iteration_since_resume)
 
     def on_stop(self, *args):
         self.save()

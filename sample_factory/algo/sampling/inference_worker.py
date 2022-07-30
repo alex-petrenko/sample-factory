@@ -163,11 +163,11 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
         self.is_initialized = True
 
     def should_stop_experience_collection(self):
-        debug_log_every_n(20, f"{self.object_id}: stopping experience collection")
+        debug_log_every_n(50, f"{self.object_id}: stopping experience collection")
         self.inference_loop.stop()
 
     def should_resume_experience_collection(self):
-        debug_log_every_n(20, f"{self.object_id}: resuming experience collection")
+        debug_log_every_n(50, f"{self.object_id}: resuming experience collection")
         self.inference_loop.start()
 
     def _batch_slices(self, timing):
