@@ -32,7 +32,7 @@ setup(
     # might want to add max versions restrictions, i.e. torch < 2?
     install_requires=[
         'numpy>=1.18.1',
-        'torch>=1.6',
+        'torch>=1.6,<1.12',
         'gym>=0.17.1',
         'tensorboard>=1.15.0',
         'tensorboardx>=2.0',
