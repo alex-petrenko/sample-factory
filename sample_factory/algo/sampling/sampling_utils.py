@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
-from torch import Tensor
-
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.envs.env_wrappers import TimeLimitWrapper
+from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict
 
@@ -33,13 +30,13 @@ class VectorEnvRunner(Configurable):
         self.traj_tensors = buffer_mgr.traj_tensors_torch[sampling_device]
         self.policy_output_tensors = buffer_mgr.policy_output_tensors_torch[sampling_device][worker_idx, split_idx]
 
-    def init(self, timing) -> Dict:
+    def init(self, timing: Timing):
         raise NotImplementedError()
 
     def advance_rollouts(self, policy_id: PolicyID, timing) -> Tuple[List[Dict], List[Dict]]:
         raise NotImplementedError()
 
-    def update_trajectory_buffers(self, timing, block=False) -> bool:
+    def update_trajectory_buffers(self, timing) -> bool:
         raise NotImplementedError()
 
     def generate_policy_request(self, timing) -> Optional[Dict]:

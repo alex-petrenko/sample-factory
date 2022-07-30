@@ -153,7 +153,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
         self.report_timer = Timer(self.event_loop, 3.0)
         self.report_timer.timeout.connect(self._report_stats)
 
-        self.cache_cleanup_timer = Timer(self.event_loop, 0.1)
+        self.cache_cleanup_timer = Timer(self.event_loop, 0.5)
         if not self.cfg.benchmark:
             self.cache_cleanup_timer.timeout.connect(self._cache_cleanup)
 

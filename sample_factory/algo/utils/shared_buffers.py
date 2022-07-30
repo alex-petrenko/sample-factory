@@ -162,21 +162,19 @@ class BufferMgr(Configurable):
 
         rollout = cfg.rollout
         self.trajectories_per_minibatch = cfg.batch_size // rollout
-        self.trajectories_per_batch = cfg.num_batches_per_epoch * self.trajectories_per_minibatch
+        self.trajectories_per_training_iteration = cfg.num_batches_per_epoch * self.trajectories_per_minibatch
 
         if cfg.batched_sampling:
-            worker_samples_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
-            assert math.gcd(self.trajectories_per_batch, worker_samples_per_iteration) == min(
-                self.trajectories_per_batch, worker_samples_per_iteration
-            ), f"{worker_samples_per_iteration=} should divide the {self.trajectories_per_batch=} or vice versa"
-            self.worker_samples_per_iteration = worker_samples_per_iteration
+            worker_traj_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
+            assert math.gcd(self.trajectories_per_training_iteration, worker_traj_per_iteration) == min(
+                self.trajectories_per_training_iteration, worker_traj_per_iteration
+            ), f"{worker_traj_per_iteration=} should divide the {self.trajectories_per_training_iteration=} or vice versa"
+            self.sampling_trajectories_per_iteration = worker_traj_per_iteration
         else:
-            self.worker_samples_per_iteration = -1
+            self.sampling_trajectories_per_iteration = -1
 
         # TODO: need extra checks for sync RL, i.e. we should have enough buffers to feed the learner
         # i.e. 1 worker 10 envs with batch size of 32 trajectories does not work
-
-        # TODO: another check for sync RL: what if we collect more experience per iteration than we can process in a training batch?
 
         share = not cfg.serial_mode
 
@@ -191,7 +189,7 @@ class BufferMgr(Configurable):
 
         # determine the number of minibatches we're allowed to accumulate before experience collection is halted
         self.max_batches_to_accumulate = cfg.num_batches_to_accumulate
-        if not cfg.async_rl and self.max_batches_to_accumulate != 1:
+        if not cfg.async_rl:
             log.debug("In synchronous mode, we only accumulate one batch. Setting num_batches_to_accumulate to 1")
             self.max_batches_to_accumulate = 1
 
@@ -203,7 +201,8 @@ class BufferMgr(Configurable):
         for device, num_buffers in self.buffers_per_device.items():
             # make sure that at the very least we have enough buffers to feed the learner
             num_buffers = max(
-                num_buffers, self.max_batches_to_accumulate * self.trajectories_per_batch * cfg.num_policies
+                num_buffers,
+                self.max_batches_to_accumulate * self.trajectories_per_training_iteration * cfg.num_policies,
             )
 
             self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
@@ -223,8 +222,8 @@ class BufferMgr(Configurable):
 
             if cfg.batched_sampling:
                 # big trajectory batches (slices) for batched sampling
-                for i in range(0, num_buffers, self.worker_samples_per_iteration):
-                    self.traj_buffer_queues[device].put(slice(i, i + self.worker_samples_per_iteration))
+                for i in range(0, num_buffers, self.sampling_trajectories_per_iteration):
+                    self.traj_buffer_queues[device].put(slice(i, i + self.sampling_trajectories_per_iteration))
             else:
                 # individual trajectories for more flexible non-batched sampling
                 for i in range(num_buffers):

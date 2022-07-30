@@ -461,8 +461,11 @@ class Runner(EventLoopObject, Configurable):
         return sampler_cls(event_loop, self.buffer_mgr, param_servers, self.cfg, self.env_info)
 
     def init(self) -> StatusCode:
+        set_global_cuda_envvars(self.cfg)
+        self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
+
         # check for any incompatible arguments
-        if not verify_cfg(self.cfg):
+        if not verify_cfg(self.cfg, self.env_info):
             return ExperimentStatus.FAILURE
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
@@ -471,8 +474,6 @@ class Runner(EventLoopObject, Configurable):
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
 
-        set_global_cuda_envvars(self.cfg)
-        self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 
         return ExperimentStatus.SUCCESS

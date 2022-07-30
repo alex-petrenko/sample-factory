@@ -12,10 +12,11 @@ from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.policy_manager import PolicyManager
-from sample_factory.algo.utils.tensor_dict import to_numpy
+from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.dicts import get_first_present
+from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log, set_attr_if_exists
 
@@ -54,7 +55,8 @@ class ActorState:
         self.curr_policy_id = self.policy_mgr.get_policy_for_agent(agent_idx, env_idx)
         self._env_set_curr_policy()
 
-        self.curr_traj_buffer_idx = self.curr_traj_buffer = None
+        self.curr_traj_buffer_idx: int = -4242424242  # uninitialized
+        self.curr_traj_buffer: Optional[TensorDict] = None
 
         self.traj_tensors = traj_tensors
 
@@ -350,7 +352,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
         self.policy_mgr = PolicyManager(self.cfg, self.num_agents)
 
-    def init(self, timing) -> Dict:
+    def init(self, timing: Timing):
         """
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
@@ -396,12 +398,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             self.actor_states.append(actor_states_env)
             self.episode_rewards.append(episode_rewards_env)
 
-        self.update_trajectory_buffers(timing, block=True)
-        assert self.need_trajectory_buffers == 0
-
-        log.debug(f"{NonBatchedVectorEnvRunner.__name__} {self.worker_idx}-{self.split_idx} resetting envs...")
-        policy_request = self._reset(timing)
-        return policy_request
+        self._reset()
 
     # TODO: implement this on the runner
     def update_env_steps(self, env_steps):
@@ -409,7 +406,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             for agent_i in range(self.num_agents):
                 self.actor_states[env_i][agent_i].approx_env_steps = env_steps
 
-    def _reset(self, timing) -> Dict:
+    def _reset(self):
         """
         Do the very first reset for all environments in a vector. Populate shared memory with initial obs.
         Note that this is called only once, at the very beginning of training. After this the envs should auto-reset.
@@ -432,15 +429,10 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             for agent_i, obs in enumerate(observations):
                 actor_state = self.actor_states[env_i][agent_i]
                 actor_state.last_obs = obs
-                actor_state.last_rnn_state = clone_tensor(
-                    self.traj_tensors["rnn_states"][actor_state.curr_traj_buffer_idx, 0]
-                )
+                actor_state.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0, 0])
                 actor_state.reset_rnn_state()
 
         self.env_step_ready = True
-        policy_request = self.generate_policy_request(timing)
-        assert policy_request is not None
-        return policy_request
 
     def _process_policy_outputs(self, policy_id, timing):
         """
@@ -642,7 +634,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
 
-    def update_trajectory_buffers(self, timing, block=False) -> bool:
+    def update_trajectory_buffers(self, timing) -> bool:
         """
         Request free trajectory buffers to store the next rollout.
         """
@@ -650,7 +642,9 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             with timing.add_time("wait_for_trajectories"):
                 try:
                     buffers = self.traj_buffer_queue.get_many(
-                        block=block, max_messages_to_get=self.need_trajectory_buffers, timeout=1e9
+                        block=False,
+                        max_messages_to_get=self.need_trajectory_buffers,
+                        timeout=1e9,
                     )
                     i = 0
                     for env_i in range(self.num_envs):

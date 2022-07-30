@@ -54,7 +54,7 @@ def add_rl_args(p: ArgumentParser):
         default=True,
         type=str2bool,
         help="Collect experience asynchronously while learning on the previous batch. "
-        "This is semantically different from standard synchronous actor-critic (or PPO) because "
+        "This is significantly different from standard synchronous actor-critic (or PPO) because "
         "not all of the experience will be collected by the latest policy thus increasing policy lag. "
         "Negative effects of using async_rl can range from negligible (just grants you throughput boost) "
         "to quite serious where you can consider switching it off. It all depends how sensitive your experiment is to policy lag. "
@@ -83,9 +83,9 @@ def add_rl_args(p: ArgumentParser):
         "--num_batches_to_accumulate",
         default=2,
         type=int,
-        help="This parameter governs the maximum number of training batches the learner can accumulate before further experience collection is stopped."
+        help="This parameter governs the maximum number of training batches the learner can accumulate before further experience collection is stopped. "
         "The default value will set this to 2, so if the experience collection is faster than the training, "
-        "the learner will accumulate enough minibatches for 2 iterations of training (but no more). This is a good balance between policy-lag and throughput."
+        "the learner will accumulate enough minibatches for 2 iterations of training but no more. This is a good balance between policy-lag and throughput. "
         "When the limit is reached, the learner will notify the actor workers that they ought to stop the experience collection until accumulated minibatches "
         "are processed. Set this parameter to 1 to further reduce policy-lag. "
         "If the experience collection is very non-uniform, increasing this parameter can increase overall throughput, at the cost of increased policy-lag.",

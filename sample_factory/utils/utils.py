@@ -15,6 +15,7 @@ from sys import platform
 
 import numpy as np
 import psutil
+import signal_slot.signal_slot
 from _queue import Empty
 from colorlog import ColoredFormatter
 
@@ -46,6 +47,9 @@ stream_formatter = ColoredFormatter(
 )
 stream_handler.setFormatter(stream_formatter)
 log.addHandler(stream_handler)
+
+# make other libraries use our logger
+signal_slot.signal_slot.configure_logger(log)
 
 
 def init_file_logger(experiment_dir_):

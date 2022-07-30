@@ -5,6 +5,7 @@ import os
 import sys
 from typing import List, Optional, Tuple
 
+from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.cfg.cfg import (
     add_basic_cli_args,
     add_default_env_args,
@@ -91,7 +92,7 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
     return args
 
 
-def verify_cfg(cfg: Config) -> bool:
+def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
     """
     Do some checks to make sure this is a viable configuration.
     The fact that configuration passes these checks does not guarantee that it is 100% valid,
@@ -121,6 +122,31 @@ def verify_cfg(cfg: Config) -> bool:
         log.warning(
             "In batched mode we're using a single policy per worker which does not allow us to use multiple different policies in the same env (see policy_manager.py)."
         )
+
+    sync_rl = not cfg.async_rl
+    samples_per_training_iteration = cfg.num_batches_per_epoch * cfg.batch_size
+    samples_from_all_workers_per_rollout = cfg.num_workers * env_info.num_agents * cfg.num_envs_per_worker * cfg.rollout
+
+    if sync_rl:
+        if samples_per_training_iteration % samples_from_all_workers_per_rollout != 0:
+            log.error(
+                "In sync mode the goal is to avoid policy lag. In order to achieve this we "
+                "alternate between collecting experience and training on it.\nThus sync mode requires "
+                "the sampler to collect the exact amount of experience required for training in one "
+                "or more iterations.\nThis is not possible with the current configuration.\n"
+            )
+            log.error(
+                f"Number of samples collected per rollout by all workers: "
+                f"{cfg.num_workers=} * {cfg.num_envs_per_worker=} * {env_info.num_agents=} * {cfg.rollout=} = {samples_from_all_workers_per_rollout}"
+            )
+            log.error(
+                f"Number of samples processed per training iteration: "
+                f"{cfg.num_batches_per_epoch=} * {cfg.batch_size=} = {samples_per_training_iteration}"
+            )
+            log.error(
+                f"Ratio is {samples_per_training_iteration / samples_from_all_workers_per_rollout} (should be a positive integer)"
+            )
+            good_config = False
 
     return good_config
 

@@ -128,11 +128,19 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
                 self.reward_shaping,
             )
 
-            policy_request = env_runner.init(self.timing)
+            env_runner.init(self.timing)
 
             # send signal to the inference worker to start processing new observations
-            self._enqueue_policy_request(split_idx, policy_request)
             self.env_runners.append(env_runner)
+
+        for r in self.env_runners:
+            # This should kickstart experience collection. We will send a policy request to inference worker and
+            # will get an "advance_rollout" signal back, and continue this loop of
+            # advance_rollout->inference->advance_rollout until we collect the full rollout.
+            # On rare occasions we might not be able to get a free buffer here (i.e. if all buffers are
+            # taken by other workers). In that case, we will just enter an event loop and be woken up when
+            # a buffer is freed (see on_trajectory_buffers_available()).
+            self._maybe_send_policy_request(r)
 
         self.is_initialized = True
 
