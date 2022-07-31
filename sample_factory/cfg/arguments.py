@@ -129,12 +129,12 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
 
     if cfg.num_policies > 1 and cfg.batched_sampling:
         log.warning(
-            "In batched mode we're using a single policy per worker which does not allow us to use multiple different policies in the same env (see policy_manager.py)."
+            "In batched mode we're using a single policy per worker which does not allow us to use multiple different policies in the same env (see agent_policy_mapping.py)."
         )
 
     sync_rl = not cfg.async_rl
     samples_per_training_iteration = cfg.num_batches_per_epoch * cfg.batch_size
-    samples_from_all_workers_per_rollout = total_num_agents(cfg, env_info) * cfg.rollout
+    samples_from_all_workers_per_rollout = total_num_agents(cfg, env_info) * cfg.rollout // cfg.num_policies
 
     if sync_rl:
         if (
@@ -152,16 +152,23 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
             )
             log.error(
                 f"Number of samples collected per rollout by all workers: "
-                f"{cfg.num_workers=} * {cfg.num_envs_per_worker=} * {env_info.num_agents=} * {cfg.rollout=} = {samples_from_all_workers_per_rollout}"
+                f"{cfg.num_workers=} * {cfg.num_envs_per_worker=} * {env_info.num_agents=} * {cfg.rollout=} // {cfg.num_policies=} = {samples_from_all_workers_per_rollout}"
             )
             log.error(
-                f"Number of samples processed per training iteration: "
+                f"Number of samples processed per training iteration on one learner: "
                 f"{cfg.num_batches_per_epoch=} * {cfg.batch_size=} = {samples_per_training_iteration}"
             )
             log.error(
                 f"Ratio is {samples_per_training_iteration / samples_from_all_workers_per_rollout} (should be a positive integer)"
             )
             good_config = False
+
+    if sync_rl and cfg.num_policies > 1:
+        log.warning(
+            "Sync mode is not fully tested with multi-policy training. Use at your own risk. "
+            "Probably requires a deterministic policy to agent mapping to guarantee that we always collect the "
+            "same amount of experience per policy."
+        )
 
     return good_config
 

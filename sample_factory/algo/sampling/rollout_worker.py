@@ -10,7 +10,7 @@ from signal_slot.signal_slot import EventLoopObject, signal
 
 from sample_factory.algo.sampling.batched_sampling import BatchedVectorEnvRunner
 from sample_factory.algo.sampling.non_batched_sampling import NonBatchedVectorEnvRunner
-from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, rollout_worker_device
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import new_trajectories_signal
@@ -18,10 +18,10 @@ from sample_factory.algo.utils.rl_utils import total_num_agents, trajectories_pe
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import inference_context
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.utils.gpu_utils import gpus_for_process, set_gpus_for_process
+from sample_factory.utils.gpu_utils import set_gpus_for_process
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import MpQueue, PolicyID
-from sample_factory.utils.utils import AttrDict, cores_for_worker_process, log, set_process_cpu_affinity
+from sample_factory.utils.utils import cores_for_worker_process, log, set_process_cpu_affinity
 
 
 def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
@@ -69,17 +69,6 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
-    # TODO: this should correspond to whichever device we have observations on, not just whether we use this device at all
-    # TODO: test with Megaverse on a multi-GPU system
-    # TODO: actions on a GPU device? Convert to CPU for some envs?
-
-    gpus_to_use = gpus_for_process(worker_idx, num_gpus_per_process=1, gpu_mask=cfg.actor_worker_gpus)
-    assert len(gpus_to_use) <= 1
-    sampling_device = torch.device("cuda", index=gpus_to_use[0]) if gpus_to_use else torch.device("cpu")
-    return sampling_device
-
-
 class RolloutWorker(StoppableEventLoopObject, Configurable):
     def __init__(
         self, event_loop, worker_idx: int, buffer_mgr, inference_queues: Dict[PolicyID, MpQueue], cfg, env_info: EnvInfo
@@ -106,7 +95,7 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
 
         self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
 
-        self.training_iteration: int = 0
+        self.training_iteration: List[int] = [0] * self.cfg.num_policies
 
         if cfg.async_rl:
             rollouts_per_iteration = int(1e10)
@@ -115,7 +104,7 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             # across all workers is sufficient to saturate the learner for one iteration.
             # This guarantees that all experience will be on policy when the learner starts training on it.
             # In async mode we don't care so initialize this to a large number.
-            trajectories_training_iteration = trajectories_per_training_iteration(cfg)
+            trajectories_training_iteration = trajectories_per_training_iteration(cfg) * cfg.num_policies
             sampling_trajectories = total_num_agents(cfg, env_info)
 
             # we do similar checks in verify_cfg() but let's throw in a check here just to be sure
@@ -258,16 +247,28 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             # we are ready to enqueue inference request
             self._maybe_send_policy_request(runner)
 
-    def on_trajectory_buffers_available(self, training_iteration: int):
+    def on_trajectory_buffers_available(self, policy_id: PolicyID, training_iteration: int):
+        """
+        Used to wake up rollout workers waiting for trajectory buffers to be freed.
+        In addition to that, we also send information about training iteration per policy. This is useful for
+        sync mode where we make progress in lock-step: the next batch of experience is collected only when we
+        finished training on the previous batch.
+
+        This becomes tricky in multi-policy case, because agent-policy mapping
+        may not necessarily guarantee the same number of trajectories per policy per iteration (i.e. if more agents
+        collect experience for one policy than another). Multi-policy sync mode is thus an experimental feature,
+        most of the time you should prefer using cfg.async_rl=True for multi-policy training.
+        """
         if not self.cfg.async_rl:
             # in sync mode we progress one iteration at a time
-            assert training_iteration - self.training_iteration in (0, 1)
+            assert training_iteration - self.training_iteration[policy_id] in (0, 1)
 
-        if training_iteration > self.training_iteration:
+        prev_iteration = min(self.training_iteration)
+        self.training_iteration[policy_id] = training_iteration
+        curr_iteration = min(self.training_iteration)
+        if curr_iteration > prev_iteration:
             # allow runners to collect the next portion of rollouts
             self.remaining_rollouts = [self.rollouts_per_iteration for _ in range(self.num_splits)]
-
-        self.training_iteration = training_iteration
 
         # we can receive this signal during batcher initialization, before the worker is initialized
         # this is fine, we just ignore it and get the trajectory buffers from the queue later after we do env.reset()

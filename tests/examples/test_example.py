@@ -1,5 +1,6 @@
 import shutil
 from os.path import isdir
+from typing import Callable
 
 import pytest
 
@@ -22,7 +23,8 @@ def run_test_env(
     serial_mode: bool = False,
     async_rl: bool = True,
     experiment_name: str = "test_example",
-    register_custom_components_func: callable = register_custom_components,
+    register_custom_components_func: Callable = register_custom_components,
+    parse_args_func: Callable = parse_custom_args,
     env_name: str = "my_custom_env_v1",
 ):
     log.debug(f"Testing with parameters {locals()}...")
@@ -32,7 +34,7 @@ def run_test_env(
     register_custom_components_func()
 
     # test training for a few thousand frames
-    cfg = parse_custom_args(argv=["--algo=APPO", f"--env={env_name}", f"--experiment={experiment_name}"])
+    cfg = parse_args_func(argv=["--algo=APPO", f"--env={env_name}", f"--experiment={experiment_name}"])
     cfg.serial_mode = serial_mode
     cfg.async_rl = async_rl
     cfg.batched_sampling = batched_sampling
@@ -61,7 +63,7 @@ def run_test_env(
     assert status == ExperimentStatus.SUCCESS
 
     # then test the evaluation of the saved model
-    cfg = parse_custom_args(
+    cfg = parse_args_func(
         argv=["--algo=APPO", f"--env={env_name}", f"--experiment={experiment_name}"],
         evaluation=True,
     )

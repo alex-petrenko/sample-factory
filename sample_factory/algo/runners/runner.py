@@ -125,8 +125,12 @@ class Runner(EventLoopObject, Configurable):
 
         self.extra_summary_handlers: List[SummaryHandler] = []
 
+        self.timers: List[Timer] = []
+
         def periodic(period, cb):
-            return Timer(self.event_loop, period).timeout.connect(cb)
+            t = Timer(self.event_loop, period)
+            t.timeout.connect(cb)
+            self.timers.append(t)
 
         periodic(self.report_interval_sec, self._update_stats_and_print_report)
         periodic(self.summaries_interval_sec, self._report_experiment_summaries)
@@ -549,6 +553,8 @@ class Runner(EventLoopObject, Configurable):
             self._save_policy()
             self._save_best_policy()
 
+            for timer in self.timers:
+                timer.stop()
             self.stop.emit(self.object_id)
             self.stopped = True
 

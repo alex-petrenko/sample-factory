@@ -8,7 +8,7 @@ from gym import spaces
 from signal_slot.queue_utils import get_queue
 from torch import Tensor
 
-from sample_factory.algo.sampling.rollout_worker import rollout_worker_device
+from sample_factory.algo.sampling.sampling_utils import rollout_worker_device
 from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.rl_utils import trajectories_per_training_iteration
@@ -174,8 +174,10 @@ class BufferMgr(Configurable):
 
         share = not cfg.serial_mode
 
-        if cfg.async_rl:
-            # one set of buffers to sample, one to learn from. Coefficient 2 seems appropriate here.
+        if cfg.async_rl or cfg.num_policies > 1:
+            # One set of buffers to sample, one to learn from. Coefficient 2 seems appropriate here.
+            # Also: multi-policy training may require more buffers since some trajectories need to be sent
+            # to multiple workers.
             for device in self.buffers_per_device:
                 self.buffers_per_device[device] *= 2
         else:

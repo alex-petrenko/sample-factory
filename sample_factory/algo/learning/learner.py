@@ -987,8 +987,6 @@ class Learner(StoppableEventLoopObject, Configurable):
 
     def on_stop(self, *args):
         self.save()
-        log.debug(f"Stopping {self.object_id}...")
-
         if not self.cfg.serial_mode:
             self.join_batcher_thread()
 

@@ -8,17 +8,18 @@ import gym
 import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
+from sample_factory.algo.utils.agent_policy_mapping import AgentPolicyMapping
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
-from sample_factory.algo.utils.policy_manager import PolicyManager
+from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID
-from sample_factory.utils.utils import AttrDict, log, set_attr_if_exists
+from sample_factory.utils.typing import Config, MpQueue, PolicyID
+from sample_factory.utils.utils import AttrDict, debug_log_every_n, log, set_attr_if_exists
 
 
 class ActorState:
@@ -29,15 +30,17 @@ class ActorState:
 
     def __init__(
         self,
-        cfg,
+        cfg: Config,
         env_info: EnvInfo,
         env,
-        worker_idx,
-        split_idx,
-        env_idx,
-        agent_idx,
-        buffer_mgr,
-        traj_tensors,
+        worker_idx: int,
+        split_idx: int,
+        env_idx: int,
+        agent_idx: int,
+        global_env_idx: int,
+        buffer_mgr: BufferMgr,
+        traj_buffer_queue: MpQueue,
+        traj_tensors: TensorDict,
         policy_output_tensors,
         pbt_reward_shaping,
         policy_mgr,
@@ -50,16 +53,18 @@ class ActorState:
         self.split_idx = split_idx
         self.env_idx = env_idx
         self.agent_idx = agent_idx
+        self.global_env_idx: int = global_env_idx  # global index of the policy in the entire system
 
         self.policy_mgr = policy_mgr
-        self.curr_policy_id = self.policy_mgr.get_policy_for_agent(agent_idx, env_idx)
+        self.curr_policy_id = self.policy_mgr.get_policy_for_agent(agent_idx, env_idx, global_env_idx)
         self._env_set_curr_policy()
 
         self.curr_traj_buffer_idx: int = -4242424242  # uninitialized
         self.curr_traj_buffer: Optional[TensorDict] = None
+        self.traj_tensors: TensorDict = traj_tensors
 
-        self.traj_tensors = traj_tensors
-
+        self.buffer_mgr: BufferMgr = buffer_mgr
+        self.traj_buffer_queue: MpQueue = traj_buffer_queue
         self.policy_output_names = buffer_mgr.output_names
         self.policy_output_sizes = buffer_mgr.output_sizes
         self.policy_output_indices = np.cumsum(self.policy_output_sizes)[:-1]
@@ -210,7 +215,7 @@ class ActorState:
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
-            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx)
+            new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx, self.global_env_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
 
@@ -242,9 +247,12 @@ class ActorState:
         trajectories = []
         buffers_used = set()
 
-        if len(np.unique(self.curr_traj_buffer["policy_id"])) > 1:
-            # TODO: dbg
-            log.debug(f"Multiple policies in trajectory buffer: {self.curr_traj_buffer['policy_id']}")
+        unique_policies = np.unique(self.curr_traj_buffer["policy_id"])
+        if len(unique_policies) > 1:
+            debug_log_every_n(
+                100,
+                f"Multiple policies in trajectory buffer: {unique_policies} (-1 means inactive agent)",
+            )
 
         for policy_id in np.unique(self.curr_traj_buffer["policy_id"]):
             policy_id = int(policy_id)
@@ -252,7 +260,6 @@ class ActorState:
                 # -1 is a policy that does not exist, used to mark inactive agents not controlled by any policy
                 continue
 
-            # TODO: do something about this crap
             traj_buffer_idx = self.curr_traj_buffer_idx
             if traj_buffer_idx in buffers_used:
                 # This rollout needs to be sent to multiple learners, i.e. because the policy changed in the middle
@@ -260,9 +267,9 @@ class ActorState:
                 # to guarantee that this buffer will only be released once. It seems easier to just copy all data to
                 # a new buffer for each additional learner. This should be a very rare event so the performance impact
                 # is negligible.
-                traj_buffer_idx = self.buffer_mgr.get_trajectory_buffers(num_buffers=1)[0]
-                buffer = self.buffer_mgr.tensors.index(traj_buffer_idx)
-                buffer.set_data(slice(None), self.curr_traj_buffer)  # copy TensorDict data recursively
+                traj_buffer_idx = self.traj_buffer_queue.get(block=True, timeout=1e3)
+                buffer = self.traj_tensors[traj_buffer_idx]
+                buffer[:] = self.curr_traj_buffer  # copy TensorDict data recursively
 
             buffers_used.add(traj_buffer_idx)
 
@@ -350,7 +357,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
         self.pbt_reward_shaping = pbt_reward_shaping
 
-        self.policy_mgr = PolicyManager(self.cfg, self.num_agents)
+        self.policy_mgr = AgentPolicyMapping(self.cfg, self.env_info)
 
     def init(self, timing: Timing):
         """
@@ -362,18 +369,18 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             vector_idx = self.split_idx * self.num_envs + env_i
 
             # global env id within the entire system
-            env_id = self.worker_idx * self.cfg.num_envs_per_worker + vector_idx
+            global_env_idx = self.worker_idx * self.cfg.num_envs_per_worker + vector_idx
 
             env_config = AttrDict(
                 worker_index=self.worker_idx,
                 vector_index=vector_idx,
-                env_id=env_id,
+                env_id=global_env_idx,
             )
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func_non_batched(self.cfg, env_config=env_config)
 
-            env.seed(env_id)
+            env.seed(global_env_idx)
             self.envs.append(env)
 
             actor_states_env, episode_rewards_env = [], []
@@ -386,7 +393,9 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
                     self.split_idx,
                     env_i,
                     agent_idx,
+                    global_env_idx,
                     self.buffer_mgr,
+                    self.traj_buffer_queue,
                     self.traj_tensors,
                     self.policy_output_tensors[env_i, agent_idx],
                     self.pbt_reward_shaping,

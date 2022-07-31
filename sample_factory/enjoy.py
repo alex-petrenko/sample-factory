@@ -151,9 +151,9 @@ def enjoy(cfg):
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
 
                 if episode_reward is None:
-                    episode_reward = rew.clone()
+                    episode_reward = rew.float().clone()
                 else:
-                    episode_reward += rew
+                    episode_reward += rew.float()
 
                 num_frames += 1
 

@@ -11,7 +11,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, PolicyID
-from sample_factory.utils.utils import AttrDict, debug_log_every_n
+from sample_factory.utils.utils import AttrDict, debug_log_every_n, log
 
 
 def slice_len(s: slice) -> int:
@@ -236,7 +236,7 @@ class Batcher(StoppableEventLoopObject):
 
             self.available_batches.append(batch_idx)
             # log.debug(
-            #     f"Finished processing batch {batch_idx}, available batches: {self.available_batches}, {training_iteration=}"
+            #     f"{self.object_id} finished processing batch {batch_idx}, available batches: {self.available_batches}, {training_iteration=}"
             # )
 
     def _release_traj_tensors(self, batch_idx: int):
@@ -266,7 +266,7 @@ class Batcher(StoppableEventLoopObject):
         for device, batches in new_sampling_batches.items():
             # log.debug(f'Release trajectories {batches}')
             self.traj_buffer_queues[device].put_many(batches)
-        self.trajectory_buffers_available.emit(self.training_iteration)
+        self.trajectory_buffers_available.emit(self.policy_id, self.training_iteration)
 
     def on_stop(self, *args):
         self.stop.emit(self.object_id, {self.object_id: self.timing})
