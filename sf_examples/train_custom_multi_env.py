@@ -68,8 +68,7 @@ class CustomMultiEnv(gym.Env):
                 if random.random() < 0.005:
                     self.inactive_steps[agent_idx] = random.randint(1, 48)
 
-            # TODO: enable this back
-            # infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
+            infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
 
         self.curr_episode_steps += 1
 

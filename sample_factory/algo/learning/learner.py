@@ -886,11 +886,11 @@ class Learner(StoppableEventLoopObject, Configurable):
             # we still reference the same buffers though
             buff = shallow_recursive_copy(self.batcher.training_batches[batch_idx])
 
-            if (buff["actions"] == -42).nonzero().shape[0] > 0:
-                # TODO: remove this after we test everything
-                # currently this can happen in envs with inactive agents
-                log.warning("Found invalid actions in batch %d", batch_idx)
-                raise ValueError("Found invalid actions in batch")
+            # if (buff["actions"] == -42).nonzero().shape[0] > 0:
+            #     # TODO: remove this after we test everything
+            #     # currently this can happen in envs with inactive agents
+            #     log.warning("Found invalid actions in batch %d", batch_idx)
+            #     raise ValueError("Found invalid actions in batch")
 
             # ensure we're in train mode so that normalization statistics are updated
             if not self.actor_critic.training:
@@ -899,7 +899,7 @@ class Learner(StoppableEventLoopObject, Configurable):
             # hold the lock while we alter the state of the normalizer since they can be used in other processes too
             with self.param_server.policy_lock:
                 buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
-            del buff["obs"]  # don't need non-normalized anymore
+            del buff["obs"]  # don't need non-normalized obs anymore
 
             # calculate estimated value for the next step (T+1)
             normalized_last_obs = buff["normalized_obs"][:, -1]

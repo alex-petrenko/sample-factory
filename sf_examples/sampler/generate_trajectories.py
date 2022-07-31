@@ -29,6 +29,7 @@ class SamplingLoop(EventLoopObject, Configurable):
         self.sample_env_steps = sample_env_steps
         self.samples_collected: int = 0
         self.prev_samples_collected: int = 0
+        self.iteration: int = 0
         self.fps_tstamp = time.time()
 
         self.buffer_mgr: Optional[BufferMgr] = None
@@ -91,7 +92,9 @@ class SamplingLoop(EventLoopObject, Configurable):
 
         # make this trajectory buffer available again
         self.buffer_mgr.traj_buffer_queues[device].put_many(available_buffers)
-        self.trajectory_buffers_available.emit()
+        self.iteration += 1
+        for policy_id in range(self.cfg.num_policies):
+            self.trajectory_buffers_available.emit(policy_id, self.iteration)
 
     def timer_callback(self):
         fps = (self.samples_collected - self.prev_samples_collected) / (time.time() - self.fps_tstamp)
