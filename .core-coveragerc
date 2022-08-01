@@ -1,0 +1,10 @@
+[run]
+omit =
+    setup.py
+    tests/*
+    sample_factory/runner/runs/*
+    sample_factory/huggingface/*
+    sample_factory/pbt/*
+    sf_examples/dmlab_examples/*
+    sf_examples/isaacgym_examples/*
+    sf_examples/vizdoom_examples/*
