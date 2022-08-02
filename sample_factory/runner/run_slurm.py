@@ -44,6 +44,12 @@ def add_slurm_args(parser):
         type=str,
         help="Commands to run before the actual experiment (i.e. activate conda env, etc.)",
     )
+    parser.add_argument(
+        "--slurm_timeout",
+        default=None,
+        type=str,
+        help="Time limit of the slurm job. The job will be requeued if the time limit is reached. Defaults to 0 for no time limit",
+    )
 
     return parser
 
@@ -92,7 +98,10 @@ def run_slurm(run_description, args):
         idx += 1
         sbatch_fname = os.path.basename(sbatch_file)
         num_cpus = args.slurm_cpus_per_gpu * args.slurm_gpus_per_job
-        cmd = f"sbatch {partition}--gres=gpu:{args.slurm_gpus_per_job} -c {num_cpus} --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}"
+        cmd = ""
+        if args.slurm_timeout is not None:
+            cmd += f"timeout {args.slurm_timeout} "
+        cmd += f"sbatch {partition}--gres=gpu:{args.slurm_gpus_per_job} -c {num_cpus} --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}"
         log.info("Executing %s...", cmd)
 
         if args.slurm_print_only:
@@ -103,6 +112,16 @@ def run_slurm(run_description, args):
             output, err = process.communicate()
             exit_code = process.wait()
             log.info("Output: %s, err: %s, exit code: %r", output, err, exit_code)
+
+            if args.slurm_timeout is not None:
+                while exit_code == 124:
+                    log.info("Requeuing job %s due to timeout", output)
+                    cmd = f"timeout {args.slurm_timeout} requeue {output}"
+                    cmd_tokens = cmd.split()
+                    process = Popen(cmd_tokens, stdout=PIPE)
+                    output, err = process.communicate()
+                    exit_code = process.wait()
+                    log.info("Output: %s, err: %s, exit code: %r", output, err, exit_code)
 
             if exit_code != 0:
                 log.error("sbatch process failed!")
