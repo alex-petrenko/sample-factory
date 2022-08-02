@@ -3,7 +3,8 @@
 ### Installation
 
 To install VizDoom just follow system setup instructions from the original repository ([VizDoom linux_deps](https://github.com/mwydmuch/ViZDoom/blob/master/doc/Building.md#linux_deps)),
-after which the latest VizDoom can be installed from PyPI: ```pip install vizdoom```.
+after which the latest VizDoom can be installed from PyPI: 
+```pip install vizdoom```
 
 ### Running Experiments
 
@@ -75,11 +76,19 @@ python -m sf_examples.vizdoom_examples.train_vizdoom --env=doom_benchmark --algo
 
 #### Models
 
-| Environment | HuggingFace Hub Models | Evaluation Metrics |
-| ----------- | ---------------------- | ------------------ |
-| Battle      | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle | 59.37 +/- 3.93 |
+| Environment | HuggingFace Hub Models                                              | Evaluation Metrics |
+| ----------- | ------------------------------------------------------------------- | ------------------ |
+| Battle      | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle  | 59.37 +/- 3.93     |
+| Battle2     | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2 | 25.72 +/- 5.51     |
 
 #### Videos
 
+##### Doom Battle
+
 <p align="center">
 <video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
+
+##### Doom Battle2
+
+<p align="center">
+<video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
