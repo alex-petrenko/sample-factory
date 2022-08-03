@@ -36,6 +36,10 @@ class AbstractSampler(EventLoopObject, Configurable):
         self.env_info: EnvInfo = env_info
 
     @signal
+    def started(self):
+        ...
+
+    @signal
     def initialized(self):
         ...
 
@@ -140,6 +144,10 @@ class Sampler(AbstractSampler, ABC):
                         rollout_worker.advance_rollouts,
                     )
 
+            # We also connect to our own advance_rollouts signal to avoid getting stuck when we have nothing
+            # to send to the inference worker. This can happen if we have an entire trajectory of inactive agents.
+            rollout_worker.connect(advance_rollouts_signal(rollout_worker_idx), rollout_worker.advance_rollouts)
+
     def connect_model_initialized(self, policy_id: PolicyID, model_initialized_signal: signal) -> None:
         for inference_worker in self.inference_workers[policy_id]:
             model_initialized_signal.connect(inference_worker.init)
@@ -211,7 +219,7 @@ class SerialSampler(Sampler):
         self._connect_internal_components()
 
     def init(self) -> None:
-        pass
+        self.started.emit()
 
     def join(self) -> None:
         pass
@@ -228,13 +236,13 @@ class ParallelSampler(Sampler):
     ):
         Sampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info)
         self.processes: List[EventLoopProcess] = []
-        self.mp_ctx = get_mp_ctx(cfg.serial_mode)
+        mp_ctx = get_mp_ctx(cfg.serial_mode)
 
         for policy_id in range(self.cfg.num_policies):
             self.inference_workers[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
                 inference_proc = EventLoopProcess(
-                    f"inference_proc{policy_id}-{i}", self.mp_ctx, init_func=init_inference_process
+                    f"inference_proc{policy_id}-{i}", mp_ctx, init_func=init_inference_process
                 )
                 self.processes.append(inference_proc)
                 inference_worker = self._make_inference_worker(
@@ -248,7 +256,7 @@ class ParallelSampler(Sampler):
                 self.inference_workers[policy_id].append(inference_worker)
 
         for i in range(self.cfg.num_workers):
-            rollout_proc = EventLoopProcess(f"rollout_proc{i}", self.mp_ctx, init_func=init_rollout_worker_process)
+            rollout_proc = EventLoopProcess(f"rollout_proc{i}", mp_ctx, init_func=init_rollout_worker_process)
             self.processes.append(rollout_proc)
             rollout_worker = self._make_rollout_worker(rollout_proc.event_loop, i)
             rollout_proc.event_loop.owner = rollout_worker
@@ -263,6 +271,8 @@ class ParallelSampler(Sampler):
             log.debug(f"Starting process {p.name}")
             p.start()
             self.event_loop.process_events()
+
+        self.started.emit()
 
     def join(self) -> None:
         for p in self.processes:

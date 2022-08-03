@@ -69,7 +69,7 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     res_queue.put(env_info)
 
 
-def obtain_env_info_in_a_separate_process(cfg: Config):
+def obtain_env_info_in_a_separate_process(cfg: Config) -> EnvInfo:
     cache_filename = join(experiment_dir(cfg=cfg), f"env_info_{cfg.env}")
     if os.path.isfile(cache_filename):
         with open(cache_filename, "rb") as fobj:

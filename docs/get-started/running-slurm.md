@@ -31,9 +31,13 @@ pip install -e .
 
 To run a custom runner script for SF2 on slurm, you may need to write your own slurm_sbatch_template and/or runner script.
 
-slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See and example at `./sample_factory/runner/slurm/sbatch_template.sh `
+slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See an example at `./sample_factory/runner/slurm/sbatch_template.sh`. Variables in the bash script can be added in `sample_factory.runner.run_slurm`.
 
-The runner script controls the python command slurm will run. Examples are located in `sf_examples`. You can run multiple experiments with different parameters using `ParamGrid`.   
+The runner script controls the python command slurm will run. Examples are located in `sf_examples`. You can run multiple experiments with different parameters using `ParamGrid`.
+
+#### Timeout Batch Script
+
+If your slurm cluster has time limits for jobs, you can use the `sbatch_timeout.sh` bash script to launch jobs that timeout and requeue themselves before the time limit. The default timeout is set to 23h and can be modified based on your cluster settings to be slightly less than the job time limit.
 
 ### Running runner scripts
 
