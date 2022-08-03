@@ -47,27 +47,7 @@ def samples_per_trajectory(trajectory: TensorDict) -> int:
     return batch * rollout
 
 
-# noinspection NonAsciiCharacters
-def gae_advantages(rewards: Tensor, dones: Tensor, values: Tensor, valids: Tensor, γ: float, λ: float) -> Tensor:
-    rewards = rewards.transpose(0, 1)  # [E, T] -> [T, E]
-    dones = dones.transpose(0, 1).float()  # [E, T] -> [T, E]
-    values = values.transpose(0, 1)  # [E, T+1] -> [T+1, E]
-    valids = valids.transpose(0, 1).float()  # [E, T+1] -> [T+1, E]
-
-    assert len(rewards) == len(dones)
-    assert len(rewards) + 1 == len(values)
-
-    # section 3 in GAE paper: calculating advantages
-    deltas = (rewards - values[:-1]) * valids[:-1] + (1 - dones) * (γ * values[1:] * valids[1:])
-
-    # consider deltas equal to 0 for invalid steps
-    advantages = calculate_discounted_sum_torch(deltas, dones, valids[:-1], γ * λ)
-
-    # transpose advantages back to [E, T] before creating a single experience buffer
-    advantages.transpose_(0, 1)
-    return advantages
-
-
+@torch.jit.script
 def calculate_discounted_sum_torch(
     x: Tensor, dones: Tensor, valids: Tensor, discount: float, x_last: Optional[Tensor] = None
 ) -> Tensor:
@@ -80,10 +60,34 @@ def calculate_discounted_sum_torch(
     cumulative = x_last
 
     discounted_sum = torch.zeros_like(x)
-    for i in reversed(range(len(x))):
+    i = len(x) - 1
+    while i >= 0:
         # do not discount invalid steps so we can entirely skip a part of the trajectory
         # x should be already multiplied by valids
         discount_valid = discount * valids[i] + (1 - valids[i])
         cumulative = x[i] + discount_valid * cumulative * (1.0 - dones[i])
         discounted_sum[i] = cumulative
+        i -= 1
+
     return discounted_sum
+
+
+# noinspection NonAsciiCharacters
+@torch.jit.script
+def gae_advantages(rewards: Tensor, dones: Tensor, values: Tensor, valids: Tensor, γ: float, λ: float) -> Tensor:
+    rewards = rewards.transpose(0, 1)  # [E, T] -> [T, E]
+    dones = dones.transpose(0, 1).float()  # [E, T] -> [T, E]
+    values = values.transpose(0, 1)  # [E, T+1] -> [T+1, E]
+    valids = valids.transpose(0, 1).float()  # [E, T+1] -> [T+1, E]
+
+    assert len(rewards) == len(dones)
+    assert len(rewards) + 1 == len(values)
+
+    # section 3 in GAE paper: calculating advantages
+    deltas = (rewards - values[:-1]) * valids[:-1] + (1 - dones) * (γ * values[1:] * valids[1:])
+
+    advantages = calculate_discounted_sum_torch(deltas, dones, valids[:-1], γ * λ)
+
+    # transpose advantages back to [E, T] before creating a single experience buffer
+    advantages.transpose_(0, 1)
+    return advantages

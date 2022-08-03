@@ -592,7 +592,7 @@ class Learner(Configurable):
         self, gpu_buffer: TensorDict, batch_size: int, experience_size: int, num_invalids: int
     ) -> Optional[AttrDict]:
         timing = self.timing
-        with torch.no_grad(), timing.add_time("prepare_train"):
+        with torch.no_grad():
             early_stopping_tolerance = 1e-6
             early_stop = False
             prev_epoch_actor_loss = 1e9
