@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
+
+import torch
 
 from sample_factory.utils.utils import AttrDict
 
@@ -20,3 +22,8 @@ MpLock = Any
 Env = Any
 
 CreateEnvFunc = Callable[[str, Optional[Config], Optional[AttrDict]], Env]
+
+# there currenly isn't a single class all distributions derive from, but we gotta use something for the type hint
+ActionDistribution = Any
+
+InitModelData = Tuple[PolicyID, Dict, torch.device, int]

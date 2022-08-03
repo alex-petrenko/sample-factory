@@ -6,9 +6,9 @@ import torch.nn as nn
 from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, build_rnn_inputs
 
 
-# noinspection PyPep8Naming
 class TestPackedSequences:
-    def check_packed_version_matching_loopy_version(self, T, N, D, random_dones, norm_tolerance=2e-6):
+    @staticmethod
+    def check_packed_version_matching_loopy_version(T, N, D, random_dones, norm_tolerance=2e-6):
         rnn = nn.GRU(D, D, 1)
 
         for _ in range(100):

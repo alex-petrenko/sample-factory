@@ -11,6 +11,7 @@ def init_torch_runtime(cfg: AttrDict, max_num_threads: Optional[int] = 1):
     if max_num_threads is not None:
         torch.set_num_threads(max_num_threads)
     if cfg.device == "gpu":
+        # noinspection PyUnresolvedReferences
         torch.backends.cudnn.benchmark = True
 
 
@@ -41,3 +42,11 @@ def to_scalar(value):
         return value.item()
     else:
         return value
+
+
+@torch.jit.script
+def masked_select(x: torch.Tensor, mask: torch.Tensor, num_non_mask: int) -> torch.Tensor:
+    if num_non_mask == 0:
+        return x
+    else:
+        return torch.masked_select(x, mask)

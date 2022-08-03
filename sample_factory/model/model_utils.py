@@ -105,9 +105,11 @@ class EncoderBase(nn.Module):
         """Default implementation, can be overridden in derived classes."""
         self.to(device)
 
-    def device_and_type_for_input_tensor(self, _):
-        """Default implementation, can be overridden in derived classes."""
-        return self.model_device(), torch.float32
+    def device_for_input_tensor(self, input_tensor_name: str) -> torch.device:
+        return self.model_device()
+
+    def type_for_input_tensor(self, input_tensor_name: str) -> torch.dtype:
+        return torch.float32
 
     def model_device(self):
         return next(self.parameters()).device
@@ -115,7 +117,6 @@ class EncoderBase(nn.Module):
     def forward_fc_blocks(self, x):
         if self.fc_after_enc is not None:
             x = self.fc_after_enc(x)
-
         return x
 
 

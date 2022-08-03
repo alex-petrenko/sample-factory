@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from typing import List
+
 import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.utils.dicts import copy_dict_structure, iter_dicts_recursively
+from sample_factory.utils.dicts import (
+    copy_dict_structure,
+    iter_dicts_recursively,
+    iterate_recursively,
+    list_of_dicts_to_dict_of_lists,
+)
 
 
 class TensorDict(dict):
@@ -45,7 +52,7 @@ class TensorDict(dict):
                 elif isinstance(new_data, np.ndarray):
                     t = torch.from_numpy(new_data)
                 else:
-                    raise Exception(f"Type {type(new_data)} not supported in set_data_func")
+                    raise ValueError(f"Type {type(new_data)} not supported in set_data_func")
 
                 x[index].copy_(t)
 
@@ -55,7 +62,7 @@ class TensorDict(dict):
                 elif isinstance(new_data, np.ndarray):
                     n = new_data
                 else:
-                    raise Exception(f"Type {type(new_data)} not supported in set_data_func")
+                    raise ValueError(f"Type {type(new_data)} not supported in set_data_func")
 
                 x[index] = n
 
@@ -66,6 +73,17 @@ def clone_tensordict(d: TensorDict) -> TensorDict:
     for d1, d2, key, v1, v2 in iter_dicts_recursively(d, d_clone):
         d2[key] = v1.clone().detach()
     return d_clone
+
+
+def shallow_recursive_copy(d: TensorDict) -> TensorDict:
+    """
+    Returns a shallow copy of the tensordict. Different dictionary object (recursively) but referencing
+    the same tensors.
+    """
+    d_copy = copy_dict_structure(d)
+    for d1, d2, key, v1, v2 in iter_dicts_recursively(d, d_copy):
+        d2[key] = v1
+    return d_copy
 
 
 def tensor_dict_to_numpy(d: TensorDict) -> TensorDict:
@@ -83,3 +101,23 @@ def to_numpy(t: Tensor | TensorDict) -> Tensor | TensorDict:
         return tensor_dict_to_numpy(t)
     else:
         return t.numpy()  # only going to work for cpu tensors
+
+
+def cat_tensordicts(lst: List[TensorDict]) -> TensorDict:
+    """
+    Concatenates a list of tensordicts.
+    """
+    if not lst:
+        return TensorDict()
+
+    res = list_of_dicts_to_dict_of_lists(lst)
+    # iterate res recursively and concatenate tensors
+    for d, k, v in iterate_recursively(res):
+        if isinstance(v[0], torch.Tensor):
+            d[k] = torch.cat(v)
+        elif isinstance(v[0], np.ndarray):
+            d[k] = np.concatenate(v)
+        else:
+            raise ValueError(f"Type {type(v[0])} not supported in cat_tensordicts")
+
+    return TensorDict(res)

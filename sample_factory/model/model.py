@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from sample_factory.algo.utils.action_distributions import is_continuous_action_space, sample_actions_log_probs
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace, running_mean_std_summaries
@@ -57,8 +57,11 @@ class _ActorCriticBase(nn.Module):
         for e in self.encoders:
             e.model_to_device(device)
 
-    def device_and_type_for_input_tensor(self, input_tensor_name):
-        return self.encoders[0].device_and_type_for_input_tensor(input_tensor_name)
+    def device_for_input_tensor(self, input_tensor_name: str) -> torch.device:
+        return self.encoders[0].device_for_input_tensor(input_tensor_name)
+
+    def type_for_input_tensor(self, input_tensor_name: str) -> torch.dtype:
+        return self.encoders[0].type_for_input_tensor(input_tensor_name)
 
     def initialize_weights(self, layer):
         # gain = nn.init.calculate_gain(self.cfg.nonlinearity)
@@ -85,7 +88,7 @@ class _ActorCriticBase(nn.Module):
             # do nothing
             pass
 
-    def normalize_obs(self, obs: TensorDict) -> TensorDict:
+    def normalize_obs(self, obs: Dict[str, Tensor]) -> Dict[str, Tensor]:
         return self.obs_normalizer(obs)
 
     def summaries(self) -> Dict:

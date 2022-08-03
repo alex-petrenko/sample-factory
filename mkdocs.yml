@@ -124,7 +124,11 @@ nav:
     - get-started/huggingface.md
   - Environment Integrations:
     - environment-integrations/mujoco.md
+<<<<<<< HEAD
     - environment-integrations/swarm-rl.md
+=======
+    - environment-integrations/vizdoom.md
+>>>>>>> sf2
   - Release Notes:
     - release-notes/release-notes.md
   - Community:

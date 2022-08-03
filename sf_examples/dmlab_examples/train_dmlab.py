@@ -4,6 +4,7 @@ from typing import Optional
 
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.model.model_utils import register_custom_encoder
@@ -81,7 +82,7 @@ def main():
     cfg, runner = make_runner(cfg)
     register_msg_handlers(cfg, runner)
 
-    level_caches = initialize_level_cache(cfg, runner.mp_ctx)
+    level_caches = initialize_level_cache(cfg, get_mp_ctx(cfg.serial_mode))
     register_dmlab_components(level_caches)
 
     status = runner.init()

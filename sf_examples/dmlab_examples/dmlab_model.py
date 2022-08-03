@@ -45,11 +45,15 @@ class DmlabEncoder(EncoderBase):
         self.word_embedding.to(self.cpu_device)
         self.instructions_lstm.to(self.cpu_device)
 
-    def device_and_type_for_input_tensor(self, input_tensor_name):
+    def device_for_input_tensor(self, input_tensor_name: str) -> torch.device:
         if input_tensor_name == DMLAB_INSTRUCTIONS:
-            return self.cpu_device, torch.int64
-        else:
-            return self.model_device(), torch.float32
+            return self.cpu_device
+        return self.model_device()
+
+    def type_for_input_tensor(self, input_tensor_name: str) -> torch.dtype:
+        if input_tensor_name == DMLAB_INSTRUCTIONS:
+            return torch.int64
+        return torch.float32
 
     def forward(self, obs_dict):
         with self.timing.add_time("dmlab_basic_enc"):

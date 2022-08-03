@@ -5,6 +5,8 @@ import os
 import sys
 from typing import List, Optional, Tuple
 
+from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.rl_utils import total_num_agents
 from sample_factory.cfg.cfg import (
     add_basic_cli_args,
     add_default_env_args,
@@ -91,7 +93,7 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
     return args
 
 
-def verify_cfg(cfg: Config) -> bool:
+def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
     """
     Do some checks to make sure this is a viable configuration.
     The fact that configuration passes these checks does not guarantee that it is 100% valid,
@@ -102,7 +104,15 @@ def verify_cfg(cfg: Config) -> bool:
     cfg: the configuration to verify
     returns: True if the configuration is valid, False otherwise.
     """
-    good_config = True
+    good_config: bool = True
+
+    if cfg.num_envs_per_worker % cfg.worker_num_splits != 0:
+        log.error(
+            f"{cfg.num_envs_per_worker=} must be a multiple of {cfg.worker_num_splits=}"
+            f" (for double-buffered sampling you need to use even number of envs per worker)"
+        )
+        good_config = False
+
     if cfg.normalize_returns and cfg.with_vtrace:
         # When we use vtrace the logic for calculating returns is different - we need to recalculate them
         # on every minibatch, because important sampling depends on the trained policy.
@@ -119,7 +129,47 @@ def verify_cfg(cfg: Config) -> bool:
 
     if cfg.num_policies > 1 and cfg.batched_sampling:
         log.warning(
-            "In batched mode we're using a single policy per worker which does not allow us to use multiple different policies in the same env (see policy_manager.py)."
+            "In batched mode we're using a single policy per worker which does not allow us to use multiple different policies in the same env (see agent_policy_mapping.py)."
+        )
+
+    sync_rl = not cfg.async_rl
+    samples_per_training_iteration = cfg.num_batches_per_epoch * cfg.batch_size
+    samples_from_all_workers_per_rollout = total_num_agents(cfg, env_info) * cfg.rollout // cfg.num_policies
+
+    if sync_rl:
+        if (
+            samples_per_training_iteration % samples_from_all_workers_per_rollout == 0
+            and samples_per_training_iteration >= samples_from_all_workers_per_rollout
+        ):
+            # everything is fine
+            pass
+        else:
+            log.error(
+                "In sync mode the goal is to avoid policy lag. In order to achieve this we "
+                "alternate between collecting experience and training on it.\nThus sync mode requires "
+                "the sampler to collect the exact amount of experience required for training in one "
+                "or more iterations.\nConfiguration needs to be changed.\n"
+                "The easiest option is to enable async mode using --async_rl=True.\n"
+                "Alternatively you can use information below to change number of workers, or batch size, etc.:\n"
+            )
+            log.error(
+                f"Number of samples collected per rollout by all workers: "
+                f"{cfg.num_workers=} * {cfg.num_envs_per_worker=} * {env_info.num_agents=} * {cfg.rollout=} // {cfg.num_policies=} = {samples_from_all_workers_per_rollout}"
+            )
+            log.error(
+                f"Number of samples processed per training iteration on one learner: "
+                f"{cfg.num_batches_per_epoch=} * {cfg.batch_size=} = {samples_per_training_iteration}"
+            )
+            log.error(
+                f"Ratio is {samples_per_training_iteration / samples_from_all_workers_per_rollout} (should be a positive integer)"
+            )
+            good_config = False
+
+    if sync_rl and cfg.num_policies > 1:
+        log.warning(
+            "Sync mode is not fully tested with multi-policy training. Use at your own risk. "
+            "Probably requires a deterministic policy to agent mapping to guarantee that we always collect the "
+            "same amount of experience per policy."
         )
 
     return good_config
