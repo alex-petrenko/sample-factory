@@ -2,7 +2,7 @@ from typing import List
 
 from signal_slot.signal_slot import EventLoop, EventLoopProcess
 
-from sample_factory.algo.learning.learner import init_learner_process
+from sample_factory.algo.learning.learner_worker import init_learner_process
 from sample_factory.algo.runners.runner import Runner
 from sample_factory.algo.sampling.sampler import ParallelSampler
 from sample_factory.algo.utils.context import sf_global_context
@@ -36,7 +36,6 @@ class ParallelRunner(Runner):
                 learner_proc.event_loop,
                 policy_id,
                 self.batchers[policy_id],
-                mp_ctx,
             )
             learner_proc.event_loop.owner = self.learners[policy_id]
             learner_proc.set_init_func_args((sf_global_context(), self.learners[policy_id]))
@@ -48,6 +47,7 @@ class ParallelRunner(Runner):
 
     def _on_start(self):
         self._start_processes()
+        super()._on_start()
 
     def _start_processes(self):
         log.debug("Starting all processes...")

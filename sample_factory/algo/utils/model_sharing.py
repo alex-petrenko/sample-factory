@@ -2,31 +2,35 @@
 Utilities for sharing model parameters between components.
 """
 import sys
+from typing import Optional
 
 import torch
 from torch import Tensor
 
-from sample_factory.algo.utils.multiprocessing_utils import get_lock
+from sample_factory.algo.utils.multiprocessing_utils import get_lock, get_mp_ctx
 from sample_factory.model.model import create_actor_critic
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
 
 class ParameterServer:
-    def __init__(self, policy_id, policy_versions: Tensor, serial_mode: bool, mp_ctx):
+    def __init__(self, policy_id, policy_versions: Tensor, serial_mode: bool):
         self.policy_id = policy_id
         self.actor_critic = None
         self.policy_versions = policy_versions
+        self.device: Optional[torch.device] = None
 
+        mp_ctx = get_mp_ctx(serial_mode)
         self._policy_lock = get_lock(serial_mode, mp_ctx)
 
     @property
     def policy_lock(self):
         return self._policy_lock
 
-    def init(self, actor_critic, policy_version):
+    def init(self, actor_critic, policy_version, device: torch.device):
         self.actor_critic = actor_critic
         self.policy_versions[self.policy_id] = policy_version
+        self.device = device
         log.debug("Initialized policy %d weights for model version %d", self.policy_id, policy_version)
 
     def update_weights(self, policy_version):

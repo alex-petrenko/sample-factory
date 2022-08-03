@@ -19,9 +19,7 @@ class SerialRunner(Runner):
 
         for policy_id in range(self.cfg.num_policies):
             self.batchers[policy_id] = self._make_batcher(self.event_loop, policy_id)
-            self.learners[policy_id] = self._make_learner(
-                self.event_loop, policy_id, self.batchers[policy_id], mp_ctx=None
-            )
+            self.learners[policy_id] = self._make_learner(self.event_loop, policy_id, self.batchers[policy_id])
 
         self.sampler = self._make_sampler(SerialSampler, self.event_loop)
 

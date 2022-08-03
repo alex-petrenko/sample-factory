@@ -12,7 +12,8 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor, unsqueeze_tensor
+from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
+from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.model import create_actor_critic
@@ -40,20 +41,33 @@ def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
     obs = obs.permute(1, 2, 0)
     # convert to numpy
     obs = obs.cpu().numpy()
-    # resize
+    # convert to uint8
+    obs = cv2.normalize(
+        obs, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8UC1
+    )  # this will be different frame-by-frame but probably good enough to give us an idea?
     scale = 5
-    obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale))
-    # show the image
-    cv2.imshow("Policy Inputs", obs)
+    obs = cv2.resize(obs, (obs.shape[1] * scale, obs.shape[0] * scale), interpolation=cv2.INTER_NEAREST)
+
+    cv2.imshow("policy inputs", obs)
+    cv2.waitKey(delay=1)
 
 
-def render_frame(cfg, env, video_frames, num_frames):
+def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
     if cfg.save_video:
         frame = env.render(mode="rgb_array")
-        if num_frames < cfg.video_frames:
+        if (len(video_frames) < cfg.video_frames) or (cfg.video_frames < 0 and num_episodes == 0):
             video_frames.append(frame)
     else:
-        env.render()
+        if not cfg.no_render:
+            target_delay = 1.0 / cfg.fps if cfg.fps > 0 else 0
+            current_delay = time.time() - last_render_start
+            time_wait = target_delay - current_delay
+
+            if time_wait > 0:
+                # log.info('Wait time %.3f', time_wait)
+                time.sleep(time_wait)
+
+            env.render()
 
 
 def process_stack(cfg_framestack, obs):
@@ -110,17 +124,15 @@ def enjoy(cfg):
     obs = env.reset()
     rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
-    finished_episode = [False] * env.num_agents
+    finished_episode = [False for _ in range(env.num_agents)]
 
     video_frames = []
+    num_episodes = 0
 
     with torch.inference_mode():
         while not max_frames_reached(num_frames):
-            for key, x in obs.items():
-                device, dtype = actor_critic.device_and_type_for_input_tensor(key)
-                obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+            normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
 
-            normalized_obs = actor_critic.normalize_obs(obs)
             if not cfg.no_render:
                 visualize_policy_inputs(normalized_obs)
             policy_outputs = actor_critic(process_stack(cfg.env_framestack, normalized_obs), rnn_states)
@@ -141,26 +153,17 @@ def enjoy(cfg):
             rnn_states = policy_outputs["new_rnn_states"]
 
             for _ in range(render_action_repeat):
-                if not cfg.no_render:
-                    target_delay = 1.0 / cfg.fps if cfg.fps > 0 else 0
-                    current_delay = time.time() - last_render_start
-                    time_wait = target_delay - current_delay
 
-                    if time_wait > 0:
-                        # log.info('Wait time %.3f', time_wait)
-                        time.sleep(time_wait)
-
-                    last_render_start = time.time()
-
-                    render_frame(cfg, env, video_frames, num_frames)
+                render_frame(cfg, env, video_frames, num_episodes, last_render_start)
+                last_render_start = time.time()
 
                 obs, rew, dones, infos = env.step(actions)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
 
                 if episode_reward is None:
-                    episode_reward = rew.clone()
+                    episode_reward = rew.float().clone()
                 else:
-                    episode_reward += rew
+                    episode_reward += rew.float()
 
                 num_frames += 1
 
@@ -190,11 +193,11 @@ def enjoy(cfg):
                         )
                         rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
+                        num_episodes += 1
 
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
-                    if not cfg.no_render:
-                        render_frame(cfg, env, video_frames, num_frames)
+                    render_frame(cfg, env, video_frames, num_episodes, last_render_start)
                     time.sleep(0.05)
 
                 if all(finished_episode):
@@ -227,6 +230,9 @@ def enjoy(cfg):
                 #     key = f'PLAYER{player}_FRAGCOUNT'
                 #     if key in infos[0]:
                 #         log.debug('Score for player %d: %r', player, infos[0][key])
+
+            if num_episodes >= cfg.max_num_episodes:
+                break
 
     env.close()
 

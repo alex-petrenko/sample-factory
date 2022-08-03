@@ -125,6 +125,7 @@ nav:
   - Environment Integrations:
     - environment-integrations/mujoco.md
     - environment-integrations/atari.md
+    - environment-integrations/vizdoom.md
   - Release Notes:
     - release-notes/release-notes.md
   - Community:

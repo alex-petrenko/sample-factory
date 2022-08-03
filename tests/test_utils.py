@@ -1,5 +1,6 @@
 import time
 
+from sample_factory.utils.dicts import list_of_dicts_to_dict_of_lists
 from sample_factory.utils.network import is_udp_port_available
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import cores_for_worker_process, log
@@ -51,3 +52,9 @@ class TestUtils:
 
         log.debug(t.flat_str())
         log.debug(t)  # tree view
+
+    def test_list_of_dicts_to_dict_of_lists(self):
+        """Test list_of_dicts_to_dict_of_lists() with recursive dicts."""
+        lt = [{"a": 1, "b": {"c": 2, "d": 3}}, {"a": 4, "b": {"c": 5, "d": 6}}]
+        d = list_of_dicts_to_dict_of_lists(lt)
+        assert d == {"a": [1, 4], "b": {"c": [2, 5], "d": [3, 6]}}

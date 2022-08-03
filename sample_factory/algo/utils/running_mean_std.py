@@ -62,7 +62,7 @@ class RunningMeanStdInPlace(nn.Module):
 
     def forward(self, x: Tensor, denormalize: bool = False) -> None:
         """Normalizes in-place! This function modifies the input tensor and returns nothing."""
-        if self.training:
+        if self.training and not denormalize:
             # check if the shape exactly matches or it's a scalar for which we use shape (1, )
             assert x.shape[1:] == self.input_shape or (
                 x.shape[1:] == () and self.input_shape == (1,)
@@ -72,12 +72,7 @@ class RunningMeanStdInPlace(nn.Module):
             μ = x.mean(self.axis)  # along channel axis
             σ2 = x.var(self.axis)
             self.running_mean[:], self.running_var[:], self.count[:] = self._update_mean_var_count_from_moments(
-                self.running_mean,
-                self.running_var,
-                self.count,
-                μ,
-                σ2,
-                batch_count,
+                self.running_mean, self.running_var, self.count, μ, σ2, batch_count
             )
 
         # change shape

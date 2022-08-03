@@ -135,7 +135,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.min_raw_rewards = self.max_raw_rewards = None
 
-    def init(self, timing) -> Dict:
+    def init(self, timing):
         """
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
@@ -167,9 +167,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         else:
             self.vec_env = SequentialVectorizeWrapper(envs)
 
-        self.update_trajectory_buffers(timing)
-        assert self.curr_traj is not None and self.curr_traj_slice is not None
-
         self.last_obs = self.vec_env.reset()
         self.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
         self.last_rnn_state[:] = 0.0
@@ -188,9 +185,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.max_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
 
         self.env_step_ready = True
-        policy_request = self.generate_policy_request(timing)
-        assert policy_request is not None
-        return policy_request
 
     def _process_rewards(self, rewards_orig: Tensor, rewards_orig_cpu: Tensor) -> Tensor:
         rewards = rewards_orig * self.cfg.reward_scale
@@ -343,14 +337,14 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
 
-    def update_trajectory_buffers(self, timing, block=False) -> bool:
+    def update_trajectory_buffers(self, timing) -> bool:
         if self.curr_traj_slice is not None and self.curr_traj is not None:
             # don't need to do anything - we have a trajectory buffer already
             return True
 
         with timing.add_time("wait_for_trajectories"):
             try:
-                buffers = self.traj_buffer_queue.get(block=block, timeout=1e9)
+                buffers = self.traj_buffer_queue.get(block=False, timeout=1e9)
             except Empty:
                 return False
 

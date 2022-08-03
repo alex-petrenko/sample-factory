@@ -1,62 +1,34 @@
 from __future__ import annotations
 
-import copy
 import glob
 import os
 import time
 from abc import ABC, abstractmethod
 from os.path import join
-from threading import Thread
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from signal_slot.signal_slot import EventLoopObject, signal
 from torch import Tensor
+from torch.nn import Module
 
-from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, build_rnn_inputs
 from sample_factory.algo.utils.action_distributions import get_action_distribution, is_continuous_action_space
-from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
+from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import LEARNER_ENV_STEPS, POLICY_ID_KEY, STATS_KEY, TRAIN_STATS, memory_stats
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
-from sample_factory.algo.utils.rl_utils import gae_advantages
+from sample_factory.algo.utils.rl_utils import gae_advantages, prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
-from sample_factory.algo.utils.torch_utils import init_torch_runtime, to_scalar
+from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
+from sample_factory.algo.utils.torch_utils import masked_select, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
-from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID
+from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID
 from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log
-
-
-def init_learner_process(sf_context: SampleFactoryContext, learner: Learner):
-    set_global_context(sf_context)
-    log.info(f"{learner.object_id}\tpid {os.getpid()}\tparent {os.getppid()}")
-
-    # workers should ignore Ctrl+C because the termination is handled in the event loop by a special msg
-    import signal as os_signal
-
-    os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
-
-    cfg = learner.cfg
-
-    import psutil
-
-    try:
-        psutil.Process().nice(cfg.default_niceness)
-    except psutil.AccessDenied:
-        log.error("Low niceness requires sudo!")
-
-    if cfg.device == "gpu":
-        cuda_envvars_for_policy(learner.policy_id, "learning")
-
-    init_torch_runtime(cfg)
 
 
 class LearningRateScheduler:
@@ -140,28 +112,43 @@ def get_lr_scheduler(cfg) -> LearningRateScheduler:
         raise RuntimeError(f"Unknown scheduler {cfg.lr_schedule}")
 
 
-class Learner(StoppableEventLoopObject, Configurable):
-    def __init__(self, evt_loop, cfg, env_info, buffer_mgr, batcher: Batcher, policy_id: PolicyID, mp_ctx):
-        Configurable.__init__(self, cfg)
+def model_initialization_data(
+    cfg: Config, policy_id: PolicyID, actor_critic: Module, policy_version: int, device: torch.device
+) -> InitModelData:
+    # in serial mode we will just use the same actor_critic directly
+    state_dict = None if cfg.serial_mode else actor_critic.state_dict()
+    model_state = (policy_id, state_dict, device, policy_version)
+    return model_state
 
-        unique_name = f"{Learner.__name__}_p{policy_id}"
-        EventLoopObject.__init__(self, evt_loop, unique_name)
+
+class Learner(Configurable):
+    def __init__(
+        self,
+        cfg: Config,
+        env_info: EnvInfo,
+        policy_versions_tensor: Tensor,
+        policy_id: PolicyID,
+        param_server: ParameterServer,
+    ):
+        Configurable.__init__(self, cfg)
 
         self.timing = Timing(name=f"Learner {policy_id} profile")
 
         self.policy_id = policy_id
 
         self.env_info = env_info
-        self.param_server = ParameterServer(policy_id, buffer_mgr.policy_versions, cfg.serial_mode, mp_ctx)
 
         self.device = None
         self.actor_critic = None
 
         self.optimizer = None
 
+        self.curr_lr: Optional[float] = None
         self.lr_scheduler: Optional[LearningRateScheduler] = None
 
-        self.train_step = self.env_steps = 0
+        self.train_step: int = 0  # total number of SGD steps
+        self.env_steps: int = 0  # total number of environment steps consumed by the learner
+
         self.best_performance = -1e9
 
         # decay rate at which summaries are collected
@@ -173,44 +160,19 @@ class Learner(StoppableEventLoopObject, Configurable):
         # TODO: fix milestone mechanism
         self.last_milestone_time = 0
 
-        self.buffer_mgr = buffer_mgr
-        self.batcher: Batcher = batcher
-        self.batcher_thread: Optional[Thread] = None
+        # shared tensor used to share the latest policy version between processes
+        self.policy_versions_tensor: Tensor = policy_versions_tensor
 
-        self.exploration_loss_func = self.kl_loss_func = None
+        self.param_server: ParameterServer = param_server
+
+        self.exploration_loss_func: Optional[Callable] = None
+        self.kl_loss_func: Optional[Callable] = None
 
         self.is_initialized = False
 
-    @signal
-    def initialized(self):
-        ...
-
-    @signal
-    def model_initialized(self):
-        ...
-
-    @signal
-    def report_msg(self):
-        ...
-
-    @signal
-    def training_batch_released(self):
-        ...
-
-    @signal
-    def finished_training_iteration(self):
-        ...
-
-    @signal
-    def stop(self):
-        ...
-
-    def init(self):
-        if not self.cfg.serial_mode:
-            self.start_batcher_thread()
-
+    def init(self) -> InitModelData:
         if self.cfg.exploration_loss_coeff == 0.0:
-            self.exploration_loss_func = lambda action_distr, valids: 0.0
+            self.exploration_loss_func = lambda action_distr, valids, num_invalids: 0.0
         elif self.cfg.exploration_loss == "entropy":
             self.exploration_loss_func = self._entropy_exploration_loss
         elif self.cfg.exploration_loss == "symmetric_kl":
@@ -224,7 +186,7 @@ class Learner(StoppableEventLoopObject, Configurable):
                     "WARNING! It is generally recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks to avoid potential numerical issues. "
                     "I.e. set --kl_loss_coeff=0.1"
                 )
-            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: (None, 0.0)
+            self.kl_loss_func = lambda action_space, action_logits, distribution, valids, num_invalids: (None, 0.0)
         else:
             self.kl_loss_func = self._kl_loss
 
@@ -260,38 +222,22 @@ class Learner(StoppableEventLoopObject, Configurable):
 
         self.optimizer = optimizer_cls(
             params,
-            lr=self.cfg.learning_rate,
+            lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
             eps=self.cfg.adam_eps,
         )
 
-        self.lr_scheduler = get_lr_scheduler(self.cfg)
-
         self.load_from_checkpoint(self.policy_id)
+        self.param_server.init(self.actor_critic, self.train_step, self.device)
+        self.policy_versions_tensor[self.policy_id] = self.train_step
 
-        self.param_server.init(self.actor_critic, self.train_step)
-
-        # in serial mode we will just use the same actor_critic directly
-        state_dict = None if self.cfg.serial_mode else self.actor_critic.state_dict()
-        model_state = (
-            state_dict,
-            self.device,
-            self.train_step,
-        )
-        # signal other components that the model is ready
-        self.model_initialized.emit(model_state)
+        self.lr_scheduler = get_lr_scheduler(self.cfg)
+        self.curr_lr = self.cfg.learning_rate if self.curr_lr is None else self.curr_lr
+        self._apply_lr(self.curr_lr)
 
         self.is_initialized = True
-        self.initialized.emit()
-        log.debug(f"{self.object_id} finished initialization!")
 
-    def start_batcher_thread(self):
-        self.batcher.event_loop.process = self.event_loop.process
-        self.batcher_thread = Thread(target=self.batcher.event_loop.exec)
-        self.batcher_thread.start()
-
-    def join_batcher_thread(self):
-        self.batcher_thread.join()
+        return model_initialization_data(self.cfg, self.policy_id, self.actor_critic, self.train_step, self.device)
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -329,8 +275,9 @@ class Learner(StoppableEventLoopObject, Configurable):
             self.best_performance = checkpoint_dict.get("best_performance", self.best_performance)
         self.actor_critic.load_state_dict(checkpoint_dict["model"])
         self.optimizer.load_state_dict(checkpoint_dict["optimizer"])
+        self.curr_lr = checkpoint_dict.get("curr_lr", self.cfg.learning_rate)
 
-        log.info("Loaded experiment state at training iteration %d, env step %d", self.train_step, self.env_steps)
+        log.info(f"Loaded experiment state at {self.train_step=}, {self.env_steps=}")
 
     def load_from_checkpoint(self, policy_id):
         name_prefix = dict(latest="checkpoint", best="best")[self.cfg.load_checkpoint_kind]
@@ -364,6 +311,7 @@ class Learner(StoppableEventLoopObject, Configurable):
             "best_performance": self.best_performance,
             "model": self.actor_critic.state_dict(),
             "optimizer": self.optimizer.state_dict(),
+            "curr_lr": self.curr_lr,
         }
         return checkpoint
 
@@ -419,61 +367,72 @@ class Learner(StoppableEventLoopObject, Configurable):
             self._save_impl("best", name_suffix, 1, verbose=False)
 
     @staticmethod
-    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids):
+    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids: int):
         clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
         loss_unclipped = ratio * adv
         loss_clipped = clipped_ratio * adv
         loss = torch.min(loss_unclipped, loss_clipped)
-        loss = torch.masked_select(loss, valids)
+        loss = masked_select(loss, valids, num_invalids)
         loss = -loss.mean()
 
         return loss
 
-    def _value_loss(self, new_values, old_values, target, clip_value, valids):
+    def _value_loss(
+        self,
+        new_values: Tensor,
+        old_values: Tensor,
+        target: Tensor,
+        clip_value: float,
+        valids: Tensor,
+        num_invalids: int,
+    ) -> Tensor:
         value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
         value_original_loss = (new_values - target).pow(2)
         value_clipped_loss = (value_clipped - target).pow(2)
         value_loss = torch.max(value_original_loss, value_clipped_loss)
-        value_loss = torch.masked_select(value_loss, valids)
+        value_loss = masked_select(value_loss, valids, num_invalids)
         value_loss = value_loss.mean()
 
         value_loss *= self.cfg.value_loss_coeff
 
         return value_loss
 
-    def _kl_loss(self, action_space, action_logits, action_distribution, valids) -> Tuple[Tensor, Tensor]:
+    def _kl_loss(
+        self, action_space, action_logits, action_distribution, valids, num_invalids: int
+    ) -> Tuple[Tensor, Tensor]:
         old_action_distribution = get_action_distribution(action_space, action_logits)
         kl_old = action_distribution.kl_divergence(old_action_distribution)
-        kl_loss = torch.masked_select(kl_old, valids)
-        kl_loss = kl_loss.mean()
+        kl_old = masked_select(kl_old, valids, num_invalids)
+        kl_loss = kl_old.mean()
 
         kl_loss *= self.cfg.kl_loss_coeff
 
         return kl_old, kl_loss
 
-    def _entropy_exploration_loss(self, action_distribution, valids):
+    def _entropy_exploration_loss(self, action_distribution, valids, num_invalids: int) -> Tensor:
         entropy = action_distribution.entropy()
-        entropy = torch.masked_select(entropy, valids)
+        entropy = masked_select(entropy, valids, num_invalids)
         entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
         return entropy_loss
 
-    def _symmetric_kl_exploration_loss(self, action_distribution, valids):
+    def _symmetric_kl_exploration_loss(self, action_distribution, valids, num_invalids: int) -> Tensor:
         kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
-        kl_prior = torch.masked_select(kl_prior, valids).mean()
+        kl_prior = masked_select(kl_prior, valids, num_invalids).mean()
         if not torch.isfinite(kl_prior):
             kl_prior = torch.zeros(kl_prior.shape)
         kl_prior = torch.clamp(kl_prior, max=30)
         kl_prior_loss = self.cfg.exploration_loss_coeff * kl_prior
         return kl_prior_loss
 
-    def _curr_lr(self):
+    def _optimizer_lr(self):
         for param_group in self.optimizer.param_groups:
             return param_group["lr"]
 
-    def _update_lr(self, new_lr):
-        if new_lr != self._curr_lr():
+    def _apply_lr(self, lr: float) -> None:
+        """Change learning rate in the optimizer."""
+        if lr != self._optimizer_lr():
             for param_group in self.optimizer.param_groups:
-                param_group["lr"] = new_lr
+                param_group["lr"] = lr
 
     def _get_minibatches(self, batch_size, experience_size):
         """Generating minibatches for training."""
@@ -508,43 +467,147 @@ class Learner(StoppableEventLoopObject, Configurable):
             # handle the case of a single batch, where the entire buffer is a minibatch
             return buffer
 
-        # TODO: make sure we use this code everywhere. Here we're relying on TensorDict's indexing features
         mb = buffer[indices]
         return mb
 
-    def _train(self, gpu_buffer, batch_size, experience_size, timing):
-        with torch.no_grad(), timing.add_time("prepare_train"):
-            policy_version_before_train = self.train_step
+    def _calculate_losses(
+        self, mb: AttrDict, num_invalids: int
+    ) -> Tuple[ActionDistribution, Tensor, Tensor | float, Optional[Tensor], Tensor | float, Tensor, Dict]:
+        with torch.no_grad(), self.timing.add_time("losses_init"):
+            recurrence: int = self.cfg.recurrence
 
+            # PPO clipping
+            clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
+            # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
+            clip_ratio_low = 1.0 / clip_ratio_high
+            clip_value = self.cfg.ppo_clip_value
+
+            valids = mb.valids
+
+        # calculate policy head outside of recurrent loop
+        with self.timing.add_time("forward_head"):
+            head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
+
+        # initial rnn states
+        with self.timing.add_time("bptt_initial"):
+            if self.cfg.use_rnn:
+                # this is the only way to stop RNNs from backpropagating through invalid timesteps
+                # (i.e. experience collected by another policy)
+                done_or_invalid = torch.logical_or(mb.dones_cpu, ~valids.cpu()).float()
+                head_output_seq, rnn_states, inverted_select_inds = build_rnn_inputs(
+                    head_outputs,
+                    done_or_invalid,
+                    mb.rnn_states,
+                    recurrence,
+                )
+            else:
+                rnn_states = mb.rnn_states[::recurrence]
+
+        # calculate RNN outputs for each timestep in a loop
+        with self.timing.add_time("bptt"):
+            if self.cfg.use_rnn:
+                with self.timing.add_time("bptt_forward_core"):
+                    core_output_seq, _ = self.actor_critic.forward_core(head_output_seq, rnn_states)
+                core_outputs = build_core_out_from_seq(core_output_seq, inverted_select_inds)
+            else:
+                core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
+
+        num_trajectories = head_outputs.size(0) // recurrence
+
+        with self.timing.add_time("tail"):
+            assert core_outputs.shape[0] == head_outputs.shape[0]
+
+            # calculate policy tail outside of recurrent loop
+            result = self.actor_critic.forward_tail(core_outputs, sample_actions=False)
+            action_distribution = self.actor_critic.action_distribution()
+            log_prob_actions = action_distribution.log_prob(mb.actions)
+            ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
+
+            # super large/small values can cause numerical problems and are probably noise anyway
+            ratio = torch.clamp(ratio, 0.05, 20.0)
+
+            values = result["values"].squeeze()
+
+        # these computations are not the part of the computation graph
+        with torch.no_grad(), self.timing.add_time("advantages_returns"):
+            if self.cfg.with_vtrace:
+                # V-trace parameters
+                rho_hat = torch.Tensor([self.cfg.vtrace_rho])
+                c_hat = torch.Tensor([self.cfg.vtrace_c])
+
+                ratios_cpu = ratio.cpu()
+                values_cpu = values.cpu()
+                rewards_cpu = mb.rewards_cpu
+                dones_cpu = mb.dones_cpu
+
+                vtrace_rho = torch.min(rho_hat, ratios_cpu)
+                vtrace_c = torch.min(c_hat, ratios_cpu)
+
+                vs = torch.zeros((num_trajectories * recurrence))
+                adv = torch.zeros((num_trajectories * recurrence))
+
+                next_values = values_cpu[recurrence - 1 :: recurrence] - rewards_cpu[recurrence - 1 :: recurrence]
+                next_values /= self.cfg.gamma
+                next_vs = next_values
+
+                for i in reversed(range(self.cfg.recurrence)):
+                    rewards = rewards_cpu[i::recurrence]
+                    dones = dones_cpu[i::recurrence]
+                    not_done = 1.0 - dones
+                    not_done_gamma = not_done * self.cfg.gamma
+
+                    curr_values = values_cpu[i::recurrence]
+                    curr_vtrace_rho = vtrace_rho[i::recurrence]
+                    curr_vtrace_c = vtrace_c[i::recurrence]
+
+                    delta_s = curr_vtrace_rho * (rewards + not_done_gamma * next_values - curr_values)
+                    adv[i::recurrence] = curr_vtrace_rho * (rewards + not_done_gamma * next_vs - curr_values)
+                    next_vs = curr_values + delta_s + not_done_gamma * curr_vtrace_c * (next_vs - next_values)
+                    vs[i::recurrence] = next_vs
+
+                    next_values = curr_values
+
+                targets = vs.to(self.device)
+                adv = adv.to(self.device)
+            else:
+                # using regular GAE
+                adv = mb.advantages
+                targets = mb.returns
+
+            adv_std, adv_mean = torch.std_mean(masked_select(adv, valids, num_invalids))
+            adv = (adv - adv_mean) / torch.clamp_min(adv_std, 1e-7)  # normalize advantage
+
+        with self.timing.add_time("losses"):
+            policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids)
+            exploration_loss = self.exploration_loss_func(action_distribution, valids, num_invalids)
+            kl_old, kl_loss = self.kl_loss_func(
+                self.actor_critic.action_space, mb.action_logits, action_distribution, valids, num_invalids
+            )
+            old_values = mb["values"]
+            value_loss = self._value_loss(values, old_values, targets, clip_value, valids, num_invalids)
+
+        return action_distribution, policy_loss, exploration_loss, kl_old, kl_loss, value_loss, locals()
+
+    def _train(
+        self, gpu_buffer: TensorDict, batch_size: int, experience_size: int, num_invalids: int
+    ) -> Optional[AttrDict]:
+        timing = self.timing
+        with torch.no_grad(), timing.add_time("prepare_train"):
             early_stopping_tolerance = 1e-6
             early_stop = False
             prev_epoch_actor_loss = 1e9
-            epoch_actor_losses = []
+            epoch_actor_losses = torch.empty([self.cfg.num_batches_per_epoch], device=self.device)
 
             # recent mean KL-divergences per minibatch, this used by LR schedulers
             recent_kls = []
 
-            # V-trace parameters
-            # noinspection PyArgumentList
-            rho_hat = torch.Tensor([self.cfg.vtrace_rho])
-            # noinspection PyArgumentList
-            c_hat = torch.Tensor([self.cfg.vtrace_c])
-
-            clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
-            # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
-            clip_ratio_low = 1.0 / clip_ratio_high
-
-            clip_value = self.cfg.ppo_clip_value
-            gamma = self.cfg.gamma
-            recurrence = self.cfg.recurrence
-
             if self.cfg.with_vtrace:
                 assert (
-                    recurrence == self.cfg.rollout and recurrence > 1
+                    self.cfg.recurrence == self.cfg.rollout and self.cfg.recurrence > 1
                 ), "V-trace requires to recurrence and rollout to be equal"
 
             num_sgd_steps = 0
-            stats_and_summaries = None
+            stats_and_summaries: Optional[AttrDict] = None
 
             # When it is time to record train summaries, we randomly sample epoch/batch for which the summaries are
             # collected to get equal representation from different stages of training.
@@ -570,7 +633,7 @@ class Learner(StoppableEventLoopObject, Configurable):
                 minibatches = self._get_minibatches(batch_size, experience_size)
 
             for batch_num in range(len(minibatches)):
-                with timing.add_time("minibatch_init"):
+                with torch.no_grad(), timing.add_time("minibatch_init"):
                     indices = minibatches[batch_num]
 
                     # current minibatch consisting of short trajectory segments with length == recurrence
@@ -579,132 +642,25 @@ class Learner(StoppableEventLoopObject, Configurable):
                     # enable syntactic sugar that allows us to access dict's keys as object attributes
                     mb = AttrDict(mb)
 
-                # calculate policy head outside of recurrent loop
-                with timing.add_time("forward_head"):
-                    head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
+                with timing.add_time("calculate_losses"):
+                    (
+                        action_distribution,
+                        policy_loss,
+                        exploration_loss,
+                        kl_old,
+                        kl_loss,
+                        value_loss,
+                        loss_locals,
+                    ) = self._calculate_losses(mb, num_invalids)
 
-                # initial rnn states
-                with timing.add_time("bptt_initial"):
-                    if self.cfg.use_rnn:
-                        head_output_seq, rnn_states, inverted_select_inds = build_rnn_inputs(
-                            head_outputs,
-                            mb.dones_cpu,
-                            mb.rnn_states,
-                            recurrence,
-                        )
-                    else:
-                        rnn_states = mb.rnn_states[::recurrence]
-
-                # calculate RNN outputs for each timestep in a loop
-                with timing.add_time("bptt"):
-                    if self.cfg.use_rnn:
-                        with timing.add_time("bptt_forward_core"):
-                            core_output_seq, _ = self.actor_critic.forward_core(head_output_seq, rnn_states)
-                        core_outputs = build_core_out_from_seq(core_output_seq, inverted_select_inds)
-                    else:
-                        core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
-
-                num_trajectories = head_outputs.size(0) // recurrence
-
-                with timing.add_time("tail"):
-                    assert core_outputs.shape[0] == head_outputs.shape[0]
-
-                    # calculate policy tail outside of recurrent loop
-                    result = self.actor_critic.forward_tail(core_outputs, sample_actions=False)
-                    action_distribution = self.actor_critic.action_distribution()
-                    log_prob_actions = action_distribution.log_prob(mb.actions)
-                    ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
-
-                    # super large/small values can cause numerical problems and are probably noise anyway
-                    ratio = torch.clamp(ratio, 0.05, 20.0)
-
-                    values = result["values"].squeeze()
-
-                with torch.no_grad():  # these computations are not the part of the computation graph
-                    # ignore experience from other agents (i.e. on episode boundary) and from inactive agents
-                    valids = mb.policy_id == self.policy_id
-
-                    # ignore experience that was older than the threshold even before training started
-                    valids = valids & (policy_version_before_train - mb.policy_version < self.cfg.max_policy_lag)
-
-                    if self.cfg.with_vtrace:
-                        with timing.add_time("vtrace"):
-                            ratios_cpu = ratio.cpu()
-                            values_cpu = values.cpu()
-                            rewards_cpu = mb.rewards_cpu
-                            dones_cpu = mb.dones_cpu
-
-                            vtrace_rho = torch.min(rho_hat, ratios_cpu)
-                            vtrace_c = torch.min(c_hat, ratios_cpu)
-
-                            vs = torch.zeros((num_trajectories * recurrence))
-                            adv = torch.zeros((num_trajectories * recurrence))
-
-                            next_values = (
-                                values_cpu[recurrence - 1 :: recurrence] - rewards_cpu[recurrence - 1 :: recurrence]
-                            ) / gamma
-                            next_vs = next_values
-
-                            for i in reversed(range(self.cfg.recurrence)):
-                                rewards = rewards_cpu[i::recurrence]
-                                dones = dones_cpu[i::recurrence]
-                                not_done = 1.0 - dones
-                                not_done_times_gamma = not_done * gamma
-
-                                curr_values = values_cpu[i::recurrence]
-                                curr_vtrace_rho = vtrace_rho[i::recurrence]
-                                curr_vtrace_c = vtrace_c[i::recurrence]
-
-                                delta_s = curr_vtrace_rho * (rewards + not_done_times_gamma * next_values - curr_values)
-                                adv[i::recurrence] = curr_vtrace_rho * (
-                                    rewards + not_done_times_gamma * next_vs - curr_values
-                                )
-                                next_vs = (
-                                    curr_values
-                                    + delta_s
-                                    + not_done_times_gamma * curr_vtrace_c * (next_vs - next_values)
-                                )
-                                vs[i::recurrence] = next_vs
-
-                                next_values = curr_values
-
-                        targets = vs
-                    else:
-                        # using regular GAE
-                        adv = mb.advantages
-                        targets = mb.returns
-
-                    # TODO: this should take validity masks into account!
-                    adv_std, adv_mean = torch.std_mean(adv, dim=-1)
-
-                    adv = (adv - adv_mean) / max(1e-7, adv_std.item())  # normalize advantage
-                    adv = adv.to(self.device)  # TODO: is this redundant now?
-
-                with timing.add_time("losses"):
-                    policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)
-                    exploration_loss = self.exploration_loss_func(action_distribution, valids)
-                    kl_old, kl_loss = self.kl_loss_func(
-                        self.actor_critic.action_space, mb.action_logits, action_distribution, valids
-                    )
-
+                with timing.add_time("losses_postprocess"):
                     actor_loss = policy_loss + exploration_loss + kl_loss
-                    epoch_actor_losses.append(actor_loss.item())
-
-                    targets = targets.to(self.device)
-                    old_values = mb.values
-                    # noinspection PyTypeChecker
-                    value_loss = self._value_loss(values, old_values, targets, clip_value, valids)
+                    epoch_actor_losses[batch_num] = actor_loss
                     critic_loss = value_loss
-
                     loss = actor_loss + critic_loss
 
                     high_loss = 30.0
-                    if (
-                        abs(to_scalar(policy_loss)) > high_loss
-                        or abs(to_scalar(value_loss)) > high_loss
-                        or abs(to_scalar(exploration_loss)) > high_loss
-                        or abs(to_scalar(kl_loss)) > high_loss
-                    ):
+                    if torch.abs(loss) > high_loss:
                         log.warning(
                             "High loss value: l:%.4f pl:%.4f vl:%.4f exp_l:%.4f kl_l:%.4f (recommended to adjust the --reward_scale parameter)",
                             to_scalar(loss),
@@ -726,6 +682,8 @@ class Learner(StoppableEventLoopObject, Configurable):
                             mb.action_logits,
                         )
                         kl_old = action_distribution.kl_divergence(old_action_distribution)
+                        kl_old = masked_select(kl_old, mb.valids, num_invalids)
+
                     kl_old_mean = kl_old.mean().item()
                     recent_kls.append(kl_old_mean)
 
@@ -743,6 +701,14 @@ class Learner(StoppableEventLoopObject, Configurable):
 
                     curr_policy_version = self.train_step  # policy version before the weight update
 
+                    actual_lr = self.curr_lr
+                    if num_invalids > 0:
+                        # if we have masked (invalid) data we should reduce the learning rate accordingly
+                        # this prevents a situation where most of the data in the minibatch is invalid
+                        # and we end up doing SGD with super noisy gradients
+                        actual_lr = self.curr_lr * (experience_size - num_invalids) / experience_size
+                    self._apply_lr(actual_lr)
+
                     with self.param_server.policy_lock:
                         self.optimizer.step()
 
@@ -752,24 +718,26 @@ class Learner(StoppableEventLoopObject, Configurable):
                     self._after_optimizer_step()
 
                     if self.lr_scheduler.invoke_after_each_minibatch():
-                        self._update_lr(self.lr_scheduler.update(self._curr_lr(), recent_kls))
+                        self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
 
                     # collect and report summaries
                     should_record_summaries = with_summaries
                     should_record_summaries &= epoch == summaries_epoch and batch_num == summaries_batch
                     should_record_summaries |= force_summaries
                     if should_record_summaries:
-                        stats_and_summaries = self._record_summaries(AttrDict(locals()))
+                        # hacky way to collect all of the intermediate variables for summaries
+                        summary_vars = {**loss_locals, **locals()}
+                        stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
                         force_summaries = False
 
             # end of an epoch
             if self.lr_scheduler.invoke_after_each_epoch():
-                self._update_lr(self.lr_scheduler.update(self._curr_lr(), recent_kls))
+                self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
 
             # this will force policy update on the inference worker (policy worker)
-            self.buffer_mgr.policy_versions[self.policy_id] = self.train_step
+            self.policy_versions_tensor[self.policy_id] = self.train_step
 
-            new_epoch_actor_loss = np.mean(epoch_actor_losses)
+            new_epoch_actor_loss = epoch_actor_losses.mean().item()
             loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
             if loss_delta_abs < early_stopping_tolerance:
                 early_stop = True
@@ -782,22 +750,21 @@ class Learner(StoppableEventLoopObject, Configurable):
                 break
 
             prev_epoch_actor_loss = new_epoch_actor_loss
-            epoch_actor_losses = []
 
         return stats_and_summaries
 
-    # noinspection PyUnresolvedReferences
-    def _record_summaries(self, train_loop_vars):
+    def _record_summaries(self, train_loop_vars) -> AttrDict:
         var = train_loop_vars
 
         self.last_summary_time = time.time()
         stats = AttrDict()
 
-        stats.lr = self._curr_lr()
+        stats.lr = self.curr_lr
+        stats.actual_lr = train_loop_vars.actual_lr  # potentially scaled because of masked data
 
         stats.update(self.actor_critic.summaries())
 
-        stats.valids_fraction = var.valids.float().mean()
+        stats.valids_fraction = var.mb.valids.float().mean()
         stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
 
         grad_norm = (
@@ -822,9 +789,10 @@ class Learner(StoppableEventLoopObject, Configurable):
 
         if var.epoch == self.cfg.num_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
             # we collect these stats only for the last PPO batch, or every time if we're only doing one batch, IMPALA-style
-            ratio_mean = torch.abs(1.0 - var.ratio).mean().detach()
-            ratio_min = var.ratio.min().detach()
-            ratio_max = var.ratio.max().detach()
+            valid_ratios = masked_select(var.ratio, var.mb.valids, var.num_invalids)
+            ratio_mean = torch.abs(1.0 - valid_ratios).mean().detach()
+            ratio_min = valid_ratios.min().detach()
+            ratio_max = valid_ratios.max().detach()
             # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
 
             value_delta = torch.abs(var.values - var.old_values)
@@ -835,7 +803,7 @@ class Learner(StoppableEventLoopObject, Configurable):
             stats.value_delta = value_delta_avg
             stats.value_delta_max = value_delta_max
             stats.fraction_clipped = (
-                (var.ratio < var.clip_ratio_low).float() + (var.ratio > var.clip_ratio_high).float()
+                (valid_ratios < var.clip_ratio_low).float() + (valid_ratios > var.clip_ratio_high).float()
             ).mean()
             stats.ratio_mean = ratio_mean
             stats.ratio_min = ratio_min
@@ -858,26 +826,47 @@ class Learner(StoppableEventLoopObject, Configurable):
 
         return stats
 
-    def _prepare_batch(self, batch_idx: int):
+    def _prepare_and_normalize_obs(self, obs: TensorDict) -> TensorDict:
+        og_shape = dict()
+
+        # assuming obs is a flat dict, collapse time and envs dimensions into a single batch dimension
+        for key, x in obs.items():
+            og_shape[key] = x.shape
+            obs[key] = x.view((x.shape[0] * x.shape[1],) + x.shape[2:])
+
+        normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
+
+        # restore original shape
+        for key, x in normalized_obs.items():
+            normalized_obs[key] = x.view(og_shape[key])
+
+        return normalized_obs
+
+    def _prepare_batch(self, batch: TensorDict) -> Tuple[TensorDict, int, int]:
         with torch.no_grad():
             # create a shallow copy so we can modify the dictionary
             # we still reference the same buffers though
-            buff = copy.copy(self.batcher.training_batches[batch_idx])
+            buff = shallow_recursive_copy(batch)
 
-            if (buff["actions"] == -42).nonzero().shape[0] > 0:
-                # TODO: remove this after we test everything
-                # currently this can happen in envs with inactive agents
-                log.warning("Found invalid actions in batch %d", batch_idx)
-                raise ValueError("Found invalid actions in batch")
+            # ignore experience from other agents (i.e. on episode boundary) and from inactive agents
+            valids: Tensor = buff["policy_id"] == self.policy_id
+            # ignore experience that was older than the threshold even before training started
+            curr_policy_version: int = self.train_step
+            buff["valids"][:, :-1] = valids & (curr_policy_version - buff["policy_version"] < self.cfg.max_policy_lag)
+            # for last T+1 step, we want to use the validity of the previous step
+            buff["valids"][:, -1] = buff["valids"][:, -2]
 
-            for k, v in buff["obs"].items():
-                device, dtype = self.actor_critic.device_and_type_for_input_tensor(k)
-                if device != v.device or dtype != v.dtype:
-                    buff["obs"][k] = v.detach().to(device, copy=True).type(dtype)
+            # ensure we're in train mode so that normalization statistics are updated
+            if not self.actor_critic.training:
+                self.actor_critic.train()
+
+            # hold the lock while we alter the state of the normalizer since they can be used in other processes too
+            with self.param_server.policy_lock:
+                buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
+            del buff["obs"]  # don't need non-normalized obs anymore
 
             # calculate estimated value for the next step (T+1)
-            self.actor_critic.eval()
-            normalized_last_obs = self.actor_critic.normalize_obs(buff["obs"][:, -1])
+            normalized_last_obs = buff["normalized_obs"][:, -1]
             next_values = self.actor_critic(normalized_last_obs, buff["rnn_states"][:, -1], values_only=True)["values"]
             buff["values"][:, -1] = next_values
 
@@ -910,75 +899,66 @@ class Learner(StoppableEventLoopObject, Configurable):
                     buff["rewards"],
                     buff["dones"],
                     denormalized_values,
+                    buff["valids"],
                     self.cfg.gamma,
                     self.cfg.gae_lambda,
                 )
                 # here returns are not normalized yet, so we should use denormalized values
-                buff["returns"] = buff["advantages"] + denormalized_values[:, :-1]
+                buff["returns"] = buff["advantages"] + buff["valids"][:, :-1] * denormalized_values[:, :-1]
 
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
-            for key in ["obs", "rnn_states", "values"]:
+            for key in ["normalized_obs", "rnn_states", "values", "valids"]:
                 buff[key] = buff[key][:, :-1]
 
-            experience_size = self.cfg.batch_size * self.cfg.num_batches_per_epoch
-
+            dataset_size = buff["actions"].shape[0] * buff["actions"].shape[1]
             for d, k, v in iterate_recursively(buff):
-                # collapse first two dimensions
-                shape = (experience_size,) + tuple(v.shape[2:])
-                d[k] = v.reshape(shape)
+                # collapse first two dimensions (batch and time) into a single dimension
+                d[k] = v.reshape((dataset_size,) + tuple(v.shape[2:]))
 
             buff["dones_cpu"] = buff["dones"].to("cpu", copy=True, dtype=torch.float, non_blocking=True)
             buff["rewards_cpu"] = buff["rewards"].to("cpu", copy=True, dtype=torch.float, non_blocking=True)
 
-            # normalize obs and record data statistics (hence the "train" mode)
-            self.actor_critic.train()
+            # return normalization parameters are only used on the learner, no need to lock the mutex
+            if self.cfg.normalize_returns:
+                self.actor_critic.returns_normalizer(buff["returns"])  # in-place
 
-            # hold the lock while we alter the state of the normalizers since they can be used in other processes too
-            with self.param_server.policy_lock:
-                buff["normalized_obs"] = self.actor_critic.normalize_obs(buff["obs"])
-                if self.cfg.normalize_returns:
-                    self.actor_critic.returns_normalizer(buff["returns"])  # in-place
+            num_invalids = dataset_size - buff["valids"].sum().item()
+            if num_invalids > 0:
+                invalid_fraction = num_invalids / dataset_size
+                if invalid_fraction > 0.5:
+                    log.warning(f"{self.policy_id=} batch has {invalid_fraction:.2%} of invalid samples")
 
-            del buff["obs"]  # we don't need the regular obs anymore
+                # invalid action values can cause problems when we calculate logprobs
+                # here we set them to 0 just to be safe
+                invalid_indices = (buff["valids"] == 0).nonzero().squeeze()
+                buff["actions"][invalid_indices] = 0
+                # likewise, some invalid values of log_prob_actions can cause NaNs or infs
+                buff["log_prob_actions"][invalid_indices] = -1  # -1 seems like a safe value
 
-            return buff, experience_size
+            return buff, dataset_size, num_invalids
 
-    def train(self, batch_idx: int, timing: Timing) -> Dict:
-        with timing.add_time("prepare_batch"):
-            buff, experience_size = self._prepare_batch(batch_idx)
+    def train(self, batch: TensorDict) -> Optional[Dict]:
+        with self.timing.add_time("prepare_batch"):
+            buff, experience_size, num_invalids = self._prepare_batch(batch)
 
-        with timing.add_time("train"):
-            train_stats = self._train(buff, self.cfg.batch_size, experience_size, timing)
-
-        # multiply the number of samples by frameskip so that FPS metrics reflect the number
-        # of environment steps actually simulated
-        if self.cfg.summaries_use_frameskip:
-            self.env_steps += experience_size * self.env_info.frameskip
+        if num_invalids >= experience_size:
+            log.error(f"Learner {self.policy_id=} received an entire batch of invalid data, skipping...")
+            return None
         else:
-            self.env_steps += experience_size
+            with self.timing.add_time("train"):
+                train_stats = self._train(buff, self.cfg.batch_size, experience_size, num_invalids)
 
-        stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
-        if train_stats is not None:
-            stats[TRAIN_STATS] = train_stats
-            stats[STATS_KEY] = memory_stats("learner", self.device)
+            # multiply the number of samples by frameskip so that FPS metrics reflect the number
+            # of environment steps actually simulated
+            if self.cfg.summaries_use_frameskip:
+                self.env_steps += experience_size * self.env_info.frameskip
+            else:
+                self.env_steps += experience_size
 
-        return stats
+            stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
+            if train_stats is not None:
+                if train_stats is not None:
+                    stats[TRAIN_STATS] = train_stats
+                stats[STATS_KEY] = memory_stats("learner", self.device)
 
-    def on_new_training_batch(self, batch_idx: int):
-        stats = self.train(batch_idx, self.timing)
-        self.training_batch_released.emit(batch_idx)
-        self.report_msg.emit(stats)
-
-        self.finished_training_iteration.emit()
-
-    def on_stop(self, *args):
-        self.save()
-        log.debug(f"Stopping {self.object_id}...")
-
-        if not self.cfg.serial_mode:
-            self.join_batcher_thread()
-
-        self.stop.emit(self.object_id, {self.object_id: self.timing})
-
-        super().on_stop(*args)
-        del self.actor_critic
+            return stats

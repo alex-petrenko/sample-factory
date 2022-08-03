@@ -5,7 +5,7 @@ import os
 import time
 from collections import deque
 from queue import Empty
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import psutil
@@ -23,6 +23,7 @@ from sample_factory.algo.utils.misc import (
     memory_stats,
 )
 from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
+from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
@@ -32,8 +33,11 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.dicts import dict_of_lists_append_idx
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import Device, MpQueue, PolicyID
+from sample_factory.utils.typing import Device, InitModelData, MpQueue, PolicyID
 from sample_factory.utils.utils import debug_log_every_n, log
+
+AdvanceRolloutSignals = Dict[int, List[Tuple[int, PolicyID]]]
+PrepareOutputsFunc = Callable[[int, TensorDict, List], AdvanceRolloutSignals]
 
 
 def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWorker):
@@ -119,10 +123,12 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
         # behavior configuration depending on whether we're in batched or non-batched sampling regime
         if cfg.batched_sampling:
             self._batch_func = self._batch_slices
-            self._store_and_enqueue_policy_outputs_func = self._store_and_enqueue_policy_outputs_batched
+            prepare_policy_outputs = self._prepare_policy_outputs_batched
         else:
             self._batch_func = self._batch_individual_steps
-            self._store_and_enqueue_policy_outputs_func = self._store_and_enqueue_policy_outputs_non_batched
+            prepare_policy_outputs = self._prepare_policy_outputs_non_batched
+
+        self._prepare_policy_outputs_func: PrepareOutputsFunc = prepare_policy_outputs
 
         self.is_initialized = False
 
@@ -134,15 +140,21 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
     def report_msg(self):
         ...
 
-    def init(self, initial_model_state: Optional[Tuple[Any, torch.device, int]]):
+    def init(self, init_model_data: Optional[InitModelData]):
+        if self.is_initialized:
+            return
+
         if "cpu" in self.traj_tensors:
             self.traj_tensors["cpu"] = to_numpy(self.traj_tensors["cpu"])
             self.policy_output_tensors["cpu"] = to_numpy(self.policy_output_tensors["cpu"])
 
         state_dict = None
         policy_version = 0
-        if initial_model_state is not None:
-            state_dict, self.device, policy_version = initial_model_state
+        if init_model_data is not None:
+            policy_id, state_dict, self.device, policy_version = init_model_data
+            if policy_id != self.policy_id:
+                return
+
         self.param_client.on_weights_initialized(state_dict, self.device, policy_version)
 
         # we can create and connect Timers and EventLoopObjects here because they all interact within one loop
@@ -152,7 +164,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
         self.report_timer = Timer(self.event_loop, 3.0)
         self.report_timer.timeout.connect(self._report_stats)
 
-        self.cache_cleanup_timer = Timer(self.event_loop, 0.1)
+        self.cache_cleanup_timer = Timer(self.event_loop, 0.5)
         if not self.cfg.benchmark:
             self.cache_cleanup_timer.timeout.connect(self._cache_cleanup)
 
@@ -162,11 +174,11 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
         self.is_initialized = True
 
     def should_stop_experience_collection(self):
-        debug_log_every_n(20, f"{self.object_id}: stopping experience collection")
+        debug_log_every_n(50, f"{self.object_id}: stopping experience collection")
         self.inference_loop.stop()
 
     def should_resume_experience_collection(self):
-        debug_log_every_n(20, f"{self.object_id}: resuming experience collection")
+        debug_log_every_n(50, f"{self.object_id}: resuming experience collection")
         self.inference_loop.start()
 
     def _batch_slices(self, timing):
@@ -221,8 +233,10 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
             if not policy_output.shape:
                 policy_output.unsqueeze_(-1)
 
-    def _store_and_enqueue_policy_outputs_batched(self, num_samples, policy_outputs, requests, timing) -> Set:
-        with timing.add_time("save_outputs"):
+    def _prepare_policy_outputs_batched(
+        self, num_samples: int, policy_outputs: TensorDict, requests: List
+    ) -> AdvanceRolloutSignals:
+        with self.timing.add_time("save_outputs"):
             # gotta unsqueeze some 0-dim tensors
             if num_samples <= 1:
                 self._unsqueeze_0dim_tensors(policy_outputs)
@@ -241,12 +255,22 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
                 ]
                 ofs += samples_per_request
 
-        outputs_ready = set((actor_idx, split_idx) for actor_idx, split_idx, _, _ in requests)
-        return outputs_ready
+        signals_to_send: AdvanceRolloutSignals = dict()
+        for actor_idx, split_idx, _, _ in requests:
+            payload = (split_idx, self.policy_id)
+            if actor_idx in signals_to_send:
+                signals_to_send[actor_idx].append(payload)
+            else:
+                signals_to_send[actor_idx] = [payload]
 
-    def _store_and_enqueue_policy_outputs_non_batched(self, _num_samples, policy_outputs, requests, timing):
+        return signals_to_send
+
+    def _prepare_policy_outputs_non_batched(
+        self, _num_samples: int, policy_outputs: TensorDict, requests: List
+    ) -> AdvanceRolloutSignals:
         # TODO: respect sampling device instead of just dumping everything on cpu
         device = "cpu"
+        timing = self.timing
 
         with timing.add_time("to_cpu"):
             for key, output_value in policy_outputs.items():
@@ -263,19 +287,22 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
 
             output_tensors = torch.cat(output_tensors, dim=1)
 
-            outputs_ready = set()
+            signals_to_send: AdvanceRolloutSignals = dict()
             output_indices = []
             for request in requests:
                 actor_idx, split_idx, request_data, device = request
                 for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
                     output_indices.append([actor_idx, split_idx, env_idx, agent_idx])
 
-                outputs_ready.add((actor_idx, split_idx))
+                payload = (split_idx, self.policy_id)
+                if actor_idx in signals_to_send:
+                    signals_to_send[actor_idx].append(payload)
+                else:
+                    signals_to_send[actor_idx] = [payload]
 
             output_indices = tuple(np.array(output_indices).T)
             self.policy_output_tensors[device][output_indices] = output_tensors.numpy()
-
-            return outputs_ready
+            return signals_to_send
 
     def _handle_policy_steps(self, timing):
         with inference_context(self.cfg.serial_mode):
@@ -283,30 +310,23 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
             num_samples = rnn_states.shape[0]
             self.total_num_samples += num_samples
 
-            with timing.add_time("obs_to_device"):
+            with timing.add_time("obs_to_device_normalize"):
                 actor_critic = self.param_client.actor_critic
                 if actor_critic.training:
                     actor_critic.eval()  # need to call this because we can be in serial mode
 
-                for key, x in obs.items():
-                    device, dtype = actor_critic.device_and_type_for_input_tensor(key)
-                    obs[key] = ensure_torch_tensor(x).to(device).type(dtype)
+                normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
                 rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
-
-            with self.timing.add_time("norm"):
-                normalized_obs = actor_critic.normalize_obs(obs)
 
             with timing.add_time("forward"):
                 policy_outputs = actor_critic(normalized_obs, rnn_states)
                 policy_outputs["policy_version"] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
 
-            outputs_ready = self._store_and_enqueue_policy_outputs_func(
-                num_samples, policy_outputs, self.requests, timing
-            )
+            signals_to_send = self._prepare_policy_outputs_func(num_samples, policy_outputs, self.requests)
 
             with timing.add_time("send_messages"):
-                for actor_idx, split_idx in outputs_ready:
-                    self.emit(advance_rollouts_signal(actor_idx), (split_idx, self.policy_id))
+                for actor_idx, data in signals_to_send.items():
+                    self.emit_many(advance_rollouts_signal(actor_idx), data)
 
             self.requests = []
 

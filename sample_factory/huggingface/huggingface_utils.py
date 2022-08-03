@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 from huggingface_hub import HfApi, Repository, repocard, upload_file, upload_folder
 
-from sample_factory.utils.utils import experiment_dir, log, project_tmp_dir
+from sample_factory.utils.utils import log, project_tmp_dir
+
+MIN_FRAME_SIZE = 180
 
 MIN_FRAME_SIZE = 180
 
