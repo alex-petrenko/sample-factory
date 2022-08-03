@@ -595,6 +595,8 @@ class Runner(EventLoopObject, Configurable):
                 status = ExperimentStatus.FAILURE
 
         log.info(self.timing)
+        if self.total_env_steps_since_resume is None:
+            self.total_env_steps_since_resume = 0
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info("Collected %r, FPS: %.1f", self.env_steps, fps)
         return status

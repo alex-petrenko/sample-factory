@@ -71,6 +71,7 @@ def run_test_env(
     cfg.max_num_frames = 1000
     cfg.no_render = True
     status, avg_reward = enjoy(cfg)
+    log.debug(f"Test reward: {avg_reward:.4f}")
 
     assert isdir(directory)
     shutil.rmtree(directory, ignore_errors=True)

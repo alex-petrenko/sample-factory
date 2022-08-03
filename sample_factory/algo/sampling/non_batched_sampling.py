@@ -83,10 +83,6 @@ class ActorState:
         # i.e. dead or otherwise disabled. Experience from such agents will be ignored.
         self.is_active = True
 
-        # This flag is reset at the beginning of every rollout. If the agent was inactive during the entire rollout
-        # then it is ignored and no experience is sent to the learner.
-        self.has_rollout_data = False
-
         self.needs_buffer = True  # whether this actor requires a new trajectory buffer
 
         self.num_trajectories = 0
@@ -197,8 +193,6 @@ class ActorState:
         policy_id = -1 if not self.is_active else self.curr_policy_id
         self.curr_traj_buffer["policy_id"][rollout_step] = policy_id
 
-        self.has_rollout_data = self.has_rollout_data or self.is_active
-
         # multiply by frameskip to get the episode lenghts matching the actual number of simulated steps
         self.last_episode_duration += self.env_info.frameskip
 
@@ -232,12 +226,6 @@ class ActorState:
         :return: dictionary with auxiliary information about the trajectory
         """
 
-        if not self.has_rollout_data:
-            # this agent was inactive the entire rollout, send no trajectories to the learners
-            return []
-
-        self.has_rollout_data = False
-
         # Saving obs and hidden states for the step AFTER the last step in the current rollout.
         # We're going to need them later when we calculate next step value estimates.
         last_step_data = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
@@ -247,7 +235,7 @@ class ActorState:
         # this trajectory should be sent to two learners, one for the original policy id, one for the new one.
         # The part of the experience that belongs to a different policy will be ignored on the learner.
         trajectories = []
-        buffers_used = set()
+        policy_buffers: Dict[PolicyID, int] = dict()
 
         unique_policies = np.unique(self.curr_traj_buffer["policy_id"])
         if len(unique_policies) > 1:
@@ -255,14 +243,21 @@ class ActorState:
                 1000, f"Multiple policies in trajectory buffer: {unique_policies} (-1 means inactive agent)"
             )
 
-        for policy_id in np.unique(self.curr_traj_buffer["policy_id"]):
+        for policy_id in unique_policies:
             policy_id = int(policy_id)
             if policy_id == -1:
-                # -1 is a policy that does not exist, used to mark inactive agents not controlled by any policy
+                # The entire trajectory belongs to an inactive agent, we send it to the current policy learner
+                # the ideal solution would be to ditch this rollout entirely but this can mess with the
+                # sync mode algorithm for counting how many trajectories we should advance at a time.
+                # Learner will carefully mask the inactive (invalid) data so it should be okay to do this.
+                policy_id = self.curr_policy_id
+
+            if policy_id in policy_buffers:
+                # we already created a request for this policy
                 continue
 
             traj_buffer_idx = self.curr_traj_buffer_idx
-            if traj_buffer_idx in buffers_used:
+            if traj_buffer_idx in policy_buffers.values():
                 # This rollout needs to be sent to multiple learners, i.e. because the policy changed in the middle
                 # of the rollout. If we use the same shared buffer on multiple learners, we need some mechanism
                 # to guarantee that this buffer will only be released once. It seems easier to just copy all data to
@@ -279,14 +274,14 @@ class ActorState:
                 buffer = self.traj_tensors[traj_buffer_idx]
                 buffer[:] = self.curr_traj_buffer  # copy TensorDict data recursively
 
-            buffers_used.add(traj_buffer_idx)
+            policy_buffers[policy_id] = traj_buffer_idx
 
             t_id = f"{policy_id}_{self.worker_idx}_{self.split_idx}_{self.env_idx}_{self.agent_idx}_{self.num_trajectories}"
             traj_dict = dict(t_id=t_id, length=rollout_step, policy_id=policy_id, traj_buffer_idx=traj_buffer_idx)
             trajectories.append(traj_dict)
             self.num_trajectories += 1
 
-        assert buffers_used, "We ought to send our buffer to at least one learner"
+        assert len(policy_buffers), "We ought to send our buffer to at least one learner"
         self.needs_buffer = True
 
         return trajectories
@@ -624,7 +619,6 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         :return: same as reset(), return a set of requests for policy workers, asking them to generate actions for
         the next env step.
         """
-
         with timing.add_time("save_policy_outputs"):
             all_actors_ready = self._process_policy_outputs(policy_id, timing)
             if not all_actors_ready:

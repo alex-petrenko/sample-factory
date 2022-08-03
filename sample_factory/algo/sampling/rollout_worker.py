@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import psutil
 import torch
@@ -171,6 +171,7 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             # This should only happen in sync mode -- means we completed a sufficient number of rollouts
             # to saturate the learner for one iteration. We will wait for the next iteration to start before
             # we can continue sampling.
+            # log.debug(f"Ran out of remaining rollouts on {runner.worker_idx}-{runner.split_idx}: {self.remaining_rollouts}")
             return
 
         if not runner.update_trajectory_buffers(self.timing):

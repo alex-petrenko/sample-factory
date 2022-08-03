@@ -20,9 +20,10 @@ def run_test_env_multi(train_steps: int, num_workers: int, expected_reward_at_le
 
 class TestExampleMulti:
     @pytest.mark.parametrize("async_rl", [False, True])
-    def test_sanity(self, async_rl: bool):
+    @pytest.mark.parametrize("train_steps", [512])
+    def test_sanity(self, async_rl: bool, train_steps: int):
         run_test_env_multi(
-            train_steps=512,
+            train_steps=train_steps,
             num_workers=1,
             batch_size=128,
             serial_mode=True,
@@ -35,7 +36,7 @@ class TestExampleMulti:
             train_steps=250000,
             num_workers=8,
             batch_size=512,
-            expected_reward_at_least=-2,  # 0 is the best we can do (would be nice to figure out why it does not converge all the way to 0)
+            expected_reward_at_least=-2.5,  # 0 is the best we can do (would be nice to figure out why it does not converge all the way to 0)
             serial_mode=False,
             async_rl=True,
         )
