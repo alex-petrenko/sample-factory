@@ -17,7 +17,7 @@ from sample_factory.utils.utils import AttrDict
 from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 
 
-def _learner_losses_res(learner: Learner, dataset: AttrDict) -> AttrDict:
+def _learner_losses_res(learner: Learner, dataset: AttrDict, num_invalids: int) -> AttrDict:
     # noinspection PyProtectedMember
     (
         action_distribution,
@@ -27,7 +27,7 @@ def _learner_losses_res(learner: Learner, dataset: AttrDict) -> AttrDict:
         kl_loss,
         value_loss,
         loss_locals,
-    ) = learner._calculate_losses(dataset)
+    ) = learner._calculate_losses(dataset, num_invalids)
 
     return AttrDict(
         policy_loss=policy_loss,
@@ -98,7 +98,7 @@ class TestValidMasks:
         n_iter = 3
         res = prev_res = None
         for _ in range(n_iter):
-            res = _learner_losses_res(learner, dataset)
+            res = _learner_losses_res(learner, dataset, invalids)
             if prev_res is not None:
                 for k in res.keys():
                     assert torch.allclose(res[k], prev_res[k])
@@ -158,7 +158,7 @@ class TestValidMasks:
             for key in ["returns", "advantages"]:
                 assert torch.allclose(dataset[key][0], invalid_dataset[key][0], atol=0.1, rtol=0.1)
 
-        invalid_res = _learner_losses_res(learner, invalid_dataset)
+        invalid_res = _learner_losses_res(learner, invalid_dataset, invalids)
         atol, rtol = 0.01, 0.01
         assert torch.allclose(res.policy_loss, invalid_res.policy_loss, atol=atol, rtol=rtol)
         assert torch.allclose(res.exploration_loss, invalid_res.exploration_loss, atol=atol, rtol=rtol)
