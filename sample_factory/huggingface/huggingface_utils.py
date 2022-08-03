@@ -8,8 +8,6 @@ from sample_factory.utils.utils import log, project_tmp_dir
 
 MIN_FRAME_SIZE = 180
 
-MIN_FRAME_SIZE = 180
-
 
 def generate_replay_video(dir_path: str, frames: list, fps: int):
     tmp_name = os.path.join(project_tmp_dir(), "replay.mp4")
