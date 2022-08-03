@@ -42,3 +42,11 @@ def to_scalar(value):
         return value.item()
     else:
         return value
+
+
+@torch.jit.script
+def masked_select(x: torch.Tensor, mask: torch.Tensor, num_non_mask: int) -> torch.Tensor:
+    if num_non_mask == 0:
+        return x
+    else:
+        return torch.masked_select(x, mask)

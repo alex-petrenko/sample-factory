@@ -21,7 +21,7 @@ from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages, prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
-from sample_factory.algo.utils.torch_utils import to_scalar
+from sample_factory.algo.utils.torch_utils import masked_select, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
 from sample_factory.utils.decay import LinearDecay
@@ -172,7 +172,7 @@ class Learner(Configurable):
 
     def init(self) -> InitModelData:
         if self.cfg.exploration_loss_coeff == 0.0:
-            self.exploration_loss_func = lambda action_distr, valids: 0.0
+            self.exploration_loss_func = lambda action_distr, valids, num_invalids: 0.0
         elif self.cfg.exploration_loss == "entropy":
             self.exploration_loss_func = self._entropy_exploration_loss
         elif self.cfg.exploration_loss == "symmetric_kl":
@@ -186,7 +186,7 @@ class Learner(Configurable):
                     "WARNING! It is generally recommended to enable Fixed KL loss (https://arxiv.org/pdf/1707.06347.pdf) for continuous action tasks to avoid potential numerical issues. "
                     "I.e. set --kl_loss_coeff=0.1"
                 )
-            self.kl_loss_func = lambda action_space, action_logits, distribution, valids: (None, 0.0)
+            self.kl_loss_func = lambda action_space, action_logits, distribution, valids, num_invalids: (None, 0.0)
         else:
             self.kl_loss_func = self._kl_loss
 
@@ -367,49 +367,57 @@ class Learner(Configurable):
             self._save_impl("best", name_suffix, 1, verbose=False)
 
     @staticmethod
-    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids):
+    def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids: int):
         clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
         loss_unclipped = ratio * adv
         loss_clipped = clipped_ratio * adv
         loss = torch.min(loss_unclipped, loss_clipped)
-        loss = torch.masked_select(loss, valids)
+        loss = masked_select(loss, valids, num_invalids)
         loss = -loss.mean()
 
         return loss
 
     def _value_loss(
-        self, new_values: Tensor, old_values: Tensor, target: Tensor, clip_value: float, valids: Tensor
+        self,
+        new_values: Tensor,
+        old_values: Tensor,
+        target: Tensor,
+        clip_value: float,
+        valids: Tensor,
+        num_invalids: int,
     ) -> Tensor:
         value_clipped = old_values + torch.clamp(new_values - old_values, -clip_value, clip_value)
         value_original_loss = (new_values - target).pow(2)
         value_clipped_loss = (value_clipped - target).pow(2)
         value_loss = torch.max(value_original_loss, value_clipped_loss)
-        value_loss = torch.masked_select(value_loss, valids)
+        value_loss = masked_select(value_loss, valids, num_invalids)
         value_loss = value_loss.mean()
 
         value_loss *= self.cfg.value_loss_coeff
 
         return value_loss
 
-    def _kl_loss(self, action_space, action_logits, action_distribution, valids) -> Tuple[Tensor, Tensor]:
+    def _kl_loss(
+        self, action_space, action_logits, action_distribution, valids, num_invalids: int
+    ) -> Tuple[Tensor, Tensor]:
         old_action_distribution = get_action_distribution(action_space, action_logits)
         kl_old = action_distribution.kl_divergence(old_action_distribution)
-        kl_old = torch.masked_select(kl_old, valids)
+        kl_old = masked_select(kl_old, valids, num_invalids)
         kl_loss = kl_old.mean()
 
         kl_loss *= self.cfg.kl_loss_coeff
 
         return kl_old, kl_loss
 
-    def _entropy_exploration_loss(self, action_distribution, valids):
+    def _entropy_exploration_loss(self, action_distribution, valids, num_invalids: int) -> Tensor:
         entropy = action_distribution.entropy()
-        entropy = torch.masked_select(entropy, valids)
+        entropy = masked_select(entropy, valids, num_invalids)
         entropy_loss = -self.cfg.exploration_loss_coeff * entropy.mean()
         return entropy_loss
 
-    def _symmetric_kl_exploration_loss(self, action_distribution, valids):
+    def _symmetric_kl_exploration_loss(self, action_distribution, valids, num_invalids: int) -> Tensor:
         kl_prior = action_distribution.symmetric_kl_with_uniform_prior()
-        kl_prior = torch.masked_select(kl_prior, valids).mean()
+        kl_prior = masked_select(kl_prior, valids, num_invalids).mean()
         if not torch.isfinite(kl_prior):
             kl_prior = torch.zeros(kl_prior.shape)
         kl_prior = torch.clamp(kl_prior, max=30)
@@ -463,17 +471,18 @@ class Learner(Configurable):
         return mb
 
     def _calculate_losses(
-        self, mb: AttrDict
+        self, mb: AttrDict, num_invalids: int
     ) -> Tuple[ActionDistribution, Tensor, Tensor | float, Optional[Tensor], Tensor | float, Tensor, Dict]:
-        recurrence: int = self.cfg.recurrence
+        with torch.no_grad(), self.timing.add_time("losses_init"):
+            recurrence: int = self.cfg.recurrence
 
-        # PPO clipping
-        clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
-        # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
-        clip_ratio_low = 1.0 / clip_ratio_high
-        clip_value = self.cfg.ppo_clip_value
+            # PPO clipping
+            clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
+            # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
+            clip_ratio_low = 1.0 / clip_ratio_high
+            clip_value = self.cfg.ppo_clip_value
 
-        valids = mb.valids
+            valids = mb.valids
 
         # calculate policy head outside of recurrent loop
         with self.timing.add_time("forward_head"):
@@ -519,44 +528,44 @@ class Learner(Configurable):
 
             values = result["values"].squeeze()
 
-        with torch.no_grad():  # these computations are not the part of the computation graph
+        # these computations are not the part of the computation graph
+        with torch.no_grad(), self.timing.add_time("advantages_returns"):
             if self.cfg.with_vtrace:
-                with self.timing.add_time("vtrace"):
-                    # V-trace parameters
-                    rho_hat = torch.Tensor([self.cfg.vtrace_rho])
-                    c_hat = torch.Tensor([self.cfg.vtrace_c])
+                # V-trace parameters
+                rho_hat = torch.Tensor([self.cfg.vtrace_rho])
+                c_hat = torch.Tensor([self.cfg.vtrace_c])
 
-                    ratios_cpu = ratio.cpu()
-                    values_cpu = values.cpu()
-                    rewards_cpu = mb.rewards_cpu
-                    dones_cpu = mb.dones_cpu
+                ratios_cpu = ratio.cpu()
+                values_cpu = values.cpu()
+                rewards_cpu = mb.rewards_cpu
+                dones_cpu = mb.dones_cpu
 
-                    vtrace_rho = torch.min(rho_hat, ratios_cpu)
-                    vtrace_c = torch.min(c_hat, ratios_cpu)
+                vtrace_rho = torch.min(rho_hat, ratios_cpu)
+                vtrace_c = torch.min(c_hat, ratios_cpu)
 
-                    vs = torch.zeros((num_trajectories * recurrence))
-                    adv = torch.zeros((num_trajectories * recurrence))
+                vs = torch.zeros((num_trajectories * recurrence))
+                adv = torch.zeros((num_trajectories * recurrence))
 
-                    next_values = values_cpu[recurrence - 1 :: recurrence] - rewards_cpu[recurrence - 1 :: recurrence]
-                    next_values /= self.cfg.gamma
-                    next_vs = next_values
+                next_values = values_cpu[recurrence - 1 :: recurrence] - rewards_cpu[recurrence - 1 :: recurrence]
+                next_values /= self.cfg.gamma
+                next_vs = next_values
 
-                    for i in reversed(range(self.cfg.recurrence)):
-                        rewards = rewards_cpu[i::recurrence]
-                        dones = dones_cpu[i::recurrence]
-                        not_done = 1.0 - dones
-                        not_done_gamma = not_done * self.cfg.gamma
+                for i in reversed(range(self.cfg.recurrence)):
+                    rewards = rewards_cpu[i::recurrence]
+                    dones = dones_cpu[i::recurrence]
+                    not_done = 1.0 - dones
+                    not_done_gamma = not_done * self.cfg.gamma
 
-                        curr_values = values_cpu[i::recurrence]
-                        curr_vtrace_rho = vtrace_rho[i::recurrence]
-                        curr_vtrace_c = vtrace_c[i::recurrence]
+                    curr_values = values_cpu[i::recurrence]
+                    curr_vtrace_rho = vtrace_rho[i::recurrence]
+                    curr_vtrace_c = vtrace_c[i::recurrence]
 
-                        delta_s = curr_vtrace_rho * (rewards + not_done_gamma * next_values - curr_values)
-                        adv[i::recurrence] = curr_vtrace_rho * (rewards + not_done_gamma * next_vs - curr_values)
-                        next_vs = curr_values + delta_s + not_done_gamma * curr_vtrace_c * (next_vs - next_values)
-                        vs[i::recurrence] = next_vs
+                    delta_s = curr_vtrace_rho * (rewards + not_done_gamma * next_values - curr_values)
+                    adv[i::recurrence] = curr_vtrace_rho * (rewards + not_done_gamma * next_vs - curr_values)
+                    next_vs = curr_values + delta_s + not_done_gamma * curr_vtrace_c * (next_vs - next_values)
+                    vs[i::recurrence] = next_vs
 
-                        next_values = curr_values
+                    next_values = curr_values
 
                 targets = vs.to(self.device)
                 adv = adv.to(self.device)
@@ -565,17 +574,17 @@ class Learner(Configurable):
                 adv = mb.advantages
                 targets = mb.returns
 
-            adv_std, adv_mean = torch.std_mean(torch.masked_select(adv, valids), dim=-1)
-            adv = (adv - adv_mean) / max(1e-7, adv_std.item())  # normalize advantage
+            adv_std, adv_mean = torch.std_mean(masked_select(adv, valids, num_invalids))
+            adv = (adv - adv_mean) / torch.clamp_min(adv_std, 1e-7)  # normalize advantage
 
         with self.timing.add_time("losses"):
-            policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids)
-            exploration_loss = self.exploration_loss_func(action_distribution, valids)
+            policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids)
+            exploration_loss = self.exploration_loss_func(action_distribution, valids, num_invalids)
             kl_old, kl_loss = self.kl_loss_func(
-                self.actor_critic.action_space, mb.action_logits, action_distribution, valids
+                self.actor_critic.action_space, mb.action_logits, action_distribution, valids, num_invalids
             )
             old_values = mb["values"]
-            value_loss = self._value_loss(values, old_values, targets, clip_value, valids)
+            value_loss = self._value_loss(values, old_values, targets, clip_value, valids, num_invalids)
 
         return action_distribution, policy_loss, exploration_loss, kl_old, kl_loss, value_loss, locals()
 
@@ -587,7 +596,7 @@ class Learner(Configurable):
             early_stopping_tolerance = 1e-6
             early_stop = False
             prev_epoch_actor_loss = 1e9
-            epoch_actor_losses = []
+            epoch_actor_losses = torch.empty([self.cfg.num_batches_per_epoch], device=self.device)
 
             # recent mean KL-divergences per minibatch, this used by LR schedulers
             recent_kls = []
@@ -624,7 +633,7 @@ class Learner(Configurable):
                 minibatches = self._get_minibatches(batch_size, experience_size)
 
             for batch_num in range(len(minibatches)):
-                with timing.add_time("minibatch_init"):
+                with torch.no_grad(), timing.add_time("minibatch_init"):
                     indices = minibatches[batch_num]
 
                     # current minibatch consisting of short trajectory segments with length == recurrence
@@ -633,6 +642,7 @@ class Learner(Configurable):
                     # enable syntactic sugar that allows us to access dict's keys as object attributes
                     mb = AttrDict(mb)
 
+                with timing.add_time("calculate_losses"):
                     (
                         action_distribution,
                         policy_loss,
@@ -641,20 +651,16 @@ class Learner(Configurable):
                         kl_loss,
                         value_loss,
                         loss_locals,
-                    ) = self._calculate_losses(mb)
+                    ) = self._calculate_losses(mb, num_invalids)
 
+                with timing.add_time("losses_postprocess"):
                     actor_loss = policy_loss + exploration_loss + kl_loss
-                    epoch_actor_losses.append(actor_loss.item())
+                    epoch_actor_losses[batch_num] = actor_loss
                     critic_loss = value_loss
                     loss = actor_loss + critic_loss
 
                     high_loss = 30.0
-                    if (
-                        abs(to_scalar(policy_loss)) > high_loss
-                        or abs(to_scalar(value_loss)) > high_loss
-                        or abs(to_scalar(exploration_loss)) > high_loss
-                        or abs(to_scalar(kl_loss)) > high_loss
-                    ):
+                    if torch.abs(loss) > high_loss:
                         log.warning(
                             "High loss value: l:%.4f pl:%.4f vl:%.4f exp_l:%.4f kl_l:%.4f (recommended to adjust the --reward_scale parameter)",
                             to_scalar(loss),
@@ -676,7 +682,7 @@ class Learner(Configurable):
                             mb.action_logits,
                         )
                         kl_old = action_distribution.kl_divergence(old_action_distribution)
-                        kl_old = torch.masked_select(kl_old, mb.valids)
+                        kl_old = masked_select(kl_old, mb.valids, num_invalids)
 
                     kl_old_mean = kl_old.mean().item()
                     recent_kls.append(kl_old_mean)
@@ -731,7 +737,7 @@ class Learner(Configurable):
             # this will force policy update on the inference worker (policy worker)
             self.policy_versions_tensor[self.policy_id] = self.train_step
 
-            new_epoch_actor_loss = np.mean(epoch_actor_losses)
+            new_epoch_actor_loss = epoch_actor_losses.mean().item()
             loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
             if loss_delta_abs < early_stopping_tolerance:
                 early_stop = True
@@ -744,7 +750,6 @@ class Learner(Configurable):
                 break
 
             prev_epoch_actor_loss = new_epoch_actor_loss
-            epoch_actor_losses = []
 
         return stats_and_summaries
 
@@ -784,7 +789,7 @@ class Learner(Configurable):
 
         if var.epoch == self.cfg.num_epochs - 1 and var.batch_num == len(var.minibatches) - 1:
             # we collect these stats only for the last PPO batch, or every time if we're only doing one batch, IMPALA-style
-            valid_ratios = torch.masked_select(var.ratio, var.mb.valids)
+            valid_ratios = masked_select(var.ratio, var.mb.valids, var.num_invalids)
             ratio_mean = torch.abs(1.0 - valid_ratios).mean().detach()
             ratio_min = valid_ratios.min().detach()
             ratio_max = valid_ratios.max().detach()
