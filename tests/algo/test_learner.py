@@ -159,7 +159,7 @@ class TestValidMasks:
                 assert torch.allclose(dataset[key][0], invalid_dataset[key][0], atol=0.1, rtol=0.1)
 
         invalid_res = _learner_losses_res(learner, invalid_dataset, invalids)
-        atol, rtol = 0.01, 0.01
+        atol, rtol = 0.02, 0.02
         assert torch.allclose(res.policy_loss, invalid_res.policy_loss, atol=atol, rtol=rtol)
         assert torch.allclose(res.exploration_loss, invalid_res.exploration_loss, atol=atol, rtol=rtol)
         assert torch.allclose(res.kl_loss, invalid_res.kl_loss, atol=atol, rtol=rtol)
