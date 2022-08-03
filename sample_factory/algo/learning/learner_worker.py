@@ -127,8 +127,9 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
 
         self.training_iteration_since_resume += 1
         self.training_batch_released.emit(batch_idx, self.training_iteration_since_resume)
-        self.report_msg.emit(stats)
         self.finished_training_iteration.emit(self.training_iteration_since_resume)
+        if stats is not None:
+            self.report_msg.emit(stats)
 
     def on_stop(self, *args):
         self.learner.save()

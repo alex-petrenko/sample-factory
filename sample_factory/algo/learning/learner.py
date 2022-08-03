@@ -937,20 +937,25 @@ class Learner(Configurable):
 
             return buff, dataset_size, num_invalids
 
-    def train(self, batch: TensorDict) -> Dict:
+    def train(self, batch: TensorDict) -> Optional[Dict]:
         with self.timing.add_time("prepare_batch"):
             buff, experience_size, num_invalids = self._prepare_batch(batch)
 
-        with self.timing.add_time("train"):
-            train_stats = self._train(buff, self.cfg.batch_size, experience_size, num_invalids)
+        if num_invalids >= experience_size:
+            log.error(f"Learner {self.policy_id=} received an entire batch of invalid data, skipping...")
+            return None
+        else:
+            with self.timing.add_time("train"):
+                train_stats = self._train(buff, self.cfg.batch_size, experience_size, num_invalids)
 
-        # multiply the number of samples by frameskip so that FPS metrics reflect the number
-        # of environment steps actually simulated
-        self.env_steps += experience_size * self.env_info.frameskip
+            # multiply the number of samples by frameskip so that FPS metrics reflect the number
+            # of environment steps actually simulated
+            self.env_steps += experience_size * self.env_info.frameskip
 
-        stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
-        if train_stats is not None:
-            stats[TRAIN_STATS] = train_stats
-            stats[STATS_KEY] = memory_stats("learner", self.device)
+            stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
+            if train_stats is not None:
+                if train_stats is not None:
+                    stats[TRAIN_STATS] = train_stats
+                stats[STATS_KEY] = memory_stats("learner", self.device)
 
-        return stats
+            return stats
