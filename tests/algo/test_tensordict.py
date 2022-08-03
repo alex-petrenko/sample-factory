@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_dict import TensorDict, cat_tensordicts
 
 
 class TestParams:
@@ -47,3 +47,21 @@ class TestParams:
         assert d[3]["rewards"].equal(odd_agents[1]["rewards"])
 
         # and we can do many other things...
+
+    def test_cat_tensordicts(self):
+        # noinspection DuplicatedCode
+        d1 = TensorDict(dict(a=torch.zeros((2, 3)), b=torch.ones((2, 3))))
+        d2 = TensorDict(dict(a=torch.ones((2, 3)), b=torch.zeros((2, 3))))
+
+        d_cat = cat_tensordicts([d1, d2])
+        assert d_cat["a"].equal(torch.cat([d1["a"], d2["a"]]))
+        assert d_cat["b"].equal(torch.cat([d1["b"], d2["b"]]))
+
+        # now same test with numpy instead of torch
+        # noinspection DuplicatedCode
+        d1 = TensorDict(dict(a=np.zeros((2, 3)), b=np.ones((2, 3))))
+        d2 = TensorDict(dict(a=np.ones((2, 3)), b=np.zeros((2, 3))))
+
+        d_cat = cat_tensordicts([d1, d2])
+        assert np.array_equal(d_cat["a"], np.concatenate([d1["a"], d2["a"]]))
+        assert np.array_equal(d_cat["b"], np.concatenate([d1["b"], d2["b"]]))

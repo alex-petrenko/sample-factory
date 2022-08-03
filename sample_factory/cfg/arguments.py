@@ -148,7 +148,9 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
                 "In sync mode the goal is to avoid policy lag. In order to achieve this we "
                 "alternate between collecting experience and training on it.\nThus sync mode requires "
                 "the sampler to collect the exact amount of experience required for training in one "
-                "or more iterations.\nThis is not possible with the current configuration.\n"
+                "or more iterations.\nConfiguration needs to be changed.\n"
+                "The easiest option is to enable async mode using --async_rl=True.\n"
+                "Alternatively you can use information below to change number of workers, or batch size, etc.:\n"
             )
             log.error(
                 f"Number of samples collected per rollout by all workers: "

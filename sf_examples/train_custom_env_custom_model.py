@@ -53,7 +53,7 @@ class CustomEnv(gym.Env):
         pass
 
 
-def make_custom_env_func(full_env_name, cfg=None, env_config=None):
+def make_custom_env_func(full_env_name, cfg=None, _env_config=None):
     return CustomEnv(full_env_name, cfg)
 
 

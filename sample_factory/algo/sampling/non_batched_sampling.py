@@ -192,6 +192,8 @@ class ActorState:
         self.curr_traj_buffer["rewards"][rollout_step] = float(reward)
         self.curr_traj_buffer["dones"][rollout_step] = done
 
+        # -1 policy_id does not match any valid policy on the learner, therefore this will be treated as
+        # invalid data coming from a different policy and should be ignored by the learner.
         policy_id = -1 if not self.is_active else self.curr_policy_id
         self.curr_traj_buffer["policy_id"][rollout_step] = policy_id
 
@@ -221,7 +223,7 @@ class ActorState:
 
         return report
 
-    def finalize_trajectory(self, rollout_step):
+    def finalize_trajectory(self, rollout_step: int) -> List[Dict[str, Any]]:
         """
         Do some postprocessing after we finished the entire rollout.
 
@@ -250,8 +252,7 @@ class ActorState:
         unique_policies = np.unique(self.curr_traj_buffer["policy_id"])
         if len(unique_policies) > 1:
             debug_log_every_n(
-                100,
-                f"Multiple policies in trajectory buffer: {unique_policies} (-1 means inactive agent)",
+                1000, f"Multiple policies in trajectory buffer: {unique_policies} (-1 means inactive agent)"
             )
 
         for policy_id in np.unique(self.curr_traj_buffer["policy_id"]):
@@ -267,7 +268,14 @@ class ActorState:
                 # to guarantee that this buffer will only be released once. It seems easier to just copy all data to
                 # a new buffer for each additional learner. This should be a very rare event so the performance impact
                 # is negligible.
-                traj_buffer_idx = self.traj_buffer_queue.get(block=True, timeout=1e3)
+                try:
+                    traj_buffer_idx = self.traj_buffer_queue.get(block=True, timeout=100)
+                except Empty:
+                    log.error(
+                        f"Lost trajectory for {policy_id=} ({self.curr_traj_buffer['policy_id']}) since we could not find a trajectory buffer!"
+                    )
+                    continue
+
                 buffer = self.traj_tensors[traj_buffer_idx]
                 buffer[:] = self.curr_traj_buffer  # copy TensorDict data recursively
 
@@ -542,7 +550,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
         return episodic_stats
 
-    def _finalize_trajectories(self):
+    def _finalize_trajectories(self) -> List[Dict[str, Any]]:
         """
         Do some postprocessing when we're done with the rollout.
         """

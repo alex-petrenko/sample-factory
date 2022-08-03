@@ -39,12 +39,16 @@ class CustomMultiEnv(gym.Env):
         self.num_agents = 2
         self.is_multiagent = True
 
-        self.inactive_steps = [0] * self.num_agents
+        self.inactive_steps = [3] * self.num_agents
 
         self.episode_rewards = [[] for _ in range(self.num_agents)]
 
+        self.obs = None
+
     def _obs(self):
-        return [np.float32(np.random.rand(self.channels, self.res, self.res)) for _ in range(self.num_agents)]
+        if self.obs is None:
+            self.obs = [np.float32(np.random.rand(self.channels, self.res, self.res)) for _ in range(self.num_agents)]
+        return self.obs
 
     def reset(self, **kwargs):
         self.curr_episode_steps = 0
@@ -74,8 +78,8 @@ class CustomMultiEnv(gym.Env):
 
         # this is like prisoner's dilemma
         payout_matrix = [
-            [(0, 0), (-0.2, -0.2)],
-            [(-0.2, -0.25), (0, 0)],  # make it asymmetric for easy learning, this is only a test after all
+            [(0, 0), (-1.0, -1.0)],
+            [(-1.1, -1.1), (0, 0)],  # make it asymmetric for easy learning, this is only a test after all
         ]
 
         # action = 0 to stay silent, 1 to betray
@@ -83,7 +87,11 @@ class CustomMultiEnv(gym.Env):
         for agent_idx in range(self.num_agents):
             self.episode_rewards[agent_idx].append(rewards[agent_idx])
 
-        done = self.curr_episode_steps >= self.cfg.custom_env_episode_len
+        time_out = self.curr_episode_steps >= self.cfg.custom_env_episode_len
+        for agent_idx in range(self.num_agents):
+            infos[agent_idx]["time_outs"] = time_out
+
+        done = time_out
         dones = [done] * self.num_agents
 
         if done:

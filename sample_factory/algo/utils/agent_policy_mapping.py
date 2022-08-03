@@ -27,7 +27,7 @@ class AgentPolicyMapping:
             cfg.pbt_mix_policies_in_one_env if hasattr(cfg, "pbt_mix_policies_in_one_env") else False
         )  # TODO
 
-        self.resample_env_policy_every = 5  # episodes
+        self.resample_env_policy_every = 10  # episodes
         self.env_policies = dict()
         self.env_policy_requests = dict()
 

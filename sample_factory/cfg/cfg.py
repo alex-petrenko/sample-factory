@@ -105,9 +105,9 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--max_policy_lag",
-        default=10000,
+        default=1000,
         type=int,
-        help="Max policy lag in policy versions. Discard all experience that is older than this. This should be increased for configurations with multiple epochs of SGD because naturally policy-lag may exceed this value.",
+        help="Max policy lag in policy versions. Discard all experience that is older than this.",
     )
 
     # RL algorithm data collection & learning regime (rollout length, batch size, etc.)

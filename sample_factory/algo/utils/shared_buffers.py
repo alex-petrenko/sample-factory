@@ -106,6 +106,8 @@ def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, 
     tensors["time_outs"].fill_(False)  # no timeouts by default
     tensors["policy_id"] = init_tensor([num_traj, rollout], torch.int, [], device, share)
     tensors["policy_id"].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
+    tensors["valids"] = init_tensor([num_traj, rollout + 1], torch.bool, [], device, share)
+    tensors["valids"].fill_(False)  # no valid experience by default
 
     return tensors
 

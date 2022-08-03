@@ -13,7 +13,7 @@ from sample_factory.algo.sampling.non_batched_sampling import NonBatchedVectorEn
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, rollout_worker_device
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.misc import new_trajectories_signal
+from sample_factory.algo.utils.misc import advance_rollouts_signal, new_trajectories_signal
 from sample_factory.algo.utils.rl_utils import total_num_agents, trajectories_per_training_iteration
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import inference_context
@@ -21,7 +21,7 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.gpu_utils import set_gpus_for_process
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import MpQueue, PolicyID
-from sample_factory.utils.utils import cores_for_worker_process, log, set_process_cpu_affinity
+from sample_factory.utils.utils import cores_for_worker_process, debug_log_every_n, log, set_process_cpu_affinity
 
 
 def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
@@ -191,14 +191,15 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
 
         if not policy_inputs:
             # This can happen if all agents on this worker were deactivated (is_active=False)
-            # log.warning('No policy requests on worker %d-%d', self.worker_idx, split_idx)
-            # log.warning('Send fake signal to our own queue to wake up the worker on the next iteration')
-            # advance_rollout_request = dict(split_idx=split_idx, policy_id=-1)
-            # TODO: sent the same type of signal inference worker sends to us
-            # TODO: connect to this signal
-            # TODO: or maybe just proceed to the next iteration right away?
-            # self.task_queue.put((TaskType.ROLLOUT_STEP, advance_rollout_request))
-            pass
+            debug_log_every_n(
+                100,
+                f"Worker {self.worker_idx}-{split_idx} has no active agents... We immediately continue to the next iteration without notifying the inference worker",
+            )
+            fake_policy_id = -1
+            # it's easier to self ourselves a signal than call advance_rollouts() directly because
+            # this way we don't have to worry about getting stuck in an infinite loop or processing things like
+            # stopping signal
+            self.emit(advance_rollouts_signal(self.worker_idx), split_idx, fake_policy_id)
 
     def _enqueue_complete_rollouts(self, complete_rollouts: List[Dict]):
         """Emit complete rollouts."""
@@ -212,7 +213,7 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
         for policy_id, rollouts in rollouts_per_policy.items():
             self.emit(new_trajectories_signal(policy_id), rollouts, self.sampling_device)
 
-    def advance_rollouts(self, data: Tuple):
+    def advance_rollouts(self, split_idx: int, policy_id: PolicyID) -> None:
         # TODO: update comment
         """
         Process incoming request from policy worker. Use the data (policy outputs, actions) to advance the simulation
@@ -220,11 +221,8 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
 
         If we successfully managed to advance the simulation, send requests to policy workers to get actions for the
         next step. If we completed the entire rollout, also send request to the learner!
-
-        :param data: request from the policy worker, containing actions and other policy outputs
         """
         with inference_context(self.cfg.serial_mode):
-            split_idx, policy_id = data
             runner = self.env_runners[split_idx]
             complete_rollouts, episodic_stats = runner.advance_rollouts(policy_id, self.timing)
 

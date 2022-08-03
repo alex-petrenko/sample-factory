@@ -14,7 +14,7 @@ from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus,
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.learning.batcher import Batcher
-from sample_factory.algo.learning.learner import Learner
+from sample_factory.algo.learning.learner_worker import LearnerWorker
 from sample_factory.algo.sampling.sampler import AbstractSampler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.misc import (
@@ -66,7 +66,7 @@ class Runner(EventLoopObject, Configurable):
         self.env_info: Optional[EnvInfo] = None
         self.buffer_mgr = None
 
-        self.learners: Dict[PolicyID, Learner] = dict()
+        self.learners: Dict[PolicyID, LearnerWorker] = dict()
         self.batchers: Dict[PolicyID, Batcher] = dict()
         self.sampler: Optional[AbstractSampler] = None
 
@@ -454,15 +454,14 @@ class Runner(EventLoopObject, Configurable):
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
 
-    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher, mp_ctx: Optional[BaseContext]):
-        return Learner(
+    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
+        return LearnerWorker(
             event_loop,
             self.cfg,
             self.env_info,
             self.buffer_mgr,
             batcher,
             policy_id=policy_id,
-            mp_ctx=mp_ctx,
         )
 
     def _make_sampler(self, sampler_cls: type, event_loop: EventLoop):
