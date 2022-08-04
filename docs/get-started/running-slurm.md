@@ -37,7 +37,9 @@ The runner script controls the python command slurm will run. Examples are locat
 
 #### Timeout Batch Script
 
-If your slurm cluster has time limits for jobs, you can use the `sbatch_timeout.sh` bash script to launch jobs that timeout and requeue themselves before the time limit. The default timeout is set to 23h and can be modified based on your cluster settings to be slightly less than the job time limit.
+If your slurm cluster has time limits for jobs, you can use the `sbatch_timeout.sh` bash script to launch jobs that timeout and requeue themselves before the time limit. 
+
+The time limit can be set with the `slurm_timeout` command line argument. It defaults to `0` which runs the job with no time limit. It is recommended the timeout be set to slightly less than the time limit of your job. For example, if the time limit is 24 hours, you should set `--slurm_timeout=23h`
 
 ### Running runner scripts
 

@@ -42,8 +42,6 @@ class CustomMultiEnv(gym.Env):
         self.inactive_steps = [3] * self.num_agents
 
         self.episode_rewards = [[] for _ in range(self.num_agents)]
-        self.num_inactive = 0
-        self.num_active = 0
 
         self.obs = None
 
