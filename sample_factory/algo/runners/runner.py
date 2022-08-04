@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import math
 import shutil
@@ -452,14 +453,18 @@ class Runner(EventLoopObject, Configurable):
             json.dump(cfg_dict(self.cfg), json_file, indent=2)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
-        return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
+        buffer_mgr_copy = copy.copy(self.buffer_mgr)
+        del buffer_mgr_copy.policy_output_tensors_torch
+        return Batcher(event_loop, policy_id, buffer_mgr_copy, self.cfg, self.env_info)
 
     def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
+        buffer_mgr_copy = copy.copy(self.buffer_mgr)
+        del buffer_mgr_copy.policy_output_tensors_torch
         return LearnerWorker(
             event_loop,
             self.cfg,
             self.env_info,
-            self.buffer_mgr,
+            buffer_mgr_copy,
             batcher,
             policy_id=policy_id,
         )

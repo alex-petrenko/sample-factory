@@ -25,12 +25,12 @@ class ParallelRunner(Runner):
         mp_ctx = get_mp_ctx(self.cfg.serial_mode)
 
         for policy_id in range(self.cfg.num_policies):
-            batcher_event_loop = EventLoop("batcher_evt_loop")
-            self.batchers[policy_id] = self._make_batcher(batcher_event_loop, policy_id)
-            batcher_event_loop.owner = self.batchers[policy_id]
-
             learner_proc = EventLoopProcess(f"learner_proc{policy_id}", mp_ctx, init_func=init_learner_process)
             self.processes.append(learner_proc)
+
+            # batcher_event_loop = EventLoop("batcher_evt_loop")
+            self.batchers[policy_id] = self._make_batcher(learner_proc.event_loop, policy_id)
+            # batcher_event_loop.owner = self.batchers[policy_id]
 
             self.learners[policy_id] = self._make_learner(
                 learner_proc.event_loop,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import numpy as np
 import torch
@@ -125,11 +125,16 @@ def cat_tensordicts(lst: List[TensorDict]) -> TensorDict:
     return TensorDict(res)
 
 
-def find_invalid_data(t: TensorDict, msg: Optional[str] = None) -> Optional[Dict[str, Tensor]]:
+def find_invalid_data(
+    t: TensorDict, msg: Optional[str] = None, keys: Optional[Iterable[str]] = None
+) -> Optional[Dict[str, Tensor]]:
     res = {}
     msg = msg or "Check"
 
     for d, k, v in iterate_recursively(t):
+        if keys is not None and k not in keys:
+            continue
+
         if isinstance(v, torch.Tensor):
             invalid_idx = None
             if torch.is_floating_point(v):

@@ -208,7 +208,14 @@ class Learner(Configurable):
             self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
         )
         self.actor_critic.model_to_device(self.device)
-        self.actor_critic.share_memory()
+
+        def share_mem(t):
+            if t is not None and not t.is_cuda:
+                return t.share_memory_()
+            return t
+
+        self.actor_critic._apply(share_mem)
+        # self.actor_critic.share_memory()
         self.actor_critic.train()
 
         params = list(self.actor_critic.parameters())
@@ -688,6 +695,8 @@ class Learner(Configurable):
                     recent_kls.append(kl_old_mean)
                     if kl_old.max().item() > 100:
                         log.error(f"KL-divergence is too high: {kl_old.max().item():.4f}")
+                        # import sys
+                        # sys.exit(1)
 
                 # update the weights
                 with timing.add_time("update"):
@@ -752,6 +761,7 @@ class Learner(Configurable):
                 break
 
             prev_epoch_actor_loss = new_epoch_actor_loss
+            # log.debug(f"Epoch {epoch + 1} ({num_sgd_steps} sgd steps)")
 
         return stats_and_summaries
 
@@ -910,8 +920,8 @@ class Learner(Configurable):
                 # here returns are not normalized yet, so we should use denormalized values
                 buff["returns"] = buff["advantages"] + buff["valids"][:, :-1] * denormalized_values[:, :-1]
 
-            log.debug(f"values min max values: {buff['values'].min().item()}, {buff['values'].max().item()}")
-            log.debug(f"returns min max values: {buff['returns'].min().item()}, {buff['returns'].max().item()}")
+            # log.debug(f"values min max values: {buff['values'].min().item()}, {buff['values'].max().item()}")
+            # log.debug(f"returns min max values: {buff['returns'].min().item()}, {buff['returns'].max().item()}")
             log.debug(
                 f"rnn_states min max values: {buff['rnn_states'].min().item()}, {buff['rnn_states'].max().item()}"
             )

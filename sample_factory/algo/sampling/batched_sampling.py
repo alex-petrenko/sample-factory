@@ -11,7 +11,7 @@ from torch import Tensor
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
-from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
+from sample_factory.algo.utils.misc import EPISODIC, MAGIC_FLOAT, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict, find_invalid_data
 from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.dicts import get_first_present
@@ -124,7 +124,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_traj: Optional[TensorDict] = None
         self.curr_step: Optional[TensorDict] = None
-        self.curr_traj_slice: Optional[slice] = None
+        self.invalid_slice = slice(-4242424242, -4242424241)
+        self.curr_traj_slice: Optional[slice] = self.invalid_slice
 
         self.curr_episode_reward = self.curr_episode_len = None
 
@@ -166,10 +167,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.vec_env = SequentialVectorizeWrapper(envs)
 
         self.last_obs = self.vec_env.reset()
-        self.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
-        self.last_rnn_state[:] = 0.0
+        self.last_rnn_state = torch.zeros_like(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
 
-        self.policy_id_buffer = clone_tensor(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
+        self.policy_id_buffer = torch.empty_like(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
         self.policy_id_buffer[:] = self.policy_id
 
         assert self.rollout_step == 0
@@ -302,6 +302,17 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # not sure if this is the best practice, but this is what everybody seems to be doing
             not_done = (1.0 - self.curr_step["dones"].float()).unsqueeze(-1)
             self.last_rnn_state = self.policy_output_tensors["new_rnn_states"] * not_done
+            rnnmin = self.last_rnn_state.min()
+            if rnnmin <= MAGIC_FLOAT:
+                log.error(f"rnnstates: {self.policy_output_tensors['new_rnn_states'].min()}")
+                log.error(
+                    f"last_rnn_state has invalid values {rnnmin}, rollout step {self.rollout_step}, not done sum {not_done.sum()}"
+                )
+
+            # self.last_test_data = self.policy_output_tensors["new_test_data_"]
+            # test_data_min = self.last_test_data.min()
+            # if test_data_min <= MAGIC_FLOAT:
+            #     log.error(f"test_data: {self.last_test_data.min()}")
 
             with timing.add_time("process_env_step"):
                 stats = self._process_env_step(rewards_cpu, dones, infos)
@@ -313,21 +324,24 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             if self.rollout_step == self.cfg.rollout:
                 # finalize and serialize the trajectory if we have a complete rollout
                 complete_rollouts = self._finalize_trajectories()
+                log.debug(f"finalize_trajectories Min rnn state value: {self.curr_traj['rnn_states'].min()}")
                 self.rollout_step = 0
                 # we will need to request a new trajectory buffer!
-                self.curr_traj_slice = self.curr_traj = None
+                self.curr_traj = None
+                self.curr_traj_slice = self.invalid_slice
 
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
 
     def update_trajectory_buffers(self, timing) -> bool:
-        if self.curr_traj_slice is not None and self.curr_traj is not None:
+        if self.curr_traj_slice != self.invalid_slice and self.curr_traj is not None:
             # don't need to do anything - we have a trajectory buffer already
             return True
 
         with timing.add_time("wait_for_trajectories"):
             try:
                 buffers = self.traj_buffer_queue.get(block=False, timeout=1e9)
+                log.warning(f"Got trajectory buffers {buffers}")
             except Empty:
                 return False
 
@@ -350,6 +364,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
             policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
             self.env_step_ready = False
+            torch.cuda.synchronize(self.last_rnn_state.device)
 
         return policy_request
 

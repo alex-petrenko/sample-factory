@@ -113,8 +113,8 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
         self.batcher_thread.join()
 
     def init(self):
-        if not self.cfg.serial_mode:
-            self.start_batcher_thread()
+        # if not self.cfg.serial_mode:
+        #     self.start_batcher_thread()
 
         init_model_data = self.learner.init()
         # signal other components that the model is ready
@@ -127,6 +127,7 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
         log.debug(f"{self.object_id} finished initialization!")
 
     def on_new_training_batch(self, batch_idx: int):
+        log.debug(f"Processing batch {batch_idx}")
         stats = self.learner.train(self.batcher.training_batches[batch_idx])
 
         self.training_iteration_since_resume += 1
@@ -141,8 +142,8 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
 
     def on_stop(self, *args):
         self.learner.save()
-        if not self.cfg.serial_mode:
-            self.join_batcher_thread()
+        # if not self.cfg.serial_mode:
+        #     self.join_batcher_thread()
 
         self.stop.emit(self.object_id, {self.object_id: self.learner.timing})
 

@@ -1,17 +1,20 @@
 import random
+import time
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import torch
 from signal_slot.signal_slot import EventLoop, signal
 
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.misc import MAGIC_FLOAT
 from sample_factory.algo.utils.shared_buffers import BufferMgr, alloc_trajectory_tensors, policy_device
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
-from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_dict import TensorDict, find_invalid_data
 from sample_factory.model.model_utils import get_hidden_size
+from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, PolicyID
-from sample_factory.utils.utils import AttrDict, debug_log_every_n
+from sample_factory.utils.utils import AttrDict, debug_log_every_n, log
 
 
 def slice_len(s: slice) -> int:
@@ -112,7 +115,7 @@ class Batcher(StoppableEventLoopObject):
 
         self.traj_buffer_queues = buffer_mgr.traj_buffer_queues
         self.traj_tensors = buffer_mgr.traj_tensors_torch
-        self.training_batches: List[TensorDict] = []
+        self.training_batches: List[TensorDict] = buffer_mgr.training_batches[policy_id]
 
         self.max_batches_to_accumulate = buffer_mgr.max_batches_to_accumulate
         self.available_batches = list(range(self.max_batches_to_accumulate))
@@ -145,18 +148,19 @@ class Batcher(StoppableEventLoopObject):
         ...
 
     def init(self):
-        device = policy_device(self.cfg, self.policy_id)
-        for i in range(self.max_batches_to_accumulate):
-            hidden_size = get_hidden_size(self.cfg)
-            training_batch = alloc_trajectory_tensors(
-                self.env_info,
-                self.traj_per_training_iteration,
-                self.cfg.rollout,
-                hidden_size,
-                device,
-                False,
-            )
-            self.training_batches.append(training_batch)
+        # device = policy_device(self.cfg, self.policy_id)
+        # for i in range(self.max_batches_to_accumulate):
+        #     hidden_size = get_hidden_size(self.cfg)
+        #     training_batch = alloc_trajectory_tensors(
+        #         self.env_info,
+        #         self.traj_per_training_iteration,
+        #         self.cfg.rollout,
+        #         hidden_size,
+        #         device,
+        #         False,
+        #         -4545.45
+        #     )
+        #     self.training_batches.append(training_batch)
 
         self.initialized.emit()
 
@@ -167,7 +171,8 @@ class Batcher(StoppableEventLoopObject):
                 trajectory_slice = trajectory_dict["traj_buffer_idx"]
                 if not isinstance(trajectory_slice, slice):
                     trajectory_slice = slice(trajectory_slice, trajectory_slice + 1)  # slice of len 1
-                # log.debug(f"{self.policy_id} received trajectory slice {trajectory_slice}")
+                log.debug(f"{self.policy_id} received trajectory slice {trajectory_slice}")
+                # log.debug(f"Min rnn state value: {self.traj_tensors[device]['rnn_states'][trajectory_slice].min()}")
                 self.slices_for_training[device].merge_slices(trajectory_slice)
 
             self._maybe_enqueue_new_training_batches()
@@ -203,7 +208,13 @@ class Batcher(StoppableEventLoopObject):
                         stop = start + slice_len(traj_slice)
 
                         # log.debug(f"Copying {traj_slice} trajectories from {device} to {batch_idx}")
+                        # log.debug(f"Min rnn state value: {traj_tensors['rnn_states'][traj_slice].min()}")
+                        # find_invalid_data(traj_tensors[traj_slice], f"batcher {self.training_iteration}", keys=["rnn_states"])
+
                         self.training_batches[batch_idx][start:stop] = traj_tensors[traj_slice]
+                        for d, k, v in iterate_recursively(traj_tensors):
+                            if v.is_floating_point():
+                                d[k][traj_slice] = MAGIC_FLOAT - 2 - self.training_iteration
 
                         # remember that we need to release these trajectories
                         self.traj_tensors_to_release[batch_idx].append((device, traj_slice))
@@ -235,9 +246,9 @@ class Batcher(StoppableEventLoopObject):
                 self.resume_experience_collection.emit()
 
             self.available_batches.append(batch_idx)
-            # log.debug(
-            #     f"{self.object_id} finished processing batch {batch_idx}, available batches: {self.available_batches}, {training_iteration=}"
-            # )
+            log.debug(
+                f"{self.object_id} finished processing batch {batch_idx}, available batches: {self.available_batches}, {training_iteration=}"
+            )
 
     def _release_traj_tensors(self, batch_idx: int):
         new_sampling_batches = dict()

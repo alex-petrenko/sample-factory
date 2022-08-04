@@ -31,7 +31,9 @@ def policy_device(cfg: AttrDict, policy_id: PolicyID) -> torch.device:
         return torch.device("cuda", index=gpus_for_process(policy_id, 1)[0])
 
 
-def init_tensor(leading_dimensions: List, tensor_type, tensor_shape, device: torch.device, share: bool) -> Tensor:
+def init_tensor(
+    leading_dimensions: List, tensor_type, tensor_shape, device: torch.device, share: bool, invalid_float=MAGIC_FLOAT
+) -> Tensor:
     if not isinstance(tensor_type, torch.dtype):
         tensor_type = to_torch_dtype(tensor_type)
 
@@ -43,12 +45,14 @@ def init_tensor(leading_dimensions: List, tensor_type, tensor_shape, device: tor
 
     # fill with magic values to make it easy to spot if we ever use unintialized data
     if t.is_floating_point():
-        t.fill_(MAGIC_FLOAT)
+        t.fill_(invalid_float)
     elif tensor_type in (torch.int, torch.int32, torch.int64, torch.int8, torch.uint8):
         t.fill_(MAGIC_INT)
 
     t = t.to(device)
-    if share:
+
+    # CUDA tensors are already shared by default
+    if share and not t.is_cuda:
         t.share_memory_()
 
     return t
@@ -73,7 +77,9 @@ def policy_output_shapes(num_actions, num_action_distribution_parameters) -> Lis
     return policy_outputs
 
 
-def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, device, share) -> TensorDict:
+def alloc_trajectory_tensors(
+    env_info: EnvInfo, num_traj, rollout, hidden_size, device, share, invalid_float=MAGIC_FLOAT
+) -> TensorDict:
     obs_space = env_info.obs_space
 
     tensors = TensorDict()
@@ -85,8 +91,15 @@ def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, 
 
     # we need to allocate an extra rollout step here to calculate the value estimates for the last step
     for space_name, space in obs_space.spaces.items():
-        tensors["obs"][space_name] = init_tensor([num_traj, rollout + 1], space.dtype, space.shape, device, share)
-    tensors["rnn_states"] = init_tensor([num_traj, rollout + 1], torch.float32, [hidden_size], device, share)
+        tensors["obs"][space_name] = init_tensor(
+            [num_traj, rollout + 1], space.dtype, space.shape, device, share, invalid_float
+        )
+    tensors["rnn_states"] = init_tensor(
+        [num_traj, rollout + 1], torch.float32, [hidden_size], device, share, invalid_float - 1
+    )
+    tensors["test_data_"] = init_tensor(
+        [num_traj, rollout], torch.float32, [hidden_size], device, share, invalid_float - 2
+    )
 
     num_actions, num_action_distribution_parameters = action_info(env_info)
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
@@ -100,14 +113,14 @@ def alloc_trajectory_tensors(env_info: EnvInfo, num_traj, rollout, hidden_size, 
         tensors[name] = init_tensor([num_traj, rollout_len], torch.float32, shape, device, share)
 
     # env outputs
-    tensors["rewards"] = init_tensor([num_traj, rollout], torch.float32, [], device, share)
-    tensors["dones"] = init_tensor([num_traj, rollout], torch.bool, [], device, share)
+    tensors["rewards"] = init_tensor([num_traj, rollout], torch.float32, [], device, share, invalid_float)
+    tensors["dones"] = init_tensor([num_traj, rollout], torch.bool, [], device, share, invalid_float)
     tensors["dones"].fill_(True)
-    tensors["time_outs"] = init_tensor([num_traj, rollout], torch.bool, [], device, share)
+    tensors["time_outs"] = init_tensor([num_traj, rollout], torch.bool, [], device, share, invalid_float)
     tensors["time_outs"].fill_(False)  # no timeouts by default
-    tensors["policy_id"] = init_tensor([num_traj, rollout], torch.int, [], device, share)
+    tensors["policy_id"] = init_tensor([num_traj, rollout], torch.int, [], device, share, invalid_float)
     tensors["policy_id"].fill_(-1)  # -1 is an invalid policy index, experience from policy "-1" is always ignored
-    tensors["valids"] = init_tensor([num_traj, rollout + 1], torch.bool, [], device, share)
+    tensors["valids"] = init_tensor([num_traj, rollout + 1], torch.bool, [], device, share, invalid_float)
     tensors["valids"].fill_(False)  # no valid experience by default
 
     return tensors
@@ -126,6 +139,7 @@ def alloc_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, sha
     num_actions, num_action_distribution_parameters = action_info(env_info)
     policy_outputs = policy_output_shapes(num_actions, num_action_distribution_parameters)
     policy_outputs += [("new_rnn_states", [hidden_size])]  # different name so we don't override current step rnn_state
+    policy_outputs += [("new_test_data_", [hidden_size])]  # different name so we don't override current step test_data
 
     output_names, output_shapes = list(zip(*policy_outputs))
     output_sizes = [shape[0] if shape else 1 for shape in output_shapes]
@@ -133,7 +147,9 @@ def alloc_policy_output_tensors(cfg, env_info: EnvInfo, hidden_size, device, sha
     if cfg.batched_sampling:
         policy_output_tensors = TensorDict()
         for name, shape in policy_outputs:
-            policy_output_tensors[name] = init_tensor(policy_outputs_shape, torch.float32, shape, device, share)
+            policy_output_tensors[name] = init_tensor(
+                policy_outputs_shape, torch.float32, shape, device, share, invalid_float=-4343.43
+            )
     else:
         # copying small policy outputs (e.g. individual value predictions & action logits) to shared memory is a
         # bottleneck on the policy worker. For optimization purposes we create additional tensors to hold
@@ -233,3 +249,20 @@ class BufferMgr(Configurable):
         self.policy_versions = torch.zeros([cfg.num_policies], dtype=torch.int32)
         if share:
             self.policy_versions.share_memory_()
+
+        self.training_batches: Dict[PolicyID, List[TensorDict]] = {}
+        for policy_id in range(cfg.num_policies):
+            self.training_batches[policy_id] = []
+            device = policy_device(self.cfg, policy_id)
+            for i in range(self.max_batches_to_accumulate):
+                hidden_size = get_hidden_size(self.cfg)
+                training_batch = alloc_trajectory_tensors(
+                    self.env_info,
+                    self.trajectories_per_training_iteration,
+                    self.cfg.rollout,
+                    hidden_size,
+                    device,
+                    share,
+                    -4545.45,
+                )
+                self.training_batches[policy_id].append(training_batch)

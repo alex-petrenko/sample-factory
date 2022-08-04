@@ -16,7 +16,7 @@ SAMPLES_COLLECTED = "samples_collected"
 POLICY_ID_KEY = "policy_id"
 
 
-MAGIC_FLOAT = -4242.4242
+MAGIC_FLOAT = -4242.42
 MAGIC_INT = 43
 
 

@@ -15,6 +15,7 @@ from signal_slot.signal_slot import EventLoopObject, TightLoop, Timer, signal
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import (
+    MAGIC_FLOAT,
     POLICY_ID_KEY,
     SAMPLES_COLLECTED,
     STATS_KEY,
@@ -203,6 +204,14 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
                 dict_of_lists_cat(obs)
                 rnn_states = cat_tensors(rnn_states)
 
+        rnnmin = rnn_states.min()
+        if rnnmin < MAGIC_FLOAT:
+            log.error(f"inference_batch_slices rnnmin {rnnmin}")
+
+        # test_data_min = traj_tensors["test_data_"][traj_idx].min()
+        # if test_data_min < MAGIC_FLOAT:
+        #     log.error(f"inference_batch_slices test_data_min {test_data_min}")
+
         return obs, rnn_states
 
     def _batch_individual_steps(self, timing):
@@ -246,6 +255,8 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
             if policy_outputs["actions"].ndim < 2:
                 policy_outputs["actions"] = policy_outputs["actions"].unsqueeze(-1)
 
+            policy_outputs["new_test_data_"] = torch.empty_like(policy_outputs["new_rnn_states"]).fill_(-13.1313)
+
             # assuming all workers provide the same number of samples
             samples_per_request = num_samples // len(requests)
             ofs = 0
@@ -253,6 +264,16 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
                 self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[
                     ofs : ofs + samples_per_request
                 ]
+                rnnmin = self.policy_output_tensors[device]["new_rnn_states"].min()
+                test_data_min = self.policy_output_tensors[device]["new_test_data_"].min()
+                if rnnmin < MAGIC_FLOAT:
+                    log.error(
+                        f"inference rnnmin {rnnmin} {self.policy_output_tensors[device][actor_idx, split_idx]['new_rnn_states'].min()}"
+                    )
+                    log.error(f"inference test_data_min {test_data_min}")
+                if test_data_min < MAGIC_FLOAT:
+                    log.error(f"inference test_data_min {test_data_min}")
+
                 ofs += samples_per_request
 
         signals_to_send: AdvanceRolloutSignals = dict()
@@ -263,6 +284,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
             else:
                 signals_to_send[actor_idx] = [payload]
 
+        # log.debug(f"{self.object_id}: sending signals: {signals_to_send}")
         return signals_to_send
 
     def _prepare_policy_outputs_non_batched(
@@ -324,6 +346,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
 
             signals_to_send = self._prepare_policy_outputs_func(num_samples, policy_outputs, self.requests)
 
+            torch.cuda.synchronize(self.device)
             with timing.add_time("send_messages"):
                 for actor_idx, data in signals_to_send.items():
                     self.emit_many(advance_rollouts_signal(actor_idx), data)
