@@ -4,14 +4,16 @@ from sf_examples.isaacgym_examples.experiments.isaacgym_runs import base_cli, vs
 _params = ParamGrid(
     [
         ("seed", [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
-        (("serial_mode", "async_rl"), ([True, False], [False, True])),
-        (("use_rnn", "recurrence"), ([False, 1], [True, 16])),
+        # (("serial_mode", "async_rl"), ([True, False], [False, True])),
+        # (("use_rnn", "recurrence"), ([False, 1], [True, 16])),
+        (("serial_mode", "async_rl"), [[False, True]]),
+        (("use_rnn", "recurrence"), [[True, 16]]),
     ]
 )
 
 vstr = f"{vstr}_norm_returns"
 
-ant_cli = f" --env=Ant --train_for_env_steps=100000000 --with_wandb=True --wandb_tags ant {vstr}"
+ant_cli = f" --env=Ant --train_for_env_steps=20000000 --with_wandb=True --wandb_tags ant {vstr}"
 cli = base_cli + ant_cli
 
 _experiments = [
