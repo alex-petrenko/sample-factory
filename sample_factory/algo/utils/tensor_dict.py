@@ -138,12 +138,12 @@ def find_invalid_data(t: TensorDict, msg: Optional[str] = None) -> Optional[Dict
                     log.error(f"{msg}: Found NaNs or infs in {k}: {v}")
                     res[k] = torch.isnan(v) | torch.isinf(v)
 
-                invalid_idx = (v == MAGIC_FLOAT).nonzero(as_tuple=True)[0]
+                invalid_idx = (v == MAGIC_FLOAT).nonzero()
             elif torch.dtype in (torch.int, torch.int32, torch.int64, torch.int8, torch.uint8):
-                invalid_idx = (v == MAGIC_INT).nonzero(as_tuple=True)[0]
+                invalid_idx = (v == MAGIC_INT).nonzero()
 
             if invalid_idx is not None and invalid_idx.numel() > 0:
                 res[k] = invalid_idx
-                log.error(f"{msg}: Found invalid data in {k} at {invalid_idx}")
+                log.error(f"{msg}: Found invalid data in {k} at {invalid_idx} (numel={invalid_idx.numel()})")
 
     return res
