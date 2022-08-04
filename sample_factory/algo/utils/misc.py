@@ -16,6 +16,10 @@ SAMPLES_COLLECTED = "samples_collected"
 POLICY_ID_KEY = "policy_id"
 
 
+MAGIC_FLOAT = -4242.4242
+MAGIC_INT = 43
+
+
 # custom signal names
 def new_trajectories_signal(policy_id: PolicyID) -> str:
     return f"p{policy_id}_trajectories"

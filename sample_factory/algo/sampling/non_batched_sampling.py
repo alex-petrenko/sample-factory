@@ -9,7 +9,7 @@ import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
 from sample_factory.algo.utils.agent_policy_mapping import AgentPolicyMapping
-from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.shared_buffers import BufferMgr
@@ -382,6 +382,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func_non_batched(self.cfg, env_config=env_config)
+            check_env_info(env, self.env_info, self.cfg)
 
             env.seed(global_env_idx)
             self.envs.append(env)

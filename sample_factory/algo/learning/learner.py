@@ -20,7 +20,7 @@ from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages, prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
+from sample_factory.algo.utils.tensor_dict import TensorDict, find_invalid_data, shallow_recursive_copy
 from sample_factory.algo.utils.torch_utils import masked_select, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
@@ -872,6 +872,8 @@ class Learner(Configurable):
             next_values = self.actor_critic(normalized_last_obs, buff["rnn_states"][:, -1], values_only=True)["values"]
             buff["values"][:, -1] = next_values
 
+            find_invalid_data(batch, f"after valuesbuff[values][:, -1] {self.train_step}")
+
             if self.cfg.normalize_returns:
                 # Since our value targets are normalized, the values will also have normalized statistics.
                 # We need to denormalize them before using them for GAE caculation and value bootstrapping.
@@ -908,6 +910,13 @@ class Learner(Configurable):
                 # here returns are not normalized yet, so we should use denormalized values
                 buff["returns"] = buff["advantages"] + buff["valids"][:, :-1] * denormalized_values[:, :-1]
 
+            log.debug(f"values min max values: {buff['values'].min().item()}, {buff['values'].max().item()}")
+            log.debug(f"returns min max values: {buff['returns'].min().item()}, {buff['returns'].max().item()}")
+            log.debug(
+                f"rnn_states min max values: {buff['rnn_states'].min().item()}, {buff['rnn_states'].max().item()}"
+            )
+            find_invalid_data(buff, "middle of prepare batch")
+
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
             for key in ["normalized_obs", "rnn_states", "values", "valids"]:
                 buff[key] = buff[key][:, :-1]
@@ -937,6 +946,7 @@ class Learner(Configurable):
                 # likewise, some invalid values of log_prob_actions can cause NaNs or infs
                 buff["log_prob_actions"][invalid_indices] = -1  # -1 seems like a safe value
 
+            find_invalid_data(buff, "end of prepare_batch")
             return buff, dataset_size, num_invalids
 
     def train(self, batch: TensorDict) -> Optional[Dict]:

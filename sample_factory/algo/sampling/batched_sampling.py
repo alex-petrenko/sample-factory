@@ -9,10 +9,10 @@ import torch
 from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
-from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
-from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_dict import TensorDict, find_invalid_data
 from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
@@ -153,6 +153,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
             env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config=env_config)
+            check_env_info(env, self.env_info, self.cfg)
 
             env.seed(env_id)
             envs.append(env)
@@ -253,6 +254,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         # We're going to need them later when we calculate next step value estimates.
         self.curr_traj["obs"][:, self.cfg.rollout] = self.last_obs
         self.curr_traj["rnn_states"][:, self.cfg.rollout] = self.last_rnn_state
+        # find_invalid_data(self.curr_traj[:, :self.cfg.rollout], "_finalize_trajectories")
 
         traj_dict = dict(policy_id=self.policy_id, traj_buffer_idx=self.curr_traj_slice)
         return [traj_dict]
