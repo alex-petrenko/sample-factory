@@ -686,6 +686,8 @@ class Learner(Configurable):
 
                     kl_old_mean = kl_old.mean().item()
                     recent_kls.append(kl_old_mean)
+                    if kl_old.max().item() > 100:
+                        log.error(f"KL-divergence is too high: {kl_old.max().item():.4f}")
 
                 # update the weights
                 with timing.add_time("update"):
@@ -834,7 +836,9 @@ class Learner(Configurable):
             og_shape[key] = x.shape
             obs[key] = x.view((x.shape[0] * x.shape[1],) + x.shape[2:])
 
-        normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
+        # hold the lock while we alter the state of the normalizer since they can be used in other processes too
+        with self.param_server.policy_lock:
+            normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
 
         # restore original shape
         for key, x in normalized_obs.items():
@@ -860,9 +864,7 @@ class Learner(Configurable):
             if not self.actor_critic.training:
                 self.actor_critic.train()
 
-            # hold the lock while we alter the state of the normalizer since they can be used in other processes too
-            with self.param_server.policy_lock:
-                buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
+            buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
             del buff["obs"]  # don't need non-normalized obs anymore
 
             # calculate estimated value for the next step (T+1)

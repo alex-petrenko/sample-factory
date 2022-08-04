@@ -11,7 +11,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, PolicyID
-from sample_factory.utils.utils import AttrDict, debug_log_every_n, log
+from sample_factory.utils.utils import AttrDict, debug_log_every_n
 
 
 def slice_len(s: slice) -> int:
