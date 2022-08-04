@@ -388,7 +388,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
 
         # initially we clean cache very frequently, later on do it every few minutes
         if self.total_num_samples > 1000:
-            self.cache_cleanup_timer.set_interval(300.0)
+            self.cache_cleanup_timer.set_interval(30.0)
 
     def on_stop(self, *args):
         if self.is_initialized:
