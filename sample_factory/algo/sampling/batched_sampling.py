@@ -349,6 +349,9 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
             self.env_step_ready = False
 
+            if not self.cfg.serial_mode:
+                torch.cuda.synchronize(self.last_rnn_state.device)
+
         return policy_request
 
     def close(self):

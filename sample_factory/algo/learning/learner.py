@@ -208,7 +208,13 @@ class Learner(Configurable):
             self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
         )
         self.actor_critic.model_to_device(self.device)
-        self.actor_critic.share_memory()
+
+        def share_mem(t):
+            if t is not None and not t.is_cuda:
+                return t.share_memory_()
+            return t
+
+        self.actor_critic._apply(share_mem)
         self.actor_critic.train()
 
         params = list(self.actor_critic.parameters())

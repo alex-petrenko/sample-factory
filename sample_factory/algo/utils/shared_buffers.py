@@ -46,7 +46,7 @@ def init_tensor(leading_dimensions: List, tensor_type, tensor_shape, device: tor
         t.fill_(43)
 
     t = t.to(device)
-    if share:
+    if share and not t.is_cuda:
         t.share_memory_()
 
     return t

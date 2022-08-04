@@ -324,6 +324,9 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
 
             signals_to_send = self._prepare_policy_outputs_func(num_samples, policy_outputs, self.requests)
 
+            if not self.cfg.serial_mode:
+                torch.cuda.synchronize(self.device)
+
             with timing.add_time("send_messages"):
                 for actor_idx, data in signals_to_send.items():
                     self.emit_many(advance_rollouts_signal(actor_idx), data)
