@@ -11,7 +11,7 @@ _params = ParamGrid(
 
 vstr = f"{vstr}_norm_returns"
 
-ant_cli = f" --env=isaacgym_Ant --train_for_env_steps=100000000 --with_wandb=True --wandb_tags ant {vstr}"
+ant_cli = f" --env=Ant --train_for_env_steps=100000000 --with_wandb=True --wandb_tags ant {vstr}"
 cli = base_cli + ant_cli
 
 _experiments = [
