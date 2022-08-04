@@ -12,6 +12,9 @@ with open("README.md", "r") as f:
     long_description = "\n".join(descr_no_gifs)
 
 
+_atari_deps = ["gym[atari, accept-rom-license]"]
+
+
 setup(
     # Information
     name="sample-factory",
@@ -45,8 +48,9 @@ setup(
         "huggingface-hub<1.0",
     ],
     extras_require={
-        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"],
-        "atari": ["gym[atari, accept-rom-license]"],
+        # some tests require Atari so let's make sure dev environment has that
+        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"] + _atari_deps,
+        "atari": _atari_deps,
         "mujoco": ["gym[mujoco]"],
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources

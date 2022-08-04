@@ -15,7 +15,7 @@ from sample_factory.utils.utils import log, str2bool
 
 SBATCH_TEMPLATE_DEFAULT = (
     "#!/bin/bash\n"
-    "source /homes/petrenko/miniconda3/etc/profile.d/conda.sh\n"
+    # "source /homes/petrenko/miniconda3/etc/profile.d/conda.sh\n"
     "conda activate sample-factory\n"
     "cd ~/sample-factory\n"
 )
