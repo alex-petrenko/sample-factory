@@ -24,7 +24,9 @@ class TestAtariEnv:
     def make_env(env_config):
         from sf_examples.atari_examples.atari.atari_utils import make_atari_env
 
-        return make_atari_env("atari_beamrider", cfg=default_cfg(env="atari_beamrider"), env_config=None)
+        return make_atari_env(
+            "atari_beamrider", cfg=parse_atari_args(argv=["--algo=APPO", "--env=atari_beamrider"]), env_config=None
+        )
 
     def test_atari_performance(self):
         eval_env_performance(self.make_env, "atari")

@@ -4,6 +4,7 @@ from typing import List
 
 import numpy as np
 import torch
+from gym.wrappers.frame_stack import LazyFrames
 from torch import Tensor
 
 from sample_factory.utils.dicts import (
@@ -51,6 +52,8 @@ class TensorDict(dict):
                     t = new_data
                 elif isinstance(new_data, np.ndarray):
                     t = torch.from_numpy(new_data)
+                elif isinstance(new_data, LazyFrames):
+                    t = torch.Tensor(new_data)
                 else:
                     raise ValueError(f"Type {type(new_data)} not supported in set_data_func")
 
@@ -61,6 +64,8 @@ class TensorDict(dict):
                     n = new_data.cpu().numpy()
                 elif isinstance(new_data, np.ndarray):
                     n = new_data
+                elif isinstance(new_data, LazyFrames):
+                    n = np.array(new_data)
                 else:
                     raise ValueError(f"Type {type(new_data)} not supported in set_data_func")
 

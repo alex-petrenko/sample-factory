@@ -70,13 +70,6 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
             env.render()
 
 
-def process_stack(cfg_framestack, obs):
-    if cfg_framestack != 1:
-        ob_stack = [obs["obs"] for i in range(cfg_framestack)]
-        obs["obs"] = torch.stack(ob_stack, dim=1)
-    return obs
-
-
 def enjoy(cfg):
     cfg = load_from_checkpoint(cfg)
 
@@ -135,7 +128,7 @@ def enjoy(cfg):
 
             if not cfg.no_render:
                 visualize_policy_inputs(normalized_obs)
-            policy_outputs = actor_critic(process_stack(cfg.env_framestack, normalized_obs), rnn_states)
+            policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
             actions = policy_outputs["actions"]

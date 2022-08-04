@@ -1,13 +1,6 @@
 import gym
 
-from sample_factory.envs.env_wrappers import (
-    ClipRewardEnv,
-    EpisodicLifeEnv,
-    FireResetEnv,
-    FrameStack,
-    MaxAndSkipEnv,
-    NoopResetEnv,
-)
+from sample_factory.envs.env_wrappers import ClipRewardEnv, EpisodicLifeEnv, FireResetEnv, MaxAndSkipEnv, NoopResetEnv
 
 ATARI_W = ATARI_H = 84
 
@@ -57,5 +50,5 @@ def make_atari_env(env_name, cfg, env_config, **kwargs):
     env = ClipRewardEnv(env)
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayScaleObservation(env)
-    env = FrameStack(env, cfg.env_framestack)
+    env = gym.wrappers.FrameStack(env, cfg.env_framestack)
     return env
