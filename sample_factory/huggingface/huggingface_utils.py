@@ -12,7 +12,7 @@ MIN_FRAME_SIZE = 180
 def generate_replay_video(dir_path: str, frames: list, fps: int):
     tmp_name = os.path.join(project_tmp_dir(), "replay.mp4")
     video_name = os.path.join(dir_path, "replay.mp4")
-    frame_size = (frames[0].shape[0], frames[0].shape[1])
+    frame_size = (frames[0].shape[1], frames[0].shape[0])
     resize = False
 
     if min(frame_size) < MIN_FRAME_SIZE:
