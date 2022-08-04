@@ -36,7 +36,7 @@ class TestExampleMulti:
             train_steps=250000,
             num_workers=8,
             batch_size=512,
-            expected_reward_at_least=-0.1,  # 0 is the best we can do
+            expected_reward_at_least=-0.2,  # 0 is the best we can do
             serial_mode=False,
             async_rl=True,
         )
