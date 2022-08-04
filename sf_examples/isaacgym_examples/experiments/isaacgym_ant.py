@@ -4,8 +4,8 @@ from sf_examples.isaacgym_examples.experiments.isaacgym_runs import base_cli, vs
 _params = ParamGrid(
     [
         ("seed", [1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888]),
-        ("serial_mode", [True, False]),
-        ("async_rl", [True, False]),
+        (("serial_mode", "async_rl"), ([True, False], [False, True])),
+        (("use_rnn", "recurrence"), ([False, 1], [True, 16])),
     ]
 )
 
@@ -15,11 +15,6 @@ ant_cli = f" --env=isaacgym_Ant --train_for_env_steps=100000000 --with_wandb=Tru
 cli = base_cli + ant_cli
 
 _experiments = [
-    Experiment(
-        f"ant_{vstr}_rnn",
-        cli + f" --use_rnn=True --recurrence=16 --wandb_group=isaacgym_ant_sf2_rnn_{vstr}",
-        _params.generate_params(False),
-    ),
     Experiment(f"ant_{vstr}", cli + f" --wandb_group=isaacgym_ant_sf2_{vstr}", _params.generate_params(False)),
 ]
 

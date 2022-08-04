@@ -165,7 +165,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--shuffle_minibatches",
-        default=True,
+        default=False,
         type=str2bool,
         help="Whether to randomize and shuffle minibatches between iterations (this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)",
     )
