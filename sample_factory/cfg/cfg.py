@@ -165,7 +165,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--shuffle_minibatches",
-        default=True,
+        default=False,
         type=str2bool,
         help="Whether to randomize and shuffle minibatches between iterations (this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)",
     )
@@ -400,6 +400,12 @@ def add_rl_args(p: ArgumentParser):
         type=int,
         help="How many episodes to average to measure performance (avg. reward etc)",
     )
+    p.add_argument(
+        "--summaries_use_frameskip",
+        default=True,
+        type=str2bool,
+        help="Whether to multiply training steps by frameskip when recording summaries, FPS, etc. When this flag is set to True, x-axis for all summaries corresponds to the total number of simulated steps, i.e. with frameskip=4 the x-axis value of 4 million will correspond to 1 million frames observed by the policy.",
+    )
 
     # experiment termination
     p.add_argument(
@@ -527,6 +533,7 @@ def add_model_args(p: ArgumentParser):
 
 def add_default_env_args(p: ArgumentParser):
     """Configuration related to the environments, i.e. things that might be difficult to query from an environment instance."""
+    p.add_argument("--use_env_info_cache", default=False, type=str2bool, help="Whether to use cached env info")
     p.add_argument(
         "--env_gpu_actions",
         default=False,
@@ -553,10 +560,16 @@ def add_default_env_args(p: ArgumentParser):
         "Frameskip=1 (default) means no frameskip, we process every frame.",
     )
     p.add_argument(
-        "--env_framestack", default=4, type=int, help="Frame stacking (only used in Atari?)"
+        "--env_framestack", default=1, type=int, help="Frame stacking (only used in Atari, and it is usually set to 4)"
     )  # <-- this probably should be moved to environment-specific scripts
     p.add_argument(
         "--pixel_format", default="CHW", type=str, help="PyTorch expects CHW by default, Ray & TensorFlow expect HWC"
+    )
+    p.add_argument(
+        "--use_record_episode_statistics",
+        default=False,
+        type=str2bool,
+        help="Whether to use gym RecordEpisodeStatistics wrapper to keep track of reward",
     )
 
 
