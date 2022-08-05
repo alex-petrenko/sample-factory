@@ -964,7 +964,10 @@ class Learner(Configurable):
 
             # multiply the number of samples by frameskip so that FPS metrics reflect the number
             # of environment steps actually simulated
-            self.env_steps += experience_size * self.env_info.frameskip
+            if self.cfg.summaries_use_frameskip:
+                self.env_steps += experience_size * self.env_info.frameskip
+            else:
+                self.env_steps += experience_size
 
             stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
             if train_stats is not None:

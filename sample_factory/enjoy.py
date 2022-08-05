@@ -167,7 +167,11 @@ def enjoy(cfg):
                         finished_episode[agent_i] = True
                         rew = episode_reward[agent_i].item()
                         episode_rewards[agent_i].append(rew)
-                        reward_list.append(rew)
+                        if cfg.use_record_episode_statistics:
+                            if "episode" in infos[agent_i].keys():
+                                reward_list.append(infos[agent_i]["episode"]["r"])
+                        else:
+                            reward_list.append(rew)
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):

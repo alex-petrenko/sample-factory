@@ -4,9 +4,11 @@ from os.path import isdir
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
+from sample_factory.cfg.arguments import default_cfg
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
 from sf_examples.atari_examples.train_atari import parse_atari_args
+from tests.envs.utils import eval_env_performance
 from tests.utils import clean_test_dir
 
 
@@ -17,15 +19,27 @@ class TestAtariEnv:
 
         register_atari_components()
 
+    # noinspection PyUnusedLocal
+    @staticmethod
+    def make_env(env_config):
+        from sf_examples.atari_examples.atari.atari_utils import make_atari_env
+
+        return make_atari_env(
+            "atari_beamrider", cfg=parse_atari_args(argv=["--algo=APPO", "--env=atari_beamrider"]), env_config=None
+        )
+
+    def test_atari_performance(self):
+        eval_env_performance(self.make_env, "atari")
+
     @staticmethod
     def _run_test_env(
         env: str = "atari_breakout",
         num_workers: int = 8,
-        train_steps: int = 128,
+        train_steps: int = 512,
         batched_sampling: bool = False,
         serial_mode: bool = True,
         async_rl: bool = False,
-        batch_size: int = 64,
+        batch_size: int = 256,
     ):
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
@@ -37,7 +51,7 @@ class TestAtariEnv:
         cfg.async_rl = async_rl
         cfg.batched_sampling = batched_sampling
         cfg.num_workers = num_workers
-        cfg.num_envs_per_worker = 2
+        cfg.num_envs_per_worker = 1
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
         cfg.seed = 0
