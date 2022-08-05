@@ -1,4 +1,4 @@
-version = 73
+version = 74
 vstr = f"v{version:03d}"
 
 # wandb_project = 'rlgpu-2022'

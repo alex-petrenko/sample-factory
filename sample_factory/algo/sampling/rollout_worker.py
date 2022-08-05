@@ -178,7 +178,12 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
             # could not get a buffer, wait for one to be freed
             return
 
-        policy_request = runner.generate_policy_request(self.timing)
+        with self.timing.add_time("enqueue_policy_requests"):
+            policy_request = runner.generate_policy_request()
+
+            # make sure all writes to shared device buffers are completed
+            runner.synchronize_devices()
+
         with self.timing.add_time("enqueue_policy_requests"):
             if policy_request is not None:
                 self._enqueue_policy_request(runner.split_idx, policy_request)

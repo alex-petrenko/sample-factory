@@ -409,7 +409,7 @@ def get_username():
 
 
 def project_tmp_dir(mkdir: bool = True) -> str:
-    tmp_dir_name = f"sample_factory_{get_username()}"
+    tmp_dir_name = f"sf2_{get_username()}"
     return maybe_ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name), mkdir)
 
 

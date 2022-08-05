@@ -1,4 +1,3 @@
-import random
 import time
 
 import gym
@@ -32,6 +31,7 @@ class TestActionDistributions:
         assert list(simple_actions.shape) == [batch_size, 1]
         assert all(0 <= a < simple_action_space.n for a in simple_actions)
 
+    # noinspection PyUnresolvedReferences
     @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
     @pytest.mark.parametrize("batch_size", [128])
     @pytest.mark.parametrize("device_type", ["cpu"])

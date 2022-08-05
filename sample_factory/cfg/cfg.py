@@ -527,13 +527,13 @@ def add_model_args(p: ArgumentParser):
 
 def add_default_env_args(p: ArgumentParser):
     """Configuration related to the environments, i.e. things that might be difficult to query from an environment instance."""
+    p.add_argument("--use_env_info_cache", default=False, type=str2bool, help="Whether to use cached env info")
     p.add_argument(
         "--env_gpu_actions",
         default=False,
         type=str2bool,
         help="Set to true if environment expects actions on GPU (i.e. as a GPU-side PyTorch tensor)",
     )
-
     p.add_argument(
         "--env_frameskip",
         default=1,

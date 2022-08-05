@@ -42,7 +42,10 @@ class VectorEnvRunner(Configurable):
     def update_trajectory_buffers(self, timing) -> bool:
         raise NotImplementedError()
 
-    def generate_policy_request(self, timing) -> Optional[Dict]:
+    def generate_policy_request(self) -> Optional[Dict]:
+        raise NotImplementedError()
+
+    def synchronize_devices(self) -> None:
         raise NotImplementedError()
 
     def close(self):

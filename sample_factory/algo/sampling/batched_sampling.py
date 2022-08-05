@@ -9,11 +9,10 @@ import torch
 from torch import Tensor
 
 from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
-from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
-from sample_factory.algo.utils.tensor_utils import clone_tensor
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
@@ -132,6 +131,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.min_raw_rewards = self.max_raw_rewards = None
 
+        self.device: Optional[torch.device] = None
+
     def init(self, timing):
         """
         Actually instantiate the env instances.
@@ -153,6 +154,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
             env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config=env_config)
+            check_env_info(env, self.env_info, self.cfg)
 
             env.seed(env_id)
             envs.append(env)
@@ -165,10 +167,12 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.vec_env = SequentialVectorizeWrapper(envs)
 
         self.last_obs = self.vec_env.reset()
-        self.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
-        self.last_rnn_state[:] = 0.0
+        self.last_rnn_state = torch.zeros_like(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
 
-        self.policy_id_buffer = clone_tensor(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
+        # we assume that all data will be on the same device
+        self.device = self.last_rnn_state.device
+
+        self.policy_id_buffer = torch.empty_like(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
         self.policy_id_buffer[:] = self.policy_id
 
         assert self.rollout_step == 0
@@ -333,7 +337,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.curr_traj = self.traj_tensors[self.curr_traj_slice]
             return True
 
-    def generate_policy_request(self, timing) -> Optional[Dict]:
+    def generate_policy_request(self) -> Optional[Dict]:
         if not self.env_step_ready:
             # we haven't actually simulated the environment yet
             return None
@@ -342,17 +346,16 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # we don't have a shared buffer to store data in - still waiting for one to become available
             return None
 
-        with timing.add_time("prepare_next_step"):
-            self.curr_step = self.curr_traj[:, self.rollout_step]
-            # save observations and RNN states in a trajectory
-            self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
-            policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
-            self.env_step_ready = False
-
-            if not self.cfg.serial_mode:
-                torch.cuda.synchronize(self.last_rnn_state.device)
-
+        self.curr_step = self.curr_traj[:, self.rollout_step]
+        # save observations and RNN states in a trajectory
+        self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
+        policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
+        self.env_step_ready = False
         return policy_request
+
+    def synchronize_devices(self) -> None:
+        """Make sure all writes to shared device buffers are finished."""
+        torch.cuda.synchronize(self.device)
 
     def close(self):
         self.vec_env.close()
