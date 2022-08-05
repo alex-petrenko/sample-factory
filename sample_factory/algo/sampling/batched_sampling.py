@@ -159,7 +159,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
-            env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config=env_config)
+            env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config)
             check_env_info(env, self.env_info, self.cfg)
 
             env.seed(env_id)

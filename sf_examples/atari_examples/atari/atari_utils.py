@@ -34,7 +34,8 @@ def atari_env_by_name(name):
     raise Exception("Unknown Atari env")
 
 
-def make_atari_env(env_name, cfg, _env_config):
+# noinspection PyUnusedLocal
+def make_atari_env(env_name, cfg, env_config):
     atari_spec = atari_env_by_name(env_name)
 
     env_kwargs = dict()
