@@ -74,7 +74,7 @@ class CustomMultiEnv(gym.Env):
         # this is like prisoner's dilemma
         payout_matrix = [
             [(0, 0), (-1.0, -1.0)],
-            [(-1.1, -1.1), (0, 0)],  # make it asymmetric for easy learning, this is only a test after all
+            [(-1.0, -1.0), (0, 0)],
         ]
 
         # action = 0 to stay silent, 1 to betray
