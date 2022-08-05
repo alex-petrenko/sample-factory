@@ -12,6 +12,10 @@ with open("README.md", "r") as f:
     long_description = "\n".join(descr_no_gifs)
 
 
+_atari_deps = ["gym[atari, accept-rom-license]"]
+_mujoco_deps = ["gym[mujoco]"]
+
+
 setup(
     # Information
     name="sample-factory",
@@ -29,7 +33,7 @@ setup(
     },
     install_requires=[
         "numpy>=1.18.1<2.0",
-        "torch>=1.6,<1.12",
+        "torch>=1.6,<2.0",
         "gym>=0.17.1,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
@@ -45,9 +49,10 @@ setup(
         "huggingface-hub<1.0",
     ],
     extras_require={
-        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"],
-        "atari": ["gym[atari, accept-rom-license]"],
-        "mujoco": ["gym[mujoco]"],
+        # some tests require Atari and Mujoco so let's make sure dev environment has that
+        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"] + _atari_deps + _mujoco_deps,
+        "atari": _atari_deps,
+        "mujoco": _mujoco_deps,
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },

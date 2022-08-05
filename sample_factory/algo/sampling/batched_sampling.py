@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numbers
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
@@ -8,12 +9,16 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
-from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.sampling.sampling_utils import (
+    TIMEOUT_KEYS,
+    VectorEnvRunner,
+    record_episode_statistics_wrapper_stats,
+)
+from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
-from sample_factory.algo.utils.tensor_utils import clone_tensor
+from sample_factory.algo.utils.torch_utils import synchronize
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
@@ -132,6 +137,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.min_raw_rewards = self.max_raw_rewards = None
 
+        self.device: Optional[torch.device] = None
+
     def init(self, timing):
         """
         Actually instantiate the env instances.
@@ -152,7 +159,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
-            env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config=env_config)
+            env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config)
+            check_env_info(env, self.env_info, self.cfg)
 
             env.seed(env_id)
             envs.append(env)
@@ -165,10 +173,12 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.vec_env = SequentialVectorizeWrapper(envs)
 
         self.last_obs = self.vec_env.reset()
-        self.last_rnn_state = clone_tensor(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
-        self.last_rnn_state[:] = 0.0
+        self.last_rnn_state = torch.zeros_like(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
 
-        self.policy_id_buffer = clone_tensor(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
+        # we assume that all data will be on the same device
+        self.device = self.last_rnn_state.device
+
+        self.policy_id_buffer = torch.empty_like(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
         self.policy_id_buffer[:] = self.policy_id
 
         assert self.rollout_step == 0
@@ -205,46 +215,68 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         num_dones = dones.sum().item()
 
         self.curr_episode_reward += rewards
-
-        # multiply by frameskip so we record the actual number of simulated steps
-        self.curr_episode_len += self.env_info.frameskip
+        self.curr_episode_len += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
 
         reports = []
-        if num_dones > 0:
-            finished = dones.nonzero(as_tuple=True)[0]
+        if num_dones <= 0:
+            return reports
 
-            stats = dict(
-                reward=self.curr_episode_reward[finished],
-                len=self.curr_episode_len[finished],
-                min_raw_reward=self.min_raw_rewards[finished],
-                max_raw_reward=self.max_raw_rewards[finished],
-            )
+        finished = dones.nonzero(as_tuple=True)[0]
 
-            if isinstance(infos, dict):
-                # vectorized reports
-                for key, value in infos.items():
-                    if isinstance(value, Tensor):
-                        if value.numel() == 1:
-                            stats[key] = value.item()
-                        elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
-                            # saving value for all agents who finished the episode
-                            stats[key] = value[finished]
-                        else:
-                            log.warning(f"Infos tensor with unexpected shape {value.shape}")
-            else:
-                # non-vectorized reports TODO (parse infos)
-                pass
+        stats = dict(
+            reward=self.curr_episode_reward[finished],
+            len=self.curr_episode_len[finished],
+            min_raw_reward=self.min_raw_rewards[finished],
+            max_raw_reward=self.max_raw_rewards[finished],
+        )
 
-            # make sure everything in the dict is either a scalar or a numpy array
-            for key, value in stats.items():
+        if isinstance(infos, dict):
+            # vectorized reports
+            for key, value in infos.items():
                 if isinstance(value, Tensor):
-                    stats[key] = value.cpu().numpy()
-            reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
+                    if value.numel() == 1:
+                        stats[key] = value.item()
+                    elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
+                        # saving value for all agents who finished the episode
+                        stats[key] = value[finished]
+                    else:
+                        log.warning(f"Infos tensor with unexpected shape {value.shape}")
+                elif isinstance(value, numbers.Number):
+                    stats[key] = value
+        else:
+            # non-vectorized reports TODO (parse infos)
 
-            self.curr_episode_reward[finished] = 0
-            self.curr_episode_len[finished] = 0
-            self.min_raw_rewards[finished] = np.inf
-            self.max_raw_rewards[finished] = -np.inf
+            assert isinstance(infos, (list, tuple)), "Expect infos to be a list or tuple of dicts"
+
+            # some envs like Atari use a special wrapper to record episode statistics
+            stats_rew, stats_len = [], []
+            for agent_i in finished.tolist():
+                episode_wrapper_stats = record_episode_statistics_wrapper_stats(infos[agent_i])
+                if episode_wrapper_stats is not None:
+                    wrapper_rew, wrapper_len = episode_wrapper_stats
+                    stats_rew.append(wrapper_rew)
+                    stats_len.append(wrapper_len)
+
+            if stats_rew and stats_len:
+                # length of these might not match len(finished), but stats handler does not care
+                stats["RecordEpisodeStatistics_reward"] = np.array(stats_rew)
+                stats["RecordEpisodeStatistics_len"] = np.array(stats_len)
+
+        # make sure everything in the dict is either a scalar or a numpy array
+        for key, value in stats.items():
+            if isinstance(value, Tensor):
+                stats[key] = value.cpu().numpy()
+            else:
+                assert isinstance(value, np.ndarray) or isinstance(
+                    value, numbers.Number
+                ), f"Expect stats[{key}] to be a scalar or numpy array, got {type(value)}"
+
+        reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
+
+        self.curr_episode_reward[finished] = 0
+        self.curr_episode_len[finished] = 0
+        self.min_raw_rewards[finished] = np.inf
+        self.max_raw_rewards[finished] = -np.inf
 
         return reports
 
@@ -333,7 +365,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.curr_traj = self.traj_tensors[self.curr_traj_slice]
             return True
 
-    def generate_policy_request(self, timing) -> Optional[Dict]:
+    def generate_policy_request(self) -> Optional[Dict]:
         if not self.env_step_ready:
             # we haven't actually simulated the environment yet
             return None
@@ -342,14 +374,16 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             # we don't have a shared buffer to store data in - still waiting for one to become available
             return None
 
-        with timing.add_time("prepare_next_step"):
-            self.curr_step = self.curr_traj[:, self.rollout_step]
-            # save observations and RNN states in a trajectory
-            self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
-            policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
-            self.env_step_ready = False
-
+        self.curr_step = self.curr_traj[:, self.rollout_step]
+        # save observations and RNN states in a trajectory
+        self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
+        policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
+        self.env_step_ready = False
         return policy_request
+
+    def synchronize_devices(self) -> None:
+        """Make sure all writes to shared device buffers are finished."""
+        synchronize(self.cfg, self.device)
 
     def close(self):
         self.vec_env.close()

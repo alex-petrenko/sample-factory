@@ -57,9 +57,14 @@ Specify the environment to run with the `--env` command line parameter. The foll
 2. Sample-Factory can run experiments synchronously or asynchronously, with asynchronous execution usually having worse sample efficiency but runs faster. MuJoCo's environments were compared using the two modes in Sample-Factory
     - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Synchronous-vs-Asynchronous--VmlldzoyMzEzNDUz
 
+3. Sample-Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL
+    - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-Wall-Time--VmlldzoyMzg2MDA3
+
 #### Models
 
 Various APPO models trained on MuJoCo environments are uploaded to the HuggingFace Hub. The models have all been trained for 10M steps. Videos of the agents after training can be found on the HuggingFace Hub.
+
+The models below are the best models from the experiment against CleanRL above. The evaluation metrics here are obtained by running the model 10 times.
 
 | Environment | HuggingFace Hub Models | Evaluation Metrics |
 | ----------- | ---------------------- | ------------------ |

@@ -21,7 +21,7 @@ from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages, prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
-from sample_factory.algo.utils.torch_utils import masked_select, to_scalar
+from sample_factory.algo.utils.torch_utils import masked_select, synchronize, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model import create_actor_critic
 from sample_factory.utils.decay import LinearDecay
@@ -208,7 +208,14 @@ class Learner(Configurable):
             self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
         )
         self.actor_critic.model_to_device(self.device)
-        self.actor_critic.share_memory()
+
+        def share_mem(t):
+            if t is not None and not t.is_cuda:
+                return t.share_memory_()
+            return t
+
+        # noinspection PyProtectedMember
+        self.actor_critic._apply(share_mem)
         self.actor_critic.train()
 
         params = list(self.actor_critic.parameters())
@@ -578,6 +585,7 @@ class Learner(Configurable):
             adv = (adv - adv_mean) / torch.clamp_min(adv_std, 1e-7)  # normalize advantage
 
         with self.timing.add_time("losses"):
+            # noinspection PyTypeChecker
             policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids)
             exploration_loss = self.exploration_loss_func(action_distribution, valids, num_invalids)
             kl_old, kl_loss = self.kl_loss_func(
@@ -592,7 +600,7 @@ class Learner(Configurable):
         self, gpu_buffer: TensorDict, batch_size: int, experience_size: int, num_invalids: int
     ) -> Optional[AttrDict]:
         timing = self.timing
-        with torch.no_grad(), timing.add_time("prepare_train"):
+        with torch.no_grad():
             early_stopping_tolerance = 1e-6
             early_stop = False
             prev_epoch_actor_loss = 1e9
@@ -654,10 +662,11 @@ class Learner(Configurable):
                     ) = self._calculate_losses(mb, num_invalids)
 
                 with timing.add_time("losses_postprocess"):
-                    actor_loss = policy_loss + exploration_loss + kl_loss
+                    # noinspection PyTypeChecker
+                    actor_loss: Tensor = policy_loss + exploration_loss + kl_loss
                     epoch_actor_losses[batch_num] = actor_loss
                     critic_loss = value_loss
-                    loss = actor_loss + critic_loss
+                    loss: Tensor = actor_loss + critic_loss
 
                     high_loss = 30.0
                     if torch.abs(loss) > high_loss:
@@ -686,6 +695,8 @@ class Learner(Configurable):
 
                     kl_old_mean = kl_old.mean().item()
                     recent_kls.append(kl_old_mean)
+                    if kl_old.max().item() > 100:
+                        log.warning(f"KL-divergence is very high: {kl_old.max().item():.4f}")
 
                 # update the weights
                 with timing.add_time("update"):
@@ -730,12 +741,14 @@ class Learner(Configurable):
                         stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
                         force_summaries = False
 
+                    # make sure everything (such as policy weights) is committed to shared device memory
+                    synchronize(self.cfg, self.device)
+                    # this will force policy update on the inference worker (policy worker)
+                    self.policy_versions_tensor[self.policy_id] = self.train_step
+
             # end of an epoch
             if self.lr_scheduler.invoke_after_each_epoch():
                 self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
-
-            # this will force policy update on the inference worker (policy worker)
-            self.policy_versions_tensor[self.policy_id] = self.train_step
 
             new_epoch_actor_loss = epoch_actor_losses.mean().item()
             loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
@@ -802,6 +815,7 @@ class Learner(Configurable):
             stats.kl_divergence_max = var.kl_old.max()
             stats.value_delta = value_delta_avg
             stats.value_delta_max = value_delta_max
+            # noinspection PyUnresolvedReferences
             stats.fraction_clipped = (
                 (valid_ratios < var.clip_ratio_low).float() + (valid_ratios > var.clip_ratio_high).float()
             ).mean()
@@ -834,7 +848,9 @@ class Learner(Configurable):
             og_shape[key] = x.shape
             obs[key] = x.view((x.shape[0] * x.shape[1],) + x.shape[2:])
 
-        normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
+        # hold the lock while we alter the state of the normalizer since they can be used in other processes too
+        with self.param_server.policy_lock:
+            normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
 
         # restore original shape
         for key, x in normalized_obs.items():
@@ -860,9 +876,7 @@ class Learner(Configurable):
             if not self.actor_critic.training:
                 self.actor_critic.train()
 
-            # hold the lock while we alter the state of the normalizer since they can be used in other processes too
-            with self.param_server.policy_lock:
-                buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
+            buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
             del buff["obs"]  # don't need non-normalized obs anymore
 
             # calculate estimated value for the next step (T+1)
@@ -950,7 +964,10 @@ class Learner(Configurable):
 
             # multiply the number of samples by frameskip so that FPS metrics reflect the number
             # of environment steps actually simulated
-            self.env_steps += experience_size * self.env_info.frameskip
+            if self.cfg.summaries_use_frameskip:
+                self.env_steps += experience_size * self.env_info.frameskip
+            else:
+                self.env_steps += experience_size
 
             stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
             if train_stats is not None:

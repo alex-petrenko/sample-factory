@@ -42,7 +42,10 @@ class VectorEnvRunner(Configurable):
     def update_trajectory_buffers(self, timing) -> bool:
         raise NotImplementedError()
 
-    def generate_policy_request(self, timing) -> Optional[Dict]:
+    def generate_policy_request(self) -> Optional[Dict]:
+        raise NotImplementedError()
+
+    def synchronize_devices(self) -> None:
         raise NotImplementedError()
 
     def close(self):
@@ -60,3 +63,13 @@ def rollout_worker_device(worker_idx, cfg: AttrDict, env_info: EnvInfo) -> torch
     assert len(gpus_to_use) <= 1
     sampling_device = torch.device("cuda", index=gpus_to_use[0]) if gpus_to_use else torch.device("cpu")
     return sampling_device
+
+
+def record_episode_statistics_wrapper_stats(info: Dict) -> Optional[Tuple[float, float]]:
+    """
+    Some envs like Atari use a special wrapper gym.wrappers.RecordEpisodeStatistics to record episode stats.
+    This accounts for things like reward clipping in the wrappers or frameskip affecting length.
+    """
+    if ep_info := info.get("episode", None):
+        return ep_info["r"], ep_info["l"]
+    return None

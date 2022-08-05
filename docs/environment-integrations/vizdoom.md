@@ -71,15 +71,17 @@ python -m sf_examples.vizdoom_examples.train_vizdoom --env=doom_benchmark --algo
 
 #### Reports
 
-1. We reproduced the paper results in SF2 in the Battle and Battle2 and compared the results using input normalization. Input normalization has improved results in the Battle environment. This experiment with input normalization was run with `sf_examples.vizdoom_examples.experiments.sf2_doom_battle_envs`
+1. We reproduced the paper results in SF2 in the Battle and Battle2 and compared the results using input normalization. Input normalization has improved results in the Battle environment. This experiment with input normalization was run with `sf_examples.vizdoom_examples.experiments.sf2_doom_battle_envs`. Note that `normalize_input=True` is set compared to the results from the paper
     - https://wandb.ai/andrewzhang505/sample_factory/reports/VizDoom-Battle-Environments--VmlldzoyMzcyODQx
 
 #### Models
 
+The models below are the best models from the input normalization experiment above. The evaluation metrics here are obtained by running the model 10 times.  
+
 | Environment | HuggingFace Hub Models                                              | Evaluation Metrics |
 | ----------- | ------------------------------------------------------------------- | ------------------ |
 | Battle      | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle  | 59.37 +/- 3.93     |
-| Battle2     | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2 | 25.72 +/- 5.51     |
+| Battle2     | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2 | 36.40 +/- 4.20     |
 
 #### Videos
 

@@ -33,10 +33,10 @@ class TestExampleMulti:
 
     def test_example_multi(self):
         run_test_env_multi(
-            train_steps=250000,
+            train_steps=100000,
             num_workers=8,
             batch_size=512,
-            expected_reward_at_least=-2.5,  # 0 is the best we can do (would be nice to figure out why it does not converge all the way to 0)
+            expected_reward_at_least=-0.2,  # 0 is the best we can do
             serial_mode=False,
             async_rl=True,
         )

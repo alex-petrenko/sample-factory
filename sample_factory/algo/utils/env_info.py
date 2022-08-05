@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import multiprocessing
 import os
 import pickle
+import shutil
 from dataclasses import dataclass
 from os.path import join
 from typing import List
@@ -9,9 +12,9 @@ import gym
 
 from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
-from sample_factory.algo.utils.make_env import BatchedVecEnv, make_env_func_batched
+from sample_factory.algo.utils.make_env import BatchedVecEnv, NonBatchedVecEnv, make_env_func_batched
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import experiment_dir, log
+from sample_factory.utils.utils import log, project_tmp_dir
 
 
 @dataclass
@@ -26,7 +29,7 @@ class EnvInfo:
     frameskip: int
 
 
-def extract_env_info(env: BatchedVecEnv, cfg):
+def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvInfo:
     obs_space = env.observation_space
     action_space = env.action_space
     num_agents = env.num_agents
@@ -60,6 +63,21 @@ def extract_env_info(env: BatchedVecEnv, cfg):
     return env_info
 
 
+def check_env_info(env: BatchedVecEnv | NonBatchedVecEnv, env_info: EnvInfo, cfg: Config) -> None:
+    new_env_info = extract_env_info(env, cfg)
+    if new_env_info != env_info:
+        cache_filename = env_info_cache_filename(cfg)
+        log.error(
+            f"Env info does not match the cached value: {env_info} != {new_env_info}. Deleting the cache entry {cache_filename}"
+        )
+        shutil.rmtree(cache_filename)
+        log.error(
+            "This is likely because the environment has changed after the cache entry was created. "
+            "Either restart the experiment to fix this or run with --use_env_info_cache=False to avoid such problems in the future."
+        )
+        raise ValueError("Env info mismatch. See logs above for details.")
+
+
 def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     set_global_context(sf_context)
 
@@ -72,9 +90,14 @@ def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):
     res_queue.put(env_info)
 
 
+def env_info_cache_filename(cfg: Config) -> str:
+    return join(project_tmp_dir(), f"env_info_{cfg.env}")
+
+
 def obtain_env_info_in_a_separate_process(cfg: Config) -> EnvInfo:
-    cache_filename = join(experiment_dir(cfg=cfg), f"env_info_{cfg.env}")
-    if os.path.isfile(cache_filename):
+    cache_filename = env_info_cache_filename(cfg)
+    if cfg.use_env_info_cache and os.path.isfile(cache_filename):
+        log.debug(f"Loading env info from cache: {cache_filename}")
         with open(cache_filename, "rb") as fobj:
             env_info = pickle.load(fobj)
             return env_info
@@ -89,7 +112,8 @@ def obtain_env_info_in_a_separate_process(cfg: Config) -> EnvInfo:
     env_info = q.get()
     p.join()
 
-    with open(cache_filename, "wb") as fobj:
-        pickle.dump(env_info, fobj)
+    if cfg.use_env_info_cache:
+        with open(cache_filename, "wb") as fobj:
+            pickle.dump(env_info, fobj)
 
     return env_info

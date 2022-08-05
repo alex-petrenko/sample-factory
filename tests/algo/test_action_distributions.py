@@ -1,4 +1,3 @@
-import random
 import time
 
 import gym
@@ -43,7 +42,9 @@ class TestActionDistributions:
 
         timing = Timing()
 
+        # noinspection PyUnresolvedReferences
         torch.backends.cudnn.enabled = True
+        # noinspection PyUnresolvedReferences
         torch.backends.cudnn.benchmark = True
 
         with torch.no_grad():

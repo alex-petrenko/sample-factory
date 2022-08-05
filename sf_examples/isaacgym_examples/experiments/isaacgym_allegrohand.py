@@ -13,7 +13,7 @@ _params = ParamGrid(
 vstr = f"{vstr}_norm_returns"
 
 ahand_cli = (
-    f" --env=isaacgym_AllegroHand --train_for_env_steps=150000000 "
+    f" --env=AllegroHand --train_for_env_steps=150000000 "
     f"--with_wandb=True --wandb_group=isaacgym_allegrohand_sf2_{vstr} --wandb_tags allegrohand {vstr}"
 )
 cli = base_cli + ahand_cli

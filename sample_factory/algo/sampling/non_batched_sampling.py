@@ -7,9 +7,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import gym
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import (
+    TIMEOUT_KEYS,
+    VectorEnvRunner,
+    record_episode_statistics_wrapper_stats,
+)
 from sample_factory.algo.utils.agent_policy_mapping import AgentPolicyMapping
-from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.shared_buffers import BufferMgr
@@ -194,7 +198,7 @@ class ActorState:
         self.curr_traj_buffer["policy_id"][rollout_step] = policy_id
 
         # multiply by frameskip to get the episode lenghts matching the actual number of simulated steps
-        self.last_episode_duration += self.env_info.frameskip
+        self.last_episode_duration += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
 
         self.is_active = info.get("is_active", True)
 
@@ -204,16 +208,15 @@ class ActorState:
 
         report = None
         if done:
-            last_episode_true_objective = info.get("true_objective", self.last_episode_reward)
-            last_episode_extra_stats = info.get("episode_extra_stats", dict())
-
-            report = self.episodic_stats(last_episode_true_objective, last_episode_extra_stats)
+            report = self._episodic_stats(info)
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
             new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx, self.global_env_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
+
+            self.last_episode_reward = self.last_episode_duration = 0.0
 
         return report
 
@@ -291,14 +294,23 @@ class ActorState:
         if done:
             self.reset_rnn_state()
 
-    def episodic_stats(self, last_episode_true_objective, last_episode_extra_stats):
-        stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
+    def _episodic_stats(self, info: Dict) -> Dict[str, Any]:
+        stats = dict(
+            reward=self.last_episode_reward,
+            len=self.last_episode_duration,
+            episode_extra_stats=info.get("episode_extra_stats", dict()),
+        )
 
-        stats["true_objective"] = last_episode_true_objective
-        stats["episode_extra_stats"] = last_episode_extra_stats
+        if true_objective := info.get("true_objective", None):
+            stats["true_objective"] = true_objective
+
+        episode_wrapper_stats = record_episode_statistics_wrapper_stats(info)
+        if episode_wrapper_stats is not None:
+            wrapper_rew, wrapper_len = episode_wrapper_stats
+            stats["RecordEpisodeStatistics_reward"] = wrapper_rew
+            stats["RecordEpisodeStatistics_len"] = wrapper_len
 
         report = {EPISODIC: stats, POLICY_ID_KEY: self.curr_policy_id}
-        self.last_episode_reward = self.last_episode_duration = 0
         return report
 
 
@@ -382,6 +394,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
             env = make_env_func_non_batched(self.cfg, env_config=env_config)
+            check_env_info(env, self.env_info, self.cfg)
 
             env.seed(global_env_idx)
             self.envs.append(env)
@@ -500,7 +513,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         # a simulation step right away, without waiting for all other actions to be calculated.
         return all_actors_ready
 
-    def _process_rewards(self, rewards, env_i):
+    def _process_rewards(self, rewards, env_i: int):
         """
         Pretty self-explanatory, here we record the episode reward and apply the optional clipping and
         scaling of rewards.
@@ -674,7 +687,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         assert self.need_trajectory_buffers == 0
         return True
 
-    def generate_policy_request(self, timing) -> Optional[Dict]:
+    def generate_policy_request(self) -> Optional[Dict]:
         if not self.env_step_ready:
             # we haven't actually simulated the environment yet
             # log.debug('Cannot generate policy request because we have not finished the env simulation step yet!')
@@ -684,12 +697,18 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             # we don't have a shared buffers to store data in - still waiting for one to become available
             return None
 
-        with timing.add_time("prepare_next_step"):
-            self._prepare_next_step()
-            policy_request = self._format_policy_request()
-            self.env_step_ready = False
-
+        self._prepare_next_step()
+        policy_request = self._format_policy_request()
+        self.env_step_ready = False
         return policy_request
+
+    def synchronize_devices(self) -> None:
+        """
+        Non-batched sampling on GPU does not really make sense, so we currently leave this as a no-op.
+        If in the future we want to do non-batched sampling with GPU-side observations, we should add synchronization
+        here.
+        """
+        pass
 
     def close(self):
         for e in self.envs:

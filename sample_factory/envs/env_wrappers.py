@@ -6,6 +6,7 @@ import json
 import os
 from collections import deque
 from os.path import join
+from typing import Any, Dict, Tuple, Union
 
 import cv2
 import gym
@@ -13,199 +14,15 @@ import numpy as np
 
 # noinspection PyProtectedMember
 from gym import ObservationWrapper, RewardWrapper, spaces
+from gym.spaces import Box
 
 from sample_factory.envs.env_utils import num_env_steps
 from sample_factory.utils.utils import ensure_dir_exists, log, numpy_all_the_way
 
 
-def reset_with_info(env):
-    """Sometimes we want to get info with the very first frame."""
-    obs = env.reset()
-    info = {}
-    if hasattr(env.unwrapped, "get_info_all"):
-        info = env.unwrapped.get_info_all()  # info for the new episode
-    return obs, info
-
-
-def unwrap_env(wrapped_env):
-    return wrapped_env.unwrapped
-
-
-def is_goal_based_env(env):
-    dict_obs = isinstance(env.observation_space, spaces.Dict)
-    if not dict_obs:
-        return False
-
-    for key in ["obs", "goal"]:
-        if key not in env.observation_space.spaces:
-            return False
-
-    return True
-
-
-def main_observation_space(env):
-    if hasattr(env.observation_space, "spaces"):
-        return env.observation_space.spaces["obs"]
-    else:
-        return env.observation_space
-
-
 def has_image_observations(observation_space):
     """It's a heuristic."""
     return len(observation_space.shape) >= 2
-
-
-class StackFramesWrapper(gym.core.Wrapper):
-    """
-    Gym env wrapper to stack multiple frames.
-    Useful for training feed-forward agents on dynamic games.
-    """
-
-    def __init__(self, env, stack_past_frames, channel_config="HWC"):
-        super(StackFramesWrapper, self).__init__(env)
-        if len(env.observation_space.shape) not in [1, 2]:
-            raise Exception("Stack frames works with vector observations and 2D single channel images")
-        self._stack_past = stack_past_frames
-        self._frames = None
-
-        self._image_obs = has_image_observations(env.observation_space)
-
-        self.channel_config = channel_config
-        if self._image_obs:
-            if self.channel_config == "CHW":
-                new_obs_space_shape = (stack_past_frames,) + env.observation_space.shape
-            elif self.channel_config == "HWC":
-                new_obs_space_shape = env.observation_space.shape + (stack_past_frames,)
-            else:
-                raise Exception(f"Unknown channel config {self.channel_config}")
-        else:
-            new_obs_space_shape = list(env.observation_space.shape)
-            new_obs_space_shape[0] *= stack_past_frames
-
-        self.observation_space = spaces.Box(
-            env.observation_space.low.flat[0],
-            env.observation_space.high.flat[0],
-            shape=new_obs_space_shape,
-            dtype=env.observation_space.dtype,
-        )
-
-    def _render_stacked_frames(self):
-        if self._image_obs:
-            # stack past frames along first dimension
-            img = numpy_all_the_way(self._frames)
-
-            if self.channel_config == "CHW":
-                return img
-            elif self.channel_config == "HWC":
-                return np.transpose(img, axes=[1, 2, 0])
-            else:
-                raise Exception(f"Unknown channel config {self.channel_config}")
-        else:
-            return np.array(self._frames).flatten()
-
-    def reset(self):
-        observation = self.env.reset()
-        self._frames = deque([observation] * self._stack_past)
-        return self._render_stacked_frames()
-
-    def step(self, action):
-        new_observation, reward, done, info = self.env.step(action)
-        self._frames.popleft()
-        self._frames.append(new_observation)
-        return self._render_stacked_frames(), reward, done, info
-
-
-class SkipFramesWrapper(gym.core.Wrapper):
-    """Wrapper for action repeat over N frames to speed up training."""
-
-    def __init__(self, env, skip_frames=4):
-        super(SkipFramesWrapper, self).__init__(env)
-        self._skip_frames = skip_frames
-
-    def reset(self):
-        return self.env.reset()
-
-    def step(self, action):
-        done = False
-        info = None
-        new_observation = None
-
-        total_reward, num_frames = 0, 0
-        for i in range(self._skip_frames):
-            new_observation, reward, done, info = self.env.step(action)
-            num_frames += 1
-            total_reward += reward
-            if done:
-                break
-
-        info["num_frames"] = num_frames
-        return new_observation, total_reward, done, info
-
-
-class SkipAndStackFramesWrapper(StackFramesWrapper):
-    """Wrapper for action repeat + stack multiple frames to capture dynamics."""
-
-    def __init__(self, env, skip_frames=4, stack_frames=4, channel_config="HWC"):
-        super().__init__(env, stack_past_frames=stack_frames, channel_config=channel_config)
-        self._skip_frames = skip_frames
-
-    def step(self, action):
-        done = False
-        info = {}
-        total_reward, num_frames = 0, 0
-        for i in range(self._skip_frames):
-            new_observation, reward, done, info = self.env.step(action)
-            num_frames += 1
-            total_reward += reward
-            self._frames.popleft()
-            self._frames.append(new_observation)
-            if done:
-                break
-
-        info["num_frames"] = num_frames
-        return self._render_stacked_frames(), total_reward, done, info
-
-
-class NormalizeWrapper(gym.core.Wrapper):
-    """
-    For environments with vector lowdim input.
-
-    """
-
-    def __init__(self, env):
-        super(NormalizeWrapper, self).__init__(env)
-        if len(env.observation_space.shape) != 1:
-            raise Exception("NormalizeWrapper only works with lowdimensional envs")
-
-        self.wrapped_env = env
-        self._normalize_to = 1.0
-
-        self._mean = (env.observation_space.high + env.observation_space.low) * 0.5
-        self._max = env.observation_space.high
-
-        self.observation_space = spaces.Box(
-            -self._normalize_to,
-            self._normalize_to,
-            shape=env.observation_space.shape,
-            dtype=np.float32,
-        )
-
-    def _normalize(self, obs):
-        obs -= self._mean
-        obs *= self._normalize_to / (self._max - self._mean)
-        return obs
-
-    def reset(self):
-        observation = self.env.reset()
-        return self._normalize(observation)
-
-    def step(self, action):
-        observation, reward, done, info = self.env.step(action)
-        return self._normalize(observation), reward, done, info
-
-    @property
-    def range(self):
-        return [-self._normalize_to, self._normalize_to]
 
 
 class ResizeWrapper(gym.core.Wrapper):
@@ -273,29 +90,6 @@ class ResizeWrapper(gym.core.Wrapper):
         return self._observation(obs), reward, done, info
 
 
-class VerticalCropWrapper(ObservationWrapper):
-    def __init__(self, env, crop_h):
-        # super(VerticalCropWrapper, self).__init__(env)
-        super().__init__(env)
-
-        self.crop_h = crop_h
-        self.observation_space = self._calc_new_obs_space(env.observation_space)
-
-    def _calc_new_obs_space(self, old_space):
-        low, high = old_space.low.flat[0], old_space.high.flat[0]
-        h, w, channels = old_space.shape
-        new_shape = [self.crop_h, w, channels]
-        return spaces.Box(low, high, shape=new_shape, dtype=old_space.dtype)
-
-    # noinspection PyProtectedMember
-    def observation(self, observation):
-        h = observation.shape[0]
-        crop_top = (h - self.crop_h) // 2
-        crop_bottom = h - self.crop_h - crop_top
-        cropped_obs = observation[crop_top : h - crop_bottom, :, :]
-        return cropped_obs
-
-
 class RewardScalingWrapper(RewardWrapper):
     def __init__(self, env, scaling_factor):
         super(RewardScalingWrapper, self).__init__(env)
@@ -338,39 +132,6 @@ class TimeLimitWrapper(gym.core.Wrapper):
                 info[self.terminated_by_timer] = True
 
         return observation, reward, done, info
-
-
-class RemainingTimeWrapper(ObservationWrapper):
-    """Designed to be used together with TimeLimitWrapper."""
-
-    def __init__(self, env):
-        super(RemainingTimeWrapper, self).__init__(env)
-
-        # adding an additional input dimension to indicate time left before the end of episode
-        self.observation_space = spaces.Dict(
-            {
-                "timer": spaces.Box(0.0, 1.0, shape=[1], dtype=np.float32),
-                "obs": env.observation_space,
-            }
-        )
-
-        wrapped_env = env
-        while not isinstance(wrapped_env, TimeLimitWrapper):
-            wrapped_env = wrapped_env.env
-            if not isinstance(wrapped_env, gym.core.Wrapper):
-                raise Exception("RemainingTimeWrapper is supposed to wrap TimeLimitWrapper")
-        self.time_limit_wrapper = wrapped_env
-
-    # noinspection PyProtectedMember
-    def observation(self, observation):
-        num_steps = self.time_limit_wrapper._num_steps
-        terminate_in = self.time_limit_wrapper._terminate_in
-
-        dict_obs = {
-            "timer": num_steps / terminate_in,
-            "obs": observation,
-        }
-        return dict_obs
 
 
 class PixelFormatChwWrapper(ObservationWrapper):
@@ -434,16 +195,6 @@ class PixelFormatChwWrapper(ObservationWrapper):
         else:
             observation = self._transpose(observation)
         return observation
-
-
-class ClipRewardWrapper(gym.RewardWrapper):
-    def __init__(self, env):
-        gym.RewardWrapper.__init__(self, env)
-
-    def reward(self, reward):
-        reward = min(5.0, reward)
-        reward = max(-0.1, reward)
-        return reward
 
 
 class RecordingWrapper(gym.core.Wrapper):
@@ -516,3 +267,166 @@ class RecordingWrapper(gym.core.Wrapper):
             self._recorded_episode_shaping_reward = self.env.unwrapped._total_shaping_reward
 
         return observation, reward, done, info
+
+
+GymObs = Union[Tuple, Dict[str, Any], np.ndarray, int]
+GymStepReturn = Tuple[GymObs, float, bool, Dict]
+
+
+# wrapper from CleanRL / Stable Baselines
+class NoopResetEnv(gym.Wrapper):
+    """
+    Sample initial states by taking random number of no-ops on reset.
+    No-op is assumed to be action 0.
+    :param env: the environment to wrap
+    :param noop_max: the maximum value of no-ops to run
+    """
+
+    def __init__(self, env: gym.Env, noop_max: int = 30):
+        gym.Wrapper.__init__(self, env)
+        self.noop_max = noop_max
+        self.override_num_noops = None
+        self.noop_action = 0
+        assert env.unwrapped.get_action_meanings()[0] == "NOOP"
+
+    def reset(self, **kwargs) -> np.ndarray:
+        self.env.reset(**kwargs)
+        if self.override_num_noops is not None:
+            noops = self.override_num_noops
+        else:
+            noops = self.unwrapped.np_random.integers(1, self.noop_max + 1)
+        assert noops > 0
+        obs = np.zeros(0)
+        for _ in range(noops):
+            obs, _, done, _ = self.env.step(self.noop_action)
+            if done:
+                obs = self.env.reset(**kwargs)
+        return obs
+
+
+# wrapper from CleanRL / Stable Baselines
+class FireResetEnv(gym.Wrapper):
+    """
+    Take action on reset for environments that are fixed until firing.
+    :param env: the environment to wrap
+    """
+
+    def __init__(self, env: gym.Env):
+        gym.Wrapper.__init__(self, env)
+        assert env.unwrapped.get_action_meanings()[1] == "FIRE"
+        assert len(env.unwrapped.get_action_meanings()) >= 3
+
+    def reset(self, **kwargs) -> np.ndarray:
+        self.env.reset(**kwargs)
+        obs, _, done, _ = self.env.step(1)
+        if done:
+            self.env.reset(**kwargs)
+        obs, _, done, _ = self.env.step(2)
+        if done:
+            self.env.reset(**kwargs)
+        return obs
+
+
+# wrapper from CleanRL / Stable Baselines
+class EpisodicLifeEnv(gym.Wrapper):
+    """
+    Make end-of-life == end-of-episode, but only reset on true game over.
+    Done by DeepMind for the DQN and co. since it helps value estimation.
+    :param env: the environment to wrap
+    """
+
+    def __init__(self, env: gym.Env):
+        gym.Wrapper.__init__(self, env)
+        self.lives = 0
+        self.was_real_done = True
+
+    def step(self, action: int) -> GymStepReturn:
+        obs, reward, done, info = self.env.step(action)
+        self.was_real_done = done
+        # check current lives, make loss of life terminal,
+        # then update lives to handle bonus lives
+        lives = self.env.unwrapped.ale.lives()
+        if 0 < lives < self.lives:
+            # for Qbert sometimes we stay in lives == 0 condtion for a few frames
+            # so its important to keep lives > 0, so that we only reset once
+            # the environment advertises done.
+            done = True
+        self.lives = lives
+        return obs, reward, done, info
+
+    def reset(self, **kwargs) -> np.ndarray:
+        """
+        Calls the Gym environment reset, only when lives are exhausted.
+        This way all states are still reachable even though lives are episodic,
+        and the learner need not know about any of this behind-the-scenes.
+        :param kwargs: Extra keywords passed to env.reset() call
+        :return: the first observation of the environment
+        """
+        if self.was_real_done:
+            obs = self.env.reset(**kwargs)
+        else:
+            # no-op step to advance from terminal/lost life state
+            obs, _, _, _ = self.env.step(0)
+        self.lives = self.env.unwrapped.ale.lives()
+        return obs
+
+
+# wrapper from CleanRL / Stable Baselines
+class MaxAndSkipEnv(gym.Wrapper):
+    """
+    Return only every ``skip``-th frame (frameskipping)
+    :param env: the environment
+    :param skip: number of ``skip``-th frame
+    """
+
+    def __init__(self, env: gym.Env, skip: int = 4):
+        gym.Wrapper.__init__(self, env)
+        # most recent raw observations (for max pooling across time steps)
+        self._obs_buffer = np.zeros((2,) + env.observation_space.shape, dtype=env.observation_space.dtype)
+        self._skip = skip
+
+    def step(self, action: int) -> GymStepReturn:
+        """
+        Step the environment with the given action
+        Repeat action, sum reward, and max over last observations.
+        :param action: the action
+        :return: observation, reward, done, information
+        """
+        total_reward = 0.0
+        done = None
+        for i in range(self._skip):
+            obs, reward, done, info = self.env.step(action)
+            if i == self._skip - 2:
+                self._obs_buffer[0] = obs
+            if i == self._skip - 1:
+                self._obs_buffer[1] = obs
+            total_reward += reward
+            if done:
+                break
+        # Note that the observation on the done=True frame
+        # doesn't matter
+        max_frame = self._obs_buffer.max(axis=0)
+
+        return max_frame, total_reward, done, info
+
+    def reset(self, **kwargs) -> GymObs:
+        return self.env.reset(**kwargs)
+
+
+# wrapper from CleanRL / Stable Baselines
+class ClipRewardEnv(gym.RewardWrapper):
+    """
+    Clips the reward to {+1, 0, -1} by its sign.
+    :param env: the environment
+    """
+
+    def __init__(self, env: gym.Env):
+        gym.RewardWrapper.__init__(self, env)
+
+    def reward(self, reward: float) -> float:
+        """
+        Bin reward to {+1, 0, -1} by its sign.
+        :param reward:
+        :return:
+        """
+        return np.sign(reward)
