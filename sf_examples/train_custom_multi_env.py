@@ -59,11 +59,6 @@ class CustomMultiEnv(gym.Env):
     def step(self, actions):
         infos = [dict() for _ in range(self.num_agents)]
 
-        # random actions for inactive agents
-        for agent_idx in range(self.num_agents):
-            if self.inactive_steps[agent_idx] > 0:
-                actions[agent_idx] = random.randint(0, 1)
-
         # "deactivate" agents randomly, mostly to test inactive agent masking functionality
         for agent_idx in range(self.num_agents):
             if self.inactive_steps[agent_idx] > 0:
@@ -83,8 +78,10 @@ class CustomMultiEnv(gym.Env):
         ]
 
         # action = 0 to stay silent, 1 to betray
-        rewards = payout_matrix[actions[0]][actions[1]]
+        rewards = list(payout_matrix[actions[0]][actions[1]])
         for agent_idx in range(self.num_agents):
+            if not infos[agent_idx]["is_active"]:
+                rewards[agent_idx] = 0
             self.episode_rewards[agent_idx].append(rewards[agent_idx])
 
         time_out = self.curr_episode_steps >= self.cfg.custom_env_episode_len

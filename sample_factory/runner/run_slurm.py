@@ -46,6 +46,13 @@ def add_slurm_args(parser):
         help="Commands to run before the actual experiment (i.e. activate conda env, etc.)",
     )
 
+    parser.add_argument(
+        "--slurm_timeout",
+        default="0",
+        type=str,
+        help="Time to run jobs before timing out job and requeuing the job. Defaults to 0, which does not time out the job",
+    )
+
     return parser
 
 
@@ -85,7 +92,12 @@ def run_slurm(run_description, args):
         sbatch_fname = os.path.abspath(sbatch_fname)
 
         file_content = Template(sbatch_template).substitute(
-            CMD=cmd, FILENAME=sbatch_fname, PARTITION=partition, GPU=args.slurm_gpus_per_job, CPU=num_cpus
+            CMD=cmd,
+            FILENAME=sbatch_fname,
+            PARTITION=partition,
+            GPU=args.slurm_gpus_per_job,
+            CPU=num_cpus,
+            TIMEOUT=args.slurm_timeout,
         )
         with open(sbatch_fname, "w") as sbatch_f:
             sbatch_f.write(file_content)
