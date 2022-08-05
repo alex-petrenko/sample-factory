@@ -307,7 +307,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
         self.policy_output_tensors[device][output_indices] = output_tensors.numpy()
 
         # this should be a no-op unless we have a non-batched env with observations on gpu
-        synchronize(self.cfg, torch.device(device))
+        synchronize(self.cfg, device)
 
         return signals_to_send
 
@@ -396,7 +396,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
 
         # initially we clean cache very frequently, later on do it every few minutes
         if self.total_num_samples > 1000:
-            self.cache_cleanup_timer.set_interval(30.0)
+            self.cache_cleanup_timer.set_interval(60.0)
 
     def on_stop(self, *args):
         if self.is_initialized:

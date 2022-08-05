@@ -13,6 +13,7 @@ from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.torch_utils import synchronize
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
@@ -355,7 +356,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
     def synchronize_devices(self) -> None:
         """Make sure all writes to shared device buffers are finished."""
-        torch.cuda.synchronize(self.device)
+        synchronize(self.cfg, self.device)
 
     def close(self):
         self.vec_env.close()
