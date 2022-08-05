@@ -1,7 +1,13 @@
-def atari_override_defaults(env, parser):
+import argparse
+
+
+def atari_override_defaults(_env, parser):
     """RL params specific to Atari envs."""
     parser.set_defaults(
-        summaries_use_frameskip=False,
+        # let's set this to True by default so it's consistent with how we report results for other envs
+        # (i.e. VizDoom or DMLab). When running evaluations for reports or to compare with other frameworks we can
+        # set this to false in command line
+        summaries_use_frameskip=True,
         use_record_episode_statistics=True,
         encoder_type="conv",
         encoder_subtype="convnet_atari",
@@ -42,11 +48,12 @@ def atari_override_defaults(env, parser):
         serial_mode=False,
         async_rl=False,
         experiment_summaries_interval=3,
-        adam_eps=1e-5,
+        adam_eps=1e-5,  # choose the same value as CleanRL used
     )
 
 
-# noinspection PyUnusedLocal
-def add_atari_env_args(env, parser):
-    # in case we more args in the future
-    pass
+def add_atari_env_args(_env, p: argparse.ArgumentParser, evaluation=False):
+    if evaluation:
+        # apparently env.render(mode="human") is not supported anymore and we need to specify the render mode in
+        # the env ctor
+        p.add_argument("--render_mode", default="human", type=str, help="")

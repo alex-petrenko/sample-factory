@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numbers
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
@@ -8,7 +9,11 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import (
+    TIMEOUT_KEYS,
+    VectorEnvRunner,
+    record_episode_statistics_wrapper_stats,
+)
 from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
@@ -128,9 +133,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward = self.curr_episode_len = None
 
-        if self.cfg.use_record_episode_statistics:
-            self.episode_return = self.episode_length = None
-
         self.pbt_reward_shaping = pbt_reward_shaping  # TODO
 
         self.min_raw_rewards = self.max_raw_rewards = None
@@ -183,9 +185,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward = torch.zeros(self.vec_env.num_agents)
         self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
-        if self.cfg.use_record_episode_statistics:
-            self.episode_return = torch.zeros(self.vec_env.num_agents)
-            self.episode_length = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
         self.min_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
         self.max_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
 
@@ -216,59 +215,68 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         num_dones = dones.sum().item()
 
         self.curr_episode_reward += rewards
-
-        if self.cfg.use_record_episode_statistics:
-            for agent_i, item in enumerate(infos):
-                if "episode" in item.keys():
-                    self.episode_return[agent_i] = torch.tensor(item["episode"]["r"])
-                    self.episode_length[agent_i] = torch.tensor(item["episode"]["l"], dtype=torch.int32)
-
-        # multiply by frameskip so we record the actual number of simulated steps
-        if self.cfg.summaries_use_frameskip:
-            self.curr_episode_len += self.env_info.frameskip
-        else:
-            self.curr_episode_len += 1
+        self.curr_episode_len += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
 
         reports = []
-        if num_dones > 0:
-            finished = dones.nonzero(as_tuple=True)[0]
+        if num_dones <= 0:
+            return reports
 
-            stats = dict(
-                reward=self.curr_episode_reward[finished]
-                if not self.cfg.use_record_episode_statistics
-                else self.episode_return[finished],
-                len=self.curr_episode_len[finished]
-                if not self.cfg.use_record_episode_statistics
-                else self.episode_length[finished],
-                min_raw_reward=self.min_raw_rewards[finished],
-                max_raw_reward=self.max_raw_rewards[finished],
-            )
+        finished = dones.nonzero(as_tuple=True)[0]
 
-            if isinstance(infos, dict):
-                # vectorized reports
-                for key, value in infos.items():
-                    if isinstance(value, Tensor):
-                        if value.numel() == 1:
-                            stats[key] = value.item()
-                        elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
-                            # saving value for all agents who finished the episode
-                            stats[key] = value[finished]
-                        else:
-                            log.warning(f"Infos tensor with unexpected shape {value.shape}")
-            else:
-                # non-vectorized reports TODO (parse infos)
-                pass
+        stats = dict(
+            reward=self.curr_episode_reward[finished],
+            len=self.curr_episode_len[finished],
+            min_raw_reward=self.min_raw_rewards[finished],
+            max_raw_reward=self.max_raw_rewards[finished],
+        )
 
-            # make sure everything in the dict is either a scalar or a numpy array
-            for key, value in stats.items():
+        if isinstance(infos, dict):
+            # vectorized reports
+            for key, value in infos.items():
                 if isinstance(value, Tensor):
-                    stats[key] = value.cpu().numpy()
-            reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
+                    if value.numel() == 1:
+                        stats[key] = value.item()
+                    elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
+                        # saving value for all agents who finished the episode
+                        stats[key] = value[finished]
+                    else:
+                        log.warning(f"Infos tensor with unexpected shape {value.shape}")
+                elif isinstance(value, numbers.Number):
+                    stats[key] = value
+        else:
+            # non-vectorized reports TODO (parse infos)
 
-            self.curr_episode_reward[finished] = 0
-            self.curr_episode_len[finished] = 0
-            self.min_raw_rewards[finished] = np.inf
-            self.max_raw_rewards[finished] = -np.inf
+            assert isinstance(infos, (list, tuple)), "Expect infos to be a list or tuple of dicts"
+
+            # some envs like Atari use a special wrapper to record episode statistics
+            stats_rew, stats_len = [], []
+            for agent_i in finished.tolist():
+                episode_wrapper_stats = record_episode_statistics_wrapper_stats(infos[agent_i])
+                if episode_wrapper_stats is not None:
+                    wrapper_rew, wrapper_len = episode_wrapper_stats
+                    stats_rew.append(wrapper_rew)
+                    stats_len.append(wrapper_len)
+
+            if stats_rew and stats_len:
+                # length of these might not match len(finished), but stats handler does not care
+                stats["RecordEpisodeStatistics_reward"] = np.array(stats_rew)
+                stats["RecordEpisodeStatistics_len"] = np.array(stats_len)
+
+        # make sure everything in the dict is either a scalar or a numpy array
+        for key, value in stats.items():
+            if isinstance(value, Tensor):
+                stats[key] = value.cpu().numpy()
+            else:
+                assert isinstance(value, np.ndarray) or isinstance(
+                    value, numbers.Number
+                ), f"Expect stats[{key}] to be a scalar or numpy array, got {type(value)}"
+
+        reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
+
+        self.curr_episode_reward[finished] = 0
+        self.curr_episode_len[finished] = 0
+        self.min_raw_rewards[finished] = np.inf
+        self.max_raw_rewards[finished] = -np.inf
 
         return reports
 

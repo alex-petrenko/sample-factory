@@ -18,7 +18,7 @@ def register_atari_components():
 
 def parse_atari_args(argv=None, evaluation=False):
     parser, partial_cfg = parse_sf_args(argv=argv, evaluation=evaluation)
-    add_atari_env_args(partial_cfg.env, parser)
+    add_atari_env_args(partial_cfg.env, parser, evaluation=evaluation)
     atari_override_defaults(partial_cfg.env, parser)
     final_cfg = parse_full_cfg(parser, argv)
     return final_cfg

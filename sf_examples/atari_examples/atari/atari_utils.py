@@ -34,17 +34,23 @@ def atari_env_by_name(name):
     raise Exception("Unknown Atari env")
 
 
-def make_atari_env(env_name, cfg, env_config, **kwargs):
+def make_atari_env(env_name, cfg, _env_config):
     atari_spec = atari_env_by_name(env_name)
-    env = gym.make(atari_spec.env_id)
+
+    env_kwargs = dict()
+    if hasattr(cfg, "render_mode"):
+        env_kwargs["render_mode"] = cfg.render_mode
+    env = gym.make(atari_spec.env_id, **env_kwargs)
 
     if atari_spec.default_timeout is not None:
         env._max_episode_steps = atari_spec.default_timeout
 
+    # these are chosen to match Stable-Baselines3 and CleanRL implementations as precisely as possible
     env = gym.wrappers.RecordEpisodeStatistics(env)
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=cfg.env_frameskip)
     env = EpisodicLifeEnv(env)
+    # noinspection PyUnresolvedReferences
     if "FIRE" in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
     env = ClipRewardEnv(env)

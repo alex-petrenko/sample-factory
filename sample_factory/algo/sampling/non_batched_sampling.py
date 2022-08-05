@@ -7,7 +7,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import gym
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import TIMEOUT_KEYS, VectorEnvRunner
+from sample_factory.algo.sampling.sampling_utils import (
+    TIMEOUT_KEYS,
+    VectorEnvRunner,
+    record_episode_statistics_wrapper_stats,
+)
 from sample_factory.algo.utils.agent_policy_mapping import AgentPolicyMapping
 from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
@@ -89,10 +93,6 @@ class ActorState:
 
         self.last_episode_reward = 0
         self.last_episode_duration = 0
-
-        if self.cfg.use_record_episode_statistics:
-            self.episode_return = 0
-            self.episode_length = 0
 
         # dictionary with current training progress per policy
         # values are approximate because we get updates from the master process once every few seconds
@@ -198,10 +198,7 @@ class ActorState:
         self.curr_traj_buffer["policy_id"][rollout_step] = policy_id
 
         # multiply by frameskip to get the episode lenghts matching the actual number of simulated steps
-        if self.cfg.summaries_use_frameskip:
-            self.last_episode_duration += self.env_info.frameskip
-        else:
-            self.last_episode_duration += 1
+        self.last_episode_duration += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
 
         self.is_active = info.get("is_active", True)
 
@@ -211,16 +208,15 @@ class ActorState:
 
         report = None
         if done:
-            last_episode_true_objective = info.get("true_objective", self.last_episode_reward)
-            last_episode_extra_stats = info.get("episode_extra_stats", dict())
-
-            report = self.episodic_stats(last_episode_true_objective, last_episode_extra_stats)
+            report = self._episodic_stats(info)
 
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
             new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx, self.global_env_idx)
             if new_policy_id != self.curr_policy_id:
                 self._on_new_policy(new_policy_id)
+
+            self.last_episode_reward = self.last_episode_duration = 0.0
 
         return report
 
@@ -298,17 +294,23 @@ class ActorState:
         if done:
             self.reset_rnn_state()
 
-    def episodic_stats(self, last_episode_true_objective, last_episode_extra_stats):
-        if self.cfg.use_record_episode_statistics:
-            stats = dict(reward=self.episode_return, len=self.episode_length)
-        else:
-            stats = dict(reward=self.last_episode_reward, len=self.last_episode_duration)
+    def _episodic_stats(self, info: Dict) -> Dict[str, Any]:
+        stats = dict(
+            reward=self.last_episode_reward,
+            len=self.last_episode_duration,
+            episode_extra_stats=info.get("episode_extra_stats", dict()),
+        )
 
-        stats["true_objective"] = last_episode_true_objective
-        stats["episode_extra_stats"] = last_episode_extra_stats
+        if true_objective := info.get("true_objective", None):
+            stats["true_objective"] = true_objective
+
+        episode_wrapper_stats = record_episode_statistics_wrapper_stats(info)
+        if episode_wrapper_stats is not None:
+            wrapper_rew, wrapper_len = episode_wrapper_stats
+            stats["RecordEpisodeStatistics_reward"] = wrapper_rew
+            stats["RecordEpisodeStatistics_len"] = wrapper_len
 
         report = {EPISODIC: stats, POLICY_ID_KEY: self.curr_policy_id}
-        self.last_episode_reward = self.last_episode_duration = 0
         return report
 
 
@@ -511,19 +513,13 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         # a simulation step right away, without waiting for all other actions to be calculated.
         return all_actors_ready
 
-    def _process_rewards(self, rewards, infos, env_i):
+    def _process_rewards(self, rewards, env_i: int):
         """
         Pretty self-explanatory, here we record the episode reward and apply the optional clipping and
         scaling of rewards.
         """
         for agent_i, r in enumerate(rewards):
             self.actor_states[env_i][agent_i].last_episode_reward += r
-
-        if self.cfg.use_record_episode_statistics:
-            for agent_i, item in enumerate(infos):
-                if "episode" in item.keys():
-                    self.actor_states[env_i][agent_i].episode_return = item["episode"]["r"]
-                    self.actor_states[env_i][agent_i].episode_length = item["episode"]["l"]
 
         rewards = np.asarray(rewards, dtype=np.float32)
         rewards = rewards * self.cfg.reward_scale
@@ -542,7 +538,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         episodic_stats = []
         env_actor_states = self.actor_states[env_i]
 
-        rewards = self._process_rewards(rewards, infos, env_i)
+        rewards = self._process_rewards(rewards, env_i)
 
         for agent_i in range(self.num_agents):
             actor_state = env_actor_states[agent_i]

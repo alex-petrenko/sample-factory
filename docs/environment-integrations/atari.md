@@ -10,7 +10,11 @@ pip install sample-factory[atari]
 
 ### Running Experiments
 
-Run Atari experiments with the scripts in `sf_examples.atari_examples`. The default parameters have been chosen to match CleanRL's results in the report below.
+Run Atari experiments with the scripts in `sf_examples.atari_examples`.
+
+The default parameters have been chosen to match CleanRL's configuration (see reports below) and are not tuned for throughput.
+TODO: provide parameters that result in faster training.
+ 
 
 To train a model in the `BreakoutNoFrameskip-v4` enviornment:
 

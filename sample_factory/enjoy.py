@@ -2,6 +2,7 @@ import time
 from collections import deque
 from typing import Dict
 
+import gym
 import numpy as np
 import torch
 from torch import Tensor
@@ -18,7 +19,7 @@ from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.model import create_actor_critic
 from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.utils.utils import AttrDict, experiment_dir, log
+from sample_factory.utils.utils import AttrDict, debug_log_every_n, experiment_dir, log
 
 
 def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
@@ -57,7 +58,6 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
         frame = env.render(mode="rgb_array")
         if (len(video_frames) < cfg.video_frames) or (cfg.video_frames < 0 and num_episodes == 0):
             video_frames.append(frame)
-
     else:
         if not cfg.no_render:
             target_delay = 1.0 / cfg.fps if cfg.fps > 0 else 0
@@ -68,7 +68,10 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
                 # log.info('Wait time %.3f', time_wait)
                 time.sleep(time_wait)
 
-            env.render()
+            try:
+                env.render(mode="human")
+            except gym.error.Error as ex:
+                debug_log_every_n(1000, f"Exception when calling env.render() {str(ex)}")
 
 
 def enjoy(cfg):
