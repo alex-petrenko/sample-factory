@@ -84,7 +84,7 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
 
         self.env_info = env_info
         self.worker_idx = worker_idx
-        self.sampling_device = str(rollout_worker_device(self.worker_idx, self.cfg))
+        self.sampling_device = str(rollout_worker_device(self.worker_idx, self.cfg, self.env_info))
 
         self.vector_size = cfg.num_envs_per_worker
         self.num_splits = cfg.worker_num_splits

@@ -290,7 +290,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
             signals_to_send: AdvanceRolloutSignals = dict()
             output_indices = []
             for request in requests:
-                actor_idx, split_idx, request_data, device = request
+                actor_idx, split_idx, request_data, _ = request
                 for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
                     output_indices.append([actor_idx, split_idx, env_idx, agent_idx])
 

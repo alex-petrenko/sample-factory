@@ -49,11 +49,13 @@ class VectorEnvRunner(Configurable):
         raise NotImplementedError()
 
 
-def rollout_worker_device(worker_idx, cfg: AttrDict) -> torch.device:
+def rollout_worker_device(worker_idx, cfg: AttrDict, env_info: EnvInfo) -> torch.device:
     # TODO: this should correspond to whichever device we have observations on, not just whether we use this device at all
     # TODO: test with Megaverse on a multi-GPU system
     # TODO: actions on a GPU device? Convert to CPU for some envs?
 
+    if not env_info.gpu_observations:
+        return torch.device("cpu")
     gpus_to_use = gpus_for_process(worker_idx, num_gpus_per_process=1, gpu_mask=cfg.actor_worker_gpus)
     assert len(gpus_to_use) <= 1
     sampling_device = torch.device("cuda", index=gpus_to_use[0]) if gpus_to_use else torch.device("cpu")

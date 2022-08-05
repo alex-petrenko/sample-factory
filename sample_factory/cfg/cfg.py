@@ -533,6 +533,12 @@ def add_default_env_args(p: ArgumentParser):
         type=str2bool,
         help="Set to true if environment expects actions on GPU (i.e. as a GPU-side PyTorch tensor)",
     )
+    p.add_argument(
+        "--env_gpu_observations",
+        default=True,
+        type=str2bool,
+        help="Set to true if environment expects data on GPU, If this is true we expect data to be on the device determined by actor_worker_gpus, otherwise it will be on CPU",
+    )
 
     p.add_argument(
         "--env_frameskip",

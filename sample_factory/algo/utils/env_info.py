@@ -20,6 +20,7 @@ class EnvInfo:
     action_space: gym.Space
     num_agents: int
     gpu_actions: bool  # whether actions provided by the agent should be on GPU or not
+    gpu_observations: bool  # whether environment expects data on GPU or not
     action_splits: List[int]  # in the case of tuple actions, the splits for the actions
     all_discrete: bool  # in the case of tuple actions, whether the actions are all discrete
     frameskip: int
@@ -31,6 +32,7 @@ def extract_env_info(env: BatchedVecEnv, cfg):
     num_agents = env.num_agents
 
     gpu_actions = cfg.env_gpu_actions
+    gpu_observations = cfg.env_gpu_observations
 
     frameskip = cfg.env_frameskip
 
@@ -50,6 +52,7 @@ def extract_env_info(env: BatchedVecEnv, cfg):
         action_space=action_space,
         num_agents=num_agents,
         gpu_actions=gpu_actions,
+        gpu_observations=gpu_observations,
         action_splits=action_splits,
         all_discrete=all_discrete,
         frameskip=frameskip,
