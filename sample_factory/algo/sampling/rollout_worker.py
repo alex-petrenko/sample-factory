@@ -13,9 +13,9 @@ from sample_factory.algo.sampling.non_batched_sampling import NonBatchedVectorEn
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, rollout_worker_device
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import advance_rollouts_signal, new_trajectories_signal
 from sample_factory.algo.utils.rl_utils import total_num_agents, trajectories_per_training_iteration
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import inference_context
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.gpu_utils import set_gpus_for_process
@@ -69,13 +69,13 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-class RolloutWorker(StoppableEventLoopObject, Configurable):
+class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
     def __init__(
         self, event_loop, worker_idx: int, buffer_mgr, inference_queues: Dict[PolicyID, MpQueue], cfg, env_info: EnvInfo
     ):
         Configurable.__init__(self, cfg)
         unique_name = f"{RolloutWorker.__name__}_w{worker_idx}"
-        EventLoopObject.__init__(self, event_loop, unique_name)
+        HeartbeatStoppableEventLoopObject.__init__(self, event_loop, unique_name, cfg.heartbeat_interval)
 
         self.timing = Timing(name=f"{self.object_id} profile")
 

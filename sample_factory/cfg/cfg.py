@@ -407,6 +407,19 @@ def add_rl_args(p: ArgumentParser):
         help="Whether to multiply training steps by frameskip when recording summaries, FPS, etc. When this flag is set to True, x-axis for all summaries corresponds to the total number of simulated steps, i.e. with frameskip=4 the x-axis value of 4 million will correspond to 1 million frames observed by the policy.",
     )
 
+    p.add_argument(
+        "--heartbeat_interval",
+        default=10,
+        type=int,
+        help="How often in seconds components send a heartbeat signal to the runner to verify they are not stuck",
+    )
+    p.add_argument(
+        "--heartbeat_reporting_interval",
+        default=60,
+        type=int,
+        help="How often in seconds the runner checks for heartbeats",
+    )
+
     # experiment termination
     p.add_argument(
         "--train_for_env_steps",

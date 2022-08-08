@@ -16,6 +16,7 @@ from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner_worker import LearnerWorker
 from sample_factory.algo.sampling.sampler import AbstractSampler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import (
     EPISODIC,
     LEARNER_ENV_STEPS,
@@ -88,6 +89,7 @@ class Runner(EventLoopObject, Configurable):
         self.report_interval_sec = 5.0
         self.avg_stats_intervals = (2, 12, 60)  # by default: 10 seconds, 60 seconds, 5 minutes
         self.summaries_interval_sec = self.cfg.experiment_summaries_interval  # sec
+        self.heartbeat_report_sec = self.cfg.heartbeat_reporting_interval
 
         self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
@@ -138,6 +140,10 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
         periodic(5, self._propagate_training_info)
+
+        periodic(self.heartbeat_report_sec, self._check_heartbeat)
+
+        self.heartbeat_dict = {}
 
         self.components_to_stop: List[EventLoopObject] = []
         self.component_profiles: Dict[str, Timing] = dict()
@@ -490,9 +496,23 @@ class Runner(EventLoopObject, Configurable):
         """Override this in a subclass to do something right when the experiment is started."""
         self.sampler.init()
 
-    def _setup_component_heartbeat(self):
-        # TODO!!!
-        pass
+    def _setup_component_heartbeat(self, component: HeartbeatStoppableEventLoopObject):
+        print(type(component))
+        self.heartbeat_dict[component.object_id] = time.time()
+        component.heartbeat.connect(self._receive_heartbeat)
+
+    def _receive_heartbeat(self, component_id: str):
+        curr_time = time.time()
+        print(f"Received Heartbeat after {curr_time - self.heartbeat_dict[component_id]} from {component_id}")
+        self.heartbeat_dict[component_id] = curr_time
+
+    def _check_heartbeat(self):
+        curr_time = time.time()
+        print(f"Checking Heartbeat at {curr_time}")
+        for component, heartbeat_time in self.heartbeat_dict.items():
+            if curr_time - heartbeat_time > self.heartbeat_report_sec:
+                log.error(f"Heartbeat after {curr_time - heartbeat_time} sec from {component}")
+                self._stop_training()
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: StoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
@@ -535,8 +555,13 @@ class Runner(EventLoopObject, Configurable):
             self._setup_component_termination(self.stop, batcher)
             self._setup_component_termination(batcher.stop, learner)
 
+            # Heartbeats
+            self._setup_component_heartbeat(batcher)
+            self._setup_component_heartbeat(learner)
+
         for sampler_component in sampler.stoppable_components():
             self._setup_component_termination(self.stop, sampler_component)
+            self._setup_component_heartbeat(sampler_component)
 
         # final cleanup
         self.all_components_stopped.connect(self._on_everything_stopped)
@@ -547,14 +572,18 @@ class Runner(EventLoopObject, Configurable):
         return end
 
     def _after_training_iteration(self, _training_iteration_since_resume: int):
-        if self._should_end_training() and not self.stopped:
+        if self._should_end_training():
+            self._stop_training()
+
+    def _stop_training(self):
+        if not self.stopped:
+            self.stopped = True
             self._save_policy()
             self._save_best_policy()
 
             for timer in self.timers:
                 timer.stop()
             self.stop.emit(self.object_id)
-            self.stopped = True
 
     def _component_stopped(self, component_obj_id, component_profiles: Dict[str, Timing]):
         log.debug(f"Component {component_obj_id} stopped!")

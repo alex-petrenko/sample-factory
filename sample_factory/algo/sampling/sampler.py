@@ -8,11 +8,11 @@ from sample_factory.algo.sampling.inference_worker import InferenceWorker, init_
 from sample_factory.algo.sampling.rollout_worker import RolloutWorker, init_rollout_worker_process
 from sample_factory.algo.utils.context import sf_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import advance_rollouts_signal, new_trajectories_signal
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.typing import Config, MpQueue, PolicyID
 from sample_factory.utils.utils import log
@@ -64,7 +64,7 @@ class AbstractSampler(EventLoopObject, Configurable):
     def connect_report_msg(self, report_msg_handler: Callable) -> None:
         raise NotImplementedError()
 
-    def stoppable_components(self) -> List[StoppableEventLoopObject]:
+    def stoppable_components(self) -> List[HeartbeatStoppableEventLoopObject]:
         raise NotImplementedError()
 
     def join(self) -> None:
@@ -123,7 +123,7 @@ class Sampler(AbstractSampler, ABC):
         for rollout_worker in self.rollout_workers:
             func(rollout_worker)
 
-    def _for_each_worker(self, func: Callable[[StoppableEventLoopObject], None]) -> None:
+    def _for_each_worker(self, func: Callable[[HeartbeatStoppableEventLoopObject], None]) -> None:
         self._for_each_inference_worker(func)
         self._for_each_rollout_worker(func)
 
@@ -188,7 +188,7 @@ class Sampler(AbstractSampler, ABC):
         # as soon as all env.reset() calls are done
         self.initialized.emit()
 
-    def stoppable_components(self) -> List[StoppableEventLoopObject]:
+    def stoppable_components(self) -> List[HeartbeatStoppableEventLoopObject]:
         stoppable = []
         self._for_each_worker(lambda w: stoppable.append(w))
         return stoppable

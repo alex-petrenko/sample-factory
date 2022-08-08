@@ -14,6 +14,7 @@ from signal_slot.signal_slot import EventLoopObject, TightLoop, Timer, signal
 
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import (
     POLICY_ID_KEY,
     SAMPLES_COLLECTED,
@@ -25,7 +26,6 @@ from sample_factory.algo.utils.misc import (
 from sample_factory.algo.utils.model_sharing import ParameterServer, make_parameter_client
 from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
 from sample_factory.algo.utils.tensor_utils import cat_tensors, dict_of_lists_cat, ensure_torch_tensor
 from sample_factory.algo.utils.torch_utils import inference_context, init_torch_runtime, synchronize
@@ -62,7 +62,7 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     init_torch_runtime(cfg)
 
 
-class InferenceWorker(StoppableEventLoopObject, Configurable):
+class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
     def __init__(
         self,
         event_loop,
@@ -76,7 +76,7 @@ class InferenceWorker(StoppableEventLoopObject, Configurable):
     ):
         Configurable.__init__(self, cfg)
         unique_name = f"{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}"
-        EventLoopObject.__init__(self, event_loop, unique_name)
+        HeartbeatStoppableEventLoopObject.__init__(self, event_loop, unique_name, cfg.heartbeat_interval)
 
         self.timing = Timing(name=f"{self.object_id} profile")
 
