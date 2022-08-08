@@ -497,22 +497,34 @@ class Runner(EventLoopObject, Configurable):
         self.sampler.init()
 
     def _setup_component_heartbeat(self, component: HeartbeatStoppableEventLoopObject):
-        print(type(component))
-        self.heartbeat_dict[component.object_id] = time.time()
+        component_type = type(component)
+        if component_type not in self.heartbeat_dict:
+            self.heartbeat_dict[component_type] = {}
+        type_dict = self.heartbeat_dict[component_type]
+        type_dict[component.object_id] = time.time()
         component.heartbeat.connect(self._receive_heartbeat)
 
-    def _receive_heartbeat(self, component_id: str):
+    def _receive_heartbeat(self, component_type: type, component_id: str):
         curr_time = time.time()
-        print(f"Received Heartbeat after {curr_time - self.heartbeat_dict[component_id]} from {component_id}")
-        self.heartbeat_dict[component_id] = curr_time
+        heartbeat_time = self.heartbeat_dict[component_type][component_id]
+        if curr_time - heartbeat_time > self.heartbeat_report_sec:
+            log.info(f"Heartbeat reconnected after {curr_time - heartbeat_time} sec from {component_id}")
+        self.heartbeat_dict[component_type][component_id] = curr_time
 
     def _check_heartbeat(self):
         curr_time = time.time()
-        print(f"Checking Heartbeat at {curr_time}")
-        for component, heartbeat_time in self.heartbeat_dict.items():
-            if curr_time - heartbeat_time > self.heartbeat_report_sec:
-                log.error(f"Heartbeat after {curr_time - heartbeat_time} sec from {component}")
+        for component_type, heartbeat_dict in self.heartbeat_dict.items():
+            num_components = len(heartbeat_dict)
+            num_stopped = 0
+            for component_id, heartbeat_time in heartbeat_dict.items():
+                if curr_time - heartbeat_time > self.heartbeat_report_sec:
+                    log.error(f"No heartbeat for {curr_time - heartbeat_time} sec from {component_id}")
+                    num_stopped += 1
+            if num_stopped == num_components:
+                log.error(f"Stopping training from lack of heartbeats from {component_type}")
                 self._stop_training()
+                break
+        log.info("Checking heartbeat, no errors")
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: StoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
@@ -577,13 +589,13 @@ class Runner(EventLoopObject, Configurable):
 
     def _stop_training(self):
         if not self.stopped:
-            self.stopped = True
             self._save_policy()
             self._save_best_policy()
 
             for timer in self.timers:
                 timer.stop()
             self.stop.emit(self.object_id)
+            self.stopped = True
 
     def _component_stopped(self, component_obj_id, component_profiles: Dict[str, Timing]):
         log.debug(f"Component {component_obj_id} stopped!")
