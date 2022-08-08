@@ -10,7 +10,7 @@ def register_env(env_name: str, make_env_func: CreateEnvFunc) -> None:
     """
     Register a callable that creates an environment.
     This callable is called like:
-        make_env_func(full_env_name, cfg=cfg, env_config=env_config)
+        make_env_func(full_env_name, cfg, env_config)
         Where full_env_name is the name of the environment to be created, cfg is a namespace or AttrDict containing
         necessary configuration parameters and env_config is an auxiliary dictionary containing information such as worker index on which the environment lives
         (some envs may require this information)

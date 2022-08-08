@@ -5,17 +5,18 @@ from threading import Thread
 from typing import Optional
 
 import psutil
-from signal_slot.signal_slot import EventLoop, signal
+import torch
+from signal_slot.signal_slot import EventLoop, Timer, signal
 from torch import Tensor
 
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import LEARNER_ENV_STEPS, POLICY_ID_KEY
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
@@ -45,7 +46,7 @@ def init_learner_process(sf_context: SampleFactoryContext, learner_worker: Learn
     init_torch_runtime(cfg)
 
 
-class LearnerWorker(StoppableEventLoopObject, Configurable):
+class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
     def __init__(
         self,
         evt_loop: EventLoop,
@@ -58,7 +59,7 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
         Configurable.__init__(self, cfg)
 
         unique_name = f"{LearnerWorker.__name__}_p{policy_id}"
-        StoppableEventLoopObject.__init__(self, evt_loop, unique_name)
+        HeartbeatStoppableEventLoopObject.__init__(self, evt_loop, unique_name, cfg.heartbeat_interval)
 
         self.batcher: Batcher = batcher
         self.batcher_thread: Optional[Thread] = None
@@ -69,6 +70,9 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
 
         # total number of full training iterations (potentially multiple minibatches/epochs per iteration)
         self.training_iteration_since_resume: int = 0
+
+        self.cache_cleanup_timer = Timer(self.event_loop, 30)
+        self.cache_cleanup_timer.timeout.connect(self._cleanup_cache)
 
     @signal
     def initialized(self):
@@ -130,6 +134,10 @@ class LearnerWorker(StoppableEventLoopObject, Configurable):
         self.finished_training_iteration.emit(self.training_iteration_since_resume)
         if stats is not None:
             self.report_msg.emit(stats)
+
+    # noinspection PyMethodMayBeStatic
+    def _cleanup_cache(self):
+        torch.cuda.empty_cache()
 
     def on_stop(self, *args):
         self.learner.save()

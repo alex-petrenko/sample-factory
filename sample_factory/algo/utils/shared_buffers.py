@@ -11,6 +11,7 @@ from torch import Tensor
 from sample_factory.algo.sampling.sampling_utils import rollout_worker_device
 from sample_factory.algo.utils.action_distributions import calc_num_actions, calc_num_logits
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.misc import MAGIC_FLOAT, MAGIC_INT
 from sample_factory.algo.utils.rl_utils import trajectories_per_training_iteration
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import to_torch_dtype
@@ -40,13 +41,16 @@ def init_tensor(leading_dimensions: List, tensor_type, tensor_shape, device: tor
     final_shape = leading_dimensions + list(tensor_shape)
     t = torch.zeros(final_shape, dtype=tensor_type)
 
-    if tensor_type in (torch.float, torch.float32, torch.float64):
-        t.fill_(-42.42)
+    # fill with magic values to make it easy to spot if we ever use unintialized data
+    if t.is_floating_point():
+        t.fill_(MAGIC_FLOAT)
     elif tensor_type in (torch.int, torch.int32, torch.int64, torch.int8, torch.uint8):
-        t.fill_(43)
+        t.fill_(MAGIC_INT)
 
     t = t.to(device)
-    if share:
+
+    # CUDA tensors are already shared by default
+    if share and not t.is_cuda:
         t.share_memory_()
 
     return t

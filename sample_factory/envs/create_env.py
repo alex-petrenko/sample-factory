@@ -4,7 +4,7 @@ from typing import Optional
 
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.utils import AttrDict, log
 
 
 # TODO: type hint for the return type?
@@ -26,7 +26,10 @@ def create_env(
     env_registry = global_env_registry()
 
     if full_env_name not in env_registry:
-        raise ValueError(f"Env name {full_env_name} is not registered. See register_env()!")
+        msg = f"Env name {full_env_name} is not registered. See register_env()!"
+        log.error(msg)
+        log.debug(f"Registered env names: {env_registry.keys()}")
+        raise ValueError(msg)
 
     env_factory = env_registry[full_env_name]
     env = env_factory(full_env_name, cfg, env_config)

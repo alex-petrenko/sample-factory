@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, Iterable, List, Optional
 
 import numpy as np
 import torch
+from gym.wrappers.frame_stack import LazyFrames
 from torch import Tensor
 
+from sample_factory.algo.utils.misc import MAGIC_FLOAT, MAGIC_INT
 from sample_factory.utils.dicts import (
     copy_dict_structure,
     iter_dicts_recursively,
     iterate_recursively,
     list_of_dicts_to_dict_of_lists,
 )
+from sample_factory.utils.utils import log
 
 
 class TensorDict(dict):
@@ -51,6 +54,8 @@ class TensorDict(dict):
                     t = new_data
                 elif isinstance(new_data, np.ndarray):
                     t = torch.from_numpy(new_data)
+                elif isinstance(new_data, LazyFrames):
+                    t = torch.Tensor(new_data)
                 else:
                     raise ValueError(f"Type {type(new_data)} not supported in set_data_func")
 
@@ -61,6 +66,8 @@ class TensorDict(dict):
                     n = new_data.cpu().numpy()
                 elif isinstance(new_data, np.ndarray):
                     n = new_data
+                elif isinstance(new_data, LazyFrames):
+                    n = np.array(new_data)
                 else:
                     raise ValueError(f"Type {type(new_data)} not supported in set_data_func")
 
@@ -121,3 +128,32 @@ def cat_tensordicts(lst: List[TensorDict]) -> TensorDict:
             raise ValueError(f"Type {type(v[0])} not supported in cat_tensordicts")
 
     return TensorDict(res)
+
+
+def find_invalid_data(
+    t: TensorDict, msg: Optional[str] = None, keys: Optional[Iterable[str]] = None
+) -> Optional[Dict[str, Tensor]]:
+    res = {}
+    msg = msg or "Check"
+
+    for d, k, v in iterate_recursively(t):
+        if keys is not None and k not in keys:
+            continue
+
+        if isinstance(v, torch.Tensor):
+            invalid_idx = None
+            if torch.is_floating_point(v):
+                # check if there are any NaNs or infs
+                if torch.isnan(v).any() or torch.isinf(v).any():
+                    log.error(f"{msg}: Found NaNs or infs in {k}: {v}")
+                    res[k] = torch.isnan(v) | torch.isinf(v)
+
+                invalid_idx = (v == MAGIC_FLOAT).nonzero()
+            elif torch.dtype in (torch.int, torch.int32, torch.int64, torch.int8, torch.uint8):
+                invalid_idx = (v == MAGIC_INT).nonzero()
+
+            if invalid_idx is not None and invalid_idx.numel() > 0:
+                res[k] = invalid_idx
+                log.error(f"{msg}: Found invalid data in {k} at {invalid_idx} (numel={invalid_idx.numel()})")
+
+    return res
