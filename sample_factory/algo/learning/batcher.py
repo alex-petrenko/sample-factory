@@ -7,7 +7,6 @@ from signal_slot.signal_slot import EventLoop, signal
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.shared_buffers import BufferMgr, alloc_trajectory_tensors, policy_device
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.timing import Timing

@@ -27,7 +27,6 @@ from sample_factory.algo.utils.misc import (
     ExperimentStatus,
 )
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.dicts import iterate_recursively
@@ -513,6 +512,7 @@ class Runner(EventLoopObject, Configurable):
 
     def _check_heartbeat(self):
         curr_time = time.time()
+        log.info("Checking heartbeat")
         for component_type, heartbeat_dict in self.heartbeat_dict.items():
             num_components = len(heartbeat_dict)
             num_stopped = 0
@@ -524,9 +524,8 @@ class Runner(EventLoopObject, Configurable):
                 log.error(f"Stopping training from lack of heartbeats from {component_type}")
                 self._stop_training()
                 break
-        log.info("Checking heartbeat, no errors")
 
-    def _setup_component_termination(self, stop_signal: signal, component_to_stop: StoppableEventLoopObject):
+    def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
         self.components_to_stop.append(component_to_stop)
         component_to_stop.stop.connect(self._component_stopped)
