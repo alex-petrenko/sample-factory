@@ -3,7 +3,6 @@ from __future__ import annotations
 import multiprocessing
 import os
 import pickle
-import shutil
 from dataclasses import dataclass
 from os.path import join
 from typing import List
@@ -67,7 +66,13 @@ def check_env_info(env: BatchedVecEnv | NonBatchedVecEnv, env_info: EnvInfo, cfg
         log.error(
             f"Env info does not match the cached value: {env_info} != {new_env_info}. Deleting the cache entry {cache_filename}"
         )
-        shutil.rmtree(cache_filename)
+
+        try:
+            os.remove(cache_filename)
+        except OSError:
+            # ignoring errors, this is not super important
+            pass
+
         log.error(
             "This is likely because the environment has changed after the cache entry was created. "
             "Either restart the experiment to fix this or run with --use_env_info_cache=False to avoid such problems in the future."

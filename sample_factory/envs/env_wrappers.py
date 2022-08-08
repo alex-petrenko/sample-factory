@@ -4,7 +4,6 @@ Gym env wrappers that make the environment suitable for the RL algorithms.
 """
 import json
 import os
-from collections import deque
 from os.path import join
 from typing import Any, Dict, Tuple, Union
 
@@ -14,10 +13,9 @@ import numpy as np
 
 # noinspection PyProtectedMember
 from gym import ObservationWrapper, RewardWrapper, spaces
-from gym.spaces import Box
 
 from sample_factory.envs.env_utils import num_env_steps
-from sample_factory.utils.utils import ensure_dir_exists, log, numpy_all_the_way
+from sample_factory.utils.utils import ensure_dir_exists, log
 
 
 def has_image_observations(observation_space):
@@ -430,3 +428,13 @@ class ClipRewardEnv(gym.RewardWrapper):
         :return:
         """
         return np.sign(reward)
+
+
+class NumpyObsWrapper(gym.ObservationWrapper):
+    """
+    RL algorithm generally expects numpy arrays or Tensors as observations. Atari envs for example return
+    LazyFrames which need to be converted to numpy arrays before we actually use them.
+    """
+
+    def observation(self, observation: Any) -> np.ndarray:
+        return np.array(observation)

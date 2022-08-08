@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import time
 from queue import Empty, Full, Queue
-from threading import Condition, Event, Thread
+from threading import Thread
 from typing import Callable, Dict, Iterable, Optional
 
-from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
+from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, signal
 
 from sample_factory.algo.sampling.sampler import AbstractSampler, ParallelSampler, SerialSampler
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.model_sharing import ParameterServer
-from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensordict
 from sample_factory.cfg.configurable import Configurable
@@ -89,7 +88,7 @@ class SamplingLoop(EventLoopObject, Configurable):
     def wait_until_ready(self):
         while not self.ready:
             log.debug(f"{self.object_id}: waiting for sampler to be ready...")
-            time.sleep(0.1)
+            time.sleep(0.5)
 
     def start(self, init_model_data: Optional[Dict[PolicyID, InitModelData]] = None):
         """Model initialization should kickstart the sampling loop."""
@@ -192,7 +191,7 @@ class SyncSamplingAPI:
     def get_trajectories_sync(self) -> Optional[TensorDict]:
         while not self.sampling_loop.stopped:
             try:
-                traj = self.traj_queue.get(timeout=1.0)
+                traj = self.traj_queue.get(timeout=5.0)
                 return traj
             except Empty:
                 log.debug(f"{self.get_trajectories_sync.__name__}(): waiting for trajectories...")
