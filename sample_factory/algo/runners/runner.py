@@ -496,6 +496,10 @@ class Runner(EventLoopObject, Configurable):
         self.sampler.init()
 
     def _setup_component_heartbeat(self, component: HeartbeatStoppableEventLoopObject):
+        """
+        Groups components with heartbeat mechanism by type and records starting time.
+        When all components of the same type do not respond in the reporting timeframe, stops the run
+        """
         component_type = type(component)
         if component_type not in self.heartbeat_dict:
             self.heartbeat_dict[component_type] = {}
@@ -504,6 +508,9 @@ class Runner(EventLoopObject, Configurable):
         component.heartbeat.connect(self._receive_heartbeat)
 
     def _receive_heartbeat(self, component_type: type, component_id: str):
+        """
+        Record the time the most recent heartbeat was received
+        """
         curr_time = time.time()
         heartbeat_time = self.heartbeat_dict[component_type][component_id]
         if curr_time - heartbeat_time > self.heartbeat_report_sec:
@@ -511,6 +518,10 @@ class Runner(EventLoopObject, Configurable):
         self.heartbeat_dict[component_type][component_id] = curr_time
 
     def _check_heartbeat(self):
+        """
+        Reports components whose last heartbeat signal is longer than self.heartbeat_report_sec.
+        If all components of the same time fail, stop the run
+        """
         curr_time = time.time()
         log.info("Checking heartbeat")
         for component_type, heartbeat_dict in self.heartbeat_dict.items():
