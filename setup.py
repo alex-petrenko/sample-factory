@@ -33,7 +33,7 @@ setup(
     },
     install_requires=[
         "numpy>=1.18.1<2.0",
-        "torch>=1.6,<2.0",
+        "torch>=1.9,<2.0",
         "gym>=0.17.1,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
@@ -59,5 +59,5 @@ setup(
     package_dir={"": "./"},
     packages=setuptools.find_packages(where="./", include="sample_factory*"),
     include_package_data=True,
-    python_requires=">=3.7",
+    python_requires=">=3.8",
 )
