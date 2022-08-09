@@ -1,10 +1,12 @@
 import gym
 
 from sample_factory.envs.env_wrappers import (
-    PixelFormatChwWrapper,
-    ResizeWrapper,
-    SkipAndStackFramesWrapper,
-    SkipFramesWrapper,
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    MaxAndSkipEnv,
+    NoopResetEnv,
+    NumpyObsWrapper,
 )
 
 ATARI_W = ATARI_H = 84
@@ -28,6 +30,7 @@ ATARI_ENVS = [
     AtariSpec("atari_gravitar", "GravitarNoFrameskip-v4"),
     AtariSpec("atari_mspacman", "MsPacmanNoFrameskip-v4"),
     AtariSpec("atari_seaquest", "SeaquestNoFrameskip-v4"),
+    AtariSpec("atari_beamrider", "BeamRiderNoFrameskip-v4"),
 ]
 
 
@@ -39,36 +42,28 @@ def atari_env_by_name(name):
 
 
 # noinspection PyUnusedLocal
-def make_atari_env(env_name, cfg, env_config, **kwargs):
+def make_atari_env(env_name, cfg, env_config):
     atari_spec = atari_env_by_name(env_name)
 
-    # TODO to render atari, need to add render_mode, will totally fix it in one week
-    # env = gym.make(atari_spec.env_id, render_mode='human')
-    env = gym.make(atari_spec.env_id)
+    env_kwargs = dict()
+    if hasattr(cfg, "render_mode"):
+        env_kwargs["render_mode"] = cfg.render_mode
+    env = gym.make(atari_spec.env_id, **env_kwargs)
+
     if atari_spec.default_timeout is not None:
         env._max_episode_steps = atari_spec.default_timeout
 
-    assert "NoFrameskip" in env.spec.id
-
-    # if 'Montezuma' in atari_cfg.env_id or 'Pitfall' in atari_cfg.env_id:
-    #     env = AtariVisitedRoomsInfoWrapper(env)
-
-    add_channel_dim = cfg.env_framestack == 1
-    env = ResizeWrapper(
-        env,
-        ATARI_W,
-        ATARI_H,
-        grayscale=True,
-        add_channel_dim=add_channel_dim,
-        area_interpolation=False,
-    )
-
-    pixel_format = cfg.pixel_format if "pixel_format" in cfg else "HWC"
-    if pixel_format == "CHW" and add_channel_dim:
-        env = PixelFormatChwWrapper(env)
-
-    if cfg.env_framestack == 1:
-        env = SkipFramesWrapper(env, skip_frames=cfg.env_frameskip)
-    else:
-        env = SkipAndStackFramesWrapper(env, skip_frames=cfg.env_frameskip, stack_frames=4, channel_config="CHW")
+    # these are chosen to match Stable-Baselines3 and CleanRL implementations as precisely as possible
+    env = gym.wrappers.RecordEpisodeStatistics(env)
+    env = NoopResetEnv(env, noop_max=30)
+    env = MaxAndSkipEnv(env, skip=cfg.env_frameskip)
+    env = EpisodicLifeEnv(env)
+    # noinspection PyUnresolvedReferences
+    if "FIRE" in env.unwrapped.get_action_meanings():
+        env = FireResetEnv(env)
+    env = ClipRewardEnv(env)
+    env = gym.wrappers.ResizeObservation(env, (84, 84))
+    env = gym.wrappers.GrayScaleObservation(env)
+    env = gym.wrappers.FrameStack(env, cfg.env_framestack)
+    env = NumpyObsWrapper(env)
     return env

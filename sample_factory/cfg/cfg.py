@@ -54,7 +54,7 @@ def add_rl_args(p: ArgumentParser):
         default=True,
         type=str2bool,
         help="Collect experience asynchronously while learning on the previous batch. "
-        "This is semantically different from standard synchronous actor-critic (or PPO) because "
+        "This is significantly different from standard synchronous actor-critic (or PPO) because "
         "not all of the experience will be collected by the latest policy thus increasing policy lag. "
         "Negative effects of using async_rl can range from negligible (just grants you throughput boost) "
         "to quite serious where you can consider switching it off. It all depends how sensitive your experiment is to policy lag. "
@@ -83,9 +83,9 @@ def add_rl_args(p: ArgumentParser):
         "--num_batches_to_accumulate",
         default=2,
         type=int,
-        help="This parameter governs the maximum number of training batches the learner can accumulate before further experience collection is stopped."
+        help="This parameter governs the maximum number of training batches the learner can accumulate before further experience collection is stopped. "
         "The default value will set this to 2, so if the experience collection is faster than the training, "
-        "the learner will accumulate enough minibatches for 2 iterations of training (but no more). This is a good balance between policy-lag and throughput."
+        "the learner will accumulate enough minibatches for 2 iterations of training but no more. This is a good balance between policy-lag and throughput. "
         "When the limit is reached, the learner will notify the actor workers that they ought to stop the experience collection until accumulated minibatches "
         "are processed. Set this parameter to 1 to further reduce policy-lag. "
         "If the experience collection is very non-uniform, increasing this parameter can increase overall throughput, at the cost of increased policy-lag.",
@@ -105,9 +105,9 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--max_policy_lag",
-        default=10000,
+        default=1000,
         type=int,
-        help="Max policy lag in policy versions. Discard all experience that is older than this. This should be increased for configurations with multiple epochs of SGD because naturally policy-lag may exceed this value.",
+        help="Max policy lag in policy versions. Discard all experience that is older than this.",
     )
 
     # RL algorithm data collection & learning regime (rollout length, batch size, etc.)
@@ -165,7 +165,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--shuffle_minibatches",
-        default=True,
+        default=False,
         type=str2bool,
         help="Whether to randomize and shuffle minibatches between iterations (this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)",
     )
@@ -400,6 +400,12 @@ def add_rl_args(p: ArgumentParser):
         type=int,
         help="How many episodes to average to measure performance (avg. reward etc)",
     )
+    p.add_argument(
+        "--summaries_use_frameskip",
+        default=True,
+        type=str2bool,
+        help="Whether to multiply training steps by frameskip when recording summaries, FPS, etc. When this flag is set to True, x-axis for all summaries corresponds to the total number of simulated steps, i.e. with frameskip=4 the x-axis value of 4 million will correspond to 1 million frames observed by the policy.",
+    )
 
     # experiment termination
     p.add_argument(
@@ -527,13 +533,13 @@ def add_model_args(p: ArgumentParser):
 
 def add_default_env_args(p: ArgumentParser):
     """Configuration related to the environments, i.e. things that might be difficult to query from an environment instance."""
+    p.add_argument("--use_env_info_cache", default=False, type=str2bool, help="Whether to use cached env info")
     p.add_argument(
         "--env_gpu_actions",
         default=False,
         type=str2bool,
         help="Set to true if environment expects actions on GPU (i.e. as a GPU-side PyTorch tensor)",
     )
-
     p.add_argument(
         "--env_frameskip",
         default=1,
@@ -547,10 +553,16 @@ def add_default_env_args(p: ArgumentParser):
         "Frameskip=1 (default) means no frameskip, we process every frame.",
     )
     p.add_argument(
-        "--env_framestack", default=4, type=int, help="Frame stacking (only used in Atari?)"
+        "--env_framestack", default=1, type=int, help="Frame stacking (only used in Atari, and it is usually set to 4)"
     )  # <-- this probably should be moved to environment-specific scripts
     p.add_argument(
         "--pixel_format", default="CHW", type=str, help="PyTorch expects CHW by default, Ray & TensorFlow expect HWC"
+    )
+    p.add_argument(
+        "--use_record_episode_statistics",
+        default=False,
+        type=str2bool,
+        help="Whether to use gym RecordEpisodeStatistics wrapper to keep track of reward",
     )
 
 
@@ -571,9 +583,15 @@ def add_eval_args(parser):
     parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
 
     parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
-    parser.add_argument("--video_frames", default=0, type=int, help="Number of frames to render for the video")
+    parser.add_argument(
+        "--video_frames",
+        default=-1,
+        type=int,
+        help="Number of frames to render for the video. Defaults to -1 which renders an entire episode",
+    )
     parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
     parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
+    parser.add_argument("--max_num_episodes", default=1e9, type=int, help="Maximum number of episodes to render")
 
     parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
     parser.add_argument("--hf_username", default=None, type=str, help="HuggingFace username")

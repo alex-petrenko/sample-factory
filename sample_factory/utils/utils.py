@@ -15,6 +15,7 @@ from sys import platform
 
 import numpy as np
 import psutil
+import signal_slot.signal_slot
 from _queue import Empty
 from colorlog import ColoredFormatter
 
@@ -47,6 +48,9 @@ stream_formatter = ColoredFormatter(
 stream_handler.setFormatter(stream_formatter)
 log.addHandler(stream_handler)
 
+# make other libraries use our logger
+signal_slot.signal_slot.configure_logger(log)
+
 
 def init_file_logger(experiment_dir_):
     file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
@@ -54,28 +58,6 @@ def init_file_logger(experiment_dir_):
     file_formatter = logging.Formatter(fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%")
     file_handler.setFormatter(file_formatter)
     log.addHandler(file_handler)
-
-
-# noinspection PyDefaultArgument
-def log_every_n(n, _level, msg, _history=dict(), *args, **kwargs):
-    """
-    Log message `msg` once in n calls to this function to avoid log spam.
-    Use only msg to count the calls, not args and kwargs.
-    Intentionally using a mutable _history dict to store call history.
-    """
-    if msg not in _history:
-        _history[msg] = 0
-
-    num_msgs = _history[msg]
-    if num_msgs % n == 0:
-        msg_with_ntimes = f"{msg} ({num_msgs} times)" if num_msgs > 1 else msg
-        log.log(_level, msg_with_ntimes, *args, **kwargs)
-
-    _history[msg] += 1
-
-
-def debug_log_every_n(n, msg, *args, **kwargs):
-    log_every_n(n, logging.DEBUG, msg, *args, **kwargs)
 
 
 # general Python utilities
@@ -405,7 +387,7 @@ def get_username():
 
 
 def project_tmp_dir(mkdir: bool = True) -> str:
-    tmp_dir_name = f"sample_factory_{get_username()}"
+    tmp_dir_name = f"sf2_{get_username()}"
     return maybe_ensure_dir_exists(join(tempfile.gettempdir(), tmp_dir_name), mkdir)
 
 
@@ -474,3 +456,28 @@ def save_git_diff(directory):
                 run(["git", "diff"], stdout=outfile, cwd=git_root_dir, timeout=1)
         except SubprocessError:
             pass
+
+
+# more logging
+
+
+@static_vars(history=dict())
+def log_every_n(n, _level, msg, *args, **kwargs):
+    """
+    Log message `msg` once in n calls to this function to avoid log spam.
+    Use only msg to count the calls, not args and kwargs.
+    Intentionally using a mutable _history dict to store call history.
+    """
+    if msg not in log_every_n.history:
+        log_every_n.history[msg] = 0
+
+    num_msgs = log_every_n.history[msg]
+    if num_msgs % n == 0:
+        msg_with_ntimes = f"{msg} ({num_msgs} times)" if num_msgs > 1 else msg
+        log.log(_level, msg_with_ntimes, *args, **kwargs)
+
+    log_every_n.history[msg] += 1
+
+
+def debug_log_every_n(n, msg, *args, **kwargs):
+    log_every_n(n, logging.DEBUG, msg, *args, **kwargs)

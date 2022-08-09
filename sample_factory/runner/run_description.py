@@ -75,7 +75,14 @@ class ParamGrid(ParamGenerator):
             all_combinations = np.random.permutation(all_combinations)
 
         for combination in all_combinations:
-            combination_dict = {param_name: combination[i] for (i, param_name) in enumerate(param_names)}
+            combination_dict = dict()
+            for i, param_name in enumerate(param_names):
+                if isinstance(param_name, (list, tuple)):
+                    for j, param in enumerate(param_name):
+                        combination_dict[param] = combination[i][j]
+                else:
+                    combination_dict[param_name] = combination[i]
+
             yield combination_dict
 
 

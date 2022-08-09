@@ -8,13 +8,14 @@ This isn't production code, but feel free to use as an example for your SLURM se
 import os
 import time
 from os.path import join
+from string import Template
 from subprocess import PIPE, Popen
 
 from sample_factory.utils.utils import log, str2bool
 
 SBATCH_TEMPLATE_DEFAULT = (
     "#!/bin/bash\n"
-    "source /homes/petrenko/miniconda3/etc/profile.d/conda.sh\n"
+    # "source /homes/petrenko/miniconda3/etc/profile.d/conda.sh\n"
     "conda activate sample-factory\n"
     "cd ~/sample-factory\n"
 )
@@ -45,6 +46,13 @@ def add_slurm_args(parser):
         help="Commands to run before the actual experiment (i.e. activate conda env, etc.)",
     )
 
+    parser.add_argument(
+        "--slurm_timeout",
+        default="0",
+        type=str,
+        help="Time to run jobs before timing out job and requeuing the job. Defaults to 0, which does not time out the job",
+    )
+
     return parser
 
 
@@ -68,6 +76,12 @@ def run_slurm(run_description, args):
 
     log.info("Sbatch template: %s", sbatch_template)
 
+    partition = ""
+    if args.slurm_partition is not None:
+        partition = f"-p {args.slurm_partition} "
+
+    num_cpus = args.slurm_cpus_per_gpu * args.slurm_gpus_per_job
+
     experiments = run_description.generate_experiments(args.train_dir)
     sbatch_files = []
     for experiment in experiments:
@@ -75,23 +89,26 @@ def run_slurm(run_description, args):
 
         sbatch_fname = f"sbatch_{name}.sh"
         sbatch_fname = join(workdir, sbatch_fname)
+        sbatch_fname = os.path.abspath(sbatch_fname)
 
-        file_content = sbatch_template + "\n" + cmd + '\n\necho "Done!!!"'
+        file_content = Template(sbatch_template).substitute(
+            CMD=cmd,
+            FILENAME=sbatch_fname,
+            PARTITION=partition,
+            GPU=args.slurm_gpus_per_job,
+            CPU=num_cpus,
+            TIMEOUT=args.slurm_timeout,
+        )
         with open(sbatch_fname, "w") as sbatch_f:
             sbatch_f.write(file_content)
 
         sbatch_files.append(sbatch_fname)
-
-    partition = ""
-    if args.slurm_partition is not None:
-        partition = f"-p {args.slurm_partition} "
 
     job_ids = []
     idx = 0
     for sbatch_file in sbatch_files:
         idx += 1
         sbatch_fname = os.path.basename(sbatch_file)
-        num_cpus = args.slurm_cpus_per_gpu * args.slurm_gpus_per_job
         cmd = f"sbatch {partition}--gres=gpu:{args.slurm_gpus_per_job} -c {num_cpus} --parsable --output {workdir}/{sbatch_fname}-slurm-%j.out {sbatch_file}"
         log.info("Executing %s...", cmd)
 

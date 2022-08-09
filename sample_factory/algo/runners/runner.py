@@ -5,7 +5,6 @@ import math
 import shutil
 import time
 from collections import OrderedDict, deque
-from multiprocessing.context import BaseContext
 from os.path import isdir, join
 from typing import Callable, Deque, Dict, List, Optional, Tuple
 
@@ -14,7 +13,7 @@ from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus,
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.learning.batcher import Batcher
-from sample_factory.algo.learning.learner import Learner
+from sample_factory.algo.learning.learner_worker import LearnerWorker
 from sample_factory.algo.sampling.sampler import AbstractSampler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.misc import (
@@ -66,7 +65,7 @@ class Runner(EventLoopObject, Configurable):
         self.env_info: Optional[EnvInfo] = None
         self.buffer_mgr = None
 
-        self.learners: Dict[PolicyID, Learner] = dict()
+        self.learners: Dict[PolicyID, LearnerWorker] = dict()
         self.batchers: Dict[PolicyID, Batcher] = dict()
         self.sampler: Optional[AbstractSampler] = None
 
@@ -78,7 +77,7 @@ class Runner(EventLoopObject, Configurable):
         # samples_collected counts the total number of observations processed by the algorithm
         self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
 
-        self.total_env_steps_since_resume = 0
+        self.total_env_steps_since_resume: Optional[int] = None
 
         # currently, this applies only to the current run, not experiment as a whole
         # to change this behavior we'd need to save the state of the main loop to a filesystem
@@ -125,8 +124,12 @@ class Runner(EventLoopObject, Configurable):
 
         self.extra_summary_handlers: List[SummaryHandler] = []
 
+        self.timers: List[Timer] = []
+
         def periodic(period, cb):
-            return Timer(self.event_loop, period).timeout.connect(cb)
+            t = Timer(self.event_loop, period)
+            t.timeout.connect(cb)
+            self.timers.append(t)
 
         periodic(self.report_interval_sec, self._update_stats_and_print_report)
         periodic(self.summaries_interval_sec, self._report_experiment_summaries)
@@ -218,6 +221,9 @@ class Runner(EventLoopObject, Configurable):
         if policy_id in runner.env_steps:
             delta = env_steps - runner.env_steps[policy_id]
             runner.total_env_steps_since_resume += delta
+        elif runner.total_env_steps_since_resume is None:
+            runner.total_env_steps_since_resume = 0
+
         runner.env_steps[policy_id] = env_steps
 
     @staticmethod
@@ -315,6 +321,9 @@ class Runner(EventLoopObject, Configurable):
 
         # don't have enough statistic from the learners yet
         if len(self.env_steps) < self.cfg.num_policies:
+            return
+
+        if self.total_env_steps_since_resume is None:
             return
 
         now = time.time()
@@ -444,15 +453,14 @@ class Runner(EventLoopObject, Configurable):
     def _make_batcher(self, event_loop, policy_id: PolicyID):
         return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
 
-    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher, mp_ctx: Optional[BaseContext]):
-        return Learner(
+    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
+        return LearnerWorker(
             event_loop,
             self.cfg,
             self.env_info,
             self.buffer_mgr,
             batcher,
             policy_id=policy_id,
-            mp_ctx=mp_ctx,
         )
 
     def _make_sampler(self, sampler_cls: type, event_loop: EventLoop):
@@ -461,8 +469,11 @@ class Runner(EventLoopObject, Configurable):
         return sampler_cls(event_loop, self.buffer_mgr, param_servers, self.cfg, self.env_info)
 
     def init(self) -> StatusCode:
+        set_global_cuda_envvars(self.cfg)
+        self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
+
         # check for any incompatible arguments
-        if not verify_cfg(self.cfg):
+        if not verify_cfg(self.cfg, self.env_info):
             return ExperimentStatus.FAILURE
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
@@ -471,8 +482,6 @@ class Runner(EventLoopObject, Configurable):
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
 
-        set_global_cuda_envvars(self.cfg)
-        self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 
         return ExperimentStatus.SUCCESS
@@ -537,11 +546,13 @@ class Runner(EventLoopObject, Configurable):
         end |= self.total_train_seconds > self.cfg.train_for_seconds
         return end
 
-    def _after_training_iteration(self):
+    def _after_training_iteration(self, _training_iteration_since_resume: int):
         if self._should_end_training() and not self.stopped:
             self._save_policy()
             self._save_best_policy()
 
+            for timer in self.timers:
+                timer.stop()
             self.stop.emit(self.object_id)
             self.stopped = True
 
@@ -583,6 +594,8 @@ class Runner(EventLoopObject, Configurable):
                 status = ExperimentStatus.FAILURE
 
         log.info(self.timing)
+        if self.total_env_steps_since_resume is None:
+            self.total_env_steps_since_resume = 0
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info("Collected %r, FPS: %.1f", self.env_steps, fps)
         return status

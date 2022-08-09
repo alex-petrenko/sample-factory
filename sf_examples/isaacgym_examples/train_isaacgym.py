@@ -265,6 +265,7 @@ def override_default_params_func(env, parser):
         save_best_after=int(5e6),
         serial_mode=True,  # it makes sense to run isaacgym envs in serial mode since most of the parallelism comes from the env itself (although async mode works!)
         async_rl=False,
+        use_env_info_cache=True,  # speeds up startup
     )
 
     # override default config parameters for specific envs

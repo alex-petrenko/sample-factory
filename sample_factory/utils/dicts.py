@@ -63,17 +63,20 @@ def iter_dicts_recursively(d1, d2):
             yield d1, d2, k, d1[k], d2[k]
 
 
-def list_of_dicts_to_dict_of_lists(list_of_dicts):
-    dict_of_lists = dict()
+def list_of_dicts_to_dict_of_lists(list_of_dicts: List[Dict]) -> Dict[Any, List]:
+    if not list_of_dicts:
+        return dict()
+
+    res = copy_dict_structure(list_of_dicts[0])
 
     for d in list_of_dicts:
-        for key, x in d.items():
-            if key not in dict_of_lists:
-                dict_of_lists[key] = []
+        for d1, d2, key, v1, v2 in iter_dicts_recursively(d, res):
+            if v2 is None:
+                d2[key] = [v1]
+            else:
+                d2[key].append(v1)
 
-            dict_of_lists[key].append(x)
-
-    return dict_of_lists
+    return res
 
 
 def get_first_present(d: Dict, keys: Iterable, default: Optional[Any] = None) -> Optional[Any]:

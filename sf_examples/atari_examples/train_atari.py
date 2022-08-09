@@ -3,8 +3,8 @@ import sys
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
-from sf_examples.atari_examples.atari_params import add_atari_env_args, atari_override_defaults
-from sf_examples.atari_examples.atari_utils import ATARI_ENVS, make_atari_env
+from sf_examples.atari_examples.atari.atari_params import add_atari_env_args, atari_override_defaults
+from sf_examples.atari_examples.atari.atari_utils import ATARI_ENVS, make_atari_env
 
 
 def register_atari_envs():
@@ -17,11 +17,11 @@ def register_atari_components():
 
 
 def parse_atari_args(argv=None, evaluation=False):
-    parser, cfg = parse_sf_args(argv, evaluation=evaluation)
-    add_atari_env_args(parser)
-    atari_override_defaults(parser)
-    cfg = parse_full_cfg(parser, argv)
-    return cfg
+    parser, partial_cfg = parse_sf_args(argv=argv, evaluation=evaluation)
+    add_atari_env_args(partial_cfg.env, parser, evaluation=evaluation)
+    atari_override_defaults(partial_cfg.env, parser)
+    final_cfg = parse_full_cfg(parser, argv)
+    return final_cfg
 
 
 def main():

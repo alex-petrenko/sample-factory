@@ -11,7 +11,7 @@ from sample_factory.envs.env_wrappers import (
     RewardScalingWrapper,
     TimeLimitWrapper,
 )
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import debug_log_every_n
 from sf_examples.vizdoom_examples.doom.action_space import (
     doom_action_space,
     doom_action_space_basic,
@@ -294,7 +294,7 @@ def make_doom_env_impl(
     if w != cfg.res_w or h != cfg.res_h:
         env = ResizeWrapper(env, cfg.res_w, cfg.res_h, grayscale=False)
 
-    log.info("Doom resolution: %s, resize resolution: %r", resolution, (cfg.res_w, cfg.res_h))
+    debug_log_every_n(50, "Doom resolution: %s, resize resolution: %r", resolution, (cfg.res_w, cfg.res_h))
 
     # randomly vary episode duration to somewhat decorrelate the experience
     timeout = doom_spec.default_timeout

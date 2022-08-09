@@ -72,12 +72,7 @@ class RunningMeanStdInPlace(nn.Module):
             μ = x.mean(self.axis)  # along channel axis
             σ2 = x.var(self.axis)
             self.running_mean[:], self.running_var[:], self.count[:] = self._update_mean_var_count_from_moments(
-                self.running_mean,
-                self.running_var,
-                self.count,
-                μ,
-                σ2,
-                batch_count,
+                self.running_mean, self.running_var, self.count, μ, σ2, batch_count
             )
 
         # change shape

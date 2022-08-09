@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from typing import Optional
 
 import numpy as np
 import torch
 
+from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import AttrDict
 
 
@@ -42,3 +45,22 @@ def to_scalar(value):
         return value.item()
     else:
         return value
+
+
+@torch.jit.script
+def masked_select(x: torch.Tensor, mask: torch.Tensor, num_non_mask: int) -> torch.Tensor:
+    if num_non_mask == 0:
+        return x
+    else:
+        return torch.masked_select(x, mask)
+
+
+def synchronize(cfg: Config, device: torch.device | str) -> None:
+    if cfg.serial_mode:
+        return
+
+    if isinstance(device, str):
+        device = torch.device(device)
+
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)

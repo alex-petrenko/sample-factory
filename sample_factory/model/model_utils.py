@@ -169,6 +169,8 @@ class ConvEncoder(EncoderBase):
             conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 128, 3, 2]]
         elif cfg.encoder_subtype == "convnet_impala":
             conv_filters = [[input_ch, 16, 8, 4], [16, 32, 4, 2]]
+        elif cfg.encoder_subtype == "convnet_atari":
+            conv_filters = [[input_ch, 32, 8, 4], [32, 64, 4, 2], [64, 64, 3, 1]]
         else:
             raise NotImplementedError(f"Unknown encoder {cfg.encoder_subtype}")
 

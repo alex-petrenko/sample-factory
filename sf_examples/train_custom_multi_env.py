@@ -39,22 +39,25 @@ class CustomMultiEnv(gym.Env):
         self.num_agents = 2
         self.is_multiagent = True
 
-        self.inactive_steps = [0] * self.num_agents
+        self.inactive_steps = [3] * self.num_agents
+
+        self.episode_rewards = [[] for _ in range(self.num_agents)]
+
+        self.obs = None
 
     def _obs(self):
-        return [np.float32(np.random.rand(self.channels, self.res, self.res)) for _ in range(self.num_agents)]
+        if self.obs is None:
+            self.obs = [np.float32(np.random.rand(self.channels, self.res, self.res)) for _ in range(self.num_agents)]
+        return self.obs
 
     def reset(self, **kwargs):
         self.curr_episode_steps = 0
+        # log.debug(f"Episode reward: {self.episode_rewards} sum_0: {sum(self.episode_rewards[0])} sum_1: {sum(self.episode_rewards[1])}")
+        self.episode_rewards = [[] for _ in range(self.num_agents)]
         return self._obs()
 
     def step(self, actions):
         infos = [dict() for _ in range(self.num_agents)]
-
-        # random actions for inactive agents
-        for agent_idx in range(self.num_agents):
-            if self.inactive_steps[agent_idx] > 0:
-                actions[agent_idx] = random.randint(0, 1)
 
         # "deactivate" agents randomly, mostly to test inactive agent masking functionality
         for agent_idx in range(self.num_agents):
@@ -64,20 +67,28 @@ class CustomMultiEnv(gym.Env):
                 if random.random() < 0.005:
                     self.inactive_steps[agent_idx] = random.randint(1, 48)
 
-            # TODO: enable this back
-            # infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
+            infos[agent_idx]["is_active"] = self.inactive_steps[agent_idx] <= 0
 
         self.curr_episode_steps += 1
 
+        # this is like prisoner's dilemma
         payout_matrix = [
-            [(-0.1, -0.1), (-0.2, -0.2)],
-            [(-0.2, -0.25), (-0.1, -0.1)],  # make it asymmetric for easy learning, this is only a test after all
+            [(0, 0), (-1.0, -1.0)],
+            [(-1.0, -1.0), (0, 0)],
         ]
 
         # action = 0 to stay silent, 1 to betray
-        rewards = payout_matrix[actions[0]][actions[1]]
+        rewards = list(payout_matrix[actions[0]][actions[1]])
+        for agent_idx in range(self.num_agents):
+            if not infos[agent_idx]["is_active"]:
+                rewards[agent_idx] = 0
+            self.episode_rewards[agent_idx].append(rewards[agent_idx])
 
-        done = self.curr_episode_steps >= self.cfg.custom_env_episode_len
+        time_out = self.curr_episode_steps >= self.cfg.custom_env_episode_len
+        for agent_idx in range(self.num_agents):
+            infos[agent_idx]["time_outs"] = time_out
+
+        done = time_out
         dones = [done] * self.num_agents
 
         if done:
@@ -92,7 +103,7 @@ class CustomMultiEnv(gym.Env):
         pass
 
 
-def make_custom_multi_env_func(full_env_name, cfg=None, env_config=None):
+def make_custom_multi_env_func(full_env_name, cfg=None, _env_config=None):
     return CustomMultiEnv(full_env_name, cfg)
 
 
@@ -114,7 +125,7 @@ def parse_custom_args(argv=None, evaluation=False):
     add_extra_params_func(parser)
     override_default_params(parser)
     # second parsing pass yields the final configuration
-    cfg = parse_full_cfg(parser)
+    cfg = parse_full_cfg(parser, argv)
     return cfg
 
 

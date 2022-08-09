@@ -1,6 +1,6 @@
 import pytest
 
-from sf_examples.train_custom_multi_env import register_custom_components
+from sf_examples.train_custom_multi_env import parse_custom_args, register_custom_components
 from tests.examples.test_example import run_test_env
 
 
@@ -9,6 +9,7 @@ def run_test_env_multi(train_steps: int, num_workers: int, expected_reward_at_le
         num_workers=num_workers,
         experiment_name="test_example_multi",
         register_custom_components_func=register_custom_components,
+        parse_args_func=parse_custom_args,
         env_name="my_custom_multi_env_v1",
         expected_reward_at_least=expected_reward_at_least,
         train_steps=train_steps,
@@ -18,17 +19,24 @@ def run_test_env_multi(train_steps: int, num_workers: int, expected_reward_at_le
 
 
 class TestExampleMulti:
-    def test_sanity(self):
+    @pytest.mark.parametrize("async_rl", [False, True])
+    @pytest.mark.parametrize("train_steps", [512])
+    def test_sanity(self, async_rl: bool, train_steps: int):
         run_test_env_multi(
-            train_steps=128, num_workers=1, serial_mode=True, async_rl=False, expected_reward_at_least=-1000
+            train_steps=train_steps,
+            num_workers=1,
+            batch_size=128,
+            serial_mode=True,
+            async_rl=async_rl,
+            expected_reward_at_least=-6,  # random policy does ~-5.5, here we don't learn long enough to improve
         )
 
-    @pytest.mark.skip(reason="TODO: fix this test")
     def test_example_multi(self):
         run_test_env_multi(
-            train_steps=350000,
+            train_steps=100000,
             num_workers=8,
-            expected_reward_at_least=-1.3,
-            serial_mode=True,
-            async_rl=False,
-        )  # TODO disable serial mode
+            batch_size=512,
+            expected_reward_at_least=-0.2,  # 0 is the best we can do
+            serial_mode=False,
+            async_rl=True,
+        )
