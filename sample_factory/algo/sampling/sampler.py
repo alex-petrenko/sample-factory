@@ -67,6 +67,9 @@ class AbstractSampler(EventLoopObject, Configurable):
     def stoppable_components(self) -> List[HeartbeatStoppableEventLoopObject]:
         raise NotImplementedError()
 
+    def heartbeat_components(self) -> List[HeartbeatStoppableEventLoopObject]:
+        raise NotImplementedError()
+
     def join(self) -> None:
         """This is where we could join processes or threads if sampler starts any."""
         raise NotImplementedError()
@@ -192,6 +195,11 @@ class Sampler(AbstractSampler, ABC):
         stoppable = []
         self._for_each_worker(lambda w: stoppable.append(w))
         return stoppable
+
+    def heartbeat_components(self) -> List[HeartbeatStoppableEventLoopObject]:
+        heartbeat = []
+        self._for_each_worker(lambda w: heartbeat.append(w))
+        return heartbeat
 
 
 class SerialSampler(Sampler):
