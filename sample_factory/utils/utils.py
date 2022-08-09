@@ -48,9 +48,6 @@ stream_formatter = ColoredFormatter(
 stream_handler.setFormatter(stream_formatter)
 log.addHandler(stream_handler)
 
-# make other libraries use our logger
-signal_slot.signal_slot.configure_logger(log)
-
 
 def init_file_logger(experiment_dir_):
     file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
@@ -58,6 +55,12 @@ def init_file_logger(experiment_dir_):
     file_formatter = logging.Formatter(fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%")
     file_handler.setFormatter(file_formatter)
     log.addHandler(file_handler)
+
+
+init_file_logger("./")
+
+# make other libraries use our logger
+signal_slot.signal_slot.configure_logger(log)
 
 
 # general Python utilities
