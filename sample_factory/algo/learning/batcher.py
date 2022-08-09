@@ -5,8 +5,8 @@ import torch
 from signal_slot.signal_slot import EventLoop, signal
 
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.shared_buffers import BufferMgr, alloc_trajectory_tensors, policy_device
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_hidden_size
 from sample_factory.utils.timing import Timing
@@ -85,12 +85,12 @@ class SliceMerger:
         return None
 
 
-class Batcher(StoppableEventLoopObject):
+class Batcher(HeartbeatStoppableEventLoopObject):
     def __init__(
         self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr: BufferMgr, cfg: AttrDict, env_info: EnvInfo
     ):
         unique_name = f"{Batcher.__name__}_{policy_id}"
-        super().__init__(evt_loop, unique_name)
+        super().__init__(evt_loop, unique_name, cfg.heartbeat_interval)
 
         self.timing = Timing(name=f"Batcher {policy_id} profile")
 

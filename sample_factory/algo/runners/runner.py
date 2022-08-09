@@ -16,6 +16,7 @@ from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner_worker import LearnerWorker
 from sample_factory.algo.sampling.sampler import AbstractSampler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
+from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import (
     EPISODIC,
     LEARNER_ENV_STEPS,
@@ -26,7 +27,6 @@ from sample_factory.algo.utils.misc import (
     ExperimentStatus,
 )
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.dicts import iterate_recursively
@@ -88,6 +88,7 @@ class Runner(EventLoopObject, Configurable):
         self.report_interval_sec = 5.0
         self.avg_stats_intervals = (2, 12, 60)  # by default: 10 seconds, 60 seconds, 5 minutes
         self.summaries_interval_sec = self.cfg.experiment_summaries_interval  # sec
+        self.heartbeat_report_sec = self.cfg.heartbeat_reporting_interval
 
         self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
@@ -138,6 +139,10 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
         periodic(5, self._propagate_training_info)
+
+        periodic(self.heartbeat_report_sec, self._check_heartbeat)
+
+        self.heartbeat_dict = {}
 
         self.components_to_stop: List[EventLoopObject] = []
         self.component_profiles: Dict[str, Timing] = dict()
@@ -490,11 +495,48 @@ class Runner(EventLoopObject, Configurable):
         """Override this in a subclass to do something right when the experiment is started."""
         self.sampler.init()
 
-    def _setup_component_heartbeat(self):
-        # TODO!!!
-        pass
+    def _setup_component_heartbeat(self, component: HeartbeatStoppableEventLoopObject):
+        """
+        Groups components with heartbeat mechanism by type and records starting time.
+        When all components of the same type do not respond in the reporting timeframe, stops the run
+        """
+        component_type = type(component)
+        if component_type not in self.heartbeat_dict:
+            self.heartbeat_dict[component_type] = {}
+        type_dict = self.heartbeat_dict[component_type]
+        type_dict[component.object_id] = time.time()
+        component.heartbeat.connect(self._receive_heartbeat)
 
-    def _setup_component_termination(self, stop_signal: signal, component_to_stop: StoppableEventLoopObject):
+    def _receive_heartbeat(self, component_type: type, component_id: str):
+        """
+        Record the time the most recent heartbeat was received
+        """
+        curr_time = time.time()
+        heartbeat_time = self.heartbeat_dict[component_type][component_id]
+        if curr_time - heartbeat_time > self.heartbeat_report_sec:
+            log.info(f"Heartbeat reconnected after {curr_time - heartbeat_time} sec from {component_id}")
+        self.heartbeat_dict[component_type][component_id] = curr_time
+
+    def _check_heartbeat(self):
+        """
+        Reports components whose last heartbeat signal is longer than self.heartbeat_report_sec.
+        If all components of the same time fail, stop the run
+        """
+        curr_time = time.time()
+        log.info("Checking heartbeat")
+        for component_type, heartbeat_dict in self.heartbeat_dict.items():
+            num_components = len(heartbeat_dict)
+            num_stopped = 0
+            for component_id, heartbeat_time in heartbeat_dict.items():
+                if curr_time - heartbeat_time > self.heartbeat_report_sec:
+                    log.error(f"No heartbeat for {curr_time - heartbeat_time} sec from {component_id}")
+                    num_stopped += 1
+            if num_stopped == num_components:
+                log.error(f"Stopping training from lack of heartbeats from {component_type}")
+                self._stop_training()
+                break
+
+    def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
         self.components_to_stop.append(component_to_stop)
         component_to_stop.stop.connect(self._component_stopped)
@@ -535,8 +577,13 @@ class Runner(EventLoopObject, Configurable):
             self._setup_component_termination(self.stop, batcher)
             self._setup_component_termination(batcher.stop, learner)
 
+            # Heartbeats
+            self._setup_component_heartbeat(batcher)
+            self._setup_component_heartbeat(learner)
+
         for sampler_component in sampler.stoppable_components():
             self._setup_component_termination(self.stop, sampler_component)
+            self._setup_component_heartbeat(sampler_component)
 
         # final cleanup
         self.all_components_stopped.connect(self._on_everything_stopped)
@@ -547,7 +594,11 @@ class Runner(EventLoopObject, Configurable):
         return end
 
     def _after_training_iteration(self, _training_iteration_since_resume: int):
-        if self._should_end_training() and not self.stopped:
+        if self._should_end_training():
+            self._stop_training()
+
+    def _stop_training(self):
+        if not self.stopped:
             self._save_policy()
             self._save_best_policy()
 
