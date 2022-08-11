@@ -15,7 +15,7 @@ from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algo.utils.stoppable import StoppableEventLoopObject
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.typing import Config, MpQueue, PolicyID
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import experiment_dir, init_file_logger, log
 
 
 class AbstractSampler(EventLoopObject, Configurable):
@@ -219,6 +219,8 @@ class SerialSampler(Sampler):
         self._connect_internal_components()
 
     def init(self) -> None:
+        init_file_logger(experiment_dir(self.cfg))
+
         self.started.emit()
 
     def join(self) -> None:
@@ -266,6 +268,8 @@ class ParallelSampler(Sampler):
         self._connect_internal_components()
 
     def init(self) -> None:
+        init_file_logger(experiment_dir(self.cfg))
+
         log.debug("Starting all processes...")
         for p in self.processes:
             log.debug(f"Starting process {p.name}")

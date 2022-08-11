@@ -49,18 +49,20 @@ stream_handler.setFormatter(stream_formatter)
 log.addHandler(stream_handler)
 
 
+def has_file_handler():
+    for handler in log.handlers:
+        if isinstance(handler, logging.FileHandler):
+            return True
+    return False
+
+
 def init_file_logger(experiment_dir_):
-    file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
-    file_handler.setLevel(log_level)
-    file_formatter = logging.Formatter(fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%")
-    file_handler.setFormatter(file_formatter)
-    log.addHandler(file_handler)
-
-
-init_file_logger("./")
-
-# make other libraries use our logger
-signal_slot.signal_slot.configure_logger(log)
+    if not has_file_handler():
+        file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
+        file_handler.setLevel(log_level)
+        file_formatter = logging.Formatter(fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%")
+        file_handler.setFormatter(file_formatter)
+        log.addHandler(file_handler)
 
 
 # general Python utilities

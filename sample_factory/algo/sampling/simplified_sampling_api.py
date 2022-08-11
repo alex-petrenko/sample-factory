@@ -16,7 +16,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensordict
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.typing import Config, InitModelData, PolicyID, StatusCode
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import experiment_dir, init_file_logger, log
 
 
 class SamplingLoop(EventLoopObject, Configurable):
@@ -56,6 +56,8 @@ class SamplingLoop(EventLoopObject, Configurable):
         self, buffer_mgr: Optional[BufferMgr] = None, param_servers: Optional[Dict[PolicyID, ParameterServer]] = None
     ):
         set_global_cuda_envvars(self.cfg)
+
+        init_file_logger(experiment_dir(self.cfg))
 
         self.buffer_mgr = buffer_mgr
         if self.buffer_mgr is None:

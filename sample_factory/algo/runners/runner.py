@@ -38,6 +38,7 @@ from sample_factory.utils.utils import (
     cfg_file,
     ensure_dir_exists,
     experiment_dir,
+    init_file_logger,
     log,
     memory_consumption_mb,
     save_git_diff,
@@ -477,6 +478,7 @@ class Runner(EventLoopObject, Configurable):
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
 
+        init_file_logger(experiment_dir(self.cfg))
         self._save_cfg()
         save_git_diff(experiment_dir(cfg=self.cfg))
 
