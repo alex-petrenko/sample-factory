@@ -158,7 +158,7 @@ class BufferMgr(Configurable):
         for i in range(cfg.num_workers):
             # TODO: this should take into account whether we just need a GPU for sampling, or we actually receive observations on the GPU
             # otherwise it will not work for things like Megaverse or GPU-rendered DMLab
-            sampling_device = str(rollout_worker_device(i, cfg))
+            sampling_device = str(rollout_worker_device(i, cfg, self.env_info))
             log.debug(f"Rollout worker {i} uses device {sampling_device}")
 
             num_buffers = env_info.num_agents * cfg.num_envs_per_worker
