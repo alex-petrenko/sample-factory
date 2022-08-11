@@ -28,7 +28,7 @@ from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID
-from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log
+from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, init_file_logger, log
 
 
 class LearningRateScheduler:
@@ -171,6 +171,8 @@ class Learner(Configurable):
         self.is_initialized = False
 
     def init(self) -> InitModelData:
+        init_file_logger(experiment_dir(self.cfg))
+
         if self.cfg.exploration_loss_coeff == 0.0:
             self.exploration_loss_func = lambda action_distr, valids, num_invalids: 0.0
         elif self.cfg.exploration_loss == "entropy":

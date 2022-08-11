@@ -21,7 +21,7 @@ from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.typing import Config, PolicyID
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import experiment_dir, init_file_logger, log
 
 
 def init_learner_process(sf_context: SampleFactoryContext, learner_worker: LearnerWorker):
@@ -113,6 +113,8 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.batcher_thread.join()
 
     def init(self):
+        init_file_logger(experiment_dir(self.cfg))
+
         if not self.cfg.serial_mode:
             self.start_batcher_thread()
 

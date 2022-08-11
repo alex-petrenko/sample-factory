@@ -34,7 +34,7 @@ from sample_factory.utils.dicts import dict_of_lists_append_idx
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, InitModelData, MpQueue, PolicyID
-from sample_factory.utils.utils import debug_log_every_n, log
+from sample_factory.utils.utils import debug_log_every_n, experiment_dir, init_file_logger, log
 
 AdvanceRolloutSignals = Dict[int, List[Tuple[int, PolicyID]]]
 PrepareOutputsFunc = Callable[[int, TensorDict, List], AdvanceRolloutSignals]
@@ -141,6 +141,8 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         ...
 
     def init(self, init_model_data: Optional[InitModelData]):
+        init_file_logger(experiment_dir(self.cfg))
+
         if self.is_initialized:
             return
 

@@ -23,7 +23,14 @@ from sample_factory.envs.env_utils import find_training_info_interface, set_rewa
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Config, MpQueue, PolicyID
-from sample_factory.utils.utils import AttrDict, debug_log_every_n, log, set_attr_if_exists
+from sample_factory.utils.utils import (
+    AttrDict,
+    debug_log_every_n,
+    experiment_dir,
+    init_file_logger,
+    log,
+    set_attr_if_exists,
+)
 
 
 class ActorState:
@@ -379,6 +386,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
         """
+        init_file_logger(experiment_dir(self.cfg))
 
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
