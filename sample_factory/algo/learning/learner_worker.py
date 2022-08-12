@@ -34,6 +34,7 @@ def init_learner_process(sf_context: SampleFactoryContext, learner_worker: Learn
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = learner_worker.cfg
+    init_file_logger(experiment_dir(cfg))
 
     try:
         psutil.Process().nice(cfg.default_niceness)
@@ -113,8 +114,6 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.batcher_thread.join()
 
     def init(self):
-        init_file_logger(experiment_dir(self.cfg))
-
         if not self.cfg.serial_mode:
             self.start_batcher_thread()
 

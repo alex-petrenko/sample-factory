@@ -50,6 +50,7 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = worker.cfg
+    init_file_logger(experiment_dir(cfg))
 
     try:
         if cfg.num_workers > 1:
@@ -141,8 +142,6 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         ...
 
     def init(self, init_model_data: Optional[InitModelData]):
-        init_file_logger(experiment_dir(self.cfg))
-
         if self.is_initialized:
             return
 
