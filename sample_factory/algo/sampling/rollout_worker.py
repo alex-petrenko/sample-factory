@@ -43,6 +43,7 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = worker.cfg
+    init_file_logger(experiment_dir(cfg))
 
     # on MacOS, psutil.Process() has no method 'cpu_affinity'
     if hasattr(psutil.Process(), "cpu_affinity"):
@@ -132,8 +133,6 @@ class RolloutWorker(StoppableEventLoopObject, Configurable):
         ...
 
     def init(self):
-        init_file_logger(experiment_dir(self.cfg))
-
         for split_idx in range(self.num_splits):
             env_runner_cls = BatchedVectorEnvRunner if self.cfg.batched_sampling else NonBatchedVectorEnvRunner
 

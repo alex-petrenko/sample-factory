@@ -21,7 +21,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import synchronize
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.typing import PolicyID
-from sample_factory.utils.utils import AttrDict, experiment_dir, init_file_logger, log
+from sample_factory.utils.utils import AttrDict, log
 
 
 def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray | List:
@@ -144,8 +144,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
         """
-        init_file_logger(experiment_dir(self.cfg))
-
         envs: List[BatchedVecEnv] = []
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i

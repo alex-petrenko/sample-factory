@@ -3,7 +3,6 @@ from sample_factory.algo.sampling.sampler import SerialSampler
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.utils.typing import StatusCode
-from sample_factory.utils.utils import experiment_dir, init_file_logger
 
 
 class SerialRunner(Runner):
@@ -12,8 +11,6 @@ class SerialRunner(Runner):
         self.trajectories_per_batch = self.cfg.batch_size // self.cfg.rollout
 
     def init(self) -> StatusCode:
-        init_file_logger(experiment_dir(self.cfg))
-
         # in serial mode everything will be happening in the main process, so we need to initialize cuda
         init_torch_runtime(self.cfg, max_num_threads=None)
         status = super().init()

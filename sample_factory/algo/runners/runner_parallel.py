@@ -9,7 +9,7 @@ from sample_factory.algo.utils.context import sf_global_context
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.utils.typing import StatusCode
-from sample_factory.utils.utils import experiment_dir, init_file_logger, log
+from sample_factory.utils.utils import log
 
 
 class ParallelRunner(Runner):
@@ -18,8 +18,6 @@ class ParallelRunner(Runner):
         self.processes: List[EventLoopProcess] = []
 
     def init(self) -> StatusCode:
-        init_file_logger(experiment_dir(self.cfg))
-
         status = super().init()
         if status != ExperimentStatus.SUCCESS:
             return status
