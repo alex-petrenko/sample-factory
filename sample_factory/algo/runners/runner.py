@@ -143,6 +143,7 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
 
         self.heartbeat_dict = {}
+        self.queue_size_dict = {}
 
         self.components_to_stop: List[EventLoopObject] = []
         self.component_profiles: Dict[str, Timing] = dict()
@@ -505,9 +506,17 @@ class Runner(EventLoopObject, Configurable):
             self.heartbeat_dict[component_type] = {}
         type_dict = self.heartbeat_dict[component_type]
         type_dict[component.object_id] = time.time()
+
+        """
+        setup up queue_size report with heartbeat, grouped by event_loop_process_id
+        """
+        process_id = component.event_loop.process
+        if process_id not in self.queue_size_dict:
+            self.queue_size_dict[process_id] = 0
+
         component.heartbeat.connect(self._receive_heartbeat)
 
-    def _receive_heartbeat(self, component_type: type, component_id: str):
+    def _receive_heartbeat(self, component_type: type, component_id: str, process_id, qsize):
         """
         Record the time the most recent heartbeat was received
         """
@@ -516,6 +525,7 @@ class Runner(EventLoopObject, Configurable):
         if curr_time - heartbeat_time > self.heartbeat_report_sec:
             log.info(f"Heartbeat reconnected after {curr_time - heartbeat_time} sec from {component_id}")
         self.heartbeat_dict[component_type][component_id] = curr_time
+        self.queue_size_dict[process_id] = qsize
 
     def _check_heartbeat(self):
         """
@@ -535,6 +545,10 @@ class Runner(EventLoopObject, Configurable):
                 log.error(f"Stopping training from lack of heartbeats from {component_type}")
                 self._stop_training()
                 break
+
+        log.debug("Checking Queue Size")
+        for process_id, qsize in self.queue_size_dict.items():
+            log.debug(f"Process: {process_id} has queue size: {qsize}")
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)

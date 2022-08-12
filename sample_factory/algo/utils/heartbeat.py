@@ -18,7 +18,9 @@ class HeartbeatStoppableEventLoopObject(EventLoopObject):
         ...
 
     def _report_heartbeat(self):
-        self.heartbeat.emit(type(self), self.object_id)
+        self.heartbeat.emit(
+            type(self), self.object_id, self.event_loop.process.ident, self.event_loop.signal_queue.qsize()
+        )
 
     def on_stop(self, *_) -> None:
         """
