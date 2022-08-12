@@ -510,7 +510,7 @@ class Runner(EventLoopObject, Configurable):
         """
         setup up queue_size report with heartbeat, grouped by event_loop_process_id
         """
-        process_id = component.event_loop.process
+        process_id = 0 if component.event_loop.process is None else component.event_loop.process.ident
         if process_id not in self.queue_size_dict:
             self.queue_size_dict[process_id] = 0
 
@@ -525,6 +525,8 @@ class Runner(EventLoopObject, Configurable):
         if curr_time - heartbeat_time > self.heartbeat_report_sec:
             log.info(f"Heartbeat reconnected after {curr_time - heartbeat_time} sec from {component_id}")
         self.heartbeat_dict[component_type][component_id] = curr_time
+        if process_id is None:
+            process_id = 0
         self.queue_size_dict[process_id] = qsize
 
     def _check_heartbeat(self):
