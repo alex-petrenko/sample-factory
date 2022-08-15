@@ -8,16 +8,11 @@ _params = ParamGrid(
 )
 
 SMALL_MODEL_CLI = QUAD_BASELINE_CLI + (
-    " --train_for_env_steps=10000000000 --num_workers=8 --num_envs_per_worker=8 "
+    " --train_for_env_steps=10000000000 --num_workers=16 --num_envs_per_worker=8 "
     "--quads_num_agents=8 --save_milestones_sec=10000 --async_rl=True --num_batches_to_accumulate=8 "
-    "--serial_mode=False --batched_sampling=True"
+    "--serial_mode=False --batched_sampling=True --normalize_input=True --normalize_returns=True "
+    "--with_wandb=True --wandb_tags multi"
 )
-
-# SMALL_MODEL_CLI = QUAD_BASELINE_CLI + (
-#     " --train_for_env_steps=10000000000 --neighbor_obs_type=none "
-#     "--quads_num_agents=8 --anneal_collision_steps=0 --save_milestones_sec=10000 "
-#     "--quads_neighbor_encoder_type=no_encoder --serial_mode=False --quads_mode=static_same_goal --normalize_input=True --normalize_returns=True"
-# )
 
 _experiment = Experiment(
     "baseline_multi_drone",
