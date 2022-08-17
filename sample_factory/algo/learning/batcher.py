@@ -235,6 +235,9 @@ class Batcher(HeartbeatStoppableEventLoopObject):
                 self.resume_experience_collection.emit()
 
             self.available_batches.append(batch_idx)
+
+            self._maybe_enqueue_new_training_batches()
+
             # log.debug(
             #     f"{self.object_id} finished processing batch {batch_idx}, available batches: {self.available_batches}, {training_iteration=}"
             # )

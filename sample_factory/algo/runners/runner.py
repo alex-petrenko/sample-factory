@@ -506,7 +506,7 @@ class Runner(EventLoopObject, Configurable):
         if component_type not in self.heartbeat_dict:
             self.heartbeat_dict[component_type] = {}
         type_dict = self.heartbeat_dict[component_type]
-        type_dict[component.object_id] = time.time()
+        type_dict[component.object_id] = None
 
         # setup up queue_size report with heartbeat, grouped by event_loop_process_name
         p_name = process_name(component.event_loop.process)
@@ -521,7 +521,9 @@ class Runner(EventLoopObject, Configurable):
         """
         curr_time = time.time()
         heartbeat_time = self.heartbeat_dict[component_type][component_id]
-        if curr_time - heartbeat_time > self.heartbeat_report_sec:
+        if heartbeat_time is None:
+            log.info(f"Heartbeat connected on {component_id}")
+        elif curr_time - heartbeat_time > self.heartbeat_report_sec:
             log.info(f"Heartbeat reconnected after {int(curr_time - heartbeat_time)} seconds from {component_id}")
         self.heartbeat_dict[component_type][component_id] = curr_time
         self.queue_size_dict[p_name] = qsize
@@ -534,20 +536,26 @@ class Runner(EventLoopObject, Configurable):
         curr_time = time.time()
         comp_list = []
         type_list = []
+        none_list = []
         for component_type, heartbeat_dict in self.heartbeat_dict.items():
             num_components = len(heartbeat_dict)
             num_stopped = 0
             for component_id, heartbeat_time in heartbeat_dict.items():
+                if heartbeat_time is None:
+                    none_list.append(component_id)
+                    continue
                 if curr_time - heartbeat_time > self.heartbeat_report_sec:
                     comp_list.append(f"{component_id} ({(int(curr_time - heartbeat_time))} seconds)")
                     num_stopped += 1
             if num_stopped == num_components:
                 type_list.append(str(component_type))
 
+        if len(none_list) > 0:
+            log.debug(f"Components not started: {', '.join(none_list)}")
         if len(comp_list) > 0:
-            log.error("No heartbeat for components: " + ", ".join(comp_list))
+            log.error(f"No heartbeat for components: {', '.join(comp_list)}")
         if len(type_list) > 0:
-            log.error("Stopping training from lack of heartbeats from " + ", ".join(type_list))
+            log.error(f"Stopping training from lack of heartbeats from {', '.join(type_list)}")
             self._stop_training()
 
         for p_name, qsize in self.queue_size_dict.items():
