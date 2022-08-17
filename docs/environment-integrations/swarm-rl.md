@@ -18,11 +18,16 @@ pip install -e .
 
 Install the gym_art folder by adding it to your PATH
 ```
-echo "export PATH=$PATH:~/quad-swarm-rl~ >> ~/.bashrc
+echo "export PATH=$PATH:~/quad-swarm-rl" >> ~/.bashrc
 ```
 
 ### Running Experiments
 
 The environments can be run from the `sf_examples.swarm_rl_examples` folder. 
 
-Experiments were run with a single drone 
+Experiments can be run with the `train_swarm_rl` script and viewed with the `enjoy_swarm_rl` script. If you are running custom experiments, it is recommended to use the `quad_multi_mix_baseline` runner script and make any modifications as needed. See `single_drone` and `multi_drone` runner scripts for an examples.
+
+### Results
+
+#### Reports
+

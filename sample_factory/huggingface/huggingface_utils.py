@@ -24,6 +24,9 @@ def generate_replay_video(dir_path: str, frames: list, fps: int):
     for frame in frames:
         if resize:
             frame = cv2.resize(frame, frame_size, interpolation=cv2.INTER_AREA)
+        # print(frame)
+        # cv2.imshow("policy inputs", frame)
+        # cv2.waitKey(delay=1)
         video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     video.release()
     os.system(f"ffmpeg -y -i {tmp_name} -vcodec libx264 {video_name}")
