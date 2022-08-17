@@ -379,7 +379,6 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         Actually instantiate the env instances.
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
         """
-
         for env_i in range(self.num_envs):
             vector_idx = self.split_idx * self.num_envs + env_i
 
