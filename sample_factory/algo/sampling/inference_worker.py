@@ -34,7 +34,7 @@ from sample_factory.utils.dicts import dict_of_lists_append_idx
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, InitModelData, MpQueue, PolicyID
-from sample_factory.utils.utils import debug_log_every_n, log
+from sample_factory.utils.utils import debug_log_every_n, experiment_dir, init_file_logger, log
 
 AdvanceRolloutSignals = Dict[int, List[Tuple[int, PolicyID]]]
 PrepareOutputsFunc = Callable[[int, TensorDict, List], AdvanceRolloutSignals]
@@ -50,6 +50,7 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = worker.cfg
+    init_file_logger(experiment_dir(cfg))
 
     try:
         if cfg.num_workers > 1:
