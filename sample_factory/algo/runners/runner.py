@@ -596,7 +596,6 @@ class Runner(EventLoopObject, Configurable):
 
         for sampler_component in sampler.stoppable_components():
             self._setup_component_termination(self.stop, sampler_component)
-            self._setup_component_heartbeat(sampler_component)
 
         for sampler_component in sampler.heartbeat_components():
             self._setup_component_heartbeat(sampler_component)
