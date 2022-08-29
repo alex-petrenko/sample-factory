@@ -49,6 +49,10 @@ stream_handler.setFormatter(stream_formatter)
 log.addHandler(stream_handler)
 
 
+# make other libraries use our logger
+signal_slot.signal_slot.configure_logger(log)
+
+
 def has_file_handler():
     for handler in log.handlers:
         if isinstance(handler, logging.FileHandler):
@@ -471,7 +475,6 @@ def log_every_n(n, _level, msg, *args, **kwargs):
     """
     Log message `msg` once in n calls to this function to avoid log spam.
     Use only msg to count the calls, not args and kwargs.
-    Intentionally using a mutable _history dict to store call history.
     """
     if msg not in log_every_n.history:
         log_every_n.history[msg] = 0
