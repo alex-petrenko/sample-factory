@@ -1,8 +1,8 @@
 import pytest
 import torch
 
+from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.cfg.arguments import default_cfg
-from sample_factory.envs.create_env import create_env
 from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.timing import Timing
@@ -24,7 +24,7 @@ class TestModel:
         cfg.use_rnn = True
         cfg.env_framestack = 4
 
-        env = create_env(env_name, cfg=cfg)
+        env = make_env_func_batched(cfg, env_config=None)
 
         torch.set_num_threads(1)
         torch.backends.cudnn.benchmark = True
