@@ -8,17 +8,13 @@ import isaacgym
 import os
 import sys
 from os.path import join
-from typing import List
 
 import gym
-import torch
 from isaacgymenvs.tasks import isaacgym_task_map
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
-from torch import Tensor, nn
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.model_utils import EncoderBase, get_obs_shape, register_custom_encoder
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, Env
 from sample_factory.utils.utils import str2bool
@@ -100,40 +96,6 @@ def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
     return env
 
 
-class _IsaacGymMlpEncoderImlp(nn.Module):
-    def __init__(self, obs_space, mlp_layers: List[int]):
-        super().__init__()
-
-        obs_shape = get_obs_shape(obs_space)
-        assert len(obs_shape.obs) == 1
-
-        layer_input_width = obs_shape.obs[0]
-        encoder_layers = []
-        for layer_width in mlp_layers:
-            encoder_layers.append(nn.Linear(layer_input_width, layer_width))
-            layer_input_width = layer_width
-            encoder_layers.append(nn.ELU(inplace=True))
-
-        self.mlp_head = nn.Sequential(*encoder_layers)
-
-    def forward(self, obs: Tensor):
-        x = self.mlp_head(obs)
-        return x
-
-
-class IsaacGymMlpEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
-
-        self._impl = _IsaacGymMlpEncoderImlp(obs_space, cfg.mlp_layers)
-        self._impl = torch.jit.script(self._impl)
-        self.encoder_out_size = cfg.mlp_layers[-1]  # TODO: we should make this an abstract method
-
-    def forward(self, obs_dict):
-        x = self._impl(obs_dict["obs"])
-        return x
-
-
 def add_extra_params_func(parser):
     """
     Specify any additional command line arguments for this family of custom environments.
@@ -147,13 +109,6 @@ def add_extra_params_func(parser):
     )
     p.add_argument("--env_headless", default=True, type=str2bool, help="Headless == no rendering")
     p.add_argument(
-        "--mlp_layers",
-        default=[256, 128, 64],
-        type=int,
-        nargs="*",
-        help="MLP layers to use with isaacgym_examples envs",
-    )
-    p.add_argument(
         "--obs_key",
         default="obs",
         type=str,
@@ -164,69 +119,8 @@ def add_extra_params_func(parser):
     )
 
 
-# custom default configuration parameters for specific envs
-# add more envs here analogously (env names should match config file names in IGE)
-env_configs = dict(
-    Ant=dict(
-        mlp_layers=[256, 128, 64],
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
-        save_every_sec=15,
-        # trains better without normalized returns, but we keep the default value for consistency
-        # normalize_returns=False,
-    ),
-    Humanoid=dict(
-        train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
-        mlp_layers=[400, 200, 100],
-        rollout=32,
-        num_epochs=5,
-        value_loss_coeff=4.0,
-        max_grad_norm=1.0,
-        num_batches_per_epoch=4,
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
-        save_every_sec=15,
-        # trains a lot better with higher gae_lambda, but we keep the default value for consistency
-        # gae_lambda=0.99,
-    ),
-    AllegroHand=dict(
-        train_for_env_steps=10_000_000_000,
-        mlp_layers=[512, 256, 128],
-        gamma=0.99,
-        rollout=16,
-        recurrence=16,
-        use_rnn=False,
-        learning_rate=5e-3,
-        lr_schedule_kl_threshold=0.02,
-        reward_scale=0.01,
-        num_epochs=5,
-        max_grad_norm=1.0,
-        num_batches_per_epoch=8,
-    ),
-    AllegroHandLSTM=dict(
-        train_for_env_steps=10_000_000_000,
-        mlp_layers=[512, 256, 128],
-        gamma=0.99,
-        rollout=16,
-        recurrence=16,
-        use_rnn=True,
-        learning_rate=1e-4,
-        lr_schedule_kl_threshold=0.016,
-        reward_scale=0.01,
-        num_epochs=4,
-        max_grad_norm=1.0,
-        num_batches_per_epoch=8,
-        obs_key="states",
-    ),
-)
-
-
 def override_default_params_func(env, parser):
-    """
-    Override default argument values for this family of environments.
-    All experiments for environments from my_custom_env_ family will have these parameters unless
-    different values are passed from command line.
-
-    """
-    # most of these parameters are taken from IsaacGymEnvs default config files
+    """Most of these parameters are taken from IsaacGymEnvs default config files."""
 
     parser.set_defaults(
         # we're using a single very vectorized env, no need to parallelize it further
@@ -236,7 +130,6 @@ def override_default_params_func(env, parser):
         worker_num_splits=1,
         actor_worker_gpus=[0],  # obviously need a GPU
         train_for_env_steps=10000000,
-        encoder_custom="isaac_gym_mlp_encoder",
         use_rnn=False,
         adaptive_stddev=False,
         policy_initialization="torch_default",
@@ -273,10 +166,64 @@ def override_default_params_func(env, parser):
         parser.set_defaults(**env_configs[env])
 
 
+# custom default configuration parameters for specific envs
+# add more envs here analogously (env names should match config file names in IGE)
+env_configs = dict(
+    Ant=dict(
+        encoder_mlp_layers=[256, 128, 64],
+        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+        save_every_sec=15,
+        # trains better without normalized returns, but we keep the default value for consistency
+        # normalize_returns=False,
+    ),
+    Humanoid=dict(
+        train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
+        encoder_mlp_layers=[400, 200, 100],
+        rollout=32,
+        num_epochs=5,
+        value_loss_coeff=4.0,
+        max_grad_norm=1.0,
+        num_batches_per_epoch=4,
+        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+        save_every_sec=15,
+        # trains a lot better with higher gae_lambda, but we keep the default value for consistency
+        # gae_lambda=0.99,
+    ),
+    AllegroHand=dict(
+        train_for_env_steps=10_000_000_000,
+        encoder_mlp_layers=[512, 256, 128],
+        gamma=0.99,
+        rollout=16,
+        recurrence=16,
+        use_rnn=False,
+        learning_rate=5e-3,
+        lr_schedule_kl_threshold=0.02,
+        reward_scale=0.01,
+        num_epochs=5,
+        max_grad_norm=1.0,
+        num_batches_per_epoch=8,
+    ),
+    AllegroHandLSTM=dict(
+        train_for_env_steps=10_000_000_000,
+        encoder_mlp_layers=[512, 256, 128],
+        gamma=0.99,
+        rollout=16,
+        recurrence=16,
+        use_rnn=True,
+        learning_rate=1e-4,
+        lr_schedule_kl_threshold=0.016,
+        reward_scale=0.01,
+        num_epochs=4,
+        max_grad_norm=1.0,
+        num_batches_per_epoch=8,
+        obs_key="states",
+    ),
+)
+
+
 def register_isaacgym_custom_components():
     for env_name in env_configs:
         register_env(env_name, make_isaacgym_env)
-    register_custom_encoder("isaac_gym_mlp_encoder", IsaacGymMlpEncoder)
 
 
 def parse_isaacgym_cfg(evaluation=False):

@@ -17,8 +17,8 @@ from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
-from sample_factory.model.model import create_actor_critic
-from sample_factory.model.model_utils import get_hidden_size
+from sample_factory.model.actor_critic import create_actor_critic
+from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.utils import AttrDict, debug_log_every_n, experiment_dir, log
 
 
@@ -119,7 +119,7 @@ def enjoy(cfg):
     reward_list = []
 
     obs = env.reset()
-    rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
+    rnn_states = torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False for _ in range(env.num_agents)]
 
@@ -188,7 +188,7 @@ def enjoy(cfg):
                             episode_reward[agent_i],
                             true_objectives[agent_i][-1],
                         )
-                        rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
+                        rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
                         num_episodes += 1
 

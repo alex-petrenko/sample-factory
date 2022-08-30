@@ -468,36 +468,66 @@ def add_rl_args(p: ArgumentParser):
 
 
 def add_model_args(p: ArgumentParser):
-    """Policy size, configuration, etc."""
+    """
+    Policy size, configuration, etc.
+
+    Model builder automatically detects whether we should use conv or MLP encoder, then we use parameters to spectify
+    settings for one or the other. If we're using MLP encoder, conv encoder settings will be ignored.
+    """
+    # policy with vector observations - encoder options
     p.add_argument(
-        "--encoder_type",
-        default="conv",
-        type=str,
-        help="Type of the encoder. Supported: conv, mlp, resnet (feel free to define more)",
-    )
-    p.add_argument(
-        "--encoder_subtype", default="convnet_simple", type=str, help="Specific encoder design (see model.py)"
-    )
-    p.add_argument(
-        "--encoder_custom",
-        default=None,
-        type=str,
-        help="Use custom encoder class from the registry (see model_utils.py)",
-    )
-    p.add_argument(
-        "--encoder_extra_fc_layers",
-        default=1,
+        "--encoder_mlp_layers",
+        default=[512, 512],
         type=int,
-        help='Number of fully-connected layers of size "hidden size" to add after the basic encoder (e.g. convolutional)',
+        nargs="*",
+        help="In case of MLP encoder, sizes of layers to use. This is ignored if observations are images.",
+    )
+
+    # policy with image observations - convolutional encoder options
+    p.add_argument(
+        "--encoder_conv_architecture",
+        default="convnet_simple",
+        choices=["convnet_simple", "convnet_impala", "convnet_atari", "resnet_impala"],
+        type=str,
+        help="Architecture of the convolutional encoder. See models.py for details. "
+        "VizDoom and DMLab examples demonstrate how to define custom architectures.",
     )
     p.add_argument(
-        "--hidden_size",
+        "--encoder_conv_mlp_layers",
+        default=[512],
+        type=int,
+        nargs="*",
+        help="Optional fully connected layers after the convolutional encoder head.",
+    )
+
+    # model core settings (core is identity function if we're not using RNNs)
+    p.add_argument("--use_rnn", default=True, type=str2bool, help="Whether to use RNN core in a policy or not")
+    p.add_argument(
+        "--rnn_size",
         default=512,
         type=int,
-        help="Size of hidden layer in the model, or the size of RNN hidden state in recurrent model (e.g. GRU)",
+        help="Size of the RNN hidden state in recurrent model (e.g. GRU or LSTM)",
     )
     p.add_argument(
-        "--nonlinearity", default="elu", choices=["elu", "relu", "tanh"], type=str, help="Type of nonlinearity to use"
+        "--rnn_type",
+        default="gru",
+        choices=["gru", "lstm"],
+        type=str,
+        help="Type of RNN cell to use if use_rnn is True",
+    )
+    p.add_argument("--rnn_num_layers", default=1, type=int, help="Number of RNN layers to use if use_rnn is True")
+
+    # Decoder settings. Decoder appears between policy core (RNN) and action/critic heads.
+    p.add_argument(
+        "--decoder_mlp_layers",
+        default=[],
+        type=int,
+        nargs="*",
+        help="Optional decoder MLP layers after the policy core. If empty (default) decoder is identity function.",
+    )
+
+    p.add_argument(
+        "--nonlinearity", default="elu", choices=["elu", "relu", "tanh"], type=str, help="Type of nonlinearity to use."
     )
     p.add_argument(
         "--policy_initialization",
@@ -518,7 +548,6 @@ def add_model_args(p: ArgumentParser):
         type=str2bool,
         help="Whether to share the weights between policy and value function",
     )
-
     p.add_argument(
         "--adaptive_stddev",
         default=True,
@@ -531,17 +560,6 @@ def add_model_args(p: ArgumentParser):
         type=float,
         help="Initial value for non-adaptive stddev. Only makes sense for continuous action spaces",
     )
-
-    # RNN settings
-    p.add_argument("--use_rnn", default=True, type=str2bool, help="Whether to use RNN core in a policy or not")
-    p.add_argument(
-        "--rnn_type",
-        default="gru",
-        choices=["gru", "lstm"],
-        type=str,
-        help="Type of RNN cell to use if use_rnn is True",
-    )
-    p.add_argument("--rnn_num_layers", default=1, type=int, help="Number of RNN layers to use if use_rnn is True")
 
 
 def add_default_env_args(p: ArgumentParser):

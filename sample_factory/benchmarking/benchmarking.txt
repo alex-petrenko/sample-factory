@@ -511,3 +511,40 @@ save_policy_outputs: 2.3827
 main_loop: 104.3648
 [2022-07-28 18:19:11,304][104459] Collected {0: 4005888}, FPS: 38305.0   <-- this is calculated differently now and includes startup time
 Actual training FPS: (10 sec: 45875.1, 60 sec: 45602.4, 300 sec: 44422.8)
+
+Version v2.0.0.v75
+New model builder API, plus new GPU (3090Ti), new CUDA, new PyTorch
+[2022-08-30 02:17:23,176][449786] Batcher 0 profile tree view:
+batching: 9.0868, releasing_batches: 0.0143
+[2022-08-30 02:17:23,177][449786] InferenceWorker_p0-w0 profile tree view:
+wait_policy: 0.0001
+  wait_policy_total: 28.4021
+update_model: 1.3279
+  weight_update: 0.0009
+one_step: 0.0037
+  handle_policy_step: 67.6332
+    deserialize: 6.9425, stack: 0.4945, obs_to_device_normalize: 15.1023, forward: 28.5246, send_messages: 4.0288
+    prepare_outputs: 9.3175
+      to_cpu: 4.3431
+[2022-08-30 02:17:23,177][449786] Learner 0 profile tree view:
+prepare_batch: 3.3698
+train: 12.7842
+  epoch_init: 0.0020, minibatch_init: 0.0035, losses_postprocess: 0.1301, kl_divergence: 0.1722, after_optimizer: 1.2661
+  calculate_losses: 6.3435
+    losses_init: 0.0024, forward_head: 0.5065, bptt_initial: 2.4949, tail: 0.2926, advantages_returns: 1.8817, losses: 0.4954
+    bptt: 0.5209
+      bptt_forward_core: 0.4975
+  update: 4.5490
+    clip: 0.6051
+[2022-08-30 02:17:23,177][449786] RolloutWorker_w0 profile tree view:
+wait_for_trajectories: 0.0563, enqueue_policy_requests: 2.6546, env_step: 80.1135, overhead: 5.5012, complete_rollouts: 0.1301
+save_policy_outputs: 2.8837
+  split_output_tensors: 1.3435
+[2022-08-30 02:17:23,177][449786] RolloutWorker_w19 profile tree view:
+wait_for_trajectories: 0.0347, enqueue_policy_requests: 2.2328, env_step: 66.3553, overhead: 4.5816, complete_rollouts: 0.0768
+save_policy_outputs: 2.4376
+  split_output_tensors: 1.1317
+[2022-08-30 02:17:23,177][449786] Loop Runner_EvtLoop terminating...
+[2022-08-30 02:17:23,178][449786] Runner profile tree view:
+main_loop: 110.6443
+[2022-08-30 02:17:23,178][449786] Collected {0: 4014080}, FPS: 36279.1

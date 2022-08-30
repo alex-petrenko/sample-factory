@@ -23,7 +23,7 @@ from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
 from sample_factory.algo.utils.torch_utils import masked_select, synchronize, to_scalar
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.model.model import create_actor_critic
+from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
@@ -139,7 +139,7 @@ class Learner(Configurable):
         self.env_info = env_info
 
         self.device = None
-        self.actor_critic = None
+        self.actor_critic: Optional[ActorCritic] = None
 
         self.optimizer = None
 
@@ -204,9 +204,7 @@ class Learner(Configurable):
         log.debug("Initializing actor-critic model on device %s", self.device)
 
         # trainable torch module
-        self.actor_critic = create_actor_critic(
-            self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
-        )
+        self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space)
         self.actor_critic.model_to_device(self.device)
 
         def share_mem(t):
@@ -525,7 +523,7 @@ class Learner(Configurable):
             assert core_outputs.shape[0] == head_outputs.shape[0]
 
             # calculate policy tail outside of recurrent loop
-            result = self.actor_critic.forward_tail(core_outputs, sample_actions=False)
+            result = self.actor_critic.forward_tail(core_outputs, values_only=False, sample_actions=False)
             action_distribution = self.actor_critic.action_distribution()
             log_prob_actions = action_distribution.log_prob(mb.actions)
             ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old

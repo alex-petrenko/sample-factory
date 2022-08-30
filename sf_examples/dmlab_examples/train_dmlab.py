@@ -3,11 +3,11 @@ from multiprocessing.context import BaseContext
 from typing import Optional
 
 from sample_factory.algo.runners.runner import Runner
+from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.train import make_runner
 from sample_factory.utils.typing import Config, Env
 from sample_factory.utils.utils import experiment_dir
@@ -19,7 +19,7 @@ from sf_examples.dmlab_examples.dmlab_env import (
     make_dmlab_env,
 )
 from sf_examples.dmlab_examples.dmlab_level_cache import DmlabLevelCaches, make_dmlab_caches
-from sf_examples.dmlab_examples.dmlab_model import DmlabEncoder
+from sf_examples.dmlab_examples.dmlab_model import make_dmlab_encoder
 from sf_examples.dmlab_examples.dmlab_params import add_dmlab_env_args, dmlab_override_defaults
 
 
@@ -37,13 +37,9 @@ def register_dmlab_envs(level_caches: Optional[DmlabLevelCaches] = None):
         register_env(env.name, env_factory.make_env)
 
 
-def dmlab_register_models():
-    register_custom_encoder("dmlab_instructions", DmlabEncoder)
-
-
 def register_dmlab_components(level_caches: Optional[DmlabLevelCaches] = None):
     register_dmlab_envs(level_caches)
-    dmlab_register_models()
+    global_model_factory().register_encoder_factory(make_dmlab_encoder)
 
 
 def register_msg_handlers(cfg: Config, runner: Runner):

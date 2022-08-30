@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 
 from sample_factory.algo.utils.multiprocessing_utils import get_lock, get_mp_ctx
-from sample_factory.model.model import create_actor_critic
+from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 

@@ -1,17 +1,18 @@
 import torch
 from torch import nn
 
-from sample_factory.model.model_utils import EncoderBase, create_standard_encoder
+from sample_factory.model.encoder import Encoder, make_img_encoder
+from sample_factory.utils.typing import Config, ObsSpace
 from sample_factory.utils.utils import log
 from sf_examples.dmlab_examples.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_VOCABULARY_SIZE
 
 
-class DmlabEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+class DmlabEncoder(Encoder):
+    def __init__(self, cfg: Config, obs_space: ObsSpace):
+        super().__init__(cfg)
 
-        self.basic_encoder = create_standard_encoder(cfg, obs_space, timing)
-        self.encoder_out_size = self.basic_encoder.encoder_out_size
+        self.basic_encoder = make_img_encoder(cfg, obs_space)
+        self.encoder_out_size = self.basic_encoder.get_out_size()
 
         # same as IMPALA paper
         self.embedding_size = 20
@@ -36,7 +37,7 @@ class DmlabEncoder(EncoderBase):
         # self.lstm_c0 = nn.Parameter(initial_hidden_values, requires_grad=True)
 
         self.encoder_out_size += self.instructions_lstm_units
-        log.debug("Policy head output size: %r", self.encoder_out_size)
+        log.debug("DMLab policy head output size: %r", self.encoder_out_size)
 
         self.cpu_device = torch.device("cpu")
 
@@ -87,3 +88,10 @@ class DmlabEncoder(EncoderBase):
 
         x = torch.cat((x, last_outputs), dim=1)
         return x
+
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
+
+
+def make_dmlab_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
+    return DmlabEncoder(cfg, obs_space)

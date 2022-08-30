@@ -12,11 +12,11 @@ import sys
 import gym
 import numpy as np
 
+from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.train import run_rl
-from sf_examples.train_custom_env_custom_model import CustomEncoder, override_default_params
+from sf_examples.train_custom_env_custom_model import make_custom_encoder, override_default_params
 
 
 class CustomMultiEnv(gym.Env):
@@ -117,7 +117,7 @@ def add_extra_params_func(parser):
 
 def register_custom_components():
     register_env("my_custom_multi_env_v1", make_custom_multi_env_func)
-    register_custom_encoder("custom_env_encoder", CustomEncoder)
+    global_model_factory().register_encoder_factory(make_custom_encoder)
 
 
 def parse_custom_args(argv=None, evaluation=False):
