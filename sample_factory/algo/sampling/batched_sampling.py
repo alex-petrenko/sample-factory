@@ -19,7 +19,7 @@ from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectoriz
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import synchronize
-from sample_factory.utils.dicts import get_first_present
+from sample_factory.utils.dicts import get_first_present, iterate_recursively_with_prefix
 from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import AttrDict, log
 
@@ -232,19 +232,23 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         if isinstance(infos, dict):
             # vectorized reports
-            for key, value in infos.items():
+            for _, key, value, prefix in iterate_recursively_with_prefix(infos):
+                key_str = key
+                if prefix:
+                    key_str = f"{'/'.join(prefix)}/{key}"
+
                 if isinstance(value, Tensor):
                     if value.numel() == 1:
-                        stats[key] = value.item()
+                        stats[key_str] = value.item()
                     elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
                         # saving value for all agents who finished the episode
-                        stats[key] = value[finished]
+                        stats[key_str] = value[finished]
                     else:
                         log.warning(f"Infos tensor with unexpected shape {value.shape}")
                 elif isinstance(value, numbers.Number):
-                    stats[key] = value
+                    stats[key_str] = value
         else:
-            # non-vectorized reports TODO (parse infos)
+            # non-vectorized reports: TODO (parse infos)
 
             assert isinstance(infos, (list, tuple)), "Expect infos to be a list or tuple of dicts"
 

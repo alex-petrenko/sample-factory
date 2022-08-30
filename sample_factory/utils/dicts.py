@@ -32,6 +32,23 @@ def iterate_recursively(d):
             yield d, k, v
 
 
+def iterate_recursively_with_prefix(d: Dict, prefix=None):
+    """
+    Generator for a dictionary that can potentially include other dictionaries.
+    Yields tuples of (dict, key, value, prefix), where key, value are "leaf" elements of the "dict" and prefix is a
+    list of keys that lead to the current element (exluding the current key).
+
+    """
+    if prefix is None:
+        prefix = []
+
+    for k, v in d.items():
+        if isinstance(v, (dict, OrderedDict)):
+            yield from iterate_recursively_with_prefix(v, prefix + [k])
+        else:
+            yield d, k, v, prefix
+
+
 def copy_dict_structure(d):
     """Copy dictionary layout without copying the actual values (populated with Nones)."""
     d_copy = type(d)()

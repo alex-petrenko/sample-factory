@@ -118,7 +118,7 @@ def make_custom_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
 
 def register_custom_components():
     register_env("my_custom_env_v1", make_custom_env_func)
-    global_model_factory().register_encoder_factory(lambda cfg, obs_space: make_custom_encoder(cfg, obs_space))
+    global_model_factory().register_encoder_factory(make_custom_encoder)
 
 
 def parse_custom_args(argv=None, evaluation=False):
