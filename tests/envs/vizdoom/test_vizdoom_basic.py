@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from sample_factory.algo.utils.context import reset_global_context
 from sample_factory.envs.env_utils import vizdoom_available
 from tests.envs.utils import eval_env_performance
 
@@ -12,7 +13,9 @@ class TestDoom:
     def register_doom_fixture(self):
         from sf_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
 
-        return register_vizdoom_components()
+        register_vizdoom_components()
+        yield  # this is where the actual test happens
+        reset_global_context()
 
     # noinspection PyUnusedLocal
     @staticmethod

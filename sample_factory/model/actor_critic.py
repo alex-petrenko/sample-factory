@@ -13,6 +13,7 @@ from sample_factory.model.action_parameterization import (
     ActionParameterizationContinuousNonAdaptiveStddev,
     ActionParameterizationDefault,
 )
+from sample_factory.model.model_utils import model_device
 from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
 
@@ -59,7 +60,10 @@ class ActorCritic(nn.Module, Configurable):
                 module.to(device)
 
     def device_for_input_tensor(self, input_tensor_name: str) -> torch.device:
-        return self.encoders[0].device_for_input_tensor(input_tensor_name)
+        device = self.encoders[0].device_for_input_tensor(input_tensor_name)
+        if device is None:
+            device = model_device(self)
+        return device
 
     def type_for_input_tensor(self, input_tensor_name: str) -> torch.dtype:
         return self.encoders[0].type_for_input_tensor(input_tensor_name)

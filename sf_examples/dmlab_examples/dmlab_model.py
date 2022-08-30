@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from sample_factory.model.encoder import Encoder, make_img_encoder
+from sample_factory.model.model_utils import model_device
 from sample_factory.utils.typing import Config, ObsSpace
 from sample_factory.utils.utils import log
 from sf_examples.dmlab_examples.dmlab30 import DMLAB_INSTRUCTIONS, DMLAB_VOCABULARY_SIZE
@@ -49,7 +50,7 @@ class DmlabEncoder(Encoder):
     def device_for_input_tensor(self, input_tensor_name: str) -> torch.device:
         if input_tensor_name == DMLAB_INSTRUCTIONS:
             return self.cpu_device
-        return self.model_device()
+        return model_device(self)
 
     def type_for_input_tensor(self, input_tensor_name: str) -> torch.dtype:
         if input_tensor_name == DMLAB_INSTRUCTIONS:

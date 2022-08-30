@@ -1,5 +1,7 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # isort: off
+from typing import List
+
 # noinspection PyUnresolvedReferences
 import isaacgym
 
@@ -57,9 +59,7 @@ class IsaacGymVecEnv(gym.Env):
 
 def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
     task_name = full_env_name
-    overrides = [f"task={task_name}"]
-    if cfg.env_agents > 0:
-        overrides.append(f"num_envs={cfg.env_agents}")
+    overrides = ige_task_cfg_overrides(task_name, cfg)
 
     import isaacgymenvs
     from hydra import compose, initialize
@@ -82,15 +82,27 @@ def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
     ige_cfg_dict = omegaconf_to_dict(ige_cfg)
     task_cfg = ige_cfg_dict["task"]
 
-    env = isaacgym_task_map[task_cfg["name"]](
-        cfg=task_cfg,
-        sim_device=sim_device,
-        rl_device=rl_device,
-        graphics_device_id=graphics_device_id,
-        headless=cfg.env_headless,
-        virtual_screen_capture=False,
-        force_render=not cfg.env_headless,
-    )
+    make_env = isaacgym_task_map[task_cfg["name"]]
+
+    if cfg.ige_api_version == "nightly":
+        env = make_env(
+            cfg=task_cfg,
+            sim_device=sim_device,
+            graphics_device_id=graphics_device_id,
+            headless=cfg.env_headless,
+        )
+    elif cfg.ige_api_version == "dev":
+        env = make_env(
+            cfg=task_cfg,
+            sim_device=sim_device,
+            rl_device=rl_device,
+            graphics_device_id=graphics_device_id,
+            headless=cfg.env_headless,
+            virtual_screen_capture=False,
+            force_render=not cfg.env_headless,
+        )
+    else:
+        raise ValueError(f"Unknown ige_api_version: {cfg.ige_api_version}")
 
     env = IsaacGymVecEnv(env, cfg.obs_key)
     return env
@@ -116,6 +128,19 @@ def add_extra_params_func(parser):
         "States key denotes the full state of the environment, and obs key corresponds to limited observations "
         'available in real world deployment. If we use "states" here we can train will full information '
         "(although the original idea was to use asymmetric training - critic sees full state and policy only sees obs).",
+    )
+    p.add_argument(
+        "--subtask",
+        default=None,
+        type=str,
+        help="Subtask for envs that support it (i.e. AllegroKuka regrasping or manipulation).",
+    )
+    p.add_argument(
+        "--ige_api_version",
+        default="nightly",
+        type=str,
+        choices=["nightly", "dev"],
+        help="So we can switch between different versions of IsaacGymEnvs API easily.",
     )
 
 
@@ -210,6 +235,7 @@ env_configs = dict(
         rollout=16,
         recurrence=16,
         use_rnn=True,
+        rnn_type="lstm",
         learning_rate=1e-4,
         lr_schedule_kl_threshold=0.016,
         reward_scale=0.01,
@@ -218,7 +244,62 @@ env_configs = dict(
         num_batches_per_epoch=8,
         obs_key="states",
     ),
+    AllegroKukaLSTM=dict(
+        subtask="regrasping",
+        env_agents=8192,
+        train_for_env_steps=10_000_000_000,
+        # No encoder, we directly feed observations into LSTM. A bit weird but this is what IGE does as well.
+        encoder_mlp_layers=[],
+        use_rnn=True,
+        rnn_size=768,
+        rnn_type="lstm",
+        decoder_mlp_layers=[768, 512, 256],  # mlp layers AFTER the LSTM
+        gamma=0.99,
+        rollout=16,
+        recurrence=16,
+        batch_size=32768,
+        num_epochs=2,
+        num_batches_per_epoch=4,
+        value_loss_coeff=4.0,
+        ppo_clip_ratio=0.2,
+        learning_rate=1e-4,
+        lr_schedule_kl_threshold=0.016,
+        reward_scale=0.01,
+        max_grad_norm=1.0,
+        obs_key="obs",
+    ),
 )
+
+
+def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
+    """
+    Ideally we would directly override these in CLI in Hydra config, but this would require integrating
+    Hydra config into Sample Factory, which would require anyone who uses Sample Factory to use Hydra as well.
+    We might want to do this in the future, but for now this should be sufficient.
+    """
+
+    overrides = [f"task={task_name}"]
+    if cfg.subtask is not None:
+        overrides.append(f"task.subtask={cfg.subtask}")
+    if cfg.env_agents > 0:
+        overrides.append(f"num_envs={cfg.env_agents}")
+
+    if "AllegroKuka" in task_name and cfg.subtask == "regrasping":
+        overrides.extend(
+            [
+                "task.env.withSmallCuboids=True",
+                "task.env.withBigCuboids=False",
+                "task.env.withSticks=False",
+                "task.env.successTolerance=0.075",
+                "task.env.targetSuccessTolerance=0.05",
+                "task.env.maxConsecutiveSuccesses=5",
+                "task.env.successSteps=10",
+                "task.env.episodeLength=200",
+                "task.env.resetDofVelRandomInterval=5.0",
+            ]
+        )
+
+    return overrides
 
 
 def register_isaacgym_custom_components():

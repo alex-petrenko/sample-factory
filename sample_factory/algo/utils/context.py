@@ -24,6 +24,11 @@ def set_global_context(ctx: SampleFactoryContext):
     GLOBAL_CONTEXT = ctx
 
 
+def reset_global_context():
+    global GLOBAL_CONTEXT
+    GLOBAL_CONTEXT = SampleFactoryContext()
+
+
 def global_env_registry() -> Dict[str, Callable]:
     """
     :return: global env registry

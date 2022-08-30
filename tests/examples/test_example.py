@@ -4,6 +4,7 @@ from typing import Callable
 
 import pytest
 
+from sample_factory.algo.utils.context import reset_global_context
 from sample_factory.algo.utils.misc import EPS, ExperimentStatus
 from sample_factory.enjoy import enjoy
 from sample_factory.train import run_rl
@@ -79,6 +80,8 @@ def run_test_env(
     assert status == ExperimentStatus.SUCCESS
     assert avg_reward >= expected_reward_at_least
     assert avg_reward <= expected_reward_at_most
+
+    reset_global_context()
 
 
 class TestExample:

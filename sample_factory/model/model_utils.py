@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 
+import torch
 from torch import nn
 from torch.nn.utils import spectral_norm
 
@@ -74,3 +75,10 @@ class ModelModule(nn.Module, Configurable):
 
     def get_out_size(self):
         raise NotImplementedError()
+
+
+def model_device(model: nn.Module) -> Optional[torch.device]:
+    try:
+        return next(model.parameters()).device
+    except StopIteration:
+        return None

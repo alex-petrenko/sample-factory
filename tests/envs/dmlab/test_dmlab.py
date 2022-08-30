@@ -1,5 +1,6 @@
 import pytest
 
+from sample_factory.algo.utils.context import reset_global_context
 from sf_examples.dmlab_examples.dmlab_utils import dmlab_available, string_to_hash_bucket
 from tests.envs.utils import eval_env_performance
 
@@ -19,6 +20,7 @@ class TestDmlab:
 
         register_dmlab_components()
         eval_env_performance(self.make_env, "dmlab", eval_frames=1000)
+        reset_global_context()
 
     def test_hash_bucket(self):
         vocab_size = 42

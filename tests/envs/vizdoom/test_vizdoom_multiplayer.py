@@ -3,6 +3,7 @@ from multiprocessing import Process
 
 import pytest
 
+from sample_factory.algo.utils.context import reset_global_context
 from sample_factory.envs.env_utils import vizdoom_available
 from sample_factory.utils.utils import AttrDict, log
 
@@ -13,7 +14,9 @@ class TestDoom:
     def register_doom_fixture(self):
         from sf_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
 
-        return register_vizdoom_components()
+        register_vizdoom_components()
+        yield
+        reset_global_context()
 
     @staticmethod
     def make_standard_dm(env_config):

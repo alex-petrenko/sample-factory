@@ -1,11 +1,11 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import torch
 from gym import spaces
 from torch import Tensor, nn
 
 from sample_factory.algo.utils.torch_utils import calc_num_elements
-from sample_factory.model.model_utils import ModelModule, create_mlp, get_obs_shape, nonlinearity
+from sample_factory.model.model_utils import ModelModule, create_mlp, get_obs_shape, model_device, nonlinearity
 from sample_factory.utils.typing import Config, ObsSpace
 from sample_factory.utils.utils import AttrDict, log
 
@@ -22,14 +22,11 @@ class Encoder(ModelModule):
         """Default implementation, can be overridden in derived classes."""
         self.to(device)
 
-    def device_for_input_tensor(self, input_tensor_name: str) -> torch.device:
-        return self.model_device()
+    def device_for_input_tensor(self, input_tensor_name: str) -> Optional[torch.device]:
+        return model_device(self)
 
     def type_for_input_tensor(self, input_tensor_name: str) -> torch.dtype:
         return torch.float32
-
-    def model_device(self):
-        return next(self.parameters()).device
 
 
 class MlpEncoder(Encoder):
