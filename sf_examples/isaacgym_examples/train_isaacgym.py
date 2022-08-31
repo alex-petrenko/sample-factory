@@ -291,13 +291,14 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
                 "task.env.withBigCuboids=False",
                 "task.env.withSticks=False",
                 "task.env.successTolerance=0.075",
-                "task.env.targetSuccessTolerance=0.05",
+                "task.env.targetSuccessTolerance=0.025",
                 "task.env.maxConsecutiveSuccesses=10",
                 "task.env.successSteps=30",
-                "task.env.episodeLength=300",
+                "task.env.episodeLength=250",
                 "task.env.resetDofVelRandomInterval=2.0",
-                "task.env.resetDofPosRandomIntervalArm=0.2",
-                "task.env.resetDofPosRandomIntervalFingers=0.2",
+                "task.env.resetDofPosRandomIntervalArm=0.1",
+                "task.env.resetDofPosRandomIntervalFingers=0.1",
+                "task.env.liftingRewScale=30.0",
             ]
         )
 

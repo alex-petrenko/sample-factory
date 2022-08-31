@@ -1,6 +1,6 @@
 import time
 from collections import deque
-from typing import Dict
+from typing import Dict, Tuple
 
 import gym
 import numpy as np
@@ -19,6 +19,7 @@ from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.utils.typing import Config, StatusCode
 from sample_factory.utils.utils import AttrDict, debug_log_every_n, experiment_dir, log
 
 
@@ -74,7 +75,9 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
                 debug_log_every_n(1000, f"Exception when calling env.render() {str(ex)}")
 
 
-def enjoy(cfg):
+def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
+    verbose = False
+
     cfg = load_from_checkpoint(cfg)
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
@@ -181,13 +184,14 @@ def enjoy(cfg):
                             true_objective = infos[agent_i].get("true_objective", rew)
                         true_objectives[agent_i].append(true_objective)
 
-                        log.info(
-                            "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
-                            agent_i,
-                            num_frames,
-                            episode_reward[agent_i],
-                            true_objectives[agent_i][-1],
-                        )
+                        if verbose:
+                            log.info(
+                                "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
+                                agent_i,
+                                num_frames,
+                                episode_reward[agent_i],
+                                true_objectives[agent_i][-1],
+                            )
                         rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
                         num_episodes += 1
