@@ -107,7 +107,7 @@ class Runner(EventLoopObject, Configurable):
         for policy_id in range(self.cfg.num_policies):
             summary_dir = join(summaries_dir(experiment_dir(cfg=self.cfg)), str(policy_id))
             summary_dir = ensure_dir_exists(summary_dir)
-            self.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=20)
+            self.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=cfg.flush_summaries_interval)
 
         # global msg handlers for messages from algo components
         self.msg_handlers: Dict[str, List[MsgHandler]] = {
@@ -483,9 +483,9 @@ class Runner(EventLoopObject, Configurable):
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
 
-        init_file_logger(experiment_dir(self.cfg))
+        init_file_logger(self.cfg)
         self._save_cfg()
-        save_git_diff(experiment_dir(cfg=self.cfg))
+        save_git_diff(experiment_dir(self.cfg))
 
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 

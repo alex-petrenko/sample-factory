@@ -387,12 +387,25 @@ def add_rl_args(p: ArgumentParser):
         help="Niceness of the highest priority process (the learner). Values below zero require elevated privileges.",
     )
 
-    # reporting summaries
+    # logging and summaries
+    p.add_argument(
+        "--log_to_file",
+        default=True,
+        type=str2bool,
+        help="Whether to log to a file (sf_log.txt in the experiment folder) or not. If False, logs to stdout only. "
+        "It can make sense to disable this in a slow server filesystem environment like NFS.",
+    )
     p.add_argument(
         "--experiment_summaries_interval",
         default=10,
         type=int,
         help="How often in seconds we write avg. statistics about the experiment (reward, episode length, extra stats...)",
+    )
+    p.add_argument(
+        "--flush_summaries_interval",
+        default=30,
+        type=int,
+        help="How often do we flush tensorboard summaries (set to higher value for slow NFS-based server filesystems)",
     )
     p.add_argument(
         "--stats_avg",

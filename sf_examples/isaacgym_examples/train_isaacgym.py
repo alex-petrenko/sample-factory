@@ -267,6 +267,10 @@ env_configs = dict(
         reward_scale=0.01,
         max_grad_norm=1.0,
         obs_key="obs",
+        save_best_every_sec=120,
+        save_best_after=int(2e7),
+        experiment_summaries_interval=30,
+        flush_summaries_interval=300,
     ),
 )
 
@@ -284,23 +288,37 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
     if cfg.env_agents > 0:
         overrides.append(f"num_envs={cfg.env_agents}")
 
-    if "AllegroKuka" in task_name and cfg.subtask == "regrasping":
+    if "AllegroKuka" in task_name and cfg.subtask in ["regrasping", "throw"]:
         overrides.extend(
             [
-                "task.env.withSmallCuboids=True",
-                "task.env.withBigCuboids=False",
-                "task.env.withSticks=False",
-                "task.env.successTolerance=0.075",
-                "task.env.targetSuccessTolerance=0.025",
-                "task.env.maxConsecutiveSuccesses=10",
-                "task.env.successSteps=30",
-                "task.env.episodeLength=250",
-                "task.env.resetDofVelRandomInterval=2.0",
-                "task.env.resetDofPosRandomIntervalArm=0.1",
-                "task.env.resetDofPosRandomIntervalFingers=0.1",
-                "task.env.liftingRewScale=30.0",
+                "task.env.maxConsecutiveSuccesses=50",
+                "task.env.episodeLength=300",
+                "task.env.clampAbsObservations=10.0",
             ]
         )
+
+        if cfg.subtask == "regrasping":
+            overrides.extend(
+                [
+                    "task.env.withSmallCuboids=True",
+                    "task.env.withBigCuboids=True",
+                    "task.env.withSticks=True",
+                    "task.env.successTolerance=0.05",
+                    "task.env.targetSuccessTolerance=0.01",
+                    "task.env.successSteps=30",
+                ]
+            )
+        elif cfg.subtask == "throw":
+            overrides.extend(
+                [
+                    "task.env.withSmallCuboids=True",
+                    "task.env.withBigCuboids=False",
+                    "task.env.withSticks=False",
+                    "task.env.successTolerance=0.075",
+                    "task.env.targetSuccessTolerance=0.075",
+                    "task.env.successSteps=10",
+                ]
+            )
 
     return overrides
 

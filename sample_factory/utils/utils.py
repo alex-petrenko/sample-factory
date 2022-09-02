@@ -19,6 +19,8 @@ import signal_slot.signal_slot
 from _queue import Empty
 from colorlog import ColoredFormatter
 
+from sample_factory.utils.typing import Config
+
 # Logging
 
 log = logging.getLogger("rl")
@@ -53,20 +55,26 @@ log.addHandler(stream_handler)
 signal_slot.signal_slot.configure_logger(log)
 
 
-def has_file_handler():
+def has_file_handler() -> bool:
     for handler in log.handlers:
         if isinstance(handler, logging.FileHandler):
             return True
     return False
 
 
-def init_file_logger(experiment_dir_):
-    if not has_file_handler():
-        file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
-        file_handler.setLevel(log_level)
-        file_formatter = logging.Formatter(fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%")
-        file_handler.setFormatter(file_formatter)
-        log.addHandler(file_handler)
+def init_file_logger(cfg: Config) -> None:
+    if not cfg.log_to_file:
+        return
+
+    if has_file_handler():
+        return
+
+    experiment_dir_ = experiment_dir(cfg)
+    file_handler = logging.FileHandler(join(experiment_dir_, "sf_log.txt"))
+    file_handler.setLevel(log_level)
+    file_formatter = logging.Formatter(fmt="[%(asctime)s][%(process)05d] %(message)s", datefmt=None, style="%")
+    file_handler.setFormatter(file_formatter)
+    log.addHandler(file_handler)
 
 
 # general Python utilities
