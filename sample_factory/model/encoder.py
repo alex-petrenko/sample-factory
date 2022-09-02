@@ -6,8 +6,9 @@ from torch import Tensor, nn
 
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.model.model_utils import ModelModule, create_mlp, get_obs_shape, model_device, nonlinearity
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, ObsSpace
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import log
 
 
 # noinspection PyMethodMayBeStatic,PyUnusedLocal

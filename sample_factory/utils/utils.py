@@ -88,16 +88,6 @@ def is_module_available(module_name):
         return False
 
 
-class AttrDict(dict):
-    __setattr__ = dict.__setitem__
-
-    def __getattribute__(self, item):
-        if item in self:
-            return self[item]
-        else:
-            return super().__getattribute__(item)
-
-
 def set_attr_if_exists(obj, attr_name, attr_value):
     if hasattr(obj, attr_name):
         setattr(obj, attr_name, attr_value)

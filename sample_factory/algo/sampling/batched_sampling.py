@@ -19,9 +19,10 @@ from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectoriz
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import synchronize
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import get_first_present, iterate_recursively_with_prefix
 from sample_factory.utils.typing import PolicyID
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import log
 
 
 def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray | List:

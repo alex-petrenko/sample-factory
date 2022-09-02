@@ -20,10 +20,11 @@ from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Config, MpQueue, PolicyID
-from sample_factory.utils.utils import AttrDict, debug_log_every_n, log, set_attr_if_exists
+from sample_factory.utils.utils import debug_log_every_n, log, set_attr_if_exists
 
 
 class ActorState:

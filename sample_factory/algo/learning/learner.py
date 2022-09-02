@@ -24,11 +24,12 @@ from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_
 from sample_factory.algo.utils.torch_utils import masked_select, synchronize, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID
-from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log
+from sample_factory.utils.utils import ensure_dir_exists, experiment_dir, log
 
 
 class LearningRateScheduler:

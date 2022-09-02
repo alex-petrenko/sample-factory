@@ -5,8 +5,8 @@ from torch import nn
 from torch.nn.utils import spectral_norm
 
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, ObsSpace
-from sample_factory.utils.utils import AttrDict
 
 
 def get_rnn_size(cfg):

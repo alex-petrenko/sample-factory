@@ -5,9 +5,8 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import torch
 from gym import spaces
-from torch import nn
 
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.attr_dict import AttrDict
 
 Config = Union[argparse.Namespace, AttrDict]
 

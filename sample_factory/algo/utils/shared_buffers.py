@@ -17,9 +17,10 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import to_torch_dtype
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.gpu_utils import gpus_for_process
 from sample_factory.utils.typing import Device, MpQueue, PolicyID
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import log
 
 
 def policy_device(cfg: AttrDict, policy_id: PolicyID) -> torch.device:

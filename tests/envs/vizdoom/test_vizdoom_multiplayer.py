@@ -5,7 +5,8 @@ import pytest
 
 from sample_factory.algo.utils.context import reset_global_context
 from sample_factory.envs.env_utils import vizdoom_available
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.attr_dict import AttrDict
+from sample_factory.utils.utils import log
 
 
 @pytest.mark.skipif(not vizdoom_available(), reason="Please install VizDoom to run a full test suite")

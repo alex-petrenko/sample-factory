@@ -12,8 +12,8 @@ from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.rl_utils import samples_per_trajectory
 from sample_factory.algo.utils.tensor_dict import cat_tensordicts
 from sample_factory.cfg.arguments import verify_cfg
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively
-from sample_factory.utils.utils import AttrDict
 from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 
 

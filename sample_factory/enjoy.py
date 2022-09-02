@@ -19,8 +19,9 @@ from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, StatusCode
-from sample_factory.utils.utils import AttrDict, debug_log_every_n, experiment_dir, log
+from sample_factory.utils.utils import debug_log_every_n, experiment_dir, log
 
 
 def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:

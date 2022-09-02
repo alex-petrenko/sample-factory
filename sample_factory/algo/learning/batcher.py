@@ -9,9 +9,10 @@ from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObjec
 from sample_factory.algo.utils.shared_buffers import BufferMgr, alloc_trajectory_tensors, policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, PolicyID
-from sample_factory.utils.utils import AttrDict, debug_log_every_n, log
+from sample_factory.utils.utils import debug_log_every_n, log
 
 
 def slice_len(s: slice) -> int:
