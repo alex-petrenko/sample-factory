@@ -241,8 +241,8 @@ class TupleActionDistribution:
 
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
-    stddev_min: float = 1e-5
-    stddev_max: float = 1e5
+    stddev_min: float = 1e-4
+    stddev_max: float = 1e4
 
     def __init__(self, params):
         self.means, self.log_std, self.stddevs = self._init_impl(params, self.stddev_min, self.stddev_max)

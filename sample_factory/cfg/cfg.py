@@ -568,6 +568,14 @@ def add_model_args(p: ArgumentParser):
         help="Only for continuous action distributions, whether stddev is state-dependent or just a single learned parameter",
     )
     p.add_argument(
+        "--continuous_tanh_scale",
+        default=0.0,
+        type=float,
+        help="Only for continuous action distributions, whether to use tanh squashing and what scale to use. "
+        "Applies tanh(mu / scale) * scale to distribution means. "
+        "Experimental. Currently only works with adaptive_stddev=False (TODO).",
+    )
+    p.add_argument(
         "--initial_stddev",
         default=1.0,
         type=float,
