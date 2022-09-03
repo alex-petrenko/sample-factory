@@ -317,6 +317,7 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
                     "task.env.successTolerance=0.075",
                     "task.env.targetSuccessTolerance=0.075",
                     "task.env.successSteps=10",
+                    "task.env.forceScale=0.0",
                 ]
             )
 
