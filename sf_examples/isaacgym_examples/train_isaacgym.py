@@ -142,6 +142,12 @@ def add_extra_params_func(parser):
         choices=["nightly", "dev"],
         help="So we can switch between different versions of IsaacGymEnvs API easily.",
     )
+    p.add_argument(
+        "--eval_stats",
+        default=False,
+        type=str2bool,
+        help="Whether to collect env stats during evaluation.",
+    )
 
 
 def override_default_params_func(env, parser):
@@ -289,11 +295,15 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
         overrides.append(f"num_envs={cfg.env_agents}")
 
     if "AllegroKuka" in task_name and cfg.subtask in ["regrasping", "throw"]:
+        if cfg.eval_stats:
+            overrides.append("task.env.evalStats=True")
+
         overrides.extend(
             [
                 "task.env.maxConsecutiveSuccesses=50",
                 "task.env.episodeLength=300",
                 "task.env.clampAbsObservations=10.0",
+                "task.env.successSteps=30",
             ]
         )
 
@@ -305,7 +315,6 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
                     "task.env.withSticks=True",
                     "task.env.successTolerance=0.05",
                     "task.env.targetSuccessTolerance=0.01",
-                    "task.env.successSteps=30",
                 ]
             )
         elif cfg.subtask == "throw":
@@ -316,7 +325,6 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
                     "task.env.withSticks=False",
                     "task.env.successTolerance=0.075",
                     "task.env.targetSuccessTolerance=0.075",
-                    "task.env.successSteps=10",
                     "task.env.forceScale=0.0",
                 ]
             )
