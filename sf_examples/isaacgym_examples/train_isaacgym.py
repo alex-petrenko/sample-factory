@@ -289,45 +289,12 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
     """
 
     overrides = [f"task={task_name}"]
-    if cfg.subtask is not None:
-        overrides.append(f"task.subtask={cfg.subtask}")
     if cfg.env_agents > 0:
         overrides.append(f"num_envs={cfg.env_agents}")
-
-    if "AllegroKuka" in task_name and cfg.subtask in ["regrasping", "throw"]:
-        if cfg.eval_stats:
-            overrides.append("task.env.evalStats=True")
-
-        overrides.extend(
-            [
-                "task.env.maxConsecutiveSuccesses=50",
-                "task.env.episodeLength=300",
-                "task.env.clampAbsObservations=10.0",
-                "task.env.successSteps=30",
-            ]
-        )
-
-        if cfg.subtask == "regrasping":
-            overrides.extend(
-                [
-                    "task.env.withSmallCuboids=True",
-                    "task.env.withBigCuboids=True",
-                    "task.env.withSticks=True",
-                    "task.env.successTolerance=0.05",
-                    "task.env.targetSuccessTolerance=0.01",
-                ]
-            )
-        elif cfg.subtask == "throw":
-            overrides.extend(
-                [
-                    "task.env.withSmallCuboids=True",
-                    "task.env.withBigCuboids=False",
-                    "task.env.withSticks=False",
-                    "task.env.successTolerance=0.075",
-                    "task.env.targetSuccessTolerance=0.075",
-                    "task.env.forceScale=0.0",
-                ]
-            )
+    if cfg.subtask is not None:
+        overrides.append(f"task/env={cfg.subtask}")
+    if "AllegroKuka" in task_name and cfg.eval_stats:
+        overrides.append("task.env.evalStats=True")
 
     return overrides
 

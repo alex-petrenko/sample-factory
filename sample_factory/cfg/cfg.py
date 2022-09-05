@@ -444,7 +444,7 @@ def add_rl_args(p: ArgumentParser):
 
     # model saving
     p.add_argument("--save_every_sec", default=120, type=int, help="Checkpointing rate")
-    p.add_argument("--keep_checkpoints", default=3, type=int, help="Number of model checkpoints to keep")
+    p.add_argument("--keep_checkpoints", default=2, type=int, help="Number of model checkpoints to keep")
     p.add_argument(
         "--load_checkpoint_kind",
         default="latest",

@@ -44,7 +44,9 @@ def run_ngc(run_description, args):
     experiments = list(experiments)
     log.info(f"{len(experiments)} experiments to run")
 
-    def launch_experiment(_experiment_idx, experiment_):
+    def launch_experiment(experiment_idx, experiment_):
+        time.sleep(experiment_idx * 0.1)
+
         cmd, name, *_ = experiment_
 
         job_name = name
