@@ -133,7 +133,7 @@ def add_extra_params_func(parser):
         "--subtask",
         default=None,
         type=str,
-        help="Subtask for envs that support it (i.e. AllegroKuka regrasping or manipulation).",
+        help="Subtask for envs that support it (i.e. AllegroKuka regrasping or manipulation or throw).",
     )
     p.add_argument(
         "--ige_api_version",
@@ -253,7 +253,7 @@ env_configs = dict(
     AllegroKukaLSTM=dict(
         subtask="regrasping",
         env_agents=8192,
-        train_for_env_steps=10_000_000_000,
+        train_for_env_steps=3_000_000_000,
         # No encoder, we directly feed observations into LSTM. A bit weird but this is what IGE does as well.
         encoder_mlp_layers=[],
         use_rnn=True,
@@ -280,6 +280,8 @@ env_configs = dict(
     ),
 )
 
+env_configs["AllegroKukaTwoArmsLSTM"] = env_configs["AllegroKukaLSTM"]
+
 
 def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
     """
@@ -295,6 +297,10 @@ def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
         overrides.append(f"task/env={cfg.subtask}")
     if "AllegroKuka" in task_name and cfg.eval_stats:
         overrides.append("task.env.evalStats=True")
+        # overrides.append("task.env.successTolerance=0.01")
+        # overrides.append("task.env.withSmallCuboids=False")
+        # overrides.append("task.env.withBigCuboids=False")
+        # overrides.append("task.env.withSticks=True")
 
     return overrides
 
