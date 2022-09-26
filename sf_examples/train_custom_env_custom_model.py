@@ -97,7 +97,7 @@ class CustomEncoder(Encoder):
         ]
 
         self.conv_head = nn.Sequential(*conv_layers)
-        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape)
 
     def forward(self, obs_dict):
         # we always work with dictionary observations. Primary observation is available with the key 'obs'

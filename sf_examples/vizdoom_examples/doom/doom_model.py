@@ -26,7 +26,7 @@ class VizdoomEncoder(Encoder):
                 nn.Linear(128, 128),
                 nonlinearity(cfg),
             )
-            measurements_out_size = calc_num_elements(self.measurements_head, obs_shape.measurements)
+            measurements_out_size = calc_num_elements(self.measurements_head, obs_shape)
             self.encoder_out_size += measurements_out_size
 
         log.debug("Policy head output size: %r", self.get_out_size())

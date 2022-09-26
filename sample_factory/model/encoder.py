@@ -30,21 +30,60 @@ class Encoder(ModelModule):
         return torch.float32
 
 
+class MultiInputEncoder(Encoder):
+    def __init__(self, cfg: Config, obs_space: ObsSpace):
+        super().__init__(cfg)
+
+        self.obs_keys = list(sorted(obs_space.keys()))  # always the same order
+        self.encoders = nn.ModuleDict()
+
+        out_size = 0
+
+        for obs_key in self.obs_keys:
+            shape = obs_space[obs_key].shape
+
+            if len(shape) == 1:
+                encoder_fn = MlpEncoder
+            elif len(shape) > 1:
+                encoder_fn = make_img_encoder
+            else:
+                raise NotImplementedError(f"Unsupported observation space {obs_space}")
+
+            self.encoders[obs_key] = encoder_fn(cfg, obs_space[obs_key])
+            out_size += self.encoders[obs_key].get_out_size()
+
+        self.encoder_out_size = out_size
+
+    def forward(self, obs_dict):
+        if len(self.obs_keys) == 1:
+            key = self.obs_keys[0]
+            return self.encoders[key](obs_dict[key])
+
+        encodings = []
+        for key in self.obs_keys:
+            x = self.encoders[key](obs_dict[key])
+            encodings.append(x)
+
+        return torch.cat(encodings, 1)
+
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
+
+
 class MlpEncoder(Encoder):
     def __init__(self, cfg: Config, obs_space: ObsSpace):
         super().__init__(cfg)
 
         obs_shape = get_obs_shape(obs_space)
-        assert len(obs_shape.obs) == 1
 
         mlp_layers: List[int] = cfg.encoder_mlp_layers
-        self.mlp_head = create_mlp(mlp_layers, obs_shape.obs[0], nonlinearity(cfg))
+        self.mlp_head = create_mlp(mlp_layers, obs_shape, nonlinearity(cfg))
         if len(mlp_layers) > 0:
             self.mlp_head = torch.jit.script(self.mlp_head)
-        self.encoder_out_size = calc_num_elements(self.mlp_head, obs_shape.obs)
+        self.encoder_out_size = calc_num_elements(self.mlp_head, obs_shape)
 
-    def forward(self, obs_dict):
-        x = self.mlp_head(obs_dict["obs"])
+    def forward(self, obs: Tensor):
+        x = self.mlp_head(obs)
         return x
 
     def get_out_size(self) -> int:
@@ -73,7 +112,7 @@ class ConvEncoderImpl(nn.Module):
                 raise NotImplementedError(f"Layer {layer} not supported!")
 
         self.conv_head = nn.Sequential(*conv_layers)
-        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape)
         self.mlp_layers = create_mlp(extra_mlp_layers, self.conv_head_out_size, activation)
 
     def forward(self, obs: Tensor) -> Tensor:
@@ -88,7 +127,7 @@ class ConvEncoder(Encoder):
         super().__init__(cfg)
 
         obs_shape = get_obs_shape(obs_space)
-        input_channels = obs_shape.obs[0]
+        input_channels = obs_shape[0]
         log.debug(f"{ConvEncoder.__name__}: {input_channels=}")
 
         if cfg.encoder_conv_architecture == "convnet_simple":
@@ -105,14 +144,14 @@ class ConvEncoder(Encoder):
         enc = ConvEncoderImpl(obs_shape, conv_filters, extra_mlp_layers, activation)
         self.enc = torch.jit.script(enc)
 
-        self.encoder_out_size = calc_num_elements(self.enc, obs_shape.obs)
+        self.encoder_out_size = calc_num_elements(self.enc, obs_shape)
         log.debug(f"Conv encoder output size: {self.encoder_out_size}")
 
     def get_out_size(self) -> int:
         return self.encoder_out_size
 
-    def forward(self, obs_dict: Dict) -> Tensor:
-        return self.enc(obs_dict["obs"])
+    def forward(self, obs: Tensor) -> Tensor:
+        return self.enc(obs)
 
 
 class ResBlock(nn.Module):
@@ -128,7 +167,7 @@ class ResBlock(nn.Module):
 
         self.res_block_core = nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x: Tensor):
         identity = x
         out = self.res_block_core(x)
         out = out + identity
@@ -140,7 +179,7 @@ class ResnetEncoder(Encoder):
         super().__init__(cfg)
 
         obs_shape = get_obs_shape(obs_space)
-        input_ch = obs_shape.obs[0]
+        input_ch = obs_shape[0]
         log.debug("Num input channels: %d", input_ch)
 
         if cfg.encoder_conv_architecture == "resnet_impala":
@@ -177,8 +216,8 @@ class ResnetEncoder(Encoder):
 
         self.encoder_out_size = calc_num_elements(self.mlp_layers, (self.conv_head_out_size,))
 
-    def forward(self, obs_dict):
-        x = self.conv_head(obs_dict["obs"])
+    def forward(self, obs: Tensor):
+        x = self.conv_head(obs)
         x = x.contiguous().view(-1, self.conv_head_out_size)
         x = self.mlp_layers(x)
         return x
@@ -202,7 +241,7 @@ def default_make_encoder_func(cfg: Config, obs_space: ObsSpace) -> Encoder:
     Analyze the observation space and create either a convolutional or an MLP encoder depending on
     whether this is an image-based environment or environment with vector observations.
     """
-
+    return MultiInputEncoder(cfg, obs_space)
     # we only support dict observation spaces - envs with non-dict obs spaces use a wrapper
     # main subspace used to determine the encoder type is called "obs". For envs with multiple subspaces,
     # this function needs to be overridden (see vizdoom or dmlab encoders for example)
@@ -223,3 +262,7 @@ def default_make_encoder_func(cfg: Config, obs_space: ObsSpace) -> Encoder:
             f"Observation space {main_obs_space} not supported. Override make encoder func or add support for it"
             f"in {__file__}"
         )
+
+
+def make_multi_encoder(cfg: Config, obs_space, ObsSpace) -> Encoder:
+    return MultiInputEncoder(cfg, obs_space)

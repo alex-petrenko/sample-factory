@@ -39,10 +39,11 @@ def nonlinearity(cfg: Config) -> nn.Module:
 def get_obs_shape(obs_space: ObsSpace) -> AttrDict:
     obs_shape = AttrDict()
     if hasattr(obs_space, "spaces"):
+        assert 0, "this should be called with single space"
         for key, space in obs_space.spaces.items():
             obs_shape[key] = space.shape
     else:
-        obs_shape.obs = obs_space.shape
+        obs_shape = obs_space.shape
 
     return obs_shape
 
