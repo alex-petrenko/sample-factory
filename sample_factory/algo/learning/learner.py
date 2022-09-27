@@ -206,6 +206,8 @@ class Learner(Configurable):
 
         # trainable torch module
         self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space)
+        log.debug("Created Actor Critic model with architecture:")
+        log.debug(self.actor_critic)
         self.actor_critic.model_to_device(self.device)
 
         def share_mem(t):
