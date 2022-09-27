@@ -58,8 +58,3 @@ class TestModelBuilder:
 
         assert set(encoder.obs_keys) == set(obs_space.keys())
         assert output.shape == (1, 512 * len(obs_space))
-
-
-if __name__ == "__main__":
-    t = TestModelBuilder()
-    t.test_default_encoder()
