@@ -241,28 +241,7 @@ def default_make_encoder_func(cfg: Config, obs_space: ObsSpace) -> Encoder:
     Analyze the observation space and create either a convolutional or an MLP encoder depending on
     whether this is an image-based environment or environment with vector observations.
     """
-    return MultiInputEncoder(cfg, obs_space)
     # we only support dict observation spaces - envs with non-dict obs spaces use a wrapper
     # main subspace used to determine the encoder type is called "obs". For envs with multiple subspaces,
     # this function needs to be overridden (see vizdoom or dmlab encoders for example)
-    assert isinstance(obs_space, spaces.Dict), f"Only dict observation spaces are supported, got {obs_space}"
-    main_obs_space = obs_space.spaces["obs"]
-
-    if isinstance(main_obs_space, spaces.Box):
-        # determine whether this is an image-based environment
-        ndim: int = len(main_obs_space.shape)
-        if ndim == 1:
-            return MlpEncoder(cfg, obs_space)
-        elif 2 <= ndim <= 3:
-            return make_img_encoder(cfg, obs_space)
-        else:
-            raise NotImplementedError(f"Unsupported observation space {main_obs_space}, {ndim=}")
-    else:
-        raise NotImplementedError(
-            f"Observation space {main_obs_space} not supported. Override make encoder func or add support for it"
-            f"in {__file__}"
-        )
-
-
-def make_multi_encoder(cfg: Config, obs_space, ObsSpace) -> Encoder:
     return MultiInputEncoder(cfg, obs_space)
