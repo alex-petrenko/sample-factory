@@ -12,7 +12,7 @@ class DmlabEncoder(Encoder):
     def __init__(self, cfg: Config, obs_space: ObsSpace):
         super().__init__(cfg)
 
-        self.basic_encoder = make_img_encoder(cfg, obs_space)
+        self.basic_encoder = make_img_encoder(cfg, obs_space["obs"])
         self.encoder_out_size = self.basic_encoder.get_out_size()
 
         # same as IMPALA paper
@@ -58,34 +58,30 @@ class DmlabEncoder(Encoder):
         return torch.float32
 
     def forward(self, obs_dict):
-        with self.timing.add_time("dmlab_basic_enc"):
-            x = self.basic_encoder(obs_dict)
+        x = self.basic_encoder(obs_dict["obs"])
 
-        with self.timing.add_time("dmlab_prepare_instr"):
-            with torch.no_grad():
-                instr = obs_dict[DMLAB_INSTRUCTIONS]
-                instr_lengths = (instr != 0).sum(axis=1)
-                instr_lengths = torch.clamp(instr_lengths, min=1)
-                max_instr_len = torch.max(instr_lengths).item()
-                instr = instr[:, :max_instr_len]
+        with torch.no_grad():
+            instr = obs_dict[DMLAB_INSTRUCTIONS]
+            instr_lengths = (instr != 0).sum(axis=1)
+            instr_lengths = torch.clamp(instr_lengths, min=1)
+            max_instr_len = torch.max(instr_lengths).item()
+            instr = instr[:, :max_instr_len]
 
-        with self.timing.add_time("dmlab_encode_instr"):
-            instr_embed = self.word_embedding(instr)
-            instr_packed = torch.nn.utils.rnn.pack_padded_sequence(
-                instr_embed,
-                instr_lengths,
-                batch_first=True,
-                enforce_sorted=False,
-            )
-            rnn_output, _ = self.instructions_lstm(instr_packed)
-            rnn_outputs, sequence_lengths = torch.nn.utils.rnn.pad_packed_sequence(rnn_output, batch_first=True)
+        instr_embed = self.word_embedding(instr)
+        instr_packed = torch.nn.utils.rnn.pack_padded_sequence(
+            instr_embed,
+            instr_lengths,
+            batch_first=True,
+            enforce_sorted=False,
+        )
+        rnn_output, _ = self.instructions_lstm(instr_packed)
+        rnn_outputs, sequence_lengths = torch.nn.utils.rnn.pad_packed_sequence(rnn_output, batch_first=True)
 
-            first_dim_idx = torch.arange(rnn_outputs.shape[0])
-            last_output_idx = sequence_lengths - 1
-            last_outputs = rnn_outputs[first_dim_idx, last_output_idx]
+        first_dim_idx = torch.arange(rnn_outputs.shape[0])
+        last_output_idx = sequence_lengths - 1
+        last_outputs = rnn_outputs[first_dim_idx, last_output_idx]
 
-        with self.timing.add_time("dmlab_last_output_device"):
-            last_outputs = last_outputs.to(x.device)  # for some reason this is very slow
+        last_outputs = last_outputs.to(x.device)  # for some reason this is very slow
 
         x = torch.cat((x, last_outputs), dim=1)
         return x
