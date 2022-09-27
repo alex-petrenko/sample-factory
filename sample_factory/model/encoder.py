@@ -77,7 +77,7 @@ class MlpEncoder(Encoder):
         obs_shape = get_obs_shape(obs_space)
 
         mlp_layers: List[int] = cfg.encoder_mlp_layers
-        self.mlp_head = create_mlp(mlp_layers, obs_shape, nonlinearity(cfg))
+        self.mlp_head = create_mlp(mlp_layers, obs_shape[0], nonlinearity(cfg))
         if len(mlp_layers) > 0:
             self.mlp_head = torch.jit.script(self.mlp_head)
         self.encoder_out_size = calc_num_elements(self.mlp_head, obs_shape)
