@@ -42,7 +42,12 @@ python -m sample_factory.runner.run --runner=slurm --slurm_workdir=./slurm_megav
 
 #### Models
 
-TODO
+An example APPO model trained on Megaverse environments is uploaded to the HuggingFace Hub. The models have all been trained for 2G steps.
+
+| Environment | HuggingFace Hub Models                                    |
+| -------- |-----------------------------------------------------------|
+| TowerBuilding    | https://huggingface.co/wmFrank/sample-factory-2-megaverse |
+
 
 #### Videos
 
