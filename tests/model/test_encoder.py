@@ -1,12 +1,9 @@
-import imp
-
 import numpy as np
-import pytest
 import torch
 from gym.spaces import Box, Dict
 
-from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
-from sample_factory.model.encoder import Encoder, default_make_encoder_func
+from sample_factory.cfg.arguments import parse_sf_args
+from sample_factory.model.encoder import default_make_encoder_func
 
 
 def test_default_encoder():

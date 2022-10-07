@@ -121,7 +121,13 @@ def register_test_components():
 def test_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    argv = ["--algo=APPO", "--env=batched_mix_dist_env", "--experiment=test_batched_mixed_action_dists", "--device=cpu"]
+    argv = [
+        "--algo=APPO",
+        "--env=batched_mix_dist_env",
+        "--experiment=test_batched_mixed_action_dists",
+        "--device=cpu",
+        "--restart_behavior=overwrite",
+    ]
     parser, cfg = parse_sf_args(argv=argv)
 
     override_defaults(parser)

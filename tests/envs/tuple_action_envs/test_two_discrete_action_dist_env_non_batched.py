@@ -93,6 +93,7 @@ def test_non_batched_two_discrete_action_dists():
         "--algo=APPO",
         "--env=non_batched_two_discrete_dist_env",
         "--experiment=test_non_batched_two_discrete_dists",
+        "--restart_behavior=overwrite",
         "--device=cpu",
     ]
 

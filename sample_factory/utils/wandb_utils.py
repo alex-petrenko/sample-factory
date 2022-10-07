@@ -51,6 +51,7 @@ def init_wandb(cfg):
         init_wandb_func()
     except Exception as exc:
         log.error(f"Could not initialize WandB! {exc}")
+        raise
 
     wandb.config.update(cfg, allow_val_change=True)
 

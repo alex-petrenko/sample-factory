@@ -125,6 +125,7 @@ def test_batched_two_discrete_action_dists():
         "--algo=APPO",
         "--env=batched_two_discrete_dist_env",
         "--experiment=test_batched_two_discrete_dists",
+        "--restart_behavior=overwrite",
         "--device=cpu",
     ]
     parser, cfg = parse_sf_args(argv=argv)

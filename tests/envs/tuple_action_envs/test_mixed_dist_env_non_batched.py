@@ -90,6 +90,7 @@ def test_non_batched_mixed_action_dists():
         "--env=non_batched_mix_dist_env",
         "--experiment=test_non_batched_mixed_action_dists",
         "--device=cpu",
+        "--restart_behavior=overwrite",
     ]
 
     parser, cfg = parse_sf_args(argv=argv)
