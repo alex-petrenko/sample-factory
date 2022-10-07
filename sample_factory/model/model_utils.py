@@ -36,17 +36,6 @@ def nonlinearity(cfg: Config) -> nn.Module:
         raise Exception("Unknown nonlinearity")
 
 
-def get_obs_shape(obs_space: ObsSpace) -> AttrDict:
-    obs_shape = AttrDict()
-    if hasattr(obs_space, "spaces"):
-        for key, space in obs_space.spaces.items():
-            obs_shape[key] = space.shape
-    else:
-        obs_shape.obs = obs_space.shape
-
-    return obs_shape
-
-
 def fc_layer(in_features: int, out_features: int, bias=True, spec_norm=False) -> nn.Module:
     layer = nn.Linear(in_features, out_features, bias)
     if spec_norm:
