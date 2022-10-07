@@ -27,7 +27,7 @@ class IdentityEnvTwoDiscreteActions(gym.Env):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
-        return self.state
+        return self.state, {}
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -39,8 +39,8 @@ class IdentityEnvTwoDiscreteActions(gym.Env):
         reward = get_reward(action, self.state)
         self._choose_next_state()
         self.current_step += 1
-        done = self.current_step >= self.ep_length
-        return self.state, reward, done, {}
+        terminated = truncated = self.current_step >= self.ep_length
+        return self.state, reward, terminated, truncated, {}
 
     def render(self, mode="human"):
         pass
@@ -67,22 +67,25 @@ class BatchedIdentityEnvTwoDiscreteActions(gym.Env):
 
     def reset(self, **kwargs):
         obss = []
+        infos = []
         for i, env in enumerate(self.envs):
-            obs = env.reset()
+            obs, info = env.reset()
             obss.append(obs)
-        return obss
+            infos.append(info)
+        return obss, infos
 
     def step(self, action: List[DiscreteActions] | np.ndarray):
-        obss, rewards, dones, infos = [], [], [], []
+        obss, rewards, terms, truncs, infos = [], [], [], [], []
 
         for i, env in enumerate(self.envs):
-            obs, reward, done, info = env.step([action[i][0], action[i][1]])
+            obs, reward, terminated, truncated, info = env.step([action[i][0], action[i][1]])
             obss.append(obs),
             rewards.append(reward)
-            dones.append(done)
+            terms.append(terminated)
+            truncs.append(truncated)
             infos.append(info)
 
-        return obss, rewards, dones, infos
+        return obss, rewards, terms, truncs, infos
 
     def render(self, mode="human"):
         pass

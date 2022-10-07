@@ -275,10 +275,16 @@ class ParallelSampler(Sampler):
 
     def init(self) -> None:
         log.debug("Starting all processes...")
-        for p in self.processes:
+
+        def start_process(p):
             log.debug(f"Starting process {p.name}")
             p.start()
-            self.event_loop.process_events()
+
+        pool_size = min(16, len(self.processes))
+        from multiprocessing.pool import ThreadPool
+
+        with ThreadPool(pool_size) as pool:
+            pool.map(start_process, self.processes)
 
         self.started.emit()
 

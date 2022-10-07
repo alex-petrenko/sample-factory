@@ -54,7 +54,7 @@ class CustomMultiEnv(gym.Env):
         self.curr_episode_steps = 0
         # log.debug(f"Episode reward: {self.episode_rewards} sum_0: {sum(self.episode_rewards[0])} sum_1: {sum(self.episode_rewards[1])}")
         self.episode_rewards = [[] for _ in range(self.num_agents)]
-        return self._obs()
+        return self._obs(), [dict() for _ in range(self.num_agents)]
 
     def step(self, actions):
         infos = [dict() for _ in range(self.num_agents)]
@@ -88,16 +88,15 @@ class CustomMultiEnv(gym.Env):
         for agent_idx in range(self.num_agents):
             infos[agent_idx]["time_outs"] = time_out
 
-        done = time_out
-        dones = [done] * self.num_agents
+        terminated = truncated = [time_out] * self.num_agents
 
-        if done:
+        if time_out:
             # multi-agent environments should auto-reset!
-            obs = self.reset()
+            obs, infos = self.reset()
         else:
             obs = self._obs()
 
-        return obs, rewards, dones, infos
+        return obs, rewards, terminated, truncated, infos
 
     def render(self, mode="human"):
         pass

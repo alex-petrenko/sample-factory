@@ -6,7 +6,6 @@ import torch
 
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.envs.env_wrappers import TimeLimitWrapper
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.gpu_utils import gpus_for_process
 from sample_factory.utils.timing import Timing
@@ -14,7 +13,7 @@ from sample_factory.utils.typing import PolicyID
 
 # "TimeLimit.truncated" is the key used by Gym TimeLimit wrapper.
 # "time_outs" is used by IsaacGym.
-TIMEOUT_KEYS: Tuple = ("time_outs", TimeLimitWrapper.terminated_by_timer)
+TIMEOUT_KEYS: Tuple = ("time_outs", "TimeLimit.truncated")
 
 
 class VectorEnvRunner(Configurable):

@@ -34,7 +34,7 @@ class IdentityEnvMixedActions(gym.Env):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
-        return self.state
+        return self.state, {}
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -46,8 +46,8 @@ class IdentityEnvMixedActions(gym.Env):
         reward = mixed_actions_get_reward(action, self.state, self.eps)
         self._choose_next_state()
         self.current_step += 1
-        done = self.current_step >= self.ep_length
-        return self.state, reward, done, {}
+        terminated = truncated = self.current_step >= self.ep_length
+        return self.state, reward, terminated, truncated, {}
 
     def render(self, mode="human"):
         pass

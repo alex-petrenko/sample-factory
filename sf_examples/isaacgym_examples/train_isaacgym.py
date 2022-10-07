@@ -1,6 +1,6 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # isort: off
-from typing import List
+from typing import List, Tuple, Dict
 
 # noinspection PyUnresolvedReferences
 import isaacgym
@@ -12,8 +12,10 @@ import sys
 from os.path import join
 
 import gym
+import torch
 from isaacgymenvs.tasks import isaacgym_task_map
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
+from torch import Tensor
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
@@ -39,19 +41,27 @@ class IsaacGymVecEnv(gym.Env):
         else:
             raise ValueError(f"Unknown observation key: {obs_key}")
 
+        self._truncated: Tensor = torch.zeros(self.num_agents, dtype=torch.bool)
+
     @staticmethod
-    def _use_states_as_obs(obs_dict):
+    def _use_states_as_obs(obs_dict: Dict) -> Dict[str, Tensor]:
         obs_dict["obs"] = obs_dict["states"]
         return obs_dict
 
-    def reset(self, *args, **kwargs):
-        obs_dict = self.env.reset()
+    def reset(self, *args, **kwargs) -> Tuple[Dict[str, Tensor], Dict]:
         # some IGE envs return all zeros on the first timestep, but this is probably okay
-        return self._proc_obs_func(obs_dict)
+        obs_dict = self.env.reset()
 
-    def step(self, actions):
-        obs, rew, dones, infos = self.env.step(actions)
-        return self._proc_obs_func(obs), rew, dones, infos
+        self._truncated = self._truncated.to(obs_dict["obs"].device)  # make sure all tensors are on the same device
+        return self._proc_obs_func(obs_dict), {}  # after Gym 0.26 reset() returns info dict
+
+    def step(self, actions) -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor, Dict]:
+        obs, rew, terminated, infos = self.env.step(actions)
+        if infos and "time_outs" in infos:
+            truncated = infos["time_outs"]
+        else:
+            truncated = self._truncated
+        return self._proc_obs_func(obs), rew, terminated, truncated, infos
 
     def render(self, mode="human"):
         pass
@@ -84,14 +94,14 @@ def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
 
     make_env = isaacgym_task_map[task_cfg["name"]]
 
-    if cfg.ige_api_version == "nightly":
+    if cfg.ige_api_version == "preview3":
         env = make_env(
             cfg=task_cfg,
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
             headless=cfg.env_headless,
         )
-    elif cfg.ige_api_version == "dev":
+    elif cfg.ige_api_version == "preview4":
         env = make_env(
             cfg=task_cfg,
             sim_device=sim_device,
@@ -137,10 +147,10 @@ def add_extra_params_func(parser):
     )
     p.add_argument(
         "--ige_api_version",
-        default="nightly",
+        default="preview4",
         type=str,
-        choices=["nightly", "dev"],
-        help="So we can switch between different versions of IsaacGymEnvs API easily.",
+        choices=["preview3", "preview4"],
+        help="We can switch between different versions of IsaacGymEnvs API using this parameter.",
     )
     p.add_argument(
         "--eval_stats",

@@ -1,6 +1,8 @@
 import gym
 import numpy as np
 
+from sample_factory.algo.utils.rl_utils import make_dones
+
 
 class MultiplayerStatsWrapper(gym.Wrapper):
     """Add to info things like place in the match, gap to leader, kill-death ratio etc."""
@@ -46,13 +48,14 @@ class MultiplayerStatsWrapper(gym.Wrapper):
     def reset(self, **kwargs):
         self.timestep = 0
         self.prev_extra_info = dict()
-        return self.env.reset()
+        return self.env.reset(**kwargs)
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, terminated, truncated, info = self.env.step(action)
         if obs is None:
-            return obs, reward, done, info
+            return obs, reward, terminated, truncated, info
 
+        done = make_dones(terminated, truncated)
         info = self._parse_info(info, done)
         self.timestep += 1
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info

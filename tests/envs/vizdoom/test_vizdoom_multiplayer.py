@@ -4,6 +4,7 @@ from multiprocessing import Process
 import pytest
 
 from sample_factory.algo.utils.context import reset_global_context
+from sample_factory.algo.utils.rl_utils import make_dones
 from sample_factory.envs.env_utils import vizdoom_available
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.utils import log
@@ -35,14 +36,15 @@ class TestDoom:
         env_config = AttrDict(worker_index=worker_index, vector_index=0, safe_init=False)
         multi_env = make_multi_env(env_config)
 
-        obs = multi_env.reset()
+        obs, infos = multi_env.reset()
 
         visualize = False
         start = time.time()
 
         for i in range(num_steps):
             actions = [multi_env.action_space.sample()] * len(obs)
-            obs, rew, dones, infos = multi_env.step(actions)
+            obs, rew, terminated, truncated, infos = multi_env.step(actions)
+            dones = make_dones(terminated, truncated)
 
             if visualize:
                 multi_env.render()

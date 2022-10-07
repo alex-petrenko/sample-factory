@@ -10,13 +10,14 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
         super().__init__(env)
         self.raw_episode_return = self.episode_length = 0
 
-    def reset(self):
-        obs = self.env.reset()
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
         self.raw_episode_return = self.episode_length = 0
-        return obs
+        return obs, info
 
     def step(self, action):
-        obs, rew, done, info = self.env.step(action)
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        done = terminated | truncated
         self.raw_episode_return += rew
         self.episode_length += info.get("num_frames", 1)
 
@@ -36,4 +37,4 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
             info["episode_extra_stats"][f"{level_name_key}_{RAW_SCORE_SUMMARY_KEY_SUFFIX}"] = score
             info["episode_extra_stats"][f"{level_name_key}_len"] = self.episode_length
 
-        return obs, rew, done, info
+        return obs, rew, terminated, truncated, info

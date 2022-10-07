@@ -548,3 +548,40 @@ save_policy_outputs: 2.4376
 [2022-08-30 02:17:23,178][449786] Runner profile tree view:
 main_loop: 110.6443
 [2022-08-30 02:17:23,178][449786] Collected {0: 4014080}, FPS: 36279.1
+
+
+Version v2.0.0.v77 (switched to Gym 0.26.2, latest CUDA, PyTorch and everything else).
+[2022-10-06 17:47:42,848][159866] Batcher 0 profile tree view:
+batching: 8.5083, releasing_batches: 0.0166
+[2022-10-06 17:47:42,849][159866] InferenceWorker_p0-w0 profile tree view:
+wait_policy: 0.0001
+  wait_policy_total: 36.6387
+update_model: 1.3975
+  weight_update: 0.0010
+one_step: 0.0051
+  handle_policy_step: 65.1514
+    deserialize: 6.8979, stack: 0.5148, obs_to_device_normalize: 16.1739, forward: 22.3737, send_messages: 3.9840
+    prepare_outputs: 12.1662
+      to_cpu: 7.2696
+[2022-10-06 17:47:42,849][159866] Learner 0 profile tree view:
+prepare_batch: 2.7143
+train: 23.7993
+  epoch_init: 0.0023, minibatch_init: 0.0037, losses_postprocess: 0.1572, kl_divergence: 0.1468, after_optimizer: 9.7619
+  calculate_losses: 9.6756
+    losses_init: 0.0019, forward_head: 0.3254, bptt_initial: 5.4393, tail: 0.2738, advantages_returns: 2.2930, losses: 0.5491
+    bptt: 0.6322
+      bptt_forward_core: 0.6085
+  update: 3.7350
+    clip: 0.6279
+[2022-10-06 17:47:42,849][159866] RolloutWorker_w0 profile tree view:
+wait_for_trajectories: 0.0419, enqueue_policy_requests: 2.6877, env_step: 86.6110, overhead: 5.5934, complete_rollouts: 0.1088
+save_policy_outputs: 3.0250
+  split_output_tensors: 1.4407
+[2022-10-06 17:47:42,850][159866] RolloutWorker_w19 profile tree view:
+wait_for_trajectories: 0.0351, enqueue_policy_requests: 2.2775, env_step: 70.5727, overhead: 4.8251, complete_rollouts: 0.0446
+save_policy_outputs: 2.4676
+  split_output_tensors: 1.1437
+[2022-10-06 17:47:42,850][159866] Loop Runner_EvtLoop terminating...
+[2022-10-06 17:47:42,851][159866] Runner profile tree view:
+main_loop: 112.9504
+[2022-10-06 17:47:42,852][159866] Collected {0: 4014080}, FPS: 35538.4

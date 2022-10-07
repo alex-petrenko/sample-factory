@@ -7,11 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import gym
 import numpy as np
 
-from sample_factory.algo.sampling.sampling_utils import (
-    TIMEOUT_KEYS,
-    VectorEnvRunner,
-    record_episode_statistics_wrapper_stats,
-)
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, record_episode_statistics_wrapper_stats
 from sample_factory.algo.utils.agent_policy_mapping import AgentPolicyMapping
 from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import make_env_func_non_batched
@@ -21,7 +17,6 @@ from sample_factory.algo.utils.tensor_dict import TensorDict, to_numpy
 from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_array
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.attr_dict import AttrDict
-from sample_factory.utils.dicts import get_first_present
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Config, MpQueue, PolicyID
 from sample_factory.utils.utils import debug_log_every_n, log, set_attr_if_exists
@@ -177,21 +172,25 @@ class ActorState:
 
         return actions
 
-    def record_env_step(self, reward, done, info, rollout_step):
+    def record_env_step(self, reward, terminated: bool, truncated: bool, info, rollout_step):
         """
         Policy inputs (obs) and policy outputs (actions, values, ...) for the current rollout step
         are already added to the trajectory buffer
         the only job remaining is to add auxiliary data: rewards, done flags, etc.
 
         :param reward: last reward from the env step
-        :param done: last value of done flag
+        :param terminated: whether the episode has terminated
+        :param truncated: whether the episode has been truncated (i.e. max episode length reached)
         :param info: info dictionary
         :param rollout_step: number of steps since we started the current rollout. When this reaches cfg.rollout
         we finalize the trajectory buffer and send it to the learner.
         """
 
+        done = terminated | truncated
+
         self.curr_traj_buffer["rewards"][rollout_step] = float(reward)
         self.curr_traj_buffer["dones"][rollout_step] = done
+        self.curr_traj_buffer["time_outs"][rollout_step] = truncated
 
         # -1 policy_id does not match any valid policy on the learner, therefore this will be treated as
         # invalid data coming from a different policy and should be ignored by the learner.
@@ -202,10 +201,6 @@ class ActorState:
         self.last_episode_duration += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
 
         self.is_active = info.get("is_active", True)
-
-        if self.cfg.value_bootstrap:
-            is_time_out = get_first_present(info, TIMEOUT_KEYS, False)
-            self.curr_traj_buffer["time_outs"][rollout_step] = is_time_out
 
         report = None
         if done:
@@ -396,7 +391,6 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             env = make_env_func_non_batched(self.cfg, env_config=env_config)
             check_env_info(env, self.env_info, self.cfg)
 
-            env.seed(global_env_idx)
             self.envs.append(env)
 
             actor_states_env, episode_rewards_env = [], []
@@ -440,7 +434,8 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         """
 
         for env_i, e in enumerate(self.envs):
-            observations = e.reset()
+            seed = self.actor_states[env_i][0].global_env_idx
+            observations, info = e.reset(seed=seed)  # new way of doing seeding since Gym 0.26.0
 
             if self.cfg.decorrelate_envs_on_one_worker:
                 env_i_split = self.num_envs * self.split_idx + env_i
@@ -449,7 +444,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
                 log.info("Decorrelating experience for %d frames...", decorrelate_steps)
                 for decorrelate_step in range(decorrelate_steps):
                     actions = [e.action_space.sample() for _ in range(self.num_agents)]
-                    observations, rew, dones, info = e.step(actions)
+                    observations, rew, terminated, truncated, info = e.step(actions)
 
             for agent_i, obs in enumerate(observations):
                 actor_state = self.actor_states[env_i][agent_i]
@@ -526,7 +521,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         rewards = np.clip(rewards, -self.cfg.reward_clip, self.cfg.reward_clip)
         return rewards
 
-    def _process_env_step(self, new_obs, rewards, dones, infos, env_i):
+    def _process_env_step(self, new_obs, rewards, terminated, truncated, infos, env_i):
         """
         Process step outputs from a single environment in the vector.
 
@@ -545,13 +540,14 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
             episode_report = actor_state.record_env_step(
                 rewards[agent_i],
-                dones[agent_i],
+                terminated[agent_i],
+                truncated[agent_i],
                 infos[agent_i],
                 self.rollout_step,
             )
 
             actor_state.last_obs = new_obs[agent_i]
-            actor_state.update_rnn_state(dones[agent_i])
+            actor_state.update_rnn_state(terminated[agent_i] | truncated[agent_i])
 
             if episode_report:
                 episodic_stats.append(episode_report)
@@ -643,10 +639,10 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         for env_i, e in enumerate(self.envs):
             with timing.add_time("env_step"):
                 actions = [s.curr_actions() for s in self.actor_states[env_i]]
-                new_obs, rewards, dones, infos = e.step(actions)
+                new_obs, rewards, terminated, truncated, infos = e.step(actions)
 
             with timing.add_time("overhead"):
-                stats = self._process_env_step(new_obs, rewards, dones, infos, env_i)
+                stats = self._process_env_step(new_obs, rewards, terminated, truncated, infos, env_i)
                 episodic_stats.extend(stats)
 
         self.rollout_step += 1

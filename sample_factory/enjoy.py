@@ -13,7 +13,7 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
+from sample_factory.algo.utils.rl_utils import make_dones, prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
@@ -91,7 +91,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     cfg.num_envs = 1
 
     env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
-    # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 
     if hasattr(env.unwrapped, "reset_on_init"):
@@ -122,7 +121,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
     reward_list = []
 
-    obs = env.reset()
+    obs, infos = env.reset()
     rnn_states = torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False for _ in range(env.num_agents)]
@@ -158,7 +157,8 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                 render_frame(cfg, env, video_frames, num_episodes, last_render_start)
                 last_render_start = time.time()
 
-                obs, rew, dones, infos = env.step(actions)
+                obs, rew, terminated, truncated, infos = env.step(actions)
+                dones = make_dones(terminated, truncated)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
 
                 if episode_reward is None:

@@ -39,18 +39,18 @@ class CustomEnv(gym.Env):
 
     def reset(self, **kwargs):
         self.curr_episode_steps = 0
-        return self._obs()
+        return self._obs(), {}
 
     def step(self, action):
         # action should be an int here
         assert isinstance(action, (int, np.int32, np.int64))
         reward = action * 0.01
 
-        done = self.curr_episode_steps >= self.cfg.custom_env_episode_len
+        terminated = truncated = self.curr_episode_steps >= self.cfg.custom_env_episode_len
 
         self.curr_episode_steps += 1
 
-        return self._obs(), reward, done, dict()
+        return self._obs(), reward, terminated, truncated, dict()
 
     def render(self, mode="human"):
         pass

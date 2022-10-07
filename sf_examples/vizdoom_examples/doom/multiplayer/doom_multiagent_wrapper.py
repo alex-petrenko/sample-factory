@@ -12,6 +12,7 @@ import filelock
 import gym
 from filelock import FileLock
 
+from sample_factory.algo.utils.rl_utils import make_dones
 from sample_factory.envs.env_utils import RewardShapingInterface, get_default_reward_shaping
 from sample_factory.utils.utils import log
 from sf_examples.vizdoom_examples.doom.doom_gym import doom_lock_file
@@ -19,7 +20,7 @@ from sf_examples.vizdoom_examples.doom.doom_render import concat_grid, cvt_doom_
 from sf_examples.vizdoom_examples.doom.multiplayer.doom_multiagent import DEFAULT_UDP_PORT, find_available_port
 
 
-def retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False):
+def retry_doom(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -125,7 +126,7 @@ class MultiAgentEnvWorker:
 
     def _set_env_attr(self, env, player_id, attr_chain, value):
         """Allows us to set an arbitrary attribute of the environment, e.g. attr_chain can be unwrapped.foo.bar"""
-        assert player_id == self.player_id
+        assert player_id == self.player_id, "Can only set attributes for the current player"
 
         attrs = attr_chain.split(".")
         curr_attr = env
@@ -159,7 +160,7 @@ class MultiAgentEnvWorker:
             elif task_type == TaskType.INFO:
                 results = self._get_info(env)
             elif task_type == TaskType.STEP or task_type == TaskType.STEP_UPDATE:
-                # collect obs, reward, done, and info
+                # collect obs, reward, terminated, truncated, and info
                 action = data
                 env.unwrapped.update_state = task_type == TaskType.STEP_UPDATE
                 results = env.step(action)
@@ -241,7 +242,7 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
         if data is None:
             data = [None] * self.num_agents
 
-        assert len(data) == self.num_agents
+        assert len(data) == self.num_agents, f"Expected {self.num_agents} items, got {len(data)}"
 
         for i, worker in enumerate(self.workers):
             worker.task_queue.put((data[i], task_type))
@@ -298,44 +299,46 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
 
             except filelock.Timeout:
                 continue
-            except Exception:
-                raise RuntimeError("Critical error: worker stuck on initialization. Abort!")
+            except Exception as exc:
+                raise RuntimeError(f"Critical error: worker stuck on initialization. Abort! {exc}")
             else:
                 break
 
         log.debug("%d agent workers initialized for env %d!", len(self.workers), self.env_config.worker_index)
         self.initialized = True
 
-    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
+    @retry_doom(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
     def info(self):
         self._ensure_initialized()
         info = self.await_tasks(None, TaskType.INFO)[0]
         return info
 
-    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
-    def reset(self):
+    @retry_doom(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=False)
+    def reset(self, **kwargs):
         self._ensure_initialized()
-        observation = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
-        return observation
+        # not passing the kwargs as of now... not sure if it's okay
+        observation, info = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+        return observation, info
 
-    @retry_dm(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=True)
+    @retry_doom(exception_class=Exception, num_attempts=3, sleep_time=1, should_reset=True)
     def step(self, actions):
         self._ensure_initialized()
 
         for frame in range(self.skip_frames - 1):
             self.await_tasks(actions, TaskType.STEP)
 
-        obs, rew, dones, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
+        obs, rew, terminated, truncated, infos = self.await_tasks(actions, TaskType.STEP_UPDATE)
+        dones = make_dones(terminated, truncated)
         for info in infos:
             info["num_frames"] = self.skip_frames
 
         if all(dones):
-            obs = self.await_tasks(None, TaskType.RESET, timeout=2.0)[0]
+            obs, infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
 
         if self.enable_rendering:
             self.last_obs = obs
 
-        return obs, rew, dones, infos
+        return obs, rew, terminated, truncated, infos
 
     # noinspection PyUnusedLocal
     def render(self, *args, **kwargs):
@@ -364,14 +367,10 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             for worker in self.workers:
                 worker.process.join()
 
-    def seed(self, seed=None):
-        """Does not really make sense for the wrapper. Individual envs will be uniquely seeded on init."""
-        pass
-
     def set_env_attr(self, agent_idx, attr_chain, value):
         data = (agent_idx, attr_chain, value)
         worker = self.workers[agent_idx]
         worker.task_queue.put((data, TaskType.SET_ATTR))
 
         result = safe_get(worker.result_queue, timeout=0.1)
-        assert result is None
+        assert result is None, f"Expected None, got {result}"
