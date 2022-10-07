@@ -44,7 +44,7 @@ class TestPackedSequences:
             loopy_out = torch.stack(loopy_out, dim=1).view(N * T, -1)
 
             norm = torch.norm(packed_out - loopy_out)
-            print(norm)
+            
             assert norm < norm_tolerance
             assert np.allclose(packed_out.detach().numpy(), loopy_out.detach().numpy(), atol=2e-6)
 
