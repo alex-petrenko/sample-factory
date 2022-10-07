@@ -44,14 +44,14 @@ class BotDifficultyWrapper(gym.Wrapper):
             self.env.unwrapped.bot_difficulty_mean = self._curr_difficulty
             self.env.unwrapped.bot_difficulty_std = self._difficulty_std
 
-        return self.env.reset()
+        return self.env.reset(**kwargs)
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, terminated, truncated, info = self.env.step(action)
         if obs is None:
-            return obs, reward, done, info
+            return obs, reward, terminated, truncated, info
 
-        if done and self._adaptive_curriculum:
+        if (terminated | truncated) and self._adaptive_curriculum:
             self._analyze_standings(info)
         info["BOT_DIFFICULTY"] = self._curr_difficulty
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info

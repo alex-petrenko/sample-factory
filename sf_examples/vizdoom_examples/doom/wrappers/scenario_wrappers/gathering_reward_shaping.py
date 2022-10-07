@@ -24,18 +24,20 @@ class DoomGatheringRewardShaping(gym.Wrapper):
         self._prev_health = curr_health
         return reward
 
-    def reset(self):
+    def reset(self, **kwargs):
         self._prev_health = None
         self.orig_env_reward = 0.0
-        return self.env.reset()
+        return self.env.reset(**kwargs)
 
     def step(self, action):
-        observation, reward, done, info = self.env.step(action)
+        observation, reward, terminated, truncated, info = self.env.step(action)
         self.orig_env_reward += reward
+
+        done = terminated | truncated
         reward += self._reward_shaping(info, done)
 
         if done:
             true_objective = self.orig_env_reward
             info["true_objective"] = true_objective
 
-        return observation, reward, done, info
+        return observation, reward, terminated, truncated, info

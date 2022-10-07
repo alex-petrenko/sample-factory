@@ -4,7 +4,6 @@ from os.path import isdir
 import pytest
 
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.cfg.arguments import default_cfg
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
 from sf_examples.atari_examples.train_atari import parse_atari_args

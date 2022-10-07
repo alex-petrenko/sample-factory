@@ -9,7 +9,8 @@ from typing import Any, Optional, Union
 import psutil
 
 from sample_factory.algo.utils.misc import EPS
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.attr_dict import AttrDict
+from sample_factory.utils.utils import log
 
 
 class AvgTime:

@@ -3,7 +3,7 @@ import json
 import os
 
 from sample_factory.huggingface.huggingface_utils import generate_model_card, push_to_hf
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.attr_dict import AttrDict
 
 
 def main():

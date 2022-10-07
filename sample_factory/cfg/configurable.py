@@ -1,4 +1,4 @@
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.attr_dict import AttrDict
 
 
 class Configurable:

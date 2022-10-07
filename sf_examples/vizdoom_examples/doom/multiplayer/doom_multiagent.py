@@ -150,14 +150,14 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
     def _random_bot(self, difficulty, used_bots):
         while True:
-            idx = self.rng.randint(0, self.num_bots)
+            idx = self.rng.integers(0, self.num_bots)
             bot_name = f"BOT_{difficulty}_{idx}"
             if bot_name not in used_bots:
                 used_bots.append(bot_name)
                 return bot_name
 
     def reset(self, **kwargs):
-        obs = super().reset()
+        obs, info = super().reset(**kwargs)
 
         if self._is_server() and self.num_bots > 0:
             self.game.send_game_command("removebots")
@@ -190,7 +190,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
 
         self.timestep = 0
         self.update_state = True
-        return obs
+        return obs, info
 
     def step(self, actions):
         if self.skip_frames > 1 or self.num_agents == 1:
@@ -207,11 +207,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.timestep += 1
 
         if not self.update_state:
-            return None, None, None, None
+            return None, None, None, None, None
 
         state = self.game.get_state()
         reward = self.game.get_last_reward()
-        done = self.game.is_episode_finished()
+        terminated = self.game.is_episode_finished()
 
         if self.record_to is not None:
             # send 'stop recording' command 1 tick before the end of the episode
@@ -220,5 +220,6 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 log.debug("Calling stop recording command!")
                 self.game.send_game_command("stop")
 
-        observation, done, info = self._process_game_step(state, done, {})
-        return observation, reward, done, info
+        observation, terminated, info = self._process_game_step(state, terminated, {})
+        truncated = False
+        return observation, reward, terminated, truncated, info

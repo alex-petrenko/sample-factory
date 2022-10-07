@@ -1,5 +1,6 @@
 import sys
 
+from sample_factory.algo.utils.rl_utils import make_dones
 from sample_factory.cfg.arguments import default_cfg
 from sample_factory.envs.create_env import create_env
 from sample_factory.utils.utils import log
@@ -13,7 +14,8 @@ def main():
     done = False
     while not done:
         env.render()
-        obs, rew, done, info = env.step(env.action_space.sample())
+        obs, rew, terminated, truncated, info = env.step(env.action_space.sample())
+        done = make_dones(terminated, truncated)
 
     log.info("Done!")
 

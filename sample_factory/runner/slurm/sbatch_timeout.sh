@@ -1,6 +1,6 @@
 #!/bin/bash
 conda activate sf2
-cd ~/sf2
+cd ~/sample-factory || exit
 
 timeout $TIMEOUT $CMD
 if [[ $$? -eq 124 ]]; then

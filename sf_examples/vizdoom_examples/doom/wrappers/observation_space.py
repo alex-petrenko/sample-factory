@@ -73,9 +73,3 @@ class SetResolutionWrapper(gym.Wrapper):
             new_obs_space = self.unwrapped.observation_space
 
         self.observation_space = self.unwrapped.observation_space = new_obs_space
-
-    def reset(self):
-        return self.env.reset()
-
-    def step(self, action):
-        return self.env.step(action)

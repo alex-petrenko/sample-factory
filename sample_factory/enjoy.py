@@ -1,6 +1,6 @@
 import time
 from collections import deque
-from typing import Dict
+from typing import Dict, Tuple
 
 import gym
 import numpy as np
@@ -13,13 +13,15 @@ from sample_factory.algo.utils.action_distributions import ContinuousActionDistr
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
+from sample_factory.algo.utils.rl_utils import make_dones, prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
-from sample_factory.model.model import create_actor_critic
-from sample_factory.model.model_utils import get_hidden_size
-from sample_factory.utils.utils import AttrDict, debug_log_every_n, experiment_dir, log
+from sample_factory.model.actor_critic import create_actor_critic
+from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.utils.attr_dict import AttrDict
+from sample_factory.utils.typing import Config, StatusCode
+from sample_factory.utils.utils import debug_log_every_n, experiment_dir, log
 
 
 def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
@@ -76,7 +78,9 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
                 debug_log_every_n(1000, f"Exception when calling env.render() {str(ex)}")
 
 
-def enjoy(cfg):
+def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
+    verbose = False
+
     cfg = load_from_checkpoint(cfg)
 
     render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
@@ -89,7 +93,6 @@ def enjoy(cfg):
     cfg.num_envs = 1
 
     env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
-    # env.seed(0)  # TODO: make a parameter for this?
     env_info = extract_env_info(env, cfg)
 
     if hasattr(env.unwrapped, "reset_on_init"):
@@ -120,8 +123,8 @@ def enjoy(cfg):
 
     reward_list = []
 
-    obs = env.reset()
-    rnn_states = torch.zeros([env.num_agents, get_hidden_size(cfg)], dtype=torch.float32, device=device)
+    obs, infos = env.reset()
+    rnn_states = torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False for _ in range(env.num_agents)]
 
@@ -156,7 +159,8 @@ def enjoy(cfg):
                 render_frame(cfg, env, video_frames, num_episodes, last_render_start)
                 last_render_start = time.time()
 
-                obs, rew, dones, infos = env.step(actions)
+                obs, rew, terminated, truncated, infos = env.step(actions)
+                dones = make_dones(terminated, truncated)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
 
                 if episode_reward is None:
@@ -183,14 +187,15 @@ def enjoy(cfg):
                             true_objective = infos[agent_i].get("true_objective", rew)
                         true_objectives[agent_i].append(true_objective)
 
-                        log.info(
-                            "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
-                            agent_i,
-                            num_frames,
-                            episode_reward[agent_i],
-                            true_objectives[agent_i][-1],
-                        )
-                        rnn_states[agent_i] = torch.zeros([get_hidden_size(cfg)], dtype=torch.float32, device=device)
+                        if verbose:
+                            log.info(
+                                "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
+                                agent_i,
+                                num_frames,
+                                episode_reward[agent_i],
+                                true_objectives[agent_i][-1],
+                            )
+                        rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
                         num_episodes += 1
 

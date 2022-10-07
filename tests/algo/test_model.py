@@ -1,10 +1,10 @@
 import pytest
 import torch
 
+from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.cfg.arguments import default_cfg
-from sample_factory.envs.create_env import create_env
-from sample_factory.model.model import create_actor_critic
-from sample_factory.model.model_utils import get_hidden_size
+from sample_factory.model.actor_critic import create_actor_critic
+from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
 
@@ -21,11 +21,10 @@ class TestModel:
         env_name = "atari_breakout"
         cfg = default_cfg(algo="APPO", env=env_name)
         cfg.actor_critic_share_weights = True
-        cfg.hidden_size = 128
         cfg.use_rnn = True
         cfg.env_framestack = 4
 
-        env = create_env(env_name, cfg=cfg)
+        env = make_env_func_batched(cfg, env_config=None)
 
         torch.set_num_threads(1)
         torch.backends.cudnn.benchmark = True
@@ -40,7 +39,7 @@ class TestModel:
             with timing.add_time("input"):
                 # better avoid hardcoding here...
                 observations = dict(obs=torch.rand([batch, 4, 84, 84]).to(device))
-                rnn_states = torch.rand([batch, get_hidden_size(cfg)]).to(device)
+                rnn_states = torch.rand([batch, get_rnn_size(cfg)]).to(device)
 
             n = 200
             for i in range(n):

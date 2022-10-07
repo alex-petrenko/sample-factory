@@ -50,10 +50,6 @@ def add_doom_env_eval_args(parser):
 def doom_override_defaults(parser):
     """RL params specific to Doom envs."""
     parser.set_defaults(
-        encoder_type="conv",
-        encoder_subtype="convnet_simple",
-        encoder_custom="vizdoom",
-        hidden_size=512,
         ppo_clip_value=0.2,  # value used in all experiments in the paper
         obs_subtract_mean=0.0,
         obs_scale=255.0,

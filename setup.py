@@ -34,7 +34,7 @@ setup(
     install_requires=[
         "numpy>=1.18.1<2.0",
         "torch>=1.9,<2.0",
-        "gym>=0.17.1,<1.0",
+        "gym>=0.26.1,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
         "tensorboardx>=2.0",
@@ -42,7 +42,7 @@ setup(
         "threadpoolctl>=2.0.0",
         "colorlog",
         "faster-fifo>=1.4.2,<2.0",
-        "signal-slot-mp>=1.0.1,<2.0",
+        "signal-slot-mp>=1.0.3,<2.0",
         "filelock",
         "opencv-python",
         "wandb>=0.12.9",

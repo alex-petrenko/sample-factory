@@ -9,19 +9,16 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sample_factory.algo.sampling.sampling_utils import (
-    TIMEOUT_KEYS,
-    VectorEnvRunner,
-    record_episode_statistics_wrapper_stats,
-)
+from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, record_episode_statistics_wrapper_stats
 from sample_factory.algo.utils.env_info import EnvInfo, check_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectorizeWrapper, make_env_func_batched
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import synchronize
-from sample_factory.utils.dicts import get_first_present
+from sample_factory.utils.attr_dict import AttrDict
+from sample_factory.utils.dicts import iterate_recursively_with_prefix
 from sample_factory.utils.typing import PolicyID
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import log
 
 
 def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray | List:
@@ -122,7 +119,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.num_envs = num_envs
 
-        self.vec_env = None
+        self.vec_env: Optional[BatchedVecEnv | SequentialVectorizeWrapper] = None
         self.last_obs = None
         self.last_rnn_state = None
         self.policy_id_buffer = None
@@ -158,11 +155,11 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             )
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)
-            # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, dones, infos
+            # a vectorized environment - we assume that it always provides a dict of vectors of obs, rewards, etc.
             env: BatchedVecEnv = make_env_func_batched(self.cfg, env_config)
             check_env_info(env, self.env_info, self.cfg)
 
-            env.seed(env_id)
+            env.seed(env_id)  # since Gym 0.26 seeding is done in reset(), we do it in BatchedVecEnv class
             envs.append(env)
 
         if len(envs) == 1:
@@ -172,7 +169,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         else:
             self.vec_env = SequentialVectorizeWrapper(envs)
 
-        self.last_obs = self.vec_env.reset()
+        self.last_obs, info = self.vec_env.reset()  # anything we need to do with info? Currently we ignore it
+
         self.last_rnn_state = torch.zeros_like(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
 
         # we assume that all data will be on the same device
@@ -197,19 +195,6 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.max_raw_rewards = torch.max(self.max_raw_rewards, rewards_orig_cpu)
         return rewards
 
-    def _process_infos(self, infos: Dict | List | Tuple) -> None:
-        """
-        Record any necessary information from the infos.
-        Note that this is not where we save env statistics for the summaries - this is done in _process_env_step
-        and only if done is True.
-        """
-        if self.cfg.value_bootstrap:
-            # Save the timeout flags for later.
-            # Actual reward modification is done in the learner when batch is prepared for training.
-            time_outs = get_first_present(infos, TIMEOUT_KEYS) if isinstance(infos, dict) else None
-            if time_outs is not None:
-                self.curr_step["time_outs"][:] = time_outs
-
     def _process_env_step(self, rewards: Tensor, dones_orig: Tensor, infos):
         dones = dones_orig.cpu()
         num_dones = dones.sum().item()
@@ -232,19 +217,23 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         if isinstance(infos, dict):
             # vectorized reports
-            for key, value in infos.items():
+            for _, key, value, prefix in iterate_recursively_with_prefix(infos):
+                key_str = key
+                if prefix:
+                    key_str = f"{'/'.join(prefix)}/{key}"
+
                 if isinstance(value, Tensor):
                     if value.numel() == 1:
-                        stats[key] = value.item()
+                        stats[key_str] = value.item()
                     elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
                         # saving value for all agents who finished the episode
-                        stats[key] = value[finished]
+                        stats[key_str] = value[finished]
                     else:
                         log.warning(f"Infos tensor with unexpected shape {value.shape}")
                 elif isinstance(value, numbers.Number):
-                    stats[key] = value
+                    stats[key_str] = value
         else:
-            # non-vectorized reports TODO (parse infos)
+            # non-vectorized reports: TODO (parse infos)
 
             assert isinstance(infos, (list, tuple)), "Expect infos to be a list or tuple of dicts"
 
@@ -307,26 +296,21 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         complete_rollouts, episodic_stats = [], []
 
         with timing.add_time("env_step"):
-            self.last_obs, rewards, dones, infos = self.vec_env.step(actions)
+            self.last_obs, rewards, terminated, truncated, infos = self.vec_env.step(actions)
+            dones = terminated | truncated  # both should be either tensors or numpy arrays of bools
 
         with timing.add_time("post_env_step"):
             self.policy_id_buffer[:] = self.policy_id
 
-            # TODO: for vectorized envs we either have a dictionary of tensors (isaacgym_examples), or a list of dictionaries (i.e. swarm_rl quadrotors)
-            # Need an adapter class so it's consistent, i.e. always a dict of tensors.
-            # this should yield indices of inactive agents
-            #
-            # if infos:
-            #     inactive_agents = [i for i, info in enumerate(infos) if not info.get('is_active', True)]
-            #     self.policy_id_buffer[inactive_agents] = -1
-            # TODO: batcher runner probably won't have inactive agent support for now.
-
             # record the results from the env step
             rewards_cpu = rewards.cpu()
             processed_rewards = self._process_rewards(rewards, rewards_cpu)
-            self.curr_step[:] = dict(rewards=processed_rewards, dones=dones, policy_id=self.policy_id_buffer)
-
-            self._process_infos(infos)
+            self.curr_step[:] = dict(
+                rewards=processed_rewards,
+                dones=dones,
+                time_outs=truncated,  # true only when done is also true, used for value bootstrapping
+                policy_id=self.policy_id_buffer,
+            )
 
             # reset next-step hidden states to zero if we encountered an episode boundary
             # not sure if this is the best practice, but this is what everybody seems to be doing

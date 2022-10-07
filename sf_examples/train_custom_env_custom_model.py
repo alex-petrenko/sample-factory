@@ -13,11 +13,14 @@ import gym
 import numpy as np
 from torch import nn
 
+from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.model_utils import EncoderBase, get_obs_shape, nonlinearity, register_custom_encoder
+from sample_factory.model.encoder import Encoder
+from sample_factory.model.model_utils import nonlinearity
 from sample_factory.train import run_rl
+from sample_factory.utils.typing import Config, ObsSpace
 
 
 class CustomEnv(gym.Env):
@@ -36,18 +39,18 @@ class CustomEnv(gym.Env):
 
     def reset(self, **kwargs):
         self.curr_episode_steps = 0
-        return self._obs()
+        return self._obs(), {}
 
     def step(self, action):
         # action should be an int here
         assert isinstance(action, (int, np.int32, np.int64))
         reward = action * 0.01
 
-        done = self.curr_episode_steps >= self.cfg.custom_env_episode_len
+        terminated = truncated = self.curr_episode_steps >= self.cfg.custom_env_episode_len
 
         self.curr_episode_steps += 1
 
-        return self._obs(), reward, done, dict()
+        return self._obs(), reward, terminated, truncated, dict()
 
     def render(self, mode="human"):
         pass
@@ -74,16 +77,17 @@ def override_default_params(parser):
 
     """
     parser.set_defaults(
-        encoder_custom="custom_env_encoder",
-        hidden_size=128,
+        rnn_size=128,
     )
 
 
-class CustomEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+class CustomEncoder(Encoder):
+    """Just an example of how to use a custom model component."""
 
-        obs_shape = get_obs_shape(obs_space)
+    def __init__(self, cfg, obs_space):
+        super().__init__(cfg)
+
+        obs_shape = obs_space["obs"].shape
 
         conv_layers = [
             nn.Conv2d(1, 8, 3, stride=2),
@@ -93,9 +97,7 @@ class CustomEncoder(EncoderBase):
         ]
 
         self.conv_head = nn.Sequential(*conv_layers)
-        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
-
-        self.init_fc_blocks(self.conv_head_out_size)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape)
 
     def forward(self, obs_dict):
         # we always work with dictionary observations. Primary observation is available with the key 'obs'
@@ -103,15 +105,20 @@ class CustomEncoder(EncoderBase):
 
         x = self.conv_head(main_obs)
         x = x.view(-1, self.conv_head_out_size)
-
-        # forward pass through configurable fully connected blocks immediately after the encoder
-        x = self.forward_fc_blocks(x)
         return x
+
+    def get_out_size(self) -> int:
+        return self.conv_head_out_size
+
+
+def make_custom_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
+    """Factory function as required by the API."""
+    return CustomEncoder(cfg, obs_space)
 
 
 def register_custom_components():
     register_env("my_custom_env_v1", make_custom_env_func)
-    register_custom_encoder("custom_env_encoder", CustomEncoder)
+    global_model_factory().register_encoder_factory(make_custom_encoder)
 
 
 def parse_custom_args(argv=None, evaluation=False):

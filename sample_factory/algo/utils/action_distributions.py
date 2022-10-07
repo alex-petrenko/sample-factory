@@ -7,6 +7,7 @@ from torch import Tensor
 from torch.distributions import Independent, Normal
 from torch.nn import functional
 
+from sample_factory.utils.typing import ActionSpace
 from sample_factory.utils.utils import log
 
 
@@ -24,20 +25,20 @@ def calc_num_actions(action_space):
         raise NotImplementedError(f"Action space type {type(action_space)} not supported!")
 
 
-def calc_num_logits(action_space):
-    """Returns the number of logits required to represent the given action space."""
+def calc_num_action_parameters(action_space: ActionSpace) -> int:
+    """Returns the number of paramaters required to represent the given action space."""
     if isinstance(action_space, gym.spaces.Discrete):
         return action_space.n
     elif isinstance(action_space, gym.spaces.Tuple):
-        return sum([calc_num_logits(a) for a in action_space])
+        return sum([calc_num_action_parameters(a) for a in action_space])
     elif isinstance(action_space, gym.spaces.Box):
-        # regress one mean and one standard deviation for every action
+        # one mean and one standard deviation for every action
         return np.prod(action_space.shape) * 2
     else:
         raise NotImplementedError(f"Action space type {type(action_space)} not supported!")
 
 
-def is_continuous_action_space(action_space):
+def is_continuous_action_space(action_space: ActionSpace) -> bool:
     return isinstance(action_space, gym.spaces.Box)
 
 
@@ -48,7 +49,7 @@ def get_action_distribution(action_space, raw_logits):
     :param raw_logits: this function expects unprocessed raw logits (not after log-softmax!)
     :return: action distribution that you can sample from
     """
-    assert calc_num_logits(action_space) == raw_logits.shape[-1]
+    assert calc_num_action_parameters(action_space) == raw_logits.shape[-1]
 
     if isinstance(action_space, gym.spaces.Discrete):
         return CategoricalActionDistribution(raw_logits)
@@ -170,7 +171,7 @@ class TupleActionDistribution:
     """
 
     def __init__(self, action_space, logits_flat):
-        self.logit_lengths = [calc_num_logits(s) for s in action_space.spaces]
+        self.logit_lengths = [calc_num_action_parameters(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
         self.action_lengths = [calc_num_actions(s) for s in action_space.spaces]
 
@@ -240,8 +241,8 @@ class TupleActionDistribution:
 
 # noinspection PyAbstractClass
 class ContinuousActionDistribution(Independent):
-    stddev_min: float = 1e-5
-    stddev_max: float = 1e5
+    stddev_min: float = 1e-4
+    stddev_max: float = 1e4
 
     def __init__(self, params):
         self.means, self.log_std, self.stddevs = self._init_impl(params, self.stddev_min, self.stddev_max)

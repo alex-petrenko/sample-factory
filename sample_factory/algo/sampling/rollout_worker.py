@@ -6,7 +6,7 @@ from typing import Dict, List
 
 import psutil
 import torch
-from signal_slot.signal_slot import EventLoopObject, signal
+from signal_slot.signal_slot import signal
 
 from sample_factory.algo.sampling.batched_sampling import BatchedVectorEnvRunner
 from sample_factory.algo.sampling.non_batched_sampling import NonBatchedVectorEnvRunner
@@ -24,7 +24,6 @@ from sample_factory.utils.typing import MpQueue, PolicyID
 from sample_factory.utils.utils import (
     cores_for_worker_process,
     debug_log_every_n,
-    experiment_dir,
     init_file_logger,
     log,
     set_process_cpu_affinity,
@@ -43,7 +42,7 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = worker.cfg
-    init_file_logger(experiment_dir(cfg))
+    init_file_logger(cfg)
 
     # on MacOS, psutil.Process() has no method 'cpu_affinity'
     if hasattr(psutil.Process(), "cpu_affinity"):

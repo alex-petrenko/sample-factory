@@ -9,11 +9,7 @@ def atari_override_defaults(_env, parser):
         # set this to false in command line
         summaries_use_frameskip=True,
         use_record_episode_statistics=True,
-        encoder_type="conv",
-        encoder_subtype="convnet_atari",
-        hidden_size=512,
-        encoder_extra_fc_layers=1,
-        obs_subtract_mean=0.0,
+        encoder_conv_architecture="convnet_atari",
         obs_scale=255.0,
         gamma=0.99,
         env_frameskip=4,
@@ -48,7 +44,7 @@ def atari_override_defaults(_env, parser):
         serial_mode=False,
         async_rl=False,
         experiment_summaries_interval=3,
-        adam_eps=1e-5,  # choose the same value as CleanRL used
+        adam_eps=1e-5,  # choosing the same value as CleanRL used
     )
 
 
