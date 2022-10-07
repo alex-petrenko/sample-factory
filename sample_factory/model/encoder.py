@@ -5,7 +5,7 @@ from gym import spaces
 from torch import Tensor, nn
 
 from sample_factory.algo.utils.torch_utils import calc_num_elements
-from sample_factory.model.model_utils import ModelModule, create_mlp, get_obs_shape, model_device, nonlinearity
+from sample_factory.model.model_utils import ModelModule, create_mlp, model_device, nonlinearity
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, ObsSpace
 from sample_factory.utils.utils import log
@@ -33,7 +33,6 @@ class Encoder(ModelModule):
 class MultiInputEncoder(Encoder):
     def __init__(self, cfg: Config, obs_space: ObsSpace):
         super().__init__(cfg)
-
         self.obs_keys = list(sorted(obs_space.keys()))  # always the same order
         self.encoders = nn.ModuleDict()
 
@@ -74,13 +73,11 @@ class MlpEncoder(Encoder):
     def __init__(self, cfg: Config, obs_space: ObsSpace):
         super().__init__(cfg)
 
-        obs_shape = get_obs_shape(obs_space)
-
         mlp_layers: List[int] = cfg.encoder_mlp_layers
-        self.mlp_head = create_mlp(mlp_layers, obs_shape[0], nonlinearity(cfg))
+        self.mlp_head = create_mlp(mlp_layers, obs_space.shape[0], nonlinearity(cfg))
         if len(mlp_layers) > 0:
             self.mlp_head = torch.jit.script(self.mlp_head)
-        self.encoder_out_size = calc_num_elements(self.mlp_head, obs_shape)
+        self.encoder_out_size = calc_num_elements(self.mlp_head, obs_space.shape)
 
     def forward(self, obs: Tensor):
         x = self.mlp_head(obs)
@@ -126,8 +123,7 @@ class ConvEncoder(Encoder):
     def __init__(self, cfg: Config, obs_space: ObsSpace):
         super().__init__(cfg)
 
-        obs_shape = get_obs_shape(obs_space)
-        input_channels = obs_shape[0]
+        input_channels = obs_space.shape[0]
         log.debug(f"{ConvEncoder.__name__}: {input_channels=}")
 
         if cfg.encoder_conv_architecture == "convnet_simple":
@@ -141,10 +137,10 @@ class ConvEncoder(Encoder):
 
         activation = nonlinearity(self.cfg)
         extra_mlp_layers: List[int] = cfg.encoder_conv_mlp_layers
-        enc = ConvEncoderImpl(obs_shape, conv_filters, extra_mlp_layers, activation)
+        enc = ConvEncoderImpl(obs_space.shape, conv_filters, extra_mlp_layers, activation)
         self.enc = torch.jit.script(enc)
 
-        self.encoder_out_size = calc_num_elements(self.enc, obs_shape)
+        self.encoder_out_size = calc_num_elements(self.enc, obs_space.shape)
         log.debug(f"Conv encoder output size: {self.encoder_out_size}")
 
     def get_out_size(self) -> int:
@@ -178,8 +174,7 @@ class ResnetEncoder(Encoder):
     def __init__(self, cfg, obs_space):
         super().__init__(cfg)
 
-        obs_shape = get_obs_shape(obs_space)
-        input_ch = obs_shape[0]
+        input_ch = obs_space.shape[0]
         log.debug("Num input channels: %d", input_ch)
 
         if cfg.encoder_conv_architecture == "resnet_impala":
@@ -207,7 +202,7 @@ class ResnetEncoder(Encoder):
         layers.append(activation)
 
         self.conv_head = nn.Sequential(*layers)
-        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_shape.obs)
+        self.conv_head_out_size = calc_num_elements(self.conv_head, obs_space.shape)
         log.debug(f"Convolutional layer output size: {self.conv_head_out_size}")
 
         self.mlp_layers = create_mlp(cfg.encoder_conv_mlp_layers, self.conv_head_out_size, activation)

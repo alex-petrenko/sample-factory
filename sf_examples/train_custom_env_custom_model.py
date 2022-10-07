@@ -18,7 +18,7 @@ from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.model.encoder import Encoder
-from sample_factory.model.model_utils import get_obs_shape, nonlinearity
+from sample_factory.model.model_utils import nonlinearity
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, ObsSpace
 
@@ -87,7 +87,7 @@ class CustomEncoder(Encoder):
     def __init__(self, cfg, obs_space):
         super().__init__(cfg)
 
-        obs_shape = get_obs_shape(obs_space)
+        obs_shape = obs_space["obs"].shape
 
         conv_layers = [
             nn.Conv2d(1, 8, 3, stride=2),

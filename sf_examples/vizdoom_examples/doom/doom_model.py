@@ -3,7 +3,7 @@ from torch import nn
 
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.model.encoder import Encoder, make_img_encoder
-from sample_factory.model.model_utils import get_obs_shape, nonlinearity
+from sample_factory.model.model_utils import nonlinearity
 from sample_factory.utils.typing import Config, ObsSpace
 from sample_factory.utils.utils import log
 
