@@ -1,8 +1,10 @@
 import torch
 from torch import nn
 
+from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.algo.utils.torch_utils import calc_num_elements
-from sample_factory.model.model_utils import EncoderBase, fc_layer, nonlinearity, register_custom_encoder
+from sample_factory.model.encoder import Encoder
+from sample_factory.model.model_utils import fc_layer, nonlinearity
 
 
 class QuadNeighborhoodEncoder(nn.Module):
@@ -123,10 +125,10 @@ class QuadNeighborhoodEncoderMlp(QuadNeighborhoodEncoder):
         return final_neighborhood_embedding
 
 
-class QuadMultiEncoder(EncoderBase):
+class QuadMultiEncoder(Encoder):
     # Mean embedding encoder based on the DeepRL for Swarms Paper
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
+    def __init__(self, cfg, obs_space):
+        super().__init__(cfg)
         # internal params -- cannot change from cmd line
         if cfg.quads_obs_repr == "xyz_vxyz_R_omega":
             self.self_obs_dim = 18
@@ -199,7 +201,7 @@ class QuadMultiEncoder(EncoderBase):
         if self.neighbor_encoder:
             neighbor_encoder_out_size = self.neighbor_hidden_size
 
-        fc_encoder_layer = cfg.hidden_size
+        fc_encoder_layer = cfg.rnn_size
         # encode the current drone's observations
         self.self_encoder = nn.Sequential(
             fc_layer(self.self_obs_dim, fc_encoder_layer, spec_norm=self.use_spectral_norm),
@@ -226,11 +228,11 @@ class QuadMultiEncoder(EncoderBase):
 
         # this is followed by another fully connected layer in the action parameterization, so we add a nonlinearity here
         self.feed_forward = nn.Sequential(
-            fc_layer(total_encoder_out_size, 2 * cfg.hidden_size, spec_norm=self.use_spectral_norm),
+            fc_layer(total_encoder_out_size, 2 * cfg.rnn_size, spec_norm=self.use_spectral_norm),
             nn.Tanh(),
         )
 
-        self.encoder_out_size = 2 * cfg.hidden_size
+        self.encoder_out_size = 2 * cfg.rnn_size
 
     def forward(self, obs_dict):
         obs = obs_dict["obs"]
@@ -256,7 +258,13 @@ class QuadMultiEncoder(EncoderBase):
         out = self.feed_forward(embeddings)
         return out
 
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
+
+
+def make_quadmulti_encoder(cfg, obs_space) -> Encoder:
+    return QuadMultiEncoder(cfg, obs_space)
+
 
 def register_models():
-    quad_custom_encoder_name = "quad_multi_encoder"
-    register_custom_encoder(quad_custom_encoder_name, QuadMultiEncoder)
+    global_model_factory().register_encoder_factory(make_quadmulti_encoder)

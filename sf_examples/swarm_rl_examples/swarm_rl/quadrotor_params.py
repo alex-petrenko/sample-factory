@@ -5,7 +5,7 @@ def quadrotors_override_defaults(env, parser):
     parser.set_defaults(
         encoder_type="mlp",
         encoder_subtype="mlp_quads",
-        hidden_size=256,
+        rnn_size=256,
         encoder_extra_fc_layers=0,
         env_frameskip=1,
         batched_sampling=False,
@@ -34,7 +34,6 @@ def quadrotors_override_defaults(env, parser):
         quads_mode="mix",
         quads_episode_duration=15.0,
         quads_formation_size=0.0,
-        encoder_custom="quad_multi_encoder",
         quads_collision_reward=5.0,
         quads_neighbor_hidden_size=256,
         neighbor_obs_type="pos_vel",
