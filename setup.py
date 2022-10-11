@@ -12,8 +12,8 @@ with open("README.md", "r") as f:
     long_description = "\n".join(descr_no_gifs)
 
 
-_atari_deps = ["gym[atari, accept-rom-license]"]
-_mujoco_deps = ["gym[mujoco]"]
+_atari_deps = ["gym[atari, accept-rom-license]", "envpool"]
+_mujoco_deps = ["gym[mujoco]", "envpool"]
 
 
 setup(
