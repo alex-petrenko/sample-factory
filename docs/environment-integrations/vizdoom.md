@@ -74,6 +74,9 @@ python -m sf_examples.vizdoom_examples.train_vizdoom --env=doom_benchmark --algo
 1. We reproduced the paper results in SF2 in the Battle and Battle2 and compared the results using input normalization. Input normalization has improved results in the Battle environment. This experiment with input normalization was run with `sf_examples.vizdoom_examples.experiments.sf2_doom_battle_envs`. Note that `normalize_input=True` is set compared to the results from the paper
     - https://wandb.ai/andrewzhang505/sample_factory/reports/VizDoom-Battle-Environments--VmlldzoyMzcyODQx
 
+2. In SF2's bot environments (deathmatch_bots and duel_bots), we trained the agents against randomly generated bots as opposed to a curriculum of increasing bot difficulty. This is because the ViZDoom environment no longer provides the bots used in the curriculum, and SF2 no longer requires the curriculum to train properly. However, due to the differences in bot difficulty, the current training results are no longer comparable to the paper. An example training curve on deathmatch_bots with the same parameters as in the paper is shown below:
+    - https://wandb.ai/andrewzhang505/sample_factory/reports/ViZDoom-Deathmatch-Bots--VmlldzoyNzY2NDI1
+
 #### Models
 
 The models below are the best models from the input normalization experiment above. The evaluation metrics here are obtained by running the model 10 times.  

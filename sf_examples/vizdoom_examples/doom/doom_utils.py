@@ -22,7 +22,6 @@ from sf_examples.vizdoom_examples.doom.action_space import (
 )
 from sf_examples.vizdoom_examples.doom.doom_gym import VizdoomEnv
 from sf_examples.vizdoom_examples.doom.wrappers.additional_input import DoomAdditionalInput
-from sf_examples.vizdoom_examples.doom.wrappers.bot_difficulty import BotDifficultyWrapper
 from sf_examples.vizdoom_examples.doom.wrappers.multiplayer_stats import MultiplayerStatsWrapper
 from sf_examples.vizdoom_examples.doom.wrappers.observation_space import SetResolutionWrapper, resolutions
 from sf_examples.vizdoom_examples.doom.wrappers.reward_shaping import (
@@ -279,9 +278,10 @@ def make_doom_env_impl(
 
     env = MultiplayerStatsWrapper(env)
 
-    if num_bots > 0:
-        bot_difficulty = cfg.start_bot_difficulty if "start_bot_difficulty" in cfg else None
-        env = BotDifficultyWrapper(env, bot_difficulty)
+    # # BotDifficultyWrapper no longer in use
+    # if num_bots > 0:
+    #     bot_difficulty = cfg.start_bot_difficulty if "start_bot_difficulty" in cfg else None
+    #     env = BotDifficultyWrapper(env, bot_difficulty)
 
     resolution = custom_resolution
     if resolution is None:
