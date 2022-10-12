@@ -51,4 +51,6 @@ An example APPO model trained on Megaverse environments is uploaded to the Huggi
 
 #### Videos
 
-TODO
+##### Tower Building with single agent
+
+<video width="500" controls><source src="https://huggingface.co/wmFrank/sample-factory-2-megaverse/resolve/main/replay.mp4" type="video/mp4"></video>
