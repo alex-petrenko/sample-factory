@@ -360,7 +360,7 @@ class Learner(Configurable):
 
         milestones_dir = ensure_dir_exists(join(checkpoint_dir, "milestones"))
         milestone_path = join(milestones_dir, f"{checkpoint_name}")
-        log.debug("Saving a milestone %s", milestone_path)
+        log.info("Saving a milestone %s", milestone_path)
         torch.save(checkpoint, milestone_path)
 
     def save_best(self, policy_id, metric, metric_value):
