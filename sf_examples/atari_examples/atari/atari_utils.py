@@ -2,7 +2,7 @@ from typing import Optional
 
 import gym
 
-from sample_factory.envs.env_wrappers import (  # For standard gym envs; For envpool envs
+from sample_factory.envs.env_wrappers import (
     BatchedRecordEpisodeStatistics,
     ClipRewardEnv,
     EnvPoolResetFixWrapper,
