@@ -534,7 +534,7 @@ class EnvPoolTo5Tuple(gym.Env):
             (observation, info)
         """
         if seed is not None:
-            self.env.seed(seed)
+            self.seed(seed)
         # Options are ignored
 
         if self.render_mode == "human":
@@ -574,6 +574,10 @@ class EnvPoolTo5Tuple(gym.Env):
     def __repr__(self):
         """Returns the string representation of the wrapper."""
         return str(self)
+
+    def seed(self, _value):
+        # The seed is set when the envpool is created, so this does nothing
+        ...
 
 
 def convert_to_terminated_truncated_step_api(

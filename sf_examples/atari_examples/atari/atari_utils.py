@@ -78,7 +78,7 @@ def make_atari_env(env_name, cfg, env_config, render_mode: Optional[str] = None)
         num_envs=cfg.env_agents,
         reward_clip=True,
         episodic_life=True,
-        **env_kwargs,
+        seed=env_config.env_id**env_kwargs,
     )
     env = EnvPoolResetFixWrapper(env)
     env = BatchedRecordEpisodeStatistics(env, num_envs=cfg.env_agents)
