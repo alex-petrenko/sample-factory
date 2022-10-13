@@ -40,4 +40,9 @@ def mujoco_override_defaults(env, parser):
 # noinspection PyUnusedLocal
 def add_mujoco_env_args(env, parser):
     # in case we need to add more args in the future
-    pass
+    parser.add_argument(
+        "--env_agents",
+        default=2,
+        type=int,
+        help="Num agents in each envpool (if used)",
+    )
