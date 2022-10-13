@@ -451,7 +451,6 @@ def add_rl_args(p: ArgumentParser):
         choices=["latest", "best"],
         help="Whether to load from latest or best checkpoint",
     )
-    # TODO: check if this is working
     p.add_argument(
         "--save_milestones_sec",
         default=-1,

@@ -352,15 +352,16 @@ class Learner(Configurable):
     def save(self):
         self._save_impl("checkpoint", "", self.cfg.keep_checkpoints)
 
-        # TODO: move milestone logic to the runner?
-        # if self.cfg.save_milestones_sec > 0:
-        #     # milestones enabled
-        #     if time.time() - self.last_milestone_time >= self.cfg.save_milestones_sec:
-        #         milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
-        #         milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
-        #         log.debug('Saving a milestone %s', milestone_path)
-        #         shutil.copy(filepath, milestone_path)
-        #         self.last_milestone_time = time.time()
+    def save_milestone(self):
+        checkpoint = self._get_checkpoint_dict()
+        assert checkpoint is not None
+        checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
+        checkpoint_name = f"checkpoint_{self.train_step:09d}_{self.env_steps}.pth"
+
+        milestones_dir = ensure_dir_exists(join(checkpoint_dir, "milestones"))
+        milestone_path = join(milestones_dir, f"{checkpoint_name}")
+        log.info("Saving a milestone %s", milestone_path)
+        torch.save(checkpoint, milestone_path)
 
     def save_best(self, policy_id, metric, metric_value):
         # TODO it seems that the Runner is broadcasting the signals to all learners, so it won't pass the assertion in multi-policy env, we may add an if instead of assert?

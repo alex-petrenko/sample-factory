@@ -102,6 +102,9 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
     def save(self) -> None:
         self.learner.save()
 
+    def save_milestone(self) -> None:
+        self.learner.save_milestone()
+
     def save_best(self, policy_id: PolicyID, metric: str, metric_value: float):
         self.learner.save_best(policy_id, metric, metric_value)
 
