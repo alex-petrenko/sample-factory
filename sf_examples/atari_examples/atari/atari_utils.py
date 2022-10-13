@@ -30,25 +30,13 @@ class AtariSpec:
 ATARI_ENVS = [
     AtariSpec("atari_montezuma", "MontezumaRevengeNoFrameskip-v4", "MontezumaRevenge-v5", default_timeout=18000),
     AtariSpec("atari_pong", "PongNoFrameskip-v4", "Pong-v5"),
-    AtariSpec(
-        "atari_qbert",
-        "QbertNoFrameskip-v4",
-        "Qbert-v5",
-    ),
+    AtariSpec("atari_qbert", "QbertNoFrameskip-v4", "Qbert-v5"),
     AtariSpec("atari_breakout", "BreakoutNoFrameskip-v4", "Breakout-v5"),
     AtariSpec("atari_spaceinvaders", "SpaceInvadersNoFrameskip-v4", "SpaceInvaders-v5"),
     AtariSpec("atari_asteroids", "AsteroidsNoFrameskip-v4", "Asteroids-v5"),
-    AtariSpec(
-        "atari_gravitar",
-        "GravitarNoFrameskip-v4",
-        "Gravitar-v5",
-    ),
+    AtariSpec("atari_gravitar", "GravitarNoFrameskip-v4", "Gravitar-v5"),
     AtariSpec("atari_mspacman", "MsPacmanNoFrameskip-v4", "MsPacman-v5"),
-    AtariSpec(
-        "atari_seaquest",
-        "SeaquestNoFrameskip-v4",
-        "Seaquest-v5",
-    ),
+    AtariSpec("atari_seaquest", "SeaquestNoFrameskip-v4", "Seaquest-v5"),
     AtariSpec("atari_beamrider", "BeamRiderNoFrameskip-v4", "BeamRider-v5"),
 ]
 
