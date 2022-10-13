@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import psutil
 import torch
@@ -100,7 +100,9 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
 
         self.env_runners: List[VectorEnvRunner] = []
 
-        self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
+        # None indicates the default reward shaping is to be used
+        # this can be updated i.e. through PBT
+        self.reward_shaping: List[Optional[Dict]] = [None for _ in range(self.cfg.num_policies)]
 
         self.training_iteration: List[int] = [0] * self.cfg.num_policies
 
@@ -291,6 +293,10 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
         # request a new trajectory (since they're now available), and finally send observations to the inference worker
         for split_idx in range(self.num_splits):
             self._maybe_send_policy_request(self.env_runners[split_idx])
+
+    def on_update_reward_shaping(self, policy_id: PolicyID, new_reward_shaping_scheme: Dict) -> None:
+        """Update reward shaping function."""
+        self.reward_shaping[policy_id] = new_reward_shaping_scheme
 
     def on_stop(self, *args):
         for env_runner in self.env_runners:

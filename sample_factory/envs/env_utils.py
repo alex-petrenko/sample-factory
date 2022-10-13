@@ -1,5 +1,6 @@
 from functools import wraps
 from time import sleep
+from typing import Dict
 
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.utils.typing import CreateEnvFunc
@@ -72,14 +73,14 @@ class RewardShapingInterface:
     def __init__(self):
         pass
 
-    def get_default_reward_shaping(self):
+    def get_default_reward_shaping(self) -> Dict[str, float]:
         """Should return a dictionary of string:float key-value pairs defining the current reward shaping scheme."""
         raise NotImplementedError
 
-    def get_current_reward_shaping(self, agent_idx: int):
+    def get_current_reward_shaping(self, agent_idx: int) -> Dict[str, float]:
         raise NotImplementedError
 
-    def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
+    def set_reward_shaping(self, reward_shaping: Dict[str, float], agent_idx: int):
         """
         Sets the new reward shaping scheme.
         :param reward_shaping dictionary of string-float key-value pairs

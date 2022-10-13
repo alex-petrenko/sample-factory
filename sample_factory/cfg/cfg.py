@@ -688,8 +688,8 @@ def add_wandb_args(p: ArgumentParser):
 
 
 def add_pbt_args(p: ArgumentParser):
-    """This is currently not supported and should be probably moved elsewhere."""  # TODO: PBT example
-    p.add_argument("--with_pbt", default=False, type=str2bool, help="Enables population-based training basic features")
+    """Population-based training (PBT) arguments."""
+    p.add_argument("--with_pbt", default=False, type=str2bool, help="Enables population-based training (PBT)")
     p.add_argument(
         "--pbt_mix_policies_in_one_env",
         default=True,
@@ -726,12 +726,6 @@ def add_pbt_args(p: ArgumentParser):
         default=1e-6,
         type=float,
         help="Absolute gap in true reward when replacing weights of the policy with a better performing one",
-    )
-    p.add_argument(
-        "--pbt_optimize_batch_size",
-        default=False,
-        type=str2bool,
-        help="Whether to optimize batch size or not (experimental)",
     )
     p.add_argument(
         "--pbt_optimize_gamma",

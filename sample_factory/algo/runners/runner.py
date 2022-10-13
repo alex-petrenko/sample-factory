@@ -46,9 +46,33 @@ from sample_factory.utils.utils import (
 )
 from sample_factory.utils.wandb_utils import init_wandb
 
+
+class AlgoObserver:
+    def on_init(self, runner: Runner) -> None:
+        """Called after ctor, but before signal-slots are connected or any processes are started."""
+        pass
+
+    def on_connect_components(self, runner: Runner) -> None:
+        """Connect additional signal-slot pairs in the observers if needed."""
+        pass
+
+    def on_start(self, runner: Runner) -> None:
+        """Called right after sampling/learning processes are started."""
+        pass
+
+    def on_training_step(self, runner: Runner, training_iteration_since_resume: int) -> None:
+        """Called after each training step."""
+        pass
+
+    def extra_summaries(self, runner: Runner, policy_id: PolicyID, env_steps: int, writer: SummaryWriter) -> None:
+        pass
+
+    def on_stop(self, runner: Runner) -> None:
+        pass
+
+
 MsgHandler = Callable[["Runner", dict], None]
 PolicyMsgHandler = Callable[["Runner", dict, PolicyID], None]
-SummaryHandler = Callable[["Runner", PolicyID, int, SummaryWriter], None]
 
 
 class Runner(EventLoopObject, Configurable):
@@ -123,7 +147,7 @@ class Runner(EventLoopObject, Configurable):
             SAMPLES_COLLECTED: [self._samples_stats_handler],
         }
 
-        self.extra_summary_handlers: List[SummaryHandler] = []
+        self.observers: List[AlgoObserver] = []
 
         self.timers: List[Timer] = []
 
@@ -393,8 +417,7 @@ class Runner(EventLoopObject, Configurable):
                         writer.add_scalar(min_tag, float(min(stat[policy_id])), env_steps)
                         writer.add_scalar(max_tag, float(max(stat[policy_id])), env_steps)
 
-            for extra_summaries_func in self.extra_summary_handlers:
-                extra_summaries_func(self, policy_id, env_steps, writer)
+            self._observers_call(AlgoObserver.extra_summaries, self, policy_id, writer, env_steps)
 
         for w in self.writers.values():
             w.flush()
@@ -446,8 +469,12 @@ class Runner(EventLoopObject, Configurable):
     def register_episodic_stats_handler(self, func: PolicyMsgHandler):
         self.policy_msg_handlers[EPISODIC].append(func)
 
-    def register_summary_handler(self, func: SummaryHandler):
-        self.extra_summary_handlers.append(func)
+    def register_observer(self, observer: AlgoObserver) -> None:
+        self.observers.append(observer)
+
+    def _observers_call(self, func, *args, **kwargs) -> None:
+        for observer in self.observers:
+            getattr(observer, func)(*args, **kwargs)
 
     def _save_cfg(self):
         fname = cfg_file(self.cfg)
@@ -489,11 +516,14 @@ class Runner(EventLoopObject, Configurable):
 
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 
+        self._observers_call(AlgoObserver.on_init, self)
+
         return ExperimentStatus.SUCCESS
 
     def _on_start(self):
         """Override this in a subclass to do something right when the experiment is started."""
         self.sampler.init()
+        self._observers_call(AlgoObserver.on_start, self)
 
     def _setup_component_heartbeat(self, component: HeartbeatStoppableEventLoopObject):
         """
@@ -560,39 +590,39 @@ class Runner(EventLoopObject, Configurable):
         sampler = self.sampler
         for policy_id in range(self.cfg.num_policies):
             # when runner is ready we initialize the learner first and then all other components in a chain
-            learner = self.learners[policy_id]
+            learner_worker = self.learners[policy_id]
             batcher = self.batchers[policy_id]
-            self.event_loop.start.connect(learner.init)
-            learner.initialized.connect(batcher.init)
-            sampler.connect_model_initialized(policy_id, learner.model_initialized)
+            self.event_loop.start.connect(learner_worker.init)
+            learner_worker.initialized.connect(batcher.init)
+            sampler.connect_model_initialized(policy_id, learner_worker.model_initialized)
 
             # key connections - sampler and batcher exchanging connections back and forth
             sampler.connect_on_new_trajectories(policy_id, batcher.on_new_trajectories)
             sampler.connect_trajectory_buffers_available(batcher.trajectory_buffers_available)
 
             # batcher gives learner batches of trajectories ready for learning
-            batcher.training_batches_available.connect(learner.on_new_training_batch)
+            batcher.training_batches_available.connect(learner_worker.on_new_training_batch)
             # once learner is done with a training batch, it is given back to the batcher
-            learner.training_batch_released.connect(batcher.on_training_batch_released)
+            learner_worker.training_batch_released.connect(batcher.on_training_batch_released)
 
             # signals that allow us to throttle the sampler if the learner can't keep up
             sampler.connect_stop_experience_collection(batcher.stop_experience_collection)
             sampler.connect_resume_experience_collection(batcher.resume_experience_collection)
 
             # auxiliary connections, such as summary reporting and checkpointing
-            learner.finished_training_iteration.connect(self._after_training_iteration)
-            learner.report_msg.connect(self._process_msg)
+            learner_worker.finished_training_iteration.connect(self._after_training_iteration)
+            learner_worker.report_msg.connect(self._process_msg)
             sampler.connect_report_msg(self._process_msg)
-            self.save_periodic.connect(learner.save)
-            self.save_best.connect(learner.save_best)
+            self.save_periodic.connect(learner_worker.save)
+            self.save_best.connect(learner_worker.save_best)
 
             # stop components when needed
             self._setup_component_termination(self.stop, batcher)
-            self._setup_component_termination(batcher.stop, learner)
+            self._setup_component_termination(batcher.stop, learner_worker)
 
             # Heartbeats
             self._setup_component_heartbeat(batcher)
-            self._setup_component_heartbeat(learner)
+            self._setup_component_heartbeat(learner_worker)
 
         for sampler_component in sampler.stoppable_components():
             self._setup_component_termination(self.stop, sampler_component)
@@ -603,17 +633,24 @@ class Runner(EventLoopObject, Configurable):
         # final cleanup
         self.all_components_stopped.connect(self._on_everything_stopped)
 
+        # connect additional signal-slot pairs in the observers if needed
+        self._observers_call(AlgoObserver.on_connect_components, self)
+
     def _should_end_training(self):
         end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
         end |= self.total_train_seconds > self.cfg.train_for_seconds
         return end
 
-    def _after_training_iteration(self, _training_iteration_since_resume: int):
+    def _after_training_iteration(self, training_iteration_since_resume: int):
+        self._observers_call(AlgoObserver.on_training_step, self, training_iteration_since_resume)
+
         if self._should_end_training():
             self._stop_training()
 
     def _stop_training(self):
         if not self.stopped:
+            self._observers_call(AlgoObserver.on_stop, self)
+
             self._save_policy()
             self._save_best_policy()
 

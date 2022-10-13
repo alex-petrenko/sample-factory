@@ -42,7 +42,7 @@ class ActorState:
         traj_buffer_queue: MpQueue,
         traj_tensors: TensorDict,
         policy_output_tensors,
-        pbt_reward_shaping,
+        reward_shaping: List[Optional[Dict]],
         policy_mgr,
     ):
         self.cfg = cfg
@@ -94,9 +94,9 @@ class ActorState:
         # values are approximate because we get updates from the master process once every few seconds
         self.approx_env_steps = {}
 
-        self.pbt_reward_shaping = pbt_reward_shaping
+        self.reward_shaping: List[Optional[Dict]] = reward_shaping
 
-        self.env_training_info_interface = find_training_info_interface(env)  # TODO: batched sampler
+        self.env_training_info_interface = find_training_info_interface(env)  # TODO: do this in the batched sampler
 
     def _env_set_curr_policy(self):
         """
@@ -112,8 +112,8 @@ class ActorState:
         # policy change can only happen at the episode boundary so no need to reset rnn state (but I guess does not hurt)
         self.reset_rnn_state()
 
-        if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
-            set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
+        if self.reward_shaping[self.curr_policy_id] is not None:
+            set_reward_shaping(self.env, self.reward_shaping[self.curr_policy_id], self.agent_idx)
             set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
         self._env_set_curr_policy()
@@ -337,7 +337,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         split_idx,
         buffer_mgr,
         sampling_device: str,
-        pbt_reward_shaping,  # TODO pbt reward
+        reward_shaping: List[Optional[Dict]],
     ):
         """
         Ctor.
@@ -348,7 +348,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         :param split_idx: index of the environment group in double-buffered sampling (either 0 or 1). Always 0 when
         double-buffered sampling is disabled.
         the trajectory buffers in shared memory.
-        :param pbt_reward_shaping: initial reward shaping dictionary, for configuration where PBT optimizes
+        :param reward_shaping: initial reward shaping dictionary, for configuration where PBT optimizes
         reward coefficients in environments.
         """
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
@@ -366,7 +366,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
         self.need_trajectory_buffers = self.num_envs * self.num_agents
 
-        self.pbt_reward_shaping = pbt_reward_shaping
+        self.reward_shaping: List[Optional[Dict]] = reward_shaping
 
         self.policy_mgr = AgentPolicyMapping(self.cfg, self.env_info)
 
@@ -408,7 +408,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
                     self.traj_buffer_queue,
                     self.traj_tensors,
                     self.policy_output_tensors[env_i, agent_idx],
-                    self.pbt_reward_shaping,
+                    self.reward_shaping,
                     self.policy_mgr,
                 )
                 actor_states_env.append(actor_state)
