@@ -91,7 +91,6 @@ class ActorState:
         self.last_episode_duration = 0
 
         self.training_info: List[Optional[Dict]] = training_info
-
         self.env_training_info_interface = find_training_info_interface(env)
 
     def _env_set_curr_policy(self):

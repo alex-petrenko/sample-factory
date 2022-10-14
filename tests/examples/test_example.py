@@ -144,6 +144,7 @@ class TestExample:
         cfg.num_workers = 1
         cfg.worker_num_splits = 1
         cfg.train_for_env_steps = 250
+        cfg.custom_env_episode_len = 50
         cfg.batched_sampling = batched_sampling
         cfg.serial_mode = True
         cfg.async_rl = False

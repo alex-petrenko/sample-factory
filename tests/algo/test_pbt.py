@@ -6,7 +6,7 @@ class TestPBT:
         cfg, eval_cfg = default_multi_cfg()
         cfg.async_rl = True
         cfg.serial_mode = False
-        cfg.train_for_env_steps = 75000
+        cfg.train_for_env_steps = 50000
         cfg.num_workers = 8
         cfg.batch_size = 512
 
