@@ -12,9 +12,9 @@ with open("README.md", "r") as f:
     long_description = "\n".join(descr_no_gifs)
 
 
-_atari_deps = ["gym[atari, accept-rom-license]", "envpool"]
-_mujoco_deps = ["gym[mujoco]", "envpool"]
-
+_atari_deps = ["gym[atari, accept-rom-license]"]
+_mujoco_deps = ["gym[mujoco]"]
+_envpool_deps = ["envpool"]
 
 setup(
     # Information
@@ -51,7 +51,12 @@ setup(
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that
         "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"] + _atari_deps + _mujoco_deps,
+        "dev_envpool": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine", "envpool"]
+        + _envpool_deps
+        + _atari_deps
+        + _mujoco_deps,
         "atari": _atari_deps,
+        "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
