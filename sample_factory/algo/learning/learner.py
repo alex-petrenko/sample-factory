@@ -1004,7 +1004,10 @@ class Learner(Configurable):
             buff, experience_size, num_invalids = self._prepare_batch(batch)
 
         if num_invalids >= experience_size:
-            log.error(f"Learner {self.policy_id=} received an entire batch of invalid data, skipping...")
+            if self.cfg.with_pbt:
+                log.warning("No valid samples in the batch, with PBT this must mean we just replaced weights")
+            else:
+                log.error(f"Learner {self.policy_id=} received an entire batch of invalid data, skipping...")
             return None
         else:
             with self.timing.add_time("train"):

@@ -6,7 +6,7 @@ import shutil
 import time
 from collections import OrderedDict, deque
 from os.path import isdir, join
-from typing import Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
@@ -87,6 +87,9 @@ class Runner(EventLoopObject, Configurable):
         self.stopped = False
 
         self.env_info: Optional[EnvInfo] = None
+
+        self.reward_shaping: List[Optional[Dict]] = [None for _ in range(self.cfg.num_policies)]
+
         self.buffer_mgr = None
 
         self.learners: Dict[PolicyID, LearnerWorker] = dict()
@@ -113,6 +116,7 @@ class Runner(EventLoopObject, Configurable):
         self.avg_stats_intervals = (2, 12, 60)  # by default: 10 seconds, 60 seconds, 5 minutes
         self.summaries_interval_sec = self.cfg.experiment_summaries_interval  # sec
         self.heartbeat_report_sec = self.cfg.heartbeat_reporting_interval
+        self.update_training_info_every_sec = 5.0
 
         self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
         self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
@@ -162,7 +166,7 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.cfg.save_every_sec, self._save_policy)
         periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
-        periodic(5, self._propagate_training_info)
+        periodic(self.update_training_info_every_sec, self._propagate_training_info)
 
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
 
@@ -178,6 +182,10 @@ class Runner(EventLoopObject, Configurable):
 
     @signal
     def save_best(self):
+        ...
+
+    @signal
+    def update_training_info(self):
         ...
 
     @signal
@@ -425,15 +433,30 @@ class Runner(EventLoopObject, Configurable):
     def _propagate_training_info(self):
         """
         Send the training stats (such as the number of processed env steps) to the sampler.
-        This can be used later by the envs to configure curriculums and so on.
+        This can be used by the envs to configure curriculums and so on.
         """
-        # TODO: send this to rollout workers
-        # self.sampler.update_training_info(self.env_steps, self.stats, self.avg_stats, self.policy_avg_stats)
 
-        # TODO!
-        # for w in self.actor_workers:
-        #     w.update_env_steps(self.env_steps)
-        pass
+        training_info: Dict[PolicyID, Dict[str, Any]] = dict()
+        for policy_id in range(self.cfg.num_policies):
+            training_info[policy_id] = dict(
+                policy_id=policy_id,
+                # "approx" here because it will lag behind a little bit due to the async nature of the system
+                approx_total_training_steps=self.env_steps.get(policy_id, 0),
+                reward_shaping=self.reward_shaping[policy_id],
+                # add more stats if needed (commented by default for efficiency)
+                # stats=self.stats,
+                # avg_stats=self.avg_stats,
+                # policy_avg_stats=self.policy_avg_stats,
+            )
+
+        self.update_training_info.emit(training_info)
+
+    def update_reward_shaping(self, policy_id: PolicyID, reward_shaping: Dict[str, Any]) -> None:
+        self.reward_shaping[policy_id] = reward_shaping
+
+        # send the updated data to other components (e.g. the sampler)
+        # this allows us to change reward shaping on the fly, PBT can take advantage of this
+        self._propagate_training_info()
 
     def _save_policy(self):
         self.save_periodic.emit()
@@ -474,7 +497,7 @@ class Runner(EventLoopObject, Configurable):
 
     def _observers_call(self, func, *args, **kwargs) -> None:
         for observer in self.observers:
-            getattr(observer, func)(*args, **kwargs)
+            getattr(observer, func.__name__)(*args, **kwargs)
 
     def _save_cfg(self):
         fname = cfg_file(self.cfg)
@@ -504,6 +527,9 @@ class Runner(EventLoopObject, Configurable):
         set_global_cuda_envvars(self.cfg)
         self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
 
+        for policy_id in range(self.cfg.num_policies):
+            self.reward_shaping[policy_id] = self.env_info.reward_shaping_scheme
+
         # check for any incompatible arguments
         if not verify_cfg(self.cfg, self.env_info):
             return ExperimentStatus.FAILURE
@@ -523,6 +549,7 @@ class Runner(EventLoopObject, Configurable):
     def _on_start(self):
         """Override this in a subclass to do something right when the experiment is started."""
         self.sampler.init()
+        self._propagate_training_info()
         self._observers_call(AlgoObserver.on_start, self)
 
     def _setup_component_heartbeat(self, component: HeartbeatStoppableEventLoopObject):
@@ -613,6 +640,7 @@ class Runner(EventLoopObject, Configurable):
             learner_worker.finished_training_iteration.connect(self._after_training_iteration)
             learner_worker.report_msg.connect(self._process_msg)
             sampler.connect_report_msg(self._process_msg)
+            sampler.connect_update_training_info(self.update_training_info)
             self.save_periodic.connect(learner_worker.save)
             self.save_best.connect(learner_worker.save_best)
 
@@ -649,6 +677,8 @@ class Runner(EventLoopObject, Configurable):
 
     def _stop_training(self):
         if not self.stopped:
+            self._propagate_training_info()
+
             self._observers_call(AlgoObserver.on_stop, self)
 
             self._save_policy()

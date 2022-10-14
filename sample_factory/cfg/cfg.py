@@ -742,7 +742,7 @@ def add_pbt_args(p: ArgumentParser):
     )
     p.add_argument(
         "--pbt_perturb_min",
-        default=1.05,
+        default=1.1,
         type=float,
         help="When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max]",
     )

@@ -1,4 +1,4 @@
-"""This is currently not supported, need to adapt for """
+"""Population-Based Training implementation, inspired by https://arxiv.org/abs/1807.01281."""
 
 
 import copy
@@ -11,7 +11,7 @@ from os.path import join
 from typing import Dict, Optional, SupportsFloat
 
 import numpy as np
-from signal_slot.signal_slot import EventLoopObject, signal
+from signal_slot.signal_slot import EventLoopObject
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.runners.runner import AlgoObserver, Runner
@@ -112,6 +112,8 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
         self.cfg: Config = cfg
         self.env_info: Optional[EnvInfo] = None
 
+        self.runner: Runner = runner
+
         # currently not supported, would require changes on the batcher
         # if cfg.pbt_optimize_batch_size:
         #     HYPERPARAMS_TO_TUNE.add("batch_size")
@@ -135,10 +137,6 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
 
         # Set to non-None when policy x has to be replaced by replacement_policy[x]
         self.replacement_policy: Dict[PolicyID, Optional[PolicyID]] = {p: None for p in range(self.cfg.num_policies)}
-
-    @signal
-    def update_reward_shaping(self):
-        ...
 
     def on_init(self, runner: Runner) -> None:
         self.env_info = runner.env_info
@@ -191,13 +189,11 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
             self.connect(load_model_signal(policy_id), learner_worker.load)
             learner_worker.saved_model.connect(self.on_saved_model)
 
-        runner.sampler.connect_on_update_reward_shaping(self.update_reward_shaping)
-
     def on_start(self, runner: Runner) -> None:
         # send initial configuration to the system components
         for policy_id in range(self.cfg.num_policies):
             self._learner_update_cfg(policy_id)
-            self._actors_update_shaping_scheme(policy_id)
+            runner.update_reward_shaping(policy_id, self.policy_reward_shaping[policy_id])
 
     def _save_cfg(self, policy_id):
         policy_cfg_filename = policy_cfg_file(self.cfg, policy_id)
@@ -278,10 +274,6 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
     def _learner_update_cfg(self, policy_id: PolicyID) -> None:
         log.debug(f"Sending learning configuration to learner {policy_id}...")
         self.emit(update_cfg_signal(policy_id), self.policy_cfg[policy_id])
-
-    def _actors_update_shaping_scheme(self, policy_id):
-        log.debug(f"Sending latest reward scheme to actors for policy {policy_id}")
-        self.update_reward_shaping.emit(policy_id, self.policy_reward_shaping[policy_id])
 
     @staticmethod
     def _write_dict_summaries(dictionary, writer, name, env_steps):
@@ -392,7 +384,8 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
             self._save_cfg(policy_id)
             self._save_reward_shaping(policy_id)
             self._learner_update_cfg(policy_id)
-            self._actors_update_shaping_scheme(policy_id)
+
+            self.runner.update_reward_shaping(policy_id, self.policy_reward_shaping[policy_id])
 
     def on_training_step(self, runner: Runner, training_iteration_since_resume: int) -> None:
         if not self.cfg.with_pbt or self.cfg.num_policies <= 1:

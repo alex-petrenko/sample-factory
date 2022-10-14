@@ -5,7 +5,7 @@ import os
 import pickle
 from dataclasses import dataclass
 from os.path import join
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import gym
 
@@ -28,7 +28,7 @@ class EnvInfo:
     frameskip: int
     # potentially customizable reward shaping, a map of reward component names to their respective weights
     # this can be used by PBT to optimize the reward shaping towards a sparse final objective
-    reward_shaping_scheme: Dict[str, float]
+    reward_shaping_scheme: Optional[Dict[str, float]] = None
 
 
 def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvInfo:

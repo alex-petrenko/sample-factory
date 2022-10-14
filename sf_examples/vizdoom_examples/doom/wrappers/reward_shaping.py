@@ -116,9 +116,6 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
     def get_default_reward_shaping(self):
         return self.reward_shaping_scheme
 
-    def get_current_reward_shaping(self, agent_idx: int):
-        return self.reward_shaping_scheme
-
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
         self.reward_shaping_scheme = reward_shaping
 

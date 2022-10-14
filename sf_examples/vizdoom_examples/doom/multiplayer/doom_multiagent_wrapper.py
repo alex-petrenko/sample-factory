@@ -215,9 +215,6 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
     def get_default_reward_shaping(self):
         return self.default_reward_shaping
 
-    def get_current_reward_shaping(self, agent_idx: int):
-        return self.current_reward_shaping[agent_idx]
-
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
         self.current_reward_shaping[agent_idx] = reward_shaping
         self.set_env_attr(

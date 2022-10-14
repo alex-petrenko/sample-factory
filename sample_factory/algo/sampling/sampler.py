@@ -64,7 +64,7 @@ class AbstractSampler(EventLoopObject, Configurable):
     def connect_report_msg(self, report_msg_handler: Callable) -> None:
         raise NotImplementedError()
 
-    def connect_on_update_reward_shaping(self, on_update_reward_shaping: signal) -> None:
+    def connect_update_training_info(self, update_training_info_signal: signal) -> None:
         raise NotImplementedError()
 
     def stoppable_components(self) -> List[HeartbeatStoppableEventLoopObject]:
@@ -175,8 +175,8 @@ class Sampler(AbstractSampler, ABC):
         self._for_each_inference_worker(lambda w: w.report_msg.connect(report_msg_handler))
         self._for_each_rollout_worker(lambda w: w.report_msg.connect(report_msg_handler))
 
-    def connect_on_update_reward_shaping(self, on_update_reward_shaping: signal) -> None:
-        self._for_each_rollout_worker(lambda w: on_update_reward_shaping.connect(w.on_update_reward_shaping))
+    def connect_update_training_info(self, update_training_info: signal) -> None:
+        self._for_each_rollout_worker(lambda w: update_training_info.connect(w.on_update_training_info))
 
     def _inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
         assert not self.inference_workers[policy_id][worker_idx].is_ready
