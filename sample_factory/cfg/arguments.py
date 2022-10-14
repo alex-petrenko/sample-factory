@@ -16,8 +16,9 @@ from sample_factory.cfg.cfg import (
     add_rl_args,
     add_wandb_args,
 )
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import AttrDict, cfg_file, get_git_commit_hash, log
+from sample_factory.utils.utils import cfg_file, get_git_commit_hash, log
 
 
 def parse_sf_args(

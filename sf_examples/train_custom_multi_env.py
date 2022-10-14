@@ -12,11 +12,11 @@ import sys
 import gym
 import numpy as np
 
+from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.model_utils import register_custom_encoder
 from sample_factory.train import run_rl
-from sf_examples.train_custom_env_custom_model import CustomEncoder, override_default_params
+from sf_examples.train_custom_env_custom_model import make_custom_encoder, override_default_params
 
 
 class CustomMultiEnv(gym.Env):
@@ -54,7 +54,7 @@ class CustomMultiEnv(gym.Env):
         self.curr_episode_steps = 0
         # log.debug(f"Episode reward: {self.episode_rewards} sum_0: {sum(self.episode_rewards[0])} sum_1: {sum(self.episode_rewards[1])}")
         self.episode_rewards = [[] for _ in range(self.num_agents)]
-        return self._obs()
+        return self._obs(), [dict() for _ in range(self.num_agents)]
 
     def step(self, actions):
         infos = [dict() for _ in range(self.num_agents)]
@@ -88,16 +88,15 @@ class CustomMultiEnv(gym.Env):
         for agent_idx in range(self.num_agents):
             infos[agent_idx]["time_outs"] = time_out
 
-        done = time_out
-        dones = [done] * self.num_agents
+        terminated = truncated = [time_out] * self.num_agents
 
-        if done:
+        if time_out:
             # multi-agent environments should auto-reset!
-            obs = self.reset()
+            obs, infos = self.reset()
         else:
             obs = self._obs()
 
-        return obs, rewards, dones, infos
+        return obs, rewards, terminated, truncated, infos
 
     def render(self, mode="human"):
         pass
@@ -117,7 +116,7 @@ def add_extra_params_func(parser):
 
 def register_custom_components():
     register_env("my_custom_multi_env_v1", make_custom_multi_env_func)
-    register_custom_encoder("custom_env_encoder", CustomEncoder)
+    global_model_factory().register_encoder_factory(make_custom_encoder)
 
 
 def parse_custom_args(argv=None, evaluation=False):

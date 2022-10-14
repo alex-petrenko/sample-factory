@@ -23,12 +23,13 @@ from sample_factory.algo.utils.shared_buffers import policy_device
 from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
 from sample_factory.algo.utils.torch_utils import masked_select, synchronize, to_scalar
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.model.model import create_actor_critic
+from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID
-from sample_factory.utils.utils import AttrDict, ensure_dir_exists, experiment_dir, log
+from sample_factory.utils.utils import ensure_dir_exists, experiment_dir, log
 
 
 class LearningRateScheduler:
@@ -139,7 +140,7 @@ class Learner(Configurable):
         self.env_info = env_info
 
         self.device = None
-        self.actor_critic = None
+        self.actor_critic: Optional[ActorCritic] = None
 
         self.optimizer = None
 
@@ -204,9 +205,9 @@ class Learner(Configurable):
         log.debug("Initializing actor-critic model on device %s", self.device)
 
         # trainable torch module
-        self.actor_critic = create_actor_critic(
-            self.cfg, self.env_info.obs_space, self.env_info.action_space, self.timing
-        )
+        self.actor_critic = create_actor_critic(self.cfg, self.env_info.obs_space, self.env_info.action_space)
+        log.debug("Created Actor Critic model with architecture:")
+        log.debug(self.actor_critic)
         self.actor_critic.model_to_device(self.device)
 
         def share_mem(t):
@@ -351,15 +352,16 @@ class Learner(Configurable):
     def save(self):
         self._save_impl("checkpoint", "", self.cfg.keep_checkpoints)
 
-        # TODO: move milestone logic to the runner?
-        # if self.cfg.save_milestones_sec > 0:
-        #     # milestones enabled
-        #     if time.time() - self.last_milestone_time >= self.cfg.save_milestones_sec:
-        #         milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
-        #         milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
-        #         log.debug('Saving a milestone %s', milestone_path)
-        #         shutil.copy(filepath, milestone_path)
-        #         self.last_milestone_time = time.time()
+    def save_milestone(self):
+        checkpoint = self._get_checkpoint_dict()
+        assert checkpoint is not None
+        checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
+        checkpoint_name = f"checkpoint_{self.train_step:09d}_{self.env_steps}.pth"
+
+        milestones_dir = ensure_dir_exists(join(checkpoint_dir, "milestones"))
+        milestone_path = join(milestones_dir, f"{checkpoint_name}")
+        log.info("Saving a milestone %s", milestone_path)
+        torch.save(checkpoint, milestone_path)
 
     def save_best(self, policy_id, metric, metric_value):
         # TODO it seems that the Runner is broadcasting the signals to all learners, so it won't pass the assertion in multi-policy env, we may add an if instead of assert?
@@ -525,7 +527,7 @@ class Learner(Configurable):
             assert core_outputs.shape[0] == head_outputs.shape[0]
 
             # calculate policy tail outside of recurrent loop
-            result = self.actor_critic.forward_tail(core_outputs, sample_actions=False)
+            result = self.actor_critic.forward_tail(core_outputs, values_only=False, sample_actions=False)
             action_distribution = self.actor_critic.action_distribution()
             log_prob_actions = action_distribution.log_prob(mb.actions)
             ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old

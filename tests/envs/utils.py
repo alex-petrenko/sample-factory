@@ -1,8 +1,9 @@
 import time
 
 from sample_factory.envs.env_utils import num_env_steps
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import log
 
 
 def eval_env_performance(make_env, env_type, verbose=False, eval_frames=10_000):
@@ -32,7 +33,8 @@ def eval_env_performance(make_env, env_type, verbose=False, eval_frames=10_000):
                     env.render()
                     time.sleep(1.0 / 40)
 
-                obs, rew, done, info = env.step(env.action_space.sample())
+                obs, rew, terminated, truncated, info = env.step(env.action_space.sample())
+                done = terminated | truncated
                 if verbose:
                     log.info("Received reward %.3f", rew)
 

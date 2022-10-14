@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Protocol, Sequence, Tuple, Union, runtime_checkable
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import gym
 import numpy as np
@@ -15,34 +15,13 @@ Actions = Any
 ListActions = Sequence[Actions]
 TensorActions = Tensor
 
+SeqBools = Sequence[bool]
+
 DictObservations = Dict[str, Any]
 DictOfListsObservations = Dict[str, Sequence[Any]]
 DictOfTensorObservations = Dict[str, Tensor]
 ListObservations = Sequence[Any]
 ListOfDictObservations = Sequence[DictObservations]
-
-
-@runtime_checkable
-class EnvMultiAgentInfo(Protocol):
-    """
-    Protocol that requires any implementing class to have the following attributes:
-    - is_multiagent: bool
-    - num_agents: int
-
-    An environment can be:
-    1) single-agent, then is_multiagent = False and num_agents = 1
-    2) multi-agent with N agents, then is_multiagent = True and num_agents = N
-    3) multi-agent with 1 agent, then is_multiagent = True and num_agents = 1
-
-    In order to add the necessary wrappers we need to distinguish between these 3 cases, i.e. for case 1 we need to
-    vectorize observations/rewards/etc., and for cases 2 and 3 we assume it is already done.
-
-    This protocol is runtime checkable, which means that we can do things like:
-    isinstance(env, EnvMultiAgentInfo)
-    """
-
-    is_multiagent: bool
-    num_agents: int
 
 
 def get_multiagent_info(env: Any) -> Tuple[bool, int]:
@@ -70,12 +49,12 @@ class BatchedDictObservationsWrapper(_DictObservationsWrapper[DictObservations, 
     """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
 
     def reset(self, **kwargs):
-        obs = self.env.reset(**kwargs)
-        return dict(obs=obs)
+        obs, info = self.env.reset(**kwargs)
+        return dict(obs=obs), info
 
     def step(self, action):
-        obs, rew, done, info = self.env.step(action)
-        return dict(obs=obs), rew, done, info
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        return dict(obs=obs), rew, terminated, truncated, info
 
 
 class BatchedMultiAgentWrapper(Wrapper[DictOfListsObservations, Actions]):
@@ -94,16 +73,16 @@ class BatchedMultiAgentWrapper(Wrapper[DictOfListsObservations, Actions]):
             self.obs_dict[key] = [value]
         return self.obs_dict
 
-    def reset(self, **kwargs) -> DictOfListsObservations:
-        obs = self.env.reset(**kwargs)
-        return self._obs(obs)
+    def reset(self, **kwargs) -> Tuple[DictOfListsObservations, Sequence[Dict]]:
+        obs, info = self.env.reset(**kwargs)
+        return self._obs(obs), [info]
 
-    def step(self, action) -> Tuple[DictOfListsObservations, Sequence, Sequence[bool], Sequence[Dict]]:
+    def step(self, action) -> Tuple[DictOfListsObservations, Sequence, SeqBools, SeqBools, Sequence[Dict]]:
         action = action[0]
-        obs, rew, done, info = self.env.step(action)
-        if done:
-            obs = self.env.reset()
-        return self._obs(obs), [rew], [done], [info]
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        if terminated | truncated:
+            obs, info = self.env.reset()
+        return self._obs(obs), [rew], [terminated], [truncated], [info]
 
 
 class NonBatchedMultiAgentWrapper(Wrapper[ListObservations, ListActions]):
@@ -119,27 +98,27 @@ class NonBatchedMultiAgentWrapper(Wrapper[ListObservations, ListActions]):
         self.is_multiagent: bool = True
 
     def reset(self, **kwargs) -> ListObservations:
-        obs = self.env.reset(**kwargs)
-        return [obs]
+        obs, info = self.env.reset(**kwargs)
+        return [obs], [info]
 
-    def step(self, action: ListActions) -> Tuple[ListObservations, Sequence[Any], Sequence[bool], Sequence[Dict]]:
+    def step(self, action: ListActions) -> Tuple[ListObservations, Sequence, SeqBools, SeqBools, Sequence[Dict]]:
         action = action[0]
-        obs, rew, done, info = self.env.step(action)
-        if done:
-            obs = self.env.reset()
-        return [obs], [rew], [done], [info]
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        if terminated or truncated:  # auto-resetting
+            obs, info = self.env.reset()
+        return [obs], [rew], [terminated], [truncated], [info]
 
 
 class NonBatchedDictObservationsWrapper(_DictObservationsWrapper[ListOfDictObservations, ListActions]):
     """Guarantees that the environment returns observations as lists of dictionaries."""
 
     def reset(self, **kwargs) -> ListOfDictObservations:
-        obs = self.env.reset(**kwargs)
-        return [dict(obs=o) for o in obs]
+        obs, info = self.env.reset(**kwargs)
+        return [dict(obs=o) for o in obs], info
 
-    def step(self, action: ListActions) -> Tuple[ListOfDictObservations, Any, Any, Any]:
-        obs, rew, done, info = self.env.step(action)
-        return [dict(obs=o) for o in obs], rew, done, info
+    def step(self, action: ListActions) -> Tuple[ListOfDictObservations, Any, Any, Any, Any]:
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        return [dict(obs=o) for o in obs], rew, terminated, truncated, info
 
 
 class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
@@ -157,7 +136,10 @@ class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
         self.num_agents: int = num_agents
 
         self._convert_obs_func: Dict[str, BatchedVecEnv.ConvertFunc] = dict()
-        self._convert_rew_func = self._convert_dones_func = None
+        self._convert_rew_func = self._convert_terminated_func = self._convert_truncated_func = None
+
+        self._seed: Optional[int] = None
+        self._seeded: bool = False
 
         super().__init__(env)
 
@@ -188,18 +170,30 @@ class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
         else:
             raise RuntimeError(f"Cannot convert data type {type(x)} to torch.Tensor")
 
-    def reset(self, **kwargs) -> DictOfTensorObservations:
-        obs = self.env.reset(**kwargs)
+    def seed(self, seed: Optional[int] = None):
+        """
+        Since Gym 0.26 seeding is done in reset().
+        Sample Factory uses its own wrappers around gym.Env so we just keep this function and forward the seed to
+        the first reset() if needed.
+        """
+        self._seed = seed
+
+    def reset(self, **kwargs) -> Tuple[DictOfTensorObservations, Dict]:
+        if not self._seeded and self._seed is not None:
+            kwargs["seed"] = self._seed
+            self._seeded = True
+
+        obs, info = self.env.reset(**kwargs)
         assert isinstance(obs, dict)
 
         for key, value in obs.items():
             if key not in self._convert_obs_func:
                 self._convert_obs_func[key] = self._get_convert_func(value)
 
-        return self._convert(obs)
+        return self._convert(obs), info
 
-    def step(self, action: TensorActions) -> Tuple[DictOfTensorObservations, Tensor, Tensor, Dict]:
-        obs, rew, dones, infos = self.env.step(action)
+    def step(self, action: TensorActions) -> Tuple[DictOfTensorObservations, Tensor, Tensor, Tensor, Dict]:
+        obs, rew, terminated, truncated, infos = self.env.step(action)
         obs = self._convert(obs)
 
         if not self._convert_rew_func:
@@ -207,11 +201,14 @@ class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
             # noinspection PyTypeChecker
             self._convert_rew_func = self._get_convert_func(rew)
             # noinspection PyTypeChecker
-            self._convert_dones_func = self._get_convert_func(dones)
+            self._convert_terminated_func = self._get_convert_func(terminated)
+            # noinspection PyTypeChecker
+            self._convert_truncated_func = self._get_convert_func(truncated)
 
         rew = self._convert_rew_func(rew)
-        dones = self._convert_dones_func(dones)
-        return obs, rew, dones, infos
+        terminated = self._convert_terminated_func(terminated)
+        truncated = self._convert_truncated_func(truncated)
+        return obs, rew, terminated, truncated, infos
 
 
 class SequentialVectorizeWrapper(Wrapper):
@@ -227,15 +224,18 @@ class SequentialVectorizeWrapper(Wrapper):
         self.envs = envs
         self.num_agents = self.single_env_agents * len(envs)
 
-        self.obs = self.rew = self.dones = self.infos = None
+        self.obs = self.rew = self.terminated = self.truncated = self.infos = None
 
-    def reset(self, **kwargs):
+    def reset(self, **kwargs) -> Tuple[Dict, List[Dict]]:
+        infos = []
         self.obs = dict()
         for e in self.envs:
-            dict_of_lists_append(self.obs, e.reset(**kwargs))
+            obs, info = e.reset(**kwargs)
+            dict_of_lists_append(self.obs, obs)
+            infos.extend(info)
 
         dict_of_lists_cat(self.obs)
-        return self.obs
+        return self.obs, infos
 
     def step(self, actions: Tensor):
         infos = []
@@ -244,7 +244,7 @@ class SequentialVectorizeWrapper(Wrapper):
         for i, e in enumerate(self.envs):
             idx = slice(ofs, next_ofs)
             env_actions = actions[idx]
-            obs, rew, dones, info = e.step(env_actions)
+            obs, rew, terminated, truncated, info = e.step(env_actions)
 
             # TODO: test if this works for multi-agent envs
             for key, x in obs.items():
@@ -252,17 +252,19 @@ class SequentialVectorizeWrapper(Wrapper):
 
             if self.rew is None:
                 self.rew = rew.repeat(len(self.envs))
-                self.dones = dones.repeat(len(self.envs))
+                self.terminated = terminated.repeat(len(self.envs))
+                self.truncated = truncated.repeat(len(self.envs))
 
             self.rew[idx] = rew
-            self.dones[idx] = dones
+            self.terminated[idx] = terminated
+            self.truncated[idx] = truncated
 
             infos.extend(info)
 
             ofs += self.single_env_agents
             next_ofs += self.single_env_agents
 
-        return self.obs, self.rew, self.dones, infos
+        return self.obs, self.rew, self.terminated, self.truncated, infos
 
     def close(self):
         for e in self.envs:
@@ -277,8 +279,7 @@ def make_env_func_batched(cfg, env_config) -> BatchedVecEnv:
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
 
     # At this point we can be sure that our environment outputs a dictionary of lists (or numpy arrays or tensors)
-    # containing obs, rewards, etc. for each agent in the environment. If it wasn't true to begin with, we guaranteed
-    # that by adding wrappers above.
+    # containing obs, rewards, etc. for each agent in the environment.
     # Now we just want the environment to return a tensor dict for observations and tensors for rewards and dones.
     # We leave infos intact for now, because format of infos isn't really specified and can be inconsistent between
     # timesteps.
@@ -306,11 +307,11 @@ class NonBatchedVecEnv(Wrapper[ListObservations, ListActions]):
 
 def make_env_func_non_batched(cfg, env_config) -> NonBatchedVecEnv:
     """
-    This should yield an environment that always returns a list of everything (list of dict observations, rewards,
-    dones, etc.)
+    This should yield an environment that always returns a list of {observations, rewards,
+    dones, etc.}
     This is for the non-batched sampler which processes each agent's data independently without any vectorization
-    attempts (and therefore enables more sophisticated configurations where agents in the same env can be controlled
-    by different policies).
+    (and therefore enables more sophisticated configurations where agents in the same env can be controlled
+    by different policies and so on).
     """
     env = create_env(cfg.env, cfg=cfg, env_config=env_config)
     env = NonBatchedVecEnv(env)

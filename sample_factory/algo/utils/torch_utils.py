@@ -5,8 +5,8 @@ from typing import Optional
 import numpy as np
 import torch
 
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import AttrDict
 
 
 def init_torch_runtime(cfg: AttrDict, max_num_threads: Optional[int] = 1):

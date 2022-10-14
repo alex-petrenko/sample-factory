@@ -80,12 +80,13 @@ class ResizeWrapper(gym.core.Wrapper):
         else:
             return self._convert_obs(obs)
 
-    def reset(self):
-        return self._observation(self.env.reset())
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        return self._observation(obs), info
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        return self._observation(obs), reward, done, info
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        return self._observation(obs), reward, terminated, truncated, info
 
 
 class RewardScalingWrapper(RewardWrapper):
@@ -99,8 +100,6 @@ class RewardScalingWrapper(RewardWrapper):
 
 
 class TimeLimitWrapper(gym.core.Wrapper):
-    terminated_by_timer = "TimeLimit.truncated"  # this is to match the default key used by Gym
-
     def __init__(self, env, limit, random_variation_steps=0):
         super(TimeLimitWrapper, self).__init__(env)
         self._limit = limit
@@ -111,25 +110,23 @@ class TimeLimitWrapper(gym.core.Wrapper):
     def _random_limit(self):
         return np.random.randint(-self._variation_steps, self._variation_steps + 1) + self._limit
 
-    def reset(self):
+    def reset(self, **kwargs):
         self._num_steps = 0
         self._terminate_in = self._random_limit()
-        return self.env.reset()
+        return self.env.reset(**kwargs)
 
     def step(self, action):
-        observation, reward, done, info = self.env.step(action)
+        observation, reward, terminated, truncated, info = self.env.step(action)
         if observation is None:
-            return observation, reward, done, info
+            return observation, reward, terminated, truncated, info
 
         self._num_steps += num_env_steps([info])
-        if done:
+        if terminated or truncated:
             pass
-        else:
-            if self._num_steps >= self._terminate_in:
-                done = True
-                info[self.terminated_by_timer] = True
+        elif self._num_steps >= self._terminate_in:
+            truncated = True
 
-        return observation, reward, done, info
+        return observation, reward, terminated, truncated, info
 
 
 class PixelFormatChwWrapper(ObservationWrapper):
@@ -212,7 +209,7 @@ class RecordingWrapper(gym.core.Wrapper):
         # Experimental! Recording Doom replay. Does not work in all scenarios, e.g. when there are in-game bots.
         self.unwrapped.record_to = record_to
 
-    def reset(self):
+    def reset(self, **kwargs):
         if self._episode_recording_dir is not None and self._record_id > 0:
             # save actions to text file
             with open(join(self._episode_recording_dir, "actions.json"), "w") as actions_file:
@@ -240,7 +237,7 @@ class RecordingWrapper(gym.core.Wrapper):
 
         self._recorded_actions = []
 
-        return self.env.reset()
+        return self.env.reset(**kwargs)
 
     def _record(self, img):
         frame_name = f"{self._frame_id:05d}.png"
@@ -249,7 +246,7 @@ class RecordingWrapper(gym.core.Wrapper):
         self._frame_id += 1
 
     def step(self, action):
-        observation, reward, done, info = self.env.step(action)
+        observation, reward, terminated, truncated, info = self.env.step(action)
 
         if isinstance(action, np.ndarray):
             self._recorded_actions.append(action.tolist())
@@ -264,11 +261,11 @@ class RecordingWrapper(gym.core.Wrapper):
             # noinspection PyProtectedMember
             self._recorded_episode_shaping_reward = self.env.unwrapped._total_shaping_reward
 
-        return observation, reward, done, info
+        return observation, reward, terminated, truncated, info
 
 
 GymObs = Union[Tuple, Dict[str, Any], np.ndarray, int]
-GymStepReturn = Tuple[GymObs, float, bool, Dict]
+GymStepReturn = Tuple[GymObs, float, bool, bool, Dict]
 
 
 # wrapper from CleanRL / Stable Baselines
@@ -287,7 +284,7 @@ class NoopResetEnv(gym.Wrapper):
         self.noop_action = 0
         assert env.unwrapped.get_action_meanings()[0] == "NOOP"
 
-    def reset(self, **kwargs) -> np.ndarray:
+    def reset(self, **kwargs) -> Tuple[np.ndarray, Dict]:
         self.env.reset(**kwargs)
         if self.override_num_noops is not None:
             noops = self.override_num_noops
@@ -295,11 +292,12 @@ class NoopResetEnv(gym.Wrapper):
             noops = self.unwrapped.np_random.integers(1, self.noop_max + 1)
         assert noops > 0
         obs = np.zeros(0)
+        info = {}
         for _ in range(noops):
-            obs, _, done, _ = self.env.step(self.noop_action)
-            if done:
-                obs = self.env.reset(**kwargs)
-        return obs
+            obs, rew, terminated, truncated, info = self.env.step(self.noop_action)
+            if terminated | truncated:
+                obs, info = self.env.reset(**kwargs)
+        return obs, info
 
 
 # wrapper from CleanRL / Stable Baselines
@@ -314,15 +312,15 @@ class FireResetEnv(gym.Wrapper):
         assert env.unwrapped.get_action_meanings()[1] == "FIRE"
         assert len(env.unwrapped.get_action_meanings()) >= 3
 
-    def reset(self, **kwargs) -> np.ndarray:
+    def reset(self, **kwargs) -> Tuple[np.ndarray, Dict]:
         self.env.reset(**kwargs)
-        obs, _, done, _ = self.env.step(1)
-        if done:
+        obs, _, terminated, truncated, info = self.env.step(1)
+        if terminated | truncated:
             self.env.reset(**kwargs)
-        obs, _, done, _ = self.env.step(2)
-        if done:
-            self.env.reset(**kwargs)
-        return obs
+        obs, _, terminated, truncated, info = self.env.step(2)
+        if terminated | truncated:
+            obs, info = self.env.reset(**kwargs)
+        return obs, info
 
 
 # wrapper from CleanRL / Stable Baselines
@@ -339,8 +337,8 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.was_real_done = True
 
     def step(self, action: int) -> GymStepReturn:
-        obs, reward, done, info = self.env.step(action)
-        self.was_real_done = done
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self.was_real_done = terminated | truncated
         # check current lives, make loss of life terminal,
         # then update lives to handle bonus lives
         lives = self.env.unwrapped.ale.lives()
@@ -348,11 +346,11 @@ class EpisodicLifeEnv(gym.Wrapper):
             # for Qbert sometimes we stay in lives == 0 condtion for a few frames
             # so its important to keep lives > 0, so that we only reset once
             # the environment advertises done.
-            done = True
+            terminated = True
         self.lives = lives
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info
 
-    def reset(self, **kwargs) -> np.ndarray:
+    def reset(self, **kwargs) -> Tuple[np.ndarray, Dict]:
         """
         Calls the Gym environment reset, only when lives are exhausted.
         This way all states are still reachable even though lives are episodic,
@@ -361,12 +359,12 @@ class EpisodicLifeEnv(gym.Wrapper):
         :return: the first observation of the environment
         """
         if self.was_real_done:
-            obs = self.env.reset(**kwargs)
+            obs, info = self.env.reset(**kwargs)
         else:
             # no-op step to advance from terminal/lost life state
-            obs, _, _, _ = self.env.step(0)
+            obs, _, terminated, truncated, info = self.env.step(0)
         self.lives = self.env.unwrapped.ale.lives()
-        return obs
+        return obs, info
 
 
 # wrapper from CleanRL / Stable Baselines
@@ -388,26 +386,26 @@ class MaxAndSkipEnv(gym.Wrapper):
         Step the environment with the given action
         Repeat action, sum reward, and max over last observations.
         :param action: the action
-        :return: observation, reward, done, information
+        :return: observation, reward, terminated, truncated, information
         """
         total_reward = 0.0
-        done = None
+        info = {}
+        terminated = truncated = False
         for i in range(self._skip):
-            obs, reward, done, info = self.env.step(action)
+            obs, reward, terminated, truncated, info = self.env.step(action)
             if i == self._skip - 2:
                 self._obs_buffer[0] = obs
             if i == self._skip - 1:
                 self._obs_buffer[1] = obs
             total_reward += reward
-            if done:
+            if terminated | truncated:
                 break
-        # Note that the observation on the done=True frame
-        # doesn't matter
+        # Note that the observation on the done=True frame doesn't matter
         max_frame = self._obs_buffer.max(axis=0)
 
-        return max_frame, total_reward, done, info
+        return max_frame, total_reward, terminated, truncated, info
 
-    def reset(self, **kwargs) -> GymObs:
+    def reset(self, **kwargs) -> Tuple[GymObs, Dict]:
         return self.env.reset(**kwargs)
 
 

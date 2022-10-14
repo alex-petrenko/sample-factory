@@ -25,7 +25,7 @@ class IdentityEnvMixedActions(gym.Env):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
-        return self.state
+        return self.state, {}
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -39,8 +39,8 @@ class IdentityEnvMixedActions(gym.Env):
         reward = mixed_actions_get_reward(action, self.state, self.eps)
         self._choose_next_state()
         self.current_step += 1
-        done = self.current_step >= self.ep_length
-        return self.state, reward, done, {}
+        terminated = truncated = self.current_step >= self.ep_length
+        return self.state, reward, terminated, truncated, {}
 
     def close(self):
         pass
@@ -67,23 +67,25 @@ class BatchedIdentityEnvMixedActions(gym.Env):
 
     def reset(self, **kwargs):
         obss = []
+        infos = []
         for i, env in enumerate(self.envs):
-            obs = env.reset()
-
+            obs, info = env.reset(**kwargs)
             obss.append(obs)
-        return obss
+            infos.append(info)
+        return obss, infos
 
     def step(self, action: List[np.ndarray]):
-        obss, rewards, dones, infos = [], [], [], []
+        obss, rewards, terms, truncs, infos = [], [], [], [], []
 
         for i, env in enumerate(self.envs):
-            obs, reward, done, info = env.step([action[0][i], action[1][i]])
+            obs, reward, terminated, truncated, info = env.step([action[0][i], action[1][i]])
             obss.append(obs),
             rewards.append(reward)
-            dones.append(done)
+            terms.append(terminated)
+            truncs.append(truncated)
             infos.append(info)
 
-        return obss, rewards, dones, infos
+        return obss, rewards, terms, truncs, infos
 
     def render(self, mode="human"):
         pass
@@ -99,10 +101,6 @@ def override_defaults(parser):
         num_envs_per_worker=1,
         worker_num_splits=1,
         train_for_env_steps=10000,
-        encoder_type="mlp",
-        encoder_subtype="mlp_mujoco",
-        hidden_size=64,
-        encoder_extra_fc_layers=0,
         env_frameskip=1,
         nonlinearity="tanh",
         batch_size=1024,
@@ -123,7 +121,13 @@ def register_test_components():
 def test_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    argv = ["--algo=APPO", "--env=batched_mix_dist_env", "--experiment=test_batched_mixed_action_dists", "--device=cpu"]
+    argv = [
+        "--algo=APPO",
+        "--env=batched_mix_dist_env",
+        "--experiment=test_batched_mixed_action_dists",
+        "--device=cpu",
+        "--restart_behavior=overwrite",
+    ]
     parser, cfg = parse_sf_args(argv=argv)
 
     override_defaults(parser)

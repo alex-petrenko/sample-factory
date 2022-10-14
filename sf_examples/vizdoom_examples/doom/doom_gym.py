@@ -5,6 +5,7 @@ import re
 import time
 from os.path import join
 from threading import Thread
+from typing import Dict, Optional, Tuple
 
 import cv2
 import gym
@@ -171,9 +172,13 @@ class VizdoomEnv(gym.Env):
 
         self.seed()
 
-    def seed(self, seed=None):
-        self.curr_seed = seeding.hash_seed(seed, max_bytes=4)
-        self.rng, _ = seeding.np_random(seed=self.curr_seed)
+    def seed(self, seed: Optional[int] = None):
+        """
+        Used to seed the actual Doom env.
+        If None is passed, the seed is generated randomly.
+        """
+        self.rng, self.curr_seed = seeding.np_random(seed=seed)
+        self.curr_seed = self.curr_seed % (2**32)  # Doom only supports 32-bit seeds
         return [self.curr_seed, self.rng]
 
     def calc_observation_space(self):
@@ -309,7 +314,7 @@ class VizdoomEnv(gym.Env):
         demo_path_ = os.path.normpath(demo_path_)
         return demo_path_
 
-    def reset(self, **kwargs):
+    def reset(self, **kwargs) -> Tuple[np.ndarray, Dict]:
         if "seed" in kwargs:
             self.seed(kwargs["seed"])
 
@@ -363,7 +368,7 @@ class VizdoomEnv(gym.Env):
 
         self._num_episodes += 1
 
-        return np.transpose(img, (1, 2, 0))
+        return np.transpose(img, (1, 2, 0)), {}  # since Gym 0.26.0, we return dict as second return value
 
     def _convert_actions(self, actions):
         """Convert actions from gym action space to the action space expected by Doom game."""
@@ -429,7 +434,7 @@ class VizdoomEnv(gym.Env):
 
         return observation, done, info
 
-    def step(self, actions):
+    def step(self, actions) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         """
         Action is either a single value (discrete, one-hot), or a tuple with an action for each of the
         discrete action subspaces.
@@ -447,7 +452,11 @@ class VizdoomEnv(gym.Env):
         done = self.game.is_episode_finished()
 
         observation, done, info = self._process_game_step(state, done, default_info)
-        return observation, reward, done, info
+
+        # Gym 0.26.0 changes
+        terminated = done
+        truncated = False
+        return observation, reward, terminated, truncated, info
 
     def render(self, mode="human"):
         try:

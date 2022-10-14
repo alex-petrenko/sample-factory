@@ -34,7 +34,7 @@ class IdentityEnvMixedActions(gym.Env):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
-        return self.state
+        return self.state, {}
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -46,8 +46,8 @@ class IdentityEnvMixedActions(gym.Env):
         reward = mixed_actions_get_reward(action, self.state, self.eps)
         self._choose_next_state()
         self.current_step += 1
-        done = self.current_step >= self.ep_length
-        return self.state, reward, done, {}
+        terminated = truncated = self.current_step >= self.ep_length
+        return self.state, reward, terminated, truncated, {}
 
     def render(self, mode="human"):
         pass
@@ -63,10 +63,6 @@ def override_defaults(parser):
         num_envs_per_worker=4,
         worker_num_splits=2,
         train_for_env_steps=10000,
-        encoder_type="mlp",
-        encoder_subtype="mlp_mujoco",
-        hidden_size=64,
-        encoder_extra_fc_layers=0,
         env_frameskip=1,
         nonlinearity="tanh",
         batch_size=1024,
@@ -94,6 +90,7 @@ def test_non_batched_mixed_action_dists():
         "--env=non_batched_mix_dist_env",
         "--experiment=test_non_batched_mixed_action_dists",
         "--device=cpu",
+        "--restart_behavior=overwrite",
     ]
 
     parser, cfg = parse_sf_args(argv=argv)

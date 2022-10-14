@@ -204,8 +204,8 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
 
         return shaping_reward
 
-    def reset(self):
-        obs = self.env.reset()
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
 
         self.prev_vars = dict()
         self.prev_dead = True
@@ -215,12 +215,14 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         self.orig_env_reward = self.total_shaping_reward = 0.0
 
         self.print_once = False
-        return obs
+        return obs, info
 
     def step(self, action):
-        obs, rew, done, info = self.env.step(action)
+        obs, rew, terminated, truncated, info = self.env.step(action)
         if obs is None:
-            return obs, rew, done, info
+            return obs, rew, terminated, truncated, info
+
+        done = terminated | truncated
 
         self.orig_env_reward += rew
 
@@ -255,7 +257,7 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
 
             info["true_objective"] = true_objective
 
-        return obs, rew, done, info
+        return obs, rew, terminated, truncated, info
 
     def close(self):
         self.env.unwrapped.reward_shaping_interface = None

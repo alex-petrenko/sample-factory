@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Optional
 
 from sample_factory.algo.utils.context import global_env_registry
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import AttrDict, log
+from sample_factory.utils.utils import log
 
 
 # TODO: type hint for the return type?

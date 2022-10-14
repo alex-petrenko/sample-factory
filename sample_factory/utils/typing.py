@@ -4,8 +4,9 @@ import argparse
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import torch
+from gym import spaces
 
-from sample_factory.utils.utils import AttrDict
+from sample_factory.utils.attr_dict import AttrDict
 
 Config = Union[argparse.Namespace, AttrDict]
 
@@ -18,8 +19,9 @@ Device = str
 MpQueue = Any
 MpLock = Any
 
-# maybe replace with a proper type hint
 Env = Any
+ObsSpace = spaces.Space
+ActionSpace = spaces.Space
 
 CreateEnvFunc = Callable[[str, Optional[Config], Optional[AttrDict]], Env]
 

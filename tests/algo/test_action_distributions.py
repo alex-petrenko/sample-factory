@@ -7,8 +7,8 @@ import torch
 from torch.distributions import Categorical
 
 from sample_factory.algo.utils.action_distributions import (
+    calc_num_action_parameters,
     calc_num_actions,
-    calc_num_logits,
     get_action_distribution,
     sample_actions_log_probs,
 )
@@ -21,7 +21,7 @@ class TestActionDistributions:
     @pytest.mark.parametrize("batch_size", [128])
     def test_simple_distribution(self, gym_space, batch_size):
         simple_action_space = gym_space
-        simple_num_logits = calc_num_logits(simple_action_space)
+        simple_num_logits = calc_num_action_parameters(simple_action_space)
         assert simple_num_logits == simple_action_space.n
 
         simple_logits = torch.rand(batch_size, simple_num_logits)
@@ -49,7 +49,7 @@ class TestActionDistributions:
 
         with torch.no_grad():
             action_space = gym_space
-            num_logits = calc_num_logits(action_space)
+            num_logits = calc_num_action_parameters(action_space)
             device = torch.device(device_type)
             logits = torch.rand(batch_size, num_logits, device=device) * 10.0 - 5.0
 
@@ -95,7 +95,7 @@ class TestActionDistributions:
         spaces = [gym_space for _ in range(num_spaces)]
         action_space = gym.spaces.Tuple(spaces)
 
-        num_logits = calc_num_logits(action_space)
+        num_logits = calc_num_action_parameters(action_space)
         logits = torch.rand(batch_size, num_logits)
 
         assert num_logits == sum(s.n for s in action_space.spaces)
@@ -118,10 +118,10 @@ class TestActionDistributions:
         spaces = [simple_space for _ in range(num_spaces)]
         tuple_space = gym.spaces.Tuple(spaces)
 
-        assert calc_num_logits(tuple_space) == num_spaces * num_actions
+        assert calc_num_action_parameters(tuple_space) == num_spaces * num_actions
 
         simple_logits = torch.zeros(1, num_actions)
-        tuple_logits = torch.zeros(1, calc_num_logits(tuple_space))
+        tuple_logits = torch.zeros(1, calc_num_action_parameters(tuple_space))
 
         simple_distr = get_action_distribution(simple_space, simple_logits)
         tuple_distr = get_action_distribution(tuple_space, tuple_logits)
@@ -200,7 +200,7 @@ def test_tuple_action_distribution(spaces, sizes):
     action_space = gym.spaces.Tuple(_action_spaces)
 
     assert calc_num_actions(action_space) == num_actions
-    assert calc_num_logits(action_space) == num_logits
+    assert calc_num_action_parameters(action_space) == num_logits
 
     logits = torch.randn(BATCH_SIZE, num_logits)
     action_dist = get_action_distribution(action_space, logits)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence, Union
 
+import numpy as np
 import torch
 from torch import Tensor
 from torch.nn import Module
@@ -91,3 +92,19 @@ def gae_advantages(rewards: Tensor, dones: Tensor, values: Tensor, valids: Tenso
     # transpose advantages back to [E, T] before creating a single experience buffer
     advantages.transpose_(0, 1)
     return advantages
+
+
+DonesType = Union[bool, np.ndarray, Tensor, Sequence[bool]]
+
+
+def make_dones(terminated: DonesType, truncated: DonesType) -> DonesType:
+    """
+    Make dones from terminated/truncated (gym 0.26.0 changes).
+    Assumes that terminated and truncated are the same type and shape.
+    """
+    if isinstance(terminated, (bool, np.ndarray, Tensor)):
+        return terminated | truncated
+    elif isinstance(terminated, Sequence):
+        return [t | truncated[i] for i, t in enumerate(terminated)]
+
+    raise ValueError(f"Unknown {type(terminated)=}")

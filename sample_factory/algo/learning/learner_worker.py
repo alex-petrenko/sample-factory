@@ -21,7 +21,7 @@ from sample_factory.algo.utils.torch_utils import init_torch_runtime
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.typing import Config, PolicyID
-from sample_factory.utils.utils import experiment_dir, init_file_logger, log
+from sample_factory.utils.utils import init_file_logger, log
 
 
 def init_learner_process(sf_context: SampleFactoryContext, learner_worker: LearnerWorker):
@@ -34,7 +34,7 @@ def init_learner_process(sf_context: SampleFactoryContext, learner_worker: Learn
     os_signal.signal(os_signal.SIGINT, os_signal.SIG_IGN)
 
     cfg = learner_worker.cfg
-    init_file_logger(experiment_dir(cfg))
+    init_file_logger(cfg)
 
     try:
         psutil.Process().nice(cfg.default_niceness)
@@ -101,6 +101,9 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
 
     def save(self) -> None:
         self.learner.save()
+
+    def save_milestone(self) -> None:
+        self.learner.save_milestone()
 
     def save_best(self, policy_id: PolicyID, metric: str, metric_value: float):
         self.learner.save_best(policy_id, metric, metric_value)

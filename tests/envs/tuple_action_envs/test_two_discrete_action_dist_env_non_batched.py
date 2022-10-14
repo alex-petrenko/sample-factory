@@ -8,7 +8,7 @@ import numpy as np
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import debug_log_every_n
 
 DiscreteActions = Union[List[int], Tuple[int, ...], np.ndarray]
 
@@ -35,7 +35,7 @@ class IdentityEnvTwoDiscreteActions(gym.Env):
         self.current_step = 0
         self.num_resets += 1
         self._choose_next_state()
-        return self.state
+        return self.state, {}
 
     def _choose_next_state(self) -> None:
         state = np.zeros(self.observation_space.shape)
@@ -44,14 +44,14 @@ class IdentityEnvTwoDiscreteActions(gym.Env):
         self.state = state
 
     def step(self, action: DiscreteActions):
-        log.debug(f"{action=}, {type(action)=}, {type(action[0])=}")
+        debug_log_every_n(1000, f"{action=}, {type(action)=}, {type(action[0])=}")
         assert isinstance(action[0], (int, np.integer))
         assert isinstance(action[1], (int, np.integer))
         reward = get_reward(action, self.state)
         self._choose_next_state()
         self.current_step += 1
-        done = self.current_step >= self.ep_length
-        return self.state, reward, done, {}
+        terminated = truncated = self.current_step >= self.ep_length
+        return self.state, reward, terminated, truncated, {}
 
     def close(self):
         pass
@@ -67,10 +67,6 @@ def override_defaults(parser):
         num_envs_per_worker=4,
         worker_num_splits=2,
         train_for_env_steps=10000,
-        encoder_type="mlp",
-        encoder_subtype="mlp_mujoco",
-        hidden_size=64,
-        encoder_extra_fc_layers=0,
         env_frameskip=1,
         nonlinearity="tanh",
         batch_size=1024,
@@ -97,6 +93,7 @@ def test_non_batched_two_discrete_action_dists():
         "--algo=APPO",
         "--env=non_batched_two_discrete_dist_env",
         "--experiment=test_non_batched_two_discrete_dists",
+        "--restart_behavior=overwrite",
         "--device=cpu",
     ]
 

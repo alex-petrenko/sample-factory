@@ -1,4 +1,3 @@
-import os
 import shutil
 from os.path import isdir
 

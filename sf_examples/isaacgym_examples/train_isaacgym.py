@@ -1,5 +1,7 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # isort: off
+from typing import List, Tuple, Dict
+
 # noinspection PyUnresolvedReferences
 import isaacgym
 
@@ -8,17 +10,15 @@ import isaacgym
 import os
 import sys
 from os.path import join
-from typing import List
 
 import gym
 import torch
 from isaacgymenvs.tasks import isaacgym_task_map
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
-from torch import Tensor, nn
+from torch import Tensor
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.model_utils import EncoderBase, get_obs_shape, register_custom_encoder
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, Env
 from sample_factory.utils.utils import str2bool
@@ -41,19 +41,27 @@ class IsaacGymVecEnv(gym.Env):
         else:
             raise ValueError(f"Unknown observation key: {obs_key}")
 
+        self._truncated: Tensor = torch.zeros(self.num_agents, dtype=torch.bool)
+
     @staticmethod
-    def _use_states_as_obs(obs_dict):
+    def _use_states_as_obs(obs_dict: Dict) -> Dict[str, Tensor]:
         obs_dict["obs"] = obs_dict["states"]
         return obs_dict
 
-    def reset(self, *args, **kwargs):
-        obs_dict = self.env.reset()
+    def reset(self, *args, **kwargs) -> Tuple[Dict[str, Tensor], Dict]:
         # some IGE envs return all zeros on the first timestep, but this is probably okay
-        return self._proc_obs_func(obs_dict)
+        obs_dict = self.env.reset()
 
-    def step(self, actions):
-        obs, rew, dones, infos = self.env.step(actions)
-        return self._proc_obs_func(obs), rew, dones, infos
+        self._truncated = self._truncated.to(obs_dict["obs"].device)  # make sure all tensors are on the same device
+        return self._proc_obs_func(obs_dict), {}  # after Gym 0.26 reset() returns info dict
+
+    def step(self, actions) -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor, Dict]:
+        obs, rew, terminated, infos = self.env.step(actions)
+        if infos and "time_outs" in infos:
+            truncated = infos["time_outs"]
+        else:
+            truncated = self._truncated
+        return self._proc_obs_func(obs), rew, terminated, truncated, infos
 
     def render(self, mode="human"):
         pass
@@ -61,9 +69,7 @@ class IsaacGymVecEnv(gym.Env):
 
 def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
     task_name = full_env_name
-    overrides = [f"task={task_name}"]
-    if cfg.env_agents > 0:
-        overrides.append(f"num_envs={cfg.env_agents}")
+    overrides = ige_task_cfg_overrides(task_name, cfg)
 
     import isaacgymenvs
     from hydra import compose, initialize
@@ -86,52 +92,30 @@ def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
     ige_cfg_dict = omegaconf_to_dict(ige_cfg)
     task_cfg = ige_cfg_dict["task"]
 
-    env = isaacgym_task_map[task_cfg["name"]](
-        cfg=task_cfg,
-        sim_device=sim_device,
-        rl_device=rl_device,
-        graphics_device_id=graphics_device_id,
-        headless=cfg.env_headless,
-        virtual_screen_capture=False,
-        force_render=not cfg.env_headless,
-    )
+    make_env = isaacgym_task_map[task_cfg["name"]]
+
+    if cfg.ige_api_version == "preview3":
+        env = make_env(
+            cfg=task_cfg,
+            sim_device=sim_device,
+            graphics_device_id=graphics_device_id,
+            headless=cfg.env_headless,
+        )
+    elif cfg.ige_api_version == "preview4":
+        env = make_env(
+            cfg=task_cfg,
+            sim_device=sim_device,
+            rl_device=rl_device,
+            graphics_device_id=graphics_device_id,
+            headless=cfg.env_headless,
+            virtual_screen_capture=False,
+            force_render=not cfg.env_headless,
+        )
+    else:
+        raise ValueError(f"Unknown ige_api_version: {cfg.ige_api_version}")
 
     env = IsaacGymVecEnv(env, cfg.obs_key)
     return env
-
-
-class _IsaacGymMlpEncoderImlp(nn.Module):
-    def __init__(self, obs_space, mlp_layers: List[int]):
-        super().__init__()
-
-        obs_shape = get_obs_shape(obs_space)
-        assert len(obs_shape.obs) == 1
-
-        layer_input_width = obs_shape.obs[0]
-        encoder_layers = []
-        for layer_width in mlp_layers:
-            encoder_layers.append(nn.Linear(layer_input_width, layer_width))
-            layer_input_width = layer_width
-            encoder_layers.append(nn.ELU(inplace=True))
-
-        self.mlp_head = nn.Sequential(*encoder_layers)
-
-    def forward(self, obs: Tensor):
-        x = self.mlp_head(obs)
-        return x
-
-
-class IsaacGymMlpEncoder(EncoderBase):
-    def __init__(self, cfg, obs_space, timing):
-        super().__init__(cfg, timing)
-
-        self._impl = _IsaacGymMlpEncoderImlp(obs_space, cfg.mlp_layers)
-        self._impl = torch.jit.script(self._impl)
-        self.encoder_out_size = cfg.mlp_layers[-1]  # TODO: we should make this an abstract method
-
-    def forward(self, obs_dict):
-        x = self._impl(obs_dict["obs"])
-        return x
 
 
 def add_extra_params_func(parser):
@@ -147,13 +131,6 @@ def add_extra_params_func(parser):
     )
     p.add_argument("--env_headless", default=True, type=str2bool, help="Headless == no rendering")
     p.add_argument(
-        "--mlp_layers",
-        default=[256, 128, 64],
-        type=int,
-        nargs="*",
-        help="MLP layers to use with isaacgym_examples envs",
-    )
-    p.add_argument(
         "--obs_key",
         default="obs",
         type=str,
@@ -162,71 +139,29 @@ def add_extra_params_func(parser):
         'available in real world deployment. If we use "states" here we can train will full information '
         "(although the original idea was to use asymmetric training - critic sees full state and policy only sees obs).",
     )
-
-
-# custom default configuration parameters for specific envs
-# add more envs here analogously (env names should match config file names in IGE)
-env_configs = dict(
-    Ant=dict(
-        mlp_layers=[256, 128, 64],
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
-        save_every_sec=15,
-        # trains better without normalized returns, but we keep the default value for consistency
-        # normalize_returns=False,
-    ),
-    Humanoid=dict(
-        train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
-        mlp_layers=[400, 200, 100],
-        rollout=32,
-        num_epochs=5,
-        value_loss_coeff=4.0,
-        max_grad_norm=1.0,
-        num_batches_per_epoch=4,
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
-        save_every_sec=15,
-        # trains a lot better with higher gae_lambda, but we keep the default value for consistency
-        # gae_lambda=0.99,
-    ),
-    AllegroHand=dict(
-        train_for_env_steps=10_000_000_000,
-        mlp_layers=[512, 256, 128],
-        gamma=0.99,
-        rollout=16,
-        recurrence=16,
-        use_rnn=False,
-        learning_rate=5e-3,
-        lr_schedule_kl_threshold=0.02,
-        reward_scale=0.01,
-        num_epochs=5,
-        max_grad_norm=1.0,
-        num_batches_per_epoch=8,
-    ),
-    AllegroHandLSTM=dict(
-        train_for_env_steps=10_000_000_000,
-        mlp_layers=[512, 256, 128],
-        gamma=0.99,
-        rollout=16,
-        recurrence=16,
-        use_rnn=True,
-        learning_rate=1e-4,
-        lr_schedule_kl_threshold=0.016,
-        reward_scale=0.01,
-        num_epochs=4,
-        max_grad_norm=1.0,
-        num_batches_per_epoch=8,
-        obs_key="states",
-    ),
-)
+    p.add_argument(
+        "--subtask",
+        default=None,
+        type=str,
+        help="Subtask for envs that support it (i.e. AllegroKuka regrasping or manipulation or throw).",
+    )
+    p.add_argument(
+        "--ige_api_version",
+        default="preview4",
+        type=str,
+        choices=["preview3", "preview4"],
+        help="We can switch between different versions of IsaacGymEnvs API using this parameter.",
+    )
+    p.add_argument(
+        "--eval_stats",
+        default=False,
+        type=str2bool,
+        help="Whether to collect env stats during evaluation.",
+    )
 
 
 def override_default_params_func(env, parser):
-    """
-    Override default argument values for this family of environments.
-    All experiments for environments from my_custom_env_ family will have these parameters unless
-    different values are passed from command line.
-
-    """
-    # most of these parameters are taken from IsaacGymEnvs default config files
+    """Most of these parameters are taken from IsaacGymEnvs default config files."""
 
     parser.set_defaults(
         # we're using a single very vectorized env, no need to parallelize it further
@@ -236,7 +171,6 @@ def override_default_params_func(env, parser):
         worker_num_splits=1,
         actor_worker_gpus=[0],  # obviously need a GPU
         train_for_env_steps=10000000,
-        encoder_custom="isaac_gym_mlp_encoder",
         use_rnn=False,
         adaptive_stddev=False,
         policy_initialization="torch_default",
@@ -273,10 +207,117 @@ def override_default_params_func(env, parser):
         parser.set_defaults(**env_configs[env])
 
 
+# custom default configuration parameters for specific envs
+# add more envs here analogously (env names should match config file names in IGE)
+env_configs = dict(
+    Ant=dict(
+        encoder_mlp_layers=[256, 128, 64],
+        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+        save_every_sec=15,
+        # trains better without normalized returns, but we keep the default value for consistency
+        # normalize_returns=False,
+    ),
+    Humanoid=dict(
+        train_for_env_steps=1310000000,  # to match how much it is trained in rl-games
+        encoder_mlp_layers=[400, 200, 100],
+        rollout=32,
+        num_epochs=5,
+        value_loss_coeff=4.0,
+        max_grad_norm=1.0,
+        num_batches_per_epoch=4,
+        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
+        save_every_sec=15,
+        # trains a lot better with higher gae_lambda, but we keep the default value for consistency
+        # gae_lambda=0.99,
+    ),
+    AllegroHand=dict(
+        train_for_env_steps=10_000_000_000,
+        encoder_mlp_layers=[512, 256, 128],
+        gamma=0.99,
+        rollout=16,
+        recurrence=16,
+        use_rnn=False,
+        learning_rate=5e-3,
+        lr_schedule_kl_threshold=0.02,
+        reward_scale=0.01,
+        num_epochs=5,
+        max_grad_norm=1.0,
+        num_batches_per_epoch=8,
+    ),
+    AllegroHandLSTM=dict(
+        train_for_env_steps=10_000_000_000,
+        encoder_mlp_layers=[512, 256, 128],
+        gamma=0.99,
+        rollout=16,
+        recurrence=16,
+        use_rnn=True,
+        rnn_type="lstm",
+        learning_rate=1e-4,
+        lr_schedule_kl_threshold=0.016,
+        reward_scale=0.01,
+        num_epochs=4,
+        max_grad_norm=1.0,
+        num_batches_per_epoch=8,
+        obs_key="states",
+    ),
+    AllegroKukaLSTM=dict(
+        subtask="regrasping",
+        env_agents=8192,
+        train_for_env_steps=3_000_000_000,
+        # No encoder, we directly feed observations into LSTM. A bit weird but this is what IGE does as well.
+        encoder_mlp_layers=[],
+        use_rnn=True,
+        rnn_size=768,
+        rnn_type="lstm",
+        decoder_mlp_layers=[768, 512, 256],  # mlp layers AFTER the LSTM
+        gamma=0.99,
+        rollout=16,
+        recurrence=16,
+        batch_size=32768,
+        num_epochs=2,
+        num_batches_per_epoch=4,
+        value_loss_coeff=4.0,
+        ppo_clip_ratio=0.2,
+        learning_rate=1e-4,
+        lr_schedule_kl_threshold=0.016,
+        reward_scale=0.01,
+        max_grad_norm=1.0,
+        obs_key="obs",
+        save_best_every_sec=120,
+        save_best_after=int(2e7),
+        experiment_summaries_interval=30,
+        flush_summaries_interval=300,
+    ),
+)
+
+env_configs["AllegroKukaTwoArmsLSTM"] = env_configs["AllegroKukaLSTM"]
+
+
+def ige_task_cfg_overrides(task_name: str, cfg: Config) -> List[str]:
+    """
+    Ideally we would directly override these in CLI in Hydra config, but this would require integrating
+    Hydra config into Sample Factory, which would require anyone who uses Sample Factory to use Hydra as well.
+    We might want to do this in the future, but for now this should be sufficient.
+    """
+
+    overrides = [f"task={task_name}"]
+    if cfg.env_agents > 0:
+        overrides.append(f"num_envs={cfg.env_agents}")
+    if cfg.subtask is not None:
+        overrides.append(f"task/env={cfg.subtask}")
+    if "AllegroKuka" in task_name and cfg.eval_stats:
+        overrides.append("task.env.evalStats=True")
+        # overrides.append("task.env.successTolerance=0.01")
+        # overrides.append("task.env.withSmallCuboids=False")
+        # overrides.append("task.env.withBigCuboids=False")
+        # overrides.append("task.env.withSticks=True")
+
+    return overrides
+
+
 def register_isaacgym_custom_components():
     for env_name in env_configs:
         register_env(env_name, make_isaacgym_env)
-    register_custom_encoder("isaac_gym_mlp_encoder", IsaacGymMlpEncoder)
 
 
 def parse_isaacgym_cfg(evaluation=False):

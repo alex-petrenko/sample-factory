@@ -29,12 +29,12 @@ from sample_factory.algo.utils.misc import (
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
 from sample_factory.cfg.configurable import Configurable
+from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, StatusCode
 from sample_factory.utils.utils import (
-    AttrDict,
     cfg_file,
     debug_log_every_n,
     ensure_dir_exists,
@@ -108,7 +108,7 @@ class Runner(EventLoopObject, Configurable):
         for policy_id in range(self.cfg.num_policies):
             summary_dir = join(summaries_dir(experiment_dir(cfg=self.cfg)), str(policy_id))
             summary_dir = ensure_dir_exists(summary_dir)
-            self.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=20)
+            self.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=cfg.flush_summaries_interval)
 
         # global msg handlers for messages from algo components
         self.msg_handlers: Dict[str, List[MsgHandler]] = {
@@ -139,6 +139,9 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.cfg.save_every_sec, self._save_policy)
         periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
+        if self.cfg.save_milestones_sec > 0:
+            periodic(self.cfg.save_milestones_sec, self._save_milestone_policy)
+
         periodic(5, self._propagate_training_info)
 
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
@@ -156,6 +159,10 @@ class Runner(EventLoopObject, Configurable):
 
     @signal
     def save_best(self):
+        ...
+
+    @signal
+    def save_milestone(self):
         ...
 
     @signal
@@ -417,6 +424,9 @@ class Runner(EventLoopObject, Configurable):
     def _save_policy(self):
         self.save_periodic.emit()
 
+    def _save_milestone_policy(self):
+        self.save_milestone.emit()
+
     def _save_best_policy(self):
         # don't have enough statistic from the learners yet
         if len(self.env_steps) < self.cfg.num_policies:
@@ -485,9 +495,9 @@ class Runner(EventLoopObject, Configurable):
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
 
-        init_file_logger(experiment_dir(self.cfg))
+        init_file_logger(self.cfg)
         self._save_cfg()
-        save_git_diff(experiment_dir(cfg=self.cfg))
+        save_git_diff(experiment_dir(self.cfg))
 
         self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
 
@@ -597,6 +607,7 @@ class Runner(EventLoopObject, Configurable):
             sampler.connect_report_msg(self._process_msg)
             self.save_periodic.connect(learner.save)
             self.save_best.connect(learner.save_best)
+            self.save_milestone.connect(learner.save_milestone)
 
             # stop components when needed
             self._setup_component_termination(self.stop, batcher)

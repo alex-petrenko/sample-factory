@@ -57,20 +57,22 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.timestep = 0
         self.update_state = True
 
-        # hardcode bot names for consistency, otherwise they are generated randomly
-        self.bot_names = [
-            "Blazkowicz",
-            "PerfectBlue",
-            "PerfectRed",
-            "PerfectGreen",
-            "PerfectPurple",
-            "PerfectYellow",
-            "PerfectWhite",
-            "PerfectLtGreen",
-        ]
-        self.bot_difficulty_mean = self.bot_difficulty_std = None
-        self.hardest_bot = 100
-        self.easiest_bot = 10
+        # # Removed bot curriculum learning in favor of randomly generated bots
+        # # hardcode bot names for consistency, otherwise they are generated randomly
+        # self.bot_names = [
+        #     "Blazkowicz",
+        #     "PerfectBlue",
+        #     "PerfectRed",
+        #     "PerfectGreen",
+        #     "PerfectPurple",
+        #     "PerfectYellow",
+        #     "PerfectWhite",
+        #     "PerfectLtGreen",
+        # ]
+        # self.bot_difficulty_mean = self.bot_difficulty_std = None
+        # self.hardest_bot = 100
+        # self.easiest_bot = 10
+
         self.respawn_delay = respawn_delay
         self.timelimit = timelimit
 
@@ -148,49 +150,49 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         log.info("Initialized w:%d v:%d player:%d", self.worker_index, self.vector_index, self.player_id)
         self.initialized = True
 
-    def _random_bot(self, difficulty, used_bots):
-        while True:
-            idx = self.rng.randint(0, self.num_bots)
-            bot_name = f"BOT_{difficulty}_{idx}"
-            if bot_name not in used_bots:
-                used_bots.append(bot_name)
-                return bot_name
+    # def _random_bot(self, difficulty, used_bots):
+    #     while True:
+    #         idx = self.rng.integers(0, self.num_bots)
+    #         bot_name = f"BOT_{difficulty}_{idx}"
+    #         if bot_name not in used_bots:
+    #             used_bots.append(bot_name)
+    #             return bot_name
 
     def reset(self, **kwargs):
-        obs = super().reset()
+        obs, info = super().reset(**kwargs)
 
         if self._is_server() and self.num_bots > 0:
             self.game.send_game_command("removebots")
 
-            bot_names = copy.deepcopy(self.bot_names)
-            self.rng.shuffle(bot_names)
+            for _ in range(self.num_bots):
+                self.game.send_game_command("addbot")
 
-            used_bots = []
-
-            for i in range(self.num_bots):
-                if self.bot_difficulty_mean is None:
-                    # add named bots from the list
-
-                    if i < len(bot_names):
-                        bot_name = " " + bot_names[i]
-                    else:
-                        bot_name = ""
-
-                    # log.info('Adding bot %d %s', i, bot_name)
-                    self.game.send_game_command(f"addbot{bot_name}")
-                else:
-                    # add random bots according to the desired difficulty
-                    diff = self.rng.normal(self.bot_difficulty_mean, self.bot_difficulty_std)
-                    diff = int(round(diff, -1))
-                    diff = max(self.easiest_bot, diff)
-                    diff = min(self.hardest_bot, diff)
-                    bot_name = self._random_bot(diff, used_bots)
-                    # log.info('Adding bot %d %s', i, bot_name)
-                    self.game.send_game_command(f"addbot {bot_name}")
+            # # No longer use curriculum learning
+            # bot_names = copy.deepcopy(self.bot_names)
+            # self.rng.shuffle(bot_names)
+            # used_bots = []
+            # for i in range(self.num_bots):
+            #     if self.bot_difficulty_mean is None:
+            #         # add named bots from the list
+            #         if i < len(bot_names):
+            #             bot_name = " " + bot_names[i]
+            #         else:
+            #             bot_name = ""
+            #         # log.info('Adding bot %d %s', i, bot_name)
+            #         self.game.send_game_command(f"addbot{bot_name}")
+            #     else:
+            #         # add random bots according to the desired difficulty
+            #         diff = self.rng.normal(self.bot_difficulty_mean, self.bot_difficulty_std)
+            #         diff = int(round(diff, -1))
+            #         diff = max(self.easiest_bot, diff)
+            #         diff = min(self.hardest_bot, diff)
+            #         bot_name = self._random_bot(diff, used_bots)
+            #         # log.info('Adding bot %d %s', i, bot_name)
+            #         self.game.send_game_command(f"addbot {bot_name}")
 
         self.timestep = 0
         self.update_state = True
-        return obs
+        return obs, info
 
     def step(self, actions):
         if self.skip_frames > 1 or self.num_agents == 1:
@@ -207,11 +209,11 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.timestep += 1
 
         if not self.update_state:
-            return None, None, None, None
+            return None, None, None, None, None
 
         state = self.game.get_state()
         reward = self.game.get_last_reward()
-        done = self.game.is_episode_finished()
+        terminated = self.game.is_episode_finished()
 
         if self.record_to is not None:
             # send 'stop recording' command 1 tick before the end of the episode
@@ -220,5 +222,6 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
                 log.debug("Calling stop recording command!")
                 self.game.send_game_command("stop")
 
-        observation, done, info = self._process_game_step(state, done, {})
-        return observation, reward, done, info
+        observation, terminated, info = self._process_game_step(state, terminated, {})
+        truncated = False
+        return observation, reward, terminated, truncated, info

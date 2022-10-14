@@ -192,7 +192,7 @@ class DmlabGymEnv(gym.Env):
 
         self.dmlab.reset()
         self.last_observation = self.format_obs_dict(self.dmlab.observations())
-        return self.last_observation
+        return self.last_observation, {}
 
     def step(self, action):
         if self.benchmark_mode:
@@ -202,14 +202,15 @@ class DmlabGymEnv(gym.Env):
             action = random.randrange(0, self.action_space.n)
 
         reward = self.dmlab.step(self.action_list[action], num_steps=self.action_repeat)
-        done = not self.dmlab.is_running()
+        terminated = not self.dmlab.is_running()
+        truncated = False
 
-        if not done:
+        if not terminated:
             obs_dict = self.format_obs_dict(self.dmlab.observations())
             self.last_observation = obs_dict
 
         info = {"num_frames": self.action_repeat}
-        return self.last_observation, reward, done, info
+        return self.last_observation, reward, terminated, truncated, info
 
     def render(self, mode="human"):
         if self.last_observation is None and self.dmlab.is_running():

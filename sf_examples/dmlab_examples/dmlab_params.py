@@ -7,10 +7,7 @@ from sample_factory.utils.utils import str2bool
 
 def dmlab_override_defaults(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(
-        encoder_type="conv",
-        encoder_subtype="convnet_impala",
-        encoder_custom="dmlab_instructions",
-        hidden_size=256,
+        encoder_conv_architecture="convnet_impala",
         obs_subtract_mean=0.0,
         obs_scale=255.0,
         env_frameskip=4,
@@ -18,6 +15,7 @@ def dmlab_override_defaults(parser: argparse.ArgumentParser) -> None:
         rollout=32,
         recurrence=32,
         rnn_type="lstm",
+        rnn_size=256,
         num_epochs=1,
     )
 
