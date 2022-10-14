@@ -168,6 +168,10 @@ class Runner(EventLoopObject, Configurable):
 
         periodic(self.update_training_info_every_sec, self._propagate_training_info)
 
+        if self.cfg.save_milestones_sec > 0:
+            periodic(self.cfg.save_milestones_sec, self._save_milestone_policy)
+
+
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
 
         self.heartbeat_dict = {}
@@ -186,6 +190,10 @@ class Runner(EventLoopObject, Configurable):
 
     @signal
     def update_training_info(self):
+        ...
+
+    @signal
+    def save_milestone(self):
         ...
 
     @signal
@@ -461,6 +469,9 @@ class Runner(EventLoopObject, Configurable):
     def _save_policy(self):
         self.save_periodic.emit()
 
+    def _save_milestone_policy(self):
+        self.save_milestone.emit()
+
     def _save_best_policy(self):
         # don't have enough statistic from the learners yet
         if len(self.env_steps) < self.cfg.num_policies:
@@ -641,8 +652,9 @@ class Runner(EventLoopObject, Configurable):
             learner_worker.report_msg.connect(self._process_msg)
             sampler.connect_report_msg(self._process_msg)
             sampler.connect_update_training_info(self.update_training_info)
-            self.save_periodic.connect(learner_worker.save)
-            self.save_best.connect(learner_worker.save_best)
+            self.save_periodic.connect(learner.save)
+            self.save_best.connect(learner.save_best)
+            self.save_milestone.connect(learner.save_milestone)
 
             # stop components when needed
             self._setup_component_termination(self.stop, batcher)

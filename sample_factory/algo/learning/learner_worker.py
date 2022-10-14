@@ -115,6 +115,9 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
             return True
         return False
 
+    def save_milestone(self) -> None:
+        self.learner.save_milestone()
+
     def load(self, policy_to_load: PolicyID) -> None:
         self.learner.set_policy_to_load(policy_to_load)
 
