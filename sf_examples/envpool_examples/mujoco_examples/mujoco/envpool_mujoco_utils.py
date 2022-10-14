@@ -1,8 +1,8 @@
 import envpool
 import gym
 
-from sample_factory.envs.env_wrappers import EnvPoolTo5Tuple
 from sample_factory.utils.utils import is_module_available
+from sf_examples.envpool_examples.envpool_wrappers import EnvPoolTo5Tuple
 
 
 def mujoco_available():

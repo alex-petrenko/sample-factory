@@ -1,7 +1,11 @@
 import envpool
 import gym
 
-from sample_factory.envs.env_wrappers import BatchedRecordEpisodeStatistics, EnvPoolResetFixWrapper, EnvPoolTo5Tuple
+from sf_examples.envpool_examples.envpool_wrappers import (
+    BatchedRecordEpisodeStatistics,
+    EnvPoolResetFixWrapper,
+    EnvPoolTo5Tuple,
+)
 
 ATARI_W = ATARI_H = 84
 
