@@ -2,7 +2,6 @@ from typing import Optional
 
 import gym
 
-from sample_factory.envs.env_wrappers import EnvPoolTo5Tuple
 from sample_factory.utils.utils import is_module_available
 
 
