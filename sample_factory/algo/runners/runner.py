@@ -171,7 +171,6 @@ class Runner(EventLoopObject, Configurable):
         if self.cfg.save_milestones_sec > 0:
             periodic(self.cfg.save_milestones_sec, self._save_milestone_policy)
 
-
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
 
         self.heartbeat_dict = {}
@@ -652,9 +651,9 @@ class Runner(EventLoopObject, Configurable):
             learner_worker.report_msg.connect(self._process_msg)
             sampler.connect_report_msg(self._process_msg)
             sampler.connect_update_training_info(self.update_training_info)
-            self.save_periodic.connect(learner.save)
-            self.save_best.connect(learner.save_best)
-            self.save_milestone.connect(learner.save_milestone)
+            self.save_periodic.connect(learner_worker.save)
+            self.save_best.connect(learner_worker.save_best)
+            self.save_milestone.connect(learner_worker.save_milestone)
 
             # stop components when needed
             self._setup_component_termination(self.stop, batcher)
