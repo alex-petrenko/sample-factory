@@ -28,11 +28,11 @@ class TestEnvpoolMujoco:
     def _run_test_env(
         env: str = "mujoco_ant",
         num_workers: int = 8,
-        train_steps: int = 128,
+        train_steps: int = 4096,
         batched_sampling: bool = True,
         serial_mode: bool = True,
         async_rl: bool = False,
-        batch_size: int = 64,
+        batch_size: int = 2048,
         rollout: int = 8,
         expected_max_policy_lag: int = 100,
         customize_cfg_func: Optional[Callable[[Config], None]] = None,
@@ -102,9 +102,9 @@ class TestEnvpoolMujoco:
 
         self._run_test_env(
             env="mujoco_ant",
-            num_workers=32,
-            train_steps=1024,
-            batch_size=512,
+            num_workers=4,
+            train_steps=4096,
+            batch_size=2048,
             batched_sampling=batched_sampling,
             serial_mode=False,
             async_rl=False,
