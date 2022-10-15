@@ -1,4 +1,8 @@
-import envpool
+try:
+    import envpool
+except ImportError as e:
+    print(e)
+    print("Trying to import envpool when it is not install. install with 'pip install envpool'")
 import gym
 
 from sf_examples.envpool_examples.envpool_wrappers import (
@@ -51,7 +55,7 @@ ATARI_ENVS = [
     AtariSpec("atari_kangaroo", "Kangaroo-v5"),
     AtariSpec("atari_krull", "Krull-v5"),
     AtariSpec("atari_kongfumaster", "KungFuMaster-v5"),
-    AtariSpec("atari_montezumasrevenge", "MontezumaRevenge-v5", default_timeout=18000),
+    AtariSpec("atari_montezuma", "MontezumaRevenge-v5", default_timeout=18000),
     AtariSpec("atari_mspacman", "MsPacman-v5"),
     AtariSpec("atari_namethisgame", "NameThisGame-v5"),
     AtariSpec("atari_phoenix", "Phoenix-v5"),

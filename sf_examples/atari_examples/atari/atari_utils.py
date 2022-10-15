@@ -54,7 +54,7 @@ ATARI_ENVS = [
     AtariSpec("atari_kangaroo", "KangarooNoFrameskip-v4"),
     AtariSpec("atari_krull", "KrullNoFrameskip-v4"),
     AtariSpec("atari_kongfumaster", "KungFuMasterNoFrameskip-v4"),
-    AtariSpec("atari_montezumasrevenge", "MontezumaRevengeNoFrameskip-v4", default_timeout=18000),
+    AtariSpec("atari_montezuma", "MontezumaRevengeNoFrameskip-v4", default_timeout=18000),
     AtariSpec("atari_mspacman", "MsPacmanNoFrameskip-v4"),
     AtariSpec("atari_namethisgame", "NameThisGameNoFrameskip-v4"),
     AtariSpec("atari_phoenix", "PhoenixNoFrameskip-v4"),

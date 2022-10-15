@@ -1,4 +1,9 @@
-import envpool
+try:
+    import envpool
+except ImportError as e:
+    print(e)
+    print("Trying to import envpool when it is not install. install with 'pip install envpool'")
+
 import gym
 
 from sample_factory.utils.utils import is_module_available
