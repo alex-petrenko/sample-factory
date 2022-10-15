@@ -42,9 +42,9 @@ class Wrapper(gym.Wrapper, RewardShapingInterface, TrainingInfoInterface):
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
         return self.env.unwrapped.set_reward_shaping(reward_shaping, agent_idx)
 
-    def reset(self):
+    def reset(self, **kwargs):
         self.episode_rewards = [0] * self.num_agents
-        return self.env.reset()
+        return self.env.reset(), {}
 
     def step(self, action):
         obs, rewards, dones, infos = self.env.step(action)
@@ -70,7 +70,9 @@ class Wrapper(gym.Wrapper, RewardShapingInterface, TrainingInfoInterface):
                     self.set_reward_shaping(rew_shaping, i)
                     extra_stats["teamSpirit"] = rew_shaping["teamSpirit"]
 
-        return obs, rewards, dones, infos
+        terminated = dones
+        truncated = dones
+        return obs, rewards, terminated, truncated, infos
 
 
 def make_megaverse(env_name, cfg=None, env_config=None, **kwargs):
