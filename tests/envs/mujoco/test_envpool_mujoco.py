@@ -40,7 +40,7 @@ class TestEnvpoolMujoco:
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
 
-        experiment_name = "test_" + env
+        experiment_name = "test_envpool_" + env
 
         cfg = parse_mujoco_cfg(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
