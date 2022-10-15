@@ -40,7 +40,7 @@ class TestEnvpoolMujoco:
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
 
-        experiment_name = "test_envpool_" + env
+        experiment_name = f"test_envpool_{num_workers}_{env}"
 
         cfg = parse_mujoco_cfg(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
@@ -84,13 +84,13 @@ class TestEnvpoolMujoco:
             "mujoco_swimmer",
         ],
     )
-    @pytest.mark.parametrize("num_workers", [1, 8])
+    @pytest.mark.parametrize("num_workers", [1])
     @pytest.mark.parametrize("batched_sampling", [True])
     def test_basic_envs(self, env_name, batched_sampling, num_workers):
         self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=batched_sampling)
 
     @pytest.mark.parametrize("env_name", ["mujoco_pendulum", "mujoco_doublependulum"])
-    @pytest.mark.parametrize("num_workers", [1, 8])
+    @pytest.mark.parametrize("num_workers", [1])
     def test_single_action_envs_batched(self, env_name, num_workers):
         """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
         self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=True)
@@ -102,7 +102,7 @@ class TestEnvpoolMujoco:
 
         self._run_test_env(
             env="mujoco_ant",
-            num_workers=4,
+            num_workers=1,
             train_steps=4096,
             batch_size=2048,
             batched_sampling=batched_sampling,

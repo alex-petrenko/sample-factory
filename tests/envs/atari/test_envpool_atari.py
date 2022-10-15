@@ -41,7 +41,7 @@ class TestEnvpoolAtariEnv:
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
 
-        experiment_name = "test_envpool_" + env
+        experiment_name = f"test_envpool_{num_workers}_{env}"
 
         cfg = parse_atari_args(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
