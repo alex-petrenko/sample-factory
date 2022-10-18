@@ -396,10 +396,17 @@ class Learner(Configurable):
                     log.debug("Learner %d replacing cfg parameter %r with new value %r", self.policy_id, key, value)
                     self.cfg[key] = value
 
+            if self.cfg.lr_schedule == "constant" and self.curr_lr != self.cfg.learning_rate:
+                # PBT-optimized learning rate, only makes sense if we use constant LR
+                # in case of more advanced LR scheduling we should update the parameters of the scheduler, not the
+                # learning rate directly
+                log.debug(f"Updating learning rate from {self.curr_lr} to {self.cfg.learning_rate}")
+                self.curr_lr = self.cfg.learning_rate
+                self._apply_lr(self.curr_lr)
+
             for param_group in self.optimizer.param_groups:
-                param_group["lr"] = self.cfg.learning_rate
                 param_group["betas"] = (self.cfg.adam_beta1, self.cfg.adam_beta2)
-                log.debug("Updated optimizer lr to value %.7f, betas: %r", param_group["lr"], param_group["betas"])
+                log.debug("Optimizer lr value %.7f, betas: %r", param_group["lr"], param_group["betas"])
 
             self.new_cfg = None
 

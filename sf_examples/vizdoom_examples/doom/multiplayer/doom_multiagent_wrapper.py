@@ -330,7 +330,9 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             info["num_frames"] = self.skip_frames
 
         if all(dones):
-            obs, infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+            obs, reset_infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+            for i, reset_info in enumerate(reset_infos):
+                infos[i]["reset_info"] = reset_info
 
         if self.enable_rendering:
             self.last_obs = obs
