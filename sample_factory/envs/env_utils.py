@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from functools import wraps
 from time import sleep
+from typing import Any, Dict, Optional
 
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.utils.typing import CreateEnvFunc
@@ -69,17 +72,11 @@ def find_wrapper_interface(env, interface_type):
 
 
 class RewardShapingInterface:
-    def __init__(self):
-        pass
-
-    def get_default_reward_shaping(self):
+    def get_default_reward_shaping(self) -> Optional[Dict[str, Any]]:
         """Should return a dictionary of string:float key-value pairs defining the current reward shaping scheme."""
         raise NotImplementedError
 
-    def get_current_reward_shaping(self, agent_idx: int):
-        raise NotImplementedError
-
-    def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
+    def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_idx: int | slice) -> None:
         """
         Sets the new reward shaping scheme.
         :param reward_shaping dictionary of string-float key-value pairs
@@ -88,7 +85,7 @@ class RewardShapingInterface:
         raise NotImplementedError
 
 
-def get_default_reward_shaping(env):
+def get_default_reward_shaping(env) -> Optional[Dict[str, Any]]:
     """
     The current convention is that when the environment supports reward shaping, the env.unwrapped should contain
     a reference to the object implementing RewardShapingInterface.
@@ -102,7 +99,10 @@ def get_default_reward_shaping(env):
     return None
 
 
-def set_reward_shaping(env, reward_shaping: dict, agent_idx: int):
+def set_reward_shaping(env, reward_shaping: Optional[Dict], agent_idx: int | slice) -> None:
+    if reward_shaping is None:
+        return
+
     reward_shaping_interface = find_wrapper_interface(env, RewardShapingInterface)
     if reward_shaping_interface:
         reward_shaping_interface.set_reward_shaping(reward_shaping, agent_idx)
@@ -110,7 +110,7 @@ def set_reward_shaping(env, reward_shaping: dict, agent_idx: int):
 
 class TrainingInfoInterface:
     def __init__(self):
-        self.training_info = dict()
+        self.training_info: Dict[str, Any] = dict()
 
     def set_training_info(self, training_info):
         """
@@ -127,10 +127,9 @@ def find_training_info_interface(env):
     return find_wrapper_interface(env, TrainingInfoInterface)
 
 
-def set_training_info(training_info_interface, approx_total_training_steps: int):
+def set_training_info(training_info_interface: Optional[TrainingInfoInterface], training_info: Dict[str, Any]) -> None:
     if training_info_interface:
-        training_info_dict = dict(approx_total_training_steps=approx_total_training_steps)
-        training_info_interface.set_training_info(training_info_dict)
+        training_info_interface.set_training_info(training_info)
 
 
 def num_env_steps(infos):

@@ -29,8 +29,8 @@ from sf_examples.vizdoom_examples.doom.wrappers.reward_shaping import (
     REWARD_SHAPING_DEATHMATCH_V0,
     REWARD_SHAPING_DEATHMATCH_V1,
     DoomRewardShapingWrapper,
-    true_objective_final_position,
     true_objective_frags,
+    true_objective_winning_the_game,
 )
 from sf_examples.vizdoom_examples.doom.wrappers.scenario_wrappers.gathering_reward_shaping import (
     DoomGatheringRewardShaping,
@@ -80,7 +80,7 @@ BOTS_REWARD_SHAPING = (
 )
 DEATHMATCH_REWARD_SHAPING = (
     DoomRewardShapingWrapper,
-    dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V1, true_objective_func=true_objective_final_position),
+    dict(reward_shaping_scheme=REWARD_SHAPING_DEATHMATCH_V1, true_objective_func=true_objective_winning_the_game),
 )
 
 

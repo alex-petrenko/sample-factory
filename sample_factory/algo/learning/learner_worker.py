@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from threading import Thread
-from typing import Optional
+from typing import Dict, Optional
 
 import psutil
 import torch
@@ -96,17 +96,33 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
         ...
 
     @signal
+    def saved_model(self):
+        ...
+
+    @signal
     def stop(self):
         ...
 
-    def save(self) -> None:
-        self.learner.save()
+    def save(self) -> bool:
+        if self.learner.save():
+            self.saved_model.emit(self.learner.policy_id)
+            return True
+        return False
+
+    def save_best(self, policy_id: PolicyID, metric: str, metric_value: float) -> bool:
+        if self.learner.save_best(policy_id, metric, metric_value):
+            self.saved_model.emit(self.learner.policy_id)
+            return True
+        return False
 
     def save_milestone(self) -> None:
         self.learner.save_milestone()
 
-    def save_best(self, policy_id: PolicyID, metric: str, metric_value: float):
-        self.learner.save_best(policy_id, metric, metric_value)
+    def load(self, policy_to_load: PolicyID) -> None:
+        self.learner.set_policy_to_load(policy_to_load)
+
+    def on_update_cfg(self, new_cfg: Dict) -> None:
+        self.learner.set_new_cfg(new_cfg)
 
     def start_batcher_thread(self):
         self.batcher.event_loop.process = self.event_loop.process

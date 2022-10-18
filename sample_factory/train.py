@@ -5,6 +5,7 @@ from sample_factory.algo.runners.runner_parallel import ParallelRunner
 from sample_factory.algo.runners.runner_serial import SerialRunner
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.cfg.arguments import maybe_load_from_checkpoint
+from sample_factory.pbt.population_based_training import PopulationBasedTraining
 from sample_factory.utils.typing import Config
 
 
@@ -20,6 +21,10 @@ def make_runner(cfg: Config) -> Tuple[Config, Runner]:
         runner_cls = ParallelRunner
 
     runner = runner_cls(cfg)
+
+    if cfg.with_pbt:
+        runner.register_observer(PopulationBasedTraining(cfg, runner))
+
     return cfg, runner
 
 

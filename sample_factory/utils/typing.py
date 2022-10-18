@@ -20,7 +20,7 @@ MpQueue = Any
 MpLock = Any
 
 Env = Any
-ObsSpace = spaces.Space
+ObsSpace = Union[spaces.Space, spaces.Dict]
 ActionSpace = spaces.Space
 
 CreateEnvFunc = Callable[[str, Optional[Config], Optional[AttrDict]], Env]

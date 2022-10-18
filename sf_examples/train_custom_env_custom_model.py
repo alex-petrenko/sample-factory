@@ -6,8 +6,10 @@ After training for a desired period of time, evaluate the policy by running:
 python -m sf_examples.enjoy_custom_env_custom_model --algo=APPO --env=my_custom_env_v1 --experiment=example
 
 """
+from __future__ import annotations
 
 import sys
+from typing import Any, Dict
 
 import gym
 import numpy as np
@@ -16,15 +18,17 @@ from torch import nn
 from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
-from sample_factory.envs.env_utils import register_env
+from sample_factory.envs.env_utils import RewardShapingInterface, TrainingInfoInterface, register_env
 from sample_factory.model.encoder import Encoder
 from sample_factory.model.model_utils import nonlinearity
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, ObsSpace
 
 
-class CustomEnv(gym.Env):
+# add "TrainingInfoInterface" and "RewardShapingInterface" just to demonstrate how to use them (and for testing)
+class CustomEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
     def __init__(self, full_env_name, cfg):
+        TrainingInfoInterface.__init__(self)
         self.name = full_env_name  # optional
         self.cfg = cfg
         self.curr_episode_steps = 0
@@ -33,6 +37,8 @@ class CustomEnv(gym.Env):
 
         self.observation_space = gym.spaces.Box(0, 1, (self.channels, self.res, self.res))
         self.action_space = gym.spaces.Discrete(self.cfg.custom_env_num_actions)
+
+        self.reward_shaping: Dict[str, Any] = dict(action_rew_coeff=0.01)
 
     def _obs(self):
         return np.float32(np.random.rand(self.channels, self.res, self.res))
@@ -44,7 +50,7 @@ class CustomEnv(gym.Env):
     def step(self, action):
         # action should be an int here
         assert isinstance(action, (int, np.int32, np.int64))
-        reward = action * 0.01
+        reward = action * self.reward_shaping["action_rew_coeff"]
 
         terminated = truncated = self.curr_episode_steps >= self.cfg.custom_env_episode_len
 
@@ -54,6 +60,12 @@ class CustomEnv(gym.Env):
 
     def render(self, mode="human"):
         pass
+
+    def get_default_reward_shaping(self) -> Dict[str, Any]:
+        return self.reward_shaping
+
+    def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_idx: int | slice) -> None:
+        self.reward_shaping = reward_shaping
 
 
 def make_custom_env_func(full_env_name, cfg=None, _env_config=None):

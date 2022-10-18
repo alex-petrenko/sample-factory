@@ -215,9 +215,6 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
     def get_default_reward_shaping(self):
         return self.default_reward_shaping
 
-    def get_current_reward_shaping(self, agent_idx: int):
-        return self.current_reward_shaping[agent_idx]
-
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
         self.current_reward_shaping[agent_idx] = reward_shaping
         self.set_env_attr(
@@ -333,7 +330,9 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             info["num_frames"] = self.skip_frames
 
         if all(dones):
-            obs, infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+            obs, reset_infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+            for i, reset_info in enumerate(reset_infos):
+                infos[i]["reset_info"] = reset_info
 
         if self.enable_rendering:
             self.last_obs = obs

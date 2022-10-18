@@ -2,14 +2,16 @@ import sys
 from multiprocessing.context import BaseContext
 from typing import Optional
 
-from sample_factory.algo.runners.runner import Runner
+from tensorboardX import SummaryWriter
+
+from sample_factory.algo.runners.runner import AlgoObserver, Runner
 from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import make_runner
-from sample_factory.utils.typing import Config, Env
+from sample_factory.utils.typing import Config, Env, PolicyID
 from sample_factory.utils.utils import experiment_dir
 from sf_examples.dmlab_examples.dmlab_env import (
     DMLAB_ENVS,
@@ -42,11 +44,16 @@ def register_dmlab_components(level_caches: Optional[DmlabLevelCaches] = None):
     global_model_factory().register_encoder_factory(make_dmlab_encoder)
 
 
+class DmlabExtraSummariesObserver(AlgoObserver):
+    def extra_summaries(self, runner: Runner, policy_id: PolicyID, env_steps: int, writer: SummaryWriter) -> None:
+        dmlab_extra_summaries(runner, policy_id, env_steps, writer)
+
+
 def register_msg_handlers(cfg: Config, runner: Runner):
     if cfg.env == "dmlab_30":
         # extra functions to calculate human-normalized score etc.
         runner.register_episodic_stats_handler(dmlab_extra_episodic_stats_processing)
-        runner.register_summary_handler(dmlab_extra_summaries)
+        runner.register_observer(DmlabExtraSummariesObserver())
 
 
 def initialize_level_cache(cfg: Config, mp_ctx: BaseContext) -> Optional[DmlabLevelCaches]:

@@ -11,10 +11,6 @@ from sample_factory.utils.gpu_utils import gpus_for_process
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID
 
-# "TimeLimit.truncated" is the key used by Gym TimeLimit wrapper.
-# "time_outs" is used by IsaacGym.
-TIMEOUT_KEYS: Tuple = ("time_outs", "TimeLimit.truncated")
-
 
 class VectorEnvRunner(Configurable):
     def __init__(self, cfg: AttrDict, env_info: EnvInfo, worker_idx, split_idx, buffer_mgr, sampling_device: str):

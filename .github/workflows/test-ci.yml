@@ -1,6 +1,14 @@
 name: tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+    - master
+    - sf2
+  pull_request:
+    branches:
+    - master
+    - sf2
 
 jobs:
   run-tests:
