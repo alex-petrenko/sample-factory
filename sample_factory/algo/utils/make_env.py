@@ -89,7 +89,7 @@ class BatchedMultiAgentWrapper(Wrapper[DictOfListsObservations, Actions]):
         action = action[0]
         obs, rew, terminated, truncated, info = self.env.step(action)
         if terminated | truncated:
-            obs, info = self.env.reset()
+            obs, _ = self.env.reset()
         return self._obs(obs), [rew], [terminated], [truncated], [info]
 
 
@@ -113,7 +113,7 @@ class NonBatchedMultiAgentWrapper(Wrapper[ListObservations, ListActions]):
         action = action[0]
         obs, rew, terminated, truncated, info = self.env.step(action)
         if terminated or truncated:  # auto-resetting
-            obs, info = self.env.reset()
+            obs, _ = self.env.reset()
         return [obs], [rew], [terminated], [truncated], [info]
 
 
