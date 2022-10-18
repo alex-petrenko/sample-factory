@@ -127,6 +127,10 @@ nav:
     - environment-integrations/atari.md
     - environment-integrations/vizdoom.md
     - environment-integrations/megaverse.md
+    - environment-integrations/dmlab.md
+  - Customizing Sample Factory:
+    - customize/custom_environments.md
+    - customize/custom_models.md
   - Release Notes:
     - release-notes/release-notes.md
   - Community:
