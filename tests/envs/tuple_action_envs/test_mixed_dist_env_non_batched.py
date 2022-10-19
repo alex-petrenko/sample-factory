@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import gym
 import numpy as np
@@ -49,7 +49,7 @@ class IdentityEnvMixedActions(gym.Env):
         terminated = truncated = self.current_step >= self.ep_length
         return self.state, reward, terminated, truncated, {}
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
     def close(self):
@@ -70,7 +70,7 @@ def override_defaults(parser):
     )
 
 
-def make_env(_env_name, _cfg, _cfg_env):
+def make_env(_env_name, _cfg, _cfg_env, render_mode: Optional[str] = None):
     return IdentityEnvMixedActions(4)
 
 
@@ -90,6 +90,7 @@ def test_non_batched_mixed_action_dists():
         "--env=non_batched_mix_dist_env",
         "--experiment=test_non_batched_mixed_action_dists",
         "--device=cpu",
+        "--restart_behavior=overwrite",
     ]
 
     parser, cfg = parse_sf_args(argv=argv)

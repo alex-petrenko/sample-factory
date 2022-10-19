@@ -152,6 +152,12 @@ class Learner(Configurable):
 
         self.best_performance = -1e9
 
+        # for configuration updates, i.e. from PBT
+        self.new_cfg: Optional[Dict] = None
+
+        # for multi-policy learning (i.e. with PBT) when we need to load weights of another policy
+        self.policy_to_load: Optional[PolicyID] = None
+
         # decay rate at which summaries are collected
         # save summaries every 5 seconds in the beginning, but decay to every 4 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
@@ -287,7 +293,7 @@ class Learner(Configurable):
 
         log.info(f"Loaded experiment state at {self.train_step=}, {self.env_steps=}")
 
-    def load_from_checkpoint(self, policy_id):
+    def load_from_checkpoint(self, policy_id: PolicyID, load_progress: bool = True) -> None:
         name_prefix = dict(latest="checkpoint", best="best")[self.cfg.load_checkpoint_kind]
         checkpoints = self.get_checkpoints(self.checkpoint_dir(self.cfg, policy_id), pattern=f"{name_prefix}_*")
         checkpoint_dict = self.load_checkpoint(checkpoints, self.device)
@@ -297,8 +303,6 @@ class Learner(Configurable):
             log.debug("Loading model from checkpoint")
 
             # if we're replacing our policy with another policy (under PBT), let's not reload the env_steps
-            # TODO: learner shouldn't know anything about PBT
-            load_progress = policy_id == self.policy_id
             self._load_state(checkpoint_dict, load_progress=load_progress)
 
     def _should_save_summaries(self):
@@ -323,9 +327,9 @@ class Learner(Configurable):
         }
         return checkpoint
 
-    def _save_impl(self, name_prefix, name_suffix, keep_checkpoints, verbose=True):
+    def _save_impl(self, name_prefix, name_suffix, keep_checkpoints, verbose=True) -> bool:
         if not self.is_initialized:
-            return
+            return False
 
         checkpoint = self._get_checkpoint_dict()
         assert checkpoint is not None
@@ -349,30 +353,77 @@ class Learner(Configurable):
                     log.debug("Removing %s", oldest_checkpoint)
                 os.remove(oldest_checkpoint)
 
-    def save(self):
-        self._save_impl("checkpoint", "", self.cfg.keep_checkpoints)
+        return True
 
-        # TODO: move milestone logic to the runner?
-        # if self.cfg.save_milestones_sec > 0:
-        #     # milestones enabled
-        #     if time.time() - self.last_milestone_time >= self.cfg.save_milestones_sec:
-        #         milestones_dir = ensure_dir_exists(join(checkpoint_dir, 'milestones'))
-        #         milestone_path = join(milestones_dir, f'{checkpoint_name}.milestone')
-        #         log.debug('Saving a milestone %s', milestone_path)
-        #         shutil.copy(filepath, milestone_path)
-        #         self.last_milestone_time = time.time()
+    def save(self) -> bool:
+        return self._save_impl("checkpoint", "", self.cfg.keep_checkpoints)
 
-    def save_best(self, policy_id, metric, metric_value):
+    def save_milestone(self):
+        checkpoint = self._get_checkpoint_dict()
+        assert checkpoint is not None
+        checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
+        checkpoint_name = f"checkpoint_{self.train_step:09d}_{self.env_steps}.pth"
+
+        milestones_dir = ensure_dir_exists(join(checkpoint_dir, "milestones"))
+        milestone_path = join(milestones_dir, f"{checkpoint_name}")
+        log.info("Saving a milestone %s", milestone_path)
+        torch.save(checkpoint, milestone_path)
+
+    def save_best(self, policy_id, metric, metric_value) -> bool:
         # TODO it seems that the Runner is broadcasting the signals to all learners, so it won't pass the assertion in multi-policy env, we may add an if instead of assert?
         # assert policy_id == self.policy_id
         if policy_id != self.policy_id:
-            return
+            return False
         p = 3  # precision, number of significant digits
         if metric_value - self.best_performance > 1 / 10**p:
             log.info(f"Saving new best policy, {metric}={metric_value:.{p}f}!")
             self.best_performance = metric_value
             name_suffix = f"_{metric}_{metric_value:.{p}f}"
-            self._save_impl("best", name_suffix, 1, verbose=False)
+            return self._save_impl("best", name_suffix, 1, verbose=False)
+
+        return False
+
+    def set_new_cfg(self, new_cfg: Dict) -> None:
+        self.new_cfg = new_cfg
+
+    def set_policy_to_load(self, policy_to_load: PolicyID) -> None:
+        self.policy_to_load = policy_to_load
+
+    def _maybe_update_cfg(self) -> None:
+        if self.new_cfg is not None:
+            for key, value in self.new_cfg.items():
+                if self.cfg[key] != value:
+                    log.debug("Learner %d replacing cfg parameter %r with new value %r", self.policy_id, key, value)
+                    self.cfg[key] = value
+
+            if self.cfg.lr_schedule == "constant" and self.curr_lr != self.cfg.learning_rate:
+                # PBT-optimized learning rate, only makes sense if we use constant LR
+                # in case of more advanced LR scheduling we should update the parameters of the scheduler, not the
+                # learning rate directly
+                log.debug(f"Updating learning rate from {self.curr_lr} to {self.cfg.learning_rate}")
+                self.curr_lr = self.cfg.learning_rate
+                self._apply_lr(self.curr_lr)
+
+            for param_group in self.optimizer.param_groups:
+                param_group["betas"] = (self.cfg.adam_beta1, self.cfg.adam_beta2)
+                log.debug("Optimizer lr value %.7f, betas: %r", param_group["lr"], param_group["betas"])
+
+            self.new_cfg = None
+
+    def _maybe_load_policy(self) -> None:
+        if self.policy_to_load is not None:
+            with self.param_server.policy_lock:
+                # don't re-load progress if we are loading from another policy checkpoint
+                self.load_from_checkpoint(self.policy_to_load, load_progress=False)
+
+            # make sure everything (such as policy weights) is committed to shared device memory
+            synchronize(self.cfg, self.device)
+            # this will force policy update on the inference worker (policy worker)
+            # we add max_policy_lag steps so that all experience currently in batches is invalidated
+            self.train_step += self.cfg.max_policy_lag + 1
+            self.policy_versions_tensor[self.policy_id] = self.train_step
+
+            self.policy_to_load = None
 
     @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids: int):
@@ -953,11 +1004,18 @@ class Learner(Configurable):
             return buff, dataset_size, num_invalids
 
     def train(self, batch: TensorDict) -> Optional[Dict]:
+        with self.timing.add_time("misc"):
+            self._maybe_update_cfg()
+            self._maybe_load_policy()
+
         with self.timing.add_time("prepare_batch"):
             buff, experience_size, num_invalids = self._prepare_batch(batch)
 
         if num_invalids >= experience_size:
-            log.error(f"Learner {self.policy_id=} received an entire batch of invalid data, skipping...")
+            if self.cfg.with_pbt:
+                log.warning("No valid samples in the batch, with PBT this must mean we just replaced weights")
+            else:
+                log.error(f"Learner {self.policy_id=} received an entire batch of invalid data, skipping...")
             return None
         else:
             with self.timing.add_time("train"):

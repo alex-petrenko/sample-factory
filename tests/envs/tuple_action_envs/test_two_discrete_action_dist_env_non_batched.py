@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import gym
 import numpy as np
@@ -56,7 +56,7 @@ class IdentityEnvTwoDiscreteActions(gym.Env):
     def close(self):
         pass
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
 
@@ -74,7 +74,7 @@ def override_defaults(parser):
     )
 
 
-def make_env(_env_name, _cfg, _cfg_env):
+def make_env(_env_name, _cfg, _cfg_env, render_mode: Optional[str] = None):
     return IdentityEnvTwoDiscreteActions(4)
 
 
@@ -93,6 +93,7 @@ def test_non_batched_two_discrete_action_dists():
         "--algo=APPO",
         "--env=non_batched_two_discrete_dist_env",
         "--experiment=test_non_batched_two_discrete_dists",
+        "--restart_behavior=overwrite",
         "--device=cpu",
     ]
 

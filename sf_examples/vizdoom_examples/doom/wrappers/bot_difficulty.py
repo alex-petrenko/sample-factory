@@ -2,6 +2,8 @@ import gym
 
 from sample_factory.utils.utils import log
 
+# Wrapper no longer in use
+
 
 class BotDifficultyWrapper(gym.Wrapper):
     """Adjust bot difficulty according to agent's final position in the match."""

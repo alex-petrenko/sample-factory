@@ -1,6 +1,7 @@
-from typing import Callable, Dict
+from typing import Dict
 
 from sample_factory.model.model_factory import ModelFactory
+from sample_factory.utils.typing import CreateEnvFunc
 
 
 class SampleFactoryContext:
@@ -29,7 +30,7 @@ def reset_global_context():
     GLOBAL_CONTEXT = SampleFactoryContext()
 
 
-def global_env_registry() -> Dict[str, Callable]:
+def global_env_registry() -> Dict[str, CreateEnvFunc]:
     """
     :return: global env registry
     :rtype: EnvRegistry

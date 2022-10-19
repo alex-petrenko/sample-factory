@@ -6,27 +6,32 @@ After training for a desired period of time, evaluate the policy by running:
 python -m sf_examples.enjoy_custom_multi_env --algo=APPO --env=my_custom_multi_env_v1 --experiment=example_multi
 
 """
+from __future__ import annotations
+
 import random
 import sys
+from typing import Any, Dict, Optional
 
 import gym
 import numpy as np
 
 from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
-from sample_factory.envs.env_utils import register_env
+from sample_factory.envs.env_utils import RewardShapingInterface, TrainingInfoInterface, register_env
 from sample_factory.train import run_rl
 from sf_examples.train_custom_env_custom_model import make_custom_encoder, override_default_params
 
 
-class CustomMultiEnv(gym.Env):
+class CustomMultiEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
     """
     Implements a simple 2-agent game. Observation space is irrelevant. Optimal strategy is for both agents
     to choose the same action (both 0 or 1).
 
     """
 
-    def __init__(self, full_env_name, cfg):
+    def __init__(self, full_env_name, cfg, render_mode: Optional[str] = None):
+        TrainingInfoInterface.__init__(self)
+
         self.name = full_env_name  # optional
         self.cfg = cfg
         self.curr_episode_steps = 0
@@ -43,7 +48,11 @@ class CustomMultiEnv(gym.Env):
 
         self.episode_rewards = [[] for _ in range(self.num_agents)]
 
+        self.reward_shaping = [dict(rew=-1.0) for _ in range(self.num_agents)]
+
         self.obs = None
+
+        self.render_mode = render_mode
 
     def _obs(self):
         if self.obs is None:
@@ -72,9 +81,11 @@ class CustomMultiEnv(gym.Env):
         self.curr_episode_steps += 1
 
         # this is like prisoner's dilemma
+        rew0 = self.reward_shaping[0]["rew"]
+        rew1 = self.reward_shaping[1]["rew"]
         payout_matrix = [
-            [(0, 0), (-1.0, -1.0)],
-            [(-1.0, -1.0), (0, 0)],
+            [(0, 0), (rew0, rew1)],
+            [(rew0, rew1), (0, 0)],
         ]
 
         # action = 0 to stay silent, 1 to betray
@@ -98,12 +109,18 @@ class CustomMultiEnv(gym.Env):
 
         return obs, rewards, terminated, truncated, infos
 
-    def render(self, mode="human"):
+    def get_default_reward_shaping(self) -> Optional[Dict[str, Any]]:
+        return self.reward_shaping[0]
+
+    def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_idx: int | slice) -> None:
+        self.reward_shaping[agent_idx] = reward_shaping
+
+    def render(self):
         pass
 
 
-def make_custom_multi_env_func(full_env_name, cfg=None, _env_config=None):
-    return CustomMultiEnv(full_env_name, cfg)
+def make_custom_multi_env_func(full_env_name, cfg=None, _env_config=None, render_mode: Optional[str] = None):
+    return CustomMultiEnv(full_env_name, cfg, render_mode=render_mode)
 
 
 def add_extra_params_func(parser):

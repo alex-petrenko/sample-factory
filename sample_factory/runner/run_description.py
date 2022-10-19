@@ -87,7 +87,7 @@ class ParamGrid(ParamGenerator):
 
 
 class Experiment:
-    def __init__(self, name, cmd, param_generator, env_vars=None):
+    def __init__(self, name, cmd, param_generator=(), env_vars=None):
         """
         :param cmd: base command to append the parameters to
         :param param_generator: iterable of parameter dicts

@@ -1,21 +1,24 @@
-"""This is currently not supported, need to adapt for """
+"""Population-Based Training implementation, inspired by https://arxiv.org/abs/1807.01281."""
 
 
 import copy
 import json
 import math
-import numbers
 import os
 import random
 import time
-from enum import Enum
 from os.path import join
-from queue import Full
+from typing import Dict, Optional, SupportsFloat
 
 import numpy as np
+from signal_slot.signal_slot import EventLoopObject
+from tensorboardX import SummaryWriter
 
-from sample_factory.algorithms.appo.appo_utils import TaskType, iter_dicts_recursively, iterate_recursively
-from sample_factory.algorithms.utils.algo_utils import EPS
+from sample_factory.algo.runners.runner import AlgoObserver, Runner
+from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.misc import EPS
+from sample_factory.utils.dicts import iter_dicts_recursively, iterate_recursively
+from sample_factory.utils.typing import Config, PolicyID
 from sample_factory.utils.utils import experiment_dir, log
 
 
@@ -25,11 +28,11 @@ def perturb_float(x, perturb_amount=1.2):
     return new_value
 
 
-def perturb_vtrace(x, cfg):
+def perturb_vtrace(x, _cfg):
     return perturb_float(x, perturb_amount=1.005)
 
 
-def perturb_exponential_decay(x, cfg, perturb_amount_min=1.01, perturb_amount_max=1.2):
+def perturb_exponential_decay(x, _cfg, perturb_amount_min=1.01, perturb_amount_max=1.2):
     # very conservative values, things like gamma should not change quickly
     perturb_amount = random.uniform(perturb_amount_min, perturb_amount_max)
     perturbed = perturb_float(1.0 - x, perturb_amount=perturb_amount)
@@ -51,10 +54,6 @@ def perturb_batch_size(x, cfg):
 
     new_value = max(new_value, min_batch_size)
     return new_value
-
-
-class PbtTask(Enum):
-    SAVE_MODEL, LOAD_MODEL, UPDATE_CFG, UPDATE_REWARD_SCHEME = range(4)
 
 
 HYPERPARAMS_TO_TUNE = {
@@ -94,12 +93,31 @@ def policy_reward_shaping_file(cfg, policy_id):
     return join(experiment_dir(cfg=cfg), f"policy_{policy_id:02d}_reward_shaping.json")
 
 
-class PopulationBasedTraining:
-    def __init__(self, cfg, default_reward_shaping, summary_writers):
-        self.cfg = cfg
+def update_cfg_signal(policy_id: PolicyID) -> str:
+    return f"update_cfg{policy_id}"
 
-        if cfg.pbt_optimize_batch_size:
-            HYPERPARAMS_TO_TUNE.add("batch_size")
+
+def save_model_signal(policy_id: PolicyID) -> str:
+    return f"save_model{policy_id}"
+
+
+def load_model_signal(policy_id: PolicyID) -> str:
+    return f"load_model{policy_id}"
+
+
+class PopulationBasedTraining(AlgoObserver, EventLoopObject):
+    def __init__(self, cfg: Config, runner: Runner):
+        EventLoopObject.__init__(self, runner.event_loop, "PBT")
+
+        self.cfg: Config = cfg
+        self.env_info: Optional[EnvInfo] = None
+
+        self.runner: Runner = runner
+
+        # currently not supported, would require changes on the batcher
+        # if cfg.pbt_optimize_batch_size:
+        #     HYPERPARAMS_TO_TUNE.add("batch_size")
+
         if cfg.pbt_optimize_gamma:
             HYPERPARAMS_TO_TUNE.add("gamma")
 
@@ -108,21 +126,21 @@ class PopulationBasedTraining:
         self.policy_cfg = [dict() for _ in range(self.cfg.num_policies)]
         self.policy_reward_shaping = [dict() for _ in range(self.cfg.num_policies)]
 
-        self.default_reward_shaping = default_reward_shaping
+        self.default_reward_shaping: Optional[Dict] = None
 
-        self.summary_writers = summary_writers
         self.last_pbt_summaries = 0
-
-        self.learner_workers = self.actor_workers = None
 
         self.reward_categories_to_tune = []
         for env_prefix, categories in REWARD_CATEGORIES_TO_TUNE.items():
             if cfg.env.startswith(env_prefix):
                 self.reward_categories_to_tune = categories
 
-    def init(self, learner_workers, actor_workers):
-        self.learner_workers = learner_workers
-        self.actor_workers = actor_workers
+        # Set to non-None when policy x has to be replaced by replacement_policy[x]
+        self.replacement_policy: Dict[PolicyID, Optional[PolicyID]] = {p: None for p in range(self.cfg.num_policies)}
+
+    def on_init(self, runner: Runner) -> None:
+        self.env_info = runner.env_info
+        self.default_reward_shaping = self.env_info.reward_shaping_scheme
 
         for policy_id in range(self.cfg.num_policies):
             # save the policy-specific configs if they don't exist, or else load them from files
@@ -160,12 +178,22 @@ class PopulationBasedTraining:
                     log.debug("Initial rewards mutation for policy %d", policy_id)
                     self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[policy_id])
 
-        # send initial configuration to the system components
         for policy_id in range(self.cfg.num_policies):
             self._save_cfg(policy_id)
             self._save_reward_shaping(policy_id)
+
+    def on_connect_components(self, runner: Runner) -> None:
+        for policy_id, learner_worker in runner.learners.items():
+            self.connect(update_cfg_signal(policy_id), learner_worker.on_update_cfg)
+            self.connect(save_model_signal(policy_id), learner_worker.save)
+            self.connect(load_model_signal(policy_id), learner_worker.load)
+            learner_worker.saved_model.connect(self.on_saved_model)
+
+    def on_start(self, runner: Runner) -> None:
+        # send initial configuration to the system components
+        for policy_id in range(self.cfg.num_policies):
             self._learner_update_cfg(policy_id)
-            self._actors_update_shaping_scheme(policy_id)
+            runner.update_reward_shaping(policy_id, self.policy_reward_shaping[policy_id])
 
     def _save_cfg(self, policy_id):
         policy_cfg_filename = policy_cfg_file(self.cfg, policy_id)
@@ -184,7 +212,7 @@ class PopulationBasedTraining:
         if random.random() > self.cfg.pbt_mutation_rate:
             return param
 
-        if param != default_param and random.random() < 0.05:
+        if param != default_param and random.random() < 0.01:
             # small chance to replace parameter with a default value
             log.debug("%s changed to default value %r", param_name, default_param)
             return default_param
@@ -193,7 +221,7 @@ class PopulationBasedTraining:
             new_value = SPECIAL_PERTURBATION[param_name](param, self.cfg)
         elif type(param) is bool:
             new_value = not param
-        elif isinstance(param, numbers.Number):
+        elif isinstance(param, SupportsFloat):
             perturb_amount = random.uniform(self.cfg.pbt_perturb_min, self.cfg.pbt_perturb_max)
             new_value = perturb_float(float(param), perturb_amount=perturb_amount)
         else:
@@ -243,33 +271,9 @@ class PopulationBasedTraining:
 
         return replacement_shaping
 
-    def _force_learner_to_save_model(self, policy_id):
-        learner_worker = self.learner_workers[policy_id]
-        learner_worker.save_model()
-
-    def _learner_load_model(self, policy_id, replacement_policy):
-        log.debug("Asking learner %d to load model from %d", policy_id, replacement_policy)
-
-        load_task = (PbtTask.LOAD_MODEL, (policy_id, replacement_policy))
-        learner_worker = self.learner_workers[policy_id]
-        learner_worker.task_queue.put((TaskType.PBT, load_task))
-
-    def _learner_update_cfg(self, policy_id):
-        learner_worker = self.learner_workers[policy_id]
-
-        log.debug("Sending learning configuration to learner %d...", policy_id)
-        cfg_task = (PbtTask.UPDATE_CFG, (policy_id, self.policy_cfg[policy_id]))
-        learner_worker.task_queue.put((TaskType.PBT, cfg_task))
-
-    def _actors_update_shaping_scheme(self, policy_id):
-        log.debug("Sending latest reward scheme to actors for policy %d...", policy_id)
-        for actor_worker in self.actor_workers:
-            reward_scheme_task = (PbtTask.UPDATE_REWARD_SCHEME, (policy_id, self.policy_reward_shaping[policy_id]))
-            task = (TaskType.PBT, reward_scheme_task)
-            try:
-                actor_worker.task_queue.put(task, timeout=0.1)
-            except Full:
-                log.warning("Could not add task %r to queue, it is likely that worker died", task)
+    def _learner_update_cfg(self, policy_id: PolicyID) -> None:
+        log.debug(f"Sending learning configuration to learner {policy_id}...")
+        self.emit(update_cfg_signal(policy_id), self.policy_cfg[policy_id])
 
     @staticmethod
     def _write_dict_summaries(dictionary, writer, name, env_steps):
@@ -285,8 +289,7 @@ class PopulationBasedTraining:
             else:
                 log.error("Unsupported type in pbt summaries %r", type(value))
 
-    def _write_pbt_summaries(self, policy_id, env_steps):
-        writer = self.summary_writers[policy_id]
+    def _write_pbt_summaries(self, policy_id, env_steps, writer: SummaryWriter):
         self._write_dict_summaries(self.policy_cfg[policy_id], writer, "cfg", env_steps)
         if self.policy_reward_shaping[policy_id] is not None:
             self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, "rew", env_steps)
@@ -357,21 +360,39 @@ class PopulationBasedTraining:
             self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[replacement_policy])
             self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[replacement_policy])
 
-        if replacement_policy != policy_id:
-            # force replacement policy learner to save the model and wait until it's done
-            self._force_learner_to_save_model(replacement_policy)
+        # force replacement policy learner to save its model so we get the latest version
+        # for simplicity we do this even if the policy is replaced by itself (so no replacement happens)
+        self.replacement_policy[policy_id] = replacement_policy
+        self.emit(save_model_signal(replacement_policy))
 
-            # now that the latest "replacement" model is saved to disk, we ask the learner to load the replacement policy
-            self._learner_load_model(policy_id, replacement_policy)
+    def on_saved_model(self, replacement_policy: PolicyID) -> None:
+        """
+        Called when learner saves its model. At this point we're free to use this model to
+        replace other policies.
+        """
+        for policy_id in range(self.cfg.num_policies):
+            if self.replacement_policy[policy_id] != replacement_policy:
+                continue
 
-        self._save_cfg(policy_id)
-        self._save_reward_shaping(policy_id)
-        self._learner_update_cfg(policy_id)
-        self._actors_update_shaping_scheme(policy_id)
+            if replacement_policy != policy_id:
+                # only load the model if it's not already loaded
+                log.debug(f"Asking learner {policy_id} to load model from {replacement_policy}")
+                self.emit(load_model_signal(policy_id), replacement_policy)
 
-    def update(self, env_steps, policy_stats):
+            self.replacement_policy[policy_id] = None
+
+            self._save_cfg(policy_id)
+            self._save_reward_shaping(policy_id)
+            self._learner_update_cfg(policy_id)
+
+            self.runner.update_reward_shaping(policy_id, self.policy_reward_shaping[policy_id])
+
+    def on_training_step(self, runner: Runner, training_iteration_since_resume: int) -> None:
         if not self.cfg.with_pbt or self.cfg.num_policies <= 1:
             return
+
+        env_steps = runner.env_steps
+        policy_avg_stats = runner.policy_avg_stats
 
         for policy_id in range(self.cfg.num_policies):
             if policy_id not in env_steps:
@@ -382,8 +403,8 @@ class PopulationBasedTraining:
 
             steps_since_last_update = env_steps[policy_id] - self.last_update[policy_id]
             if steps_since_last_update > self.cfg.pbt_period_env_steps:
-                self._update_policy(policy_id, policy_stats)
-                self._write_pbt_summaries(policy_id, env_steps[policy_id])
+                self._update_policy(policy_id, policy_avg_stats)
+                self._write_pbt_summaries(policy_id, env_steps[policy_id], runner.writers[policy_id])
                 self.last_update[policy_id] = env_steps[policy_id]
 
         # also periodically dump a pbt summary even if we didn't change anything
@@ -391,5 +412,5 @@ class PopulationBasedTraining:
         if now - self.last_pbt_summaries > 5 * 60:
             for policy_id in range(self.cfg.num_policies):
                 if policy_id in env_steps:
-                    self._write_pbt_summaries(policy_id, env_steps[policy_id])
+                    self._write_pbt_summaries(policy_id, env_steps[policy_id], runner.writers[policy_id])
                     self.last_pbt_summaries = now

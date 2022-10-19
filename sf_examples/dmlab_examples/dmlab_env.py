@@ -105,14 +105,19 @@ def list_all_levels_for_experiment(env_name):
 
 
 def make_dmlab_env_impl(
-    spec, cfg, env_config, dmlab_level_caches_per_policy: Dict[PolicyID, DmlabLevelCache] = None, **kwargs
+    spec,
+    cfg,
+    env_config,
+    render_mode: Optional[str] = None,
+    dmlab_level_caches_per_policy: Dict[PolicyID, DmlabLevelCache] = None,
+    **_kwargs,
 ):
     skip_frames = cfg.env_frameskip
 
     gpu_idx = 0
     if len(cfg.dmlab_gpus) > 0:
-        if kwargs.get("env_config") is not None:
-            vector_index = kwargs["env_config"]["vector_index"]
+        if env_config is not None:
+            vector_index = env_config["vector_index"]
             gpu_idx = cfg.dmlab_gpus[vector_index % len(cfg.dmlab_gpus)]
             log.debug("Using GPU %d for DMLab rendering!", gpu_idx)
 
@@ -135,6 +140,7 @@ def make_dmlab_env_impl(
         gpu_idx,
         dmlab_level_caches_per_policy,
         spec.extra_cfg,
+        render_mode,
     )
 
     if env_config and "env_id" in env_config:
@@ -150,9 +156,15 @@ def make_dmlab_env_impl(
     return env
 
 
-def make_dmlab_env(env_name, cfg, env_config, dmlab_level_caches_per_policy: Optional[DmlabLevelCaches] = None):
+def make_dmlab_env(
+    env_name,
+    cfg,
+    env_config,
+    render_mode: Optional[str] = None,
+    dmlab_level_caches_per_policy: Optional[DmlabLevelCaches] = None,
+):
     spec = dmlab_env_by_name(env_name)
-    return make_dmlab_env_impl(spec, cfg, env_config, dmlab_level_caches_per_policy)
+    return make_dmlab_env_impl(spec, cfg, env_config, render_mode, dmlab_level_caches_per_policy)
 
 
 @static_vars(new_level_returns=dict(), env_spec=None)

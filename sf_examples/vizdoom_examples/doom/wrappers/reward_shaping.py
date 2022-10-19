@@ -1,6 +1,7 @@
 import copy
 import operator
 from collections import deque
+from typing import Callable
 
 import gym
 
@@ -68,7 +69,7 @@ REWARD_SHAPING_DEATHMATCH_V1["delta"].update(
 REWARD_SHAPING_BATTLE = copy.deepcopy(REWARD_SHAPING_DEATHMATCH_V0)
 
 
-def true_objective_final_position(info):
+def true_objective_winning_the_game(info):
     if info["LEADER_GAP"] == 0:
         # tied with the leader for the win, we don't reward for ties, only for the win
         return 0.0
@@ -93,7 +94,7 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         RewardShapingInterface.__init__(self)
 
         self.reward_shaping_scheme = reward_shaping_scheme
-        self.true_objective_func = true_objective_func
+        self.true_objective_func: Callable = true_objective_func
 
         # without this we reward using BFG and shotguns too much
         self.reward_delta_limits = dict(DAMAGECOUNT=200, HITCOUNT=5)
@@ -114,9 +115,6 @@ class DoomRewardShapingWrapper(gym.Wrapper, RewardShapingInterface):
         self.env.unwrapped.reward_shaping_interface = self
 
     def get_default_reward_shaping(self):
-        return self.reward_shaping_scheme
-
-    def get_current_reward_shaping(self, agent_idx: int):
         return self.reward_shaping_scheme
 
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):

@@ -20,10 +20,10 @@ MpQueue = Any
 MpLock = Any
 
 Env = Any
-ObsSpace = spaces.Space
+ObsSpace = Union[spaces.Space, spaces.Dict]
 ActionSpace = spaces.Space
 
-CreateEnvFunc = Callable[[str, Optional[Config], Optional[AttrDict]], Env]
+CreateEnvFunc = Callable[[str, Optional[Config], Optional[AttrDict], Optional[str]], Env]
 
 # there currenly isn't a single class all distributions derive from, but we gotta use something for the type hint
 ActionDistribution = Any

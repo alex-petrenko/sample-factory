@@ -174,7 +174,7 @@ class MultiAgentEnvWorker:
 
 
 class MultiAgentEnv(gym.Env, RewardShapingInterface):
-    def __init__(self, num_agents, make_env_func, env_config, skip_frames):
+    def __init__(self, num_agents, make_env_func, env_config, skip_frames, render_mode):
         gym.Env.__init__(self)
         RewardShapingInterface.__init__(self)
 
@@ -212,11 +212,10 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
 
         self.initialized = False
 
+        self.render_mode = render_mode
+
     def get_default_reward_shaping(self):
         return self.default_reward_shaping
-
-    def get_current_reward_shaping(self, agent_idx: int):
-        return self.current_reward_shaping[agent_idx]
 
     def set_reward_shaping(self, reward_shaping: dict, agent_idx: int):
         self.current_reward_shaping[agent_idx] = reward_shaping
@@ -333,7 +332,9 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             info["num_frames"] = self.skip_frames
 
         if all(dones):
-            obs, infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+            obs, reset_infos = self.await_tasks(None, TaskType.RESET, timeout=2.0)
+            for i, reset_info in enumerate(reset_infos):
+                infos[i]["reset_info"] = reset_info
 
         if self.enable_rendering:
             self.last_obs = obs
@@ -341,11 +342,18 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
         return obs, rew, terminated, truncated, infos
 
     # noinspection PyUnusedLocal
-    def render(self, *args, **kwargs):
+    def render(self):
         self.enable_rendering = True
 
         if self.last_obs is None:
             return
+
+        if self.render_mode is None:
+            return
+        elif self.render_mode == "human":
+            pass
+        else:
+            raise ValueError(f"{self.render_mode=} is not supported")
 
         render_multiagent = True
         if render_multiagent:

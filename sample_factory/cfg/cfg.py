@@ -333,7 +333,7 @@ def add_rl_args(p: ArgumentParser):
         default=None,
         type=str,
         nargs="*",
-        help="Which observation keys to use for normalization. If None, all observation keys are used",
+        help="Which observation keys to use for normalization. If None, all observation keys are used (be careful with this!)",
     )
 
     # decorrelating experience on startup (optional)
@@ -451,7 +451,6 @@ def add_rl_args(p: ArgumentParser):
         choices=["latest", "best"],
         help="Whether to load from latest or best checkpoint",
     )
-    # TODO: check if this is working
     p.add_argument(
         "--save_milestones_sec",
         default=-1,
@@ -688,8 +687,8 @@ def add_wandb_args(p: ArgumentParser):
 
 
 def add_pbt_args(p: ArgumentParser):
-    """This is currently not supported and should be probably moved elsewhere."""  # TODO: PBT example
-    p.add_argument("--with_pbt", default=False, type=str2bool, help="Enables population-based training basic features")
+    """Population-based training (PBT) arguments."""
+    p.add_argument("--with_pbt", default=False, type=str2bool, help="Enables population-based training (PBT)")
     p.add_argument(
         "--pbt_mix_policies_in_one_env",
         default=True,
@@ -728,12 +727,6 @@ def add_pbt_args(p: ArgumentParser):
         help="Absolute gap in true reward when replacing weights of the policy with a better performing one",
     )
     p.add_argument(
-        "--pbt_optimize_batch_size",
-        default=False,
-        type=str2bool,
-        help="Whether to optimize batch size or not (experimental)",
-    )
-    p.add_argument(
         "--pbt_optimize_gamma",
         default=False,
         type=str2bool,
@@ -748,7 +741,7 @@ def add_pbt_args(p: ArgumentParser):
     )
     p.add_argument(
         "--pbt_perturb_min",
-        default=1.05,
+        default=1.1,
         type=float,
         help="When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max]",
     )

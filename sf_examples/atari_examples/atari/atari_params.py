@@ -1,6 +1,3 @@
-import argparse
-
-
 def atari_override_defaults(_env, parser):
     """RL params specific to Atari envs."""
     parser.set_defaults(
@@ -39,17 +36,10 @@ def atari_override_defaults(_env, parser):
         shuffle_minibatches=False,
         gae_lambda=0.95,
         batched_sampling=False,
-        normalize_input=False,
-        normalize_returns=False,
+        normalize_input=True,
+        normalize_returns=True,
         serial_mode=False,
         async_rl=False,
         experiment_summaries_interval=3,
         adam_eps=1e-5,  # choosing the same value as CleanRL used
     )
-
-
-def add_atari_env_args(_env, p: argparse.ArgumentParser, evaluation=False):
-    if evaluation:
-        # apparently env.render(mode="human") is not supported anymore and we need to specify the render mode in
-        # the env ctor
-        p.add_argument("--render_mode", default="human", type=str, help="")

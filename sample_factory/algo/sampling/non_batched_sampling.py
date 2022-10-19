@@ -42,7 +42,7 @@ class ActorState:
         traj_buffer_queue: MpQueue,
         traj_tensors: TensorDict,
         policy_output_tensors,
-        pbt_reward_shaping,
+        training_info: List[Optional[Dict]],
         policy_mgr,
     ):
         self.cfg = cfg
@@ -90,13 +90,8 @@ class ActorState:
         self.last_episode_reward = 0
         self.last_episode_duration = 0
 
-        # dictionary with current training progress per policy
-        # values are approximate because we get updates from the master process once every few seconds
-        self.approx_env_steps = {}
-
-        self.pbt_reward_shaping = pbt_reward_shaping
-
-        self.env_training_info_interface = find_training_info_interface(env)  # TODO: batched sampler
+        self.training_info: List[Optional[Dict]] = training_info
+        self.env_training_info_interface = find_training_info_interface(env)
 
     def _env_set_curr_policy(self):
         """
@@ -105,16 +100,19 @@ class ActorState:
         """
         set_attr_if_exists(self.env.unwrapped, "curr_policy_idx", self.curr_policy_id)
 
+    def _update_training_info(self) -> None:
+        """Propagate information in the direction RL algo -> environment."""
+        if self.training_info[self.curr_policy_id] is not None:
+            reward_shaping = self.training_info[self.curr_policy_id].get("reward_shaping", None)
+            set_reward_shaping(self.env, reward_shaping, self.agent_idx)
+            set_training_info(self.env_training_info_interface, self.training_info[self.curr_policy_id])
+
     def _on_new_policy(self, new_policy_id):
         """Called when the new policy is sampled for this actor."""
         self.curr_policy_id = new_policy_id
 
         # policy change can only happen at the episode boundary so no need to reset rnn state (but I guess does not hurt)
         self.reset_rnn_state()
-
-        if self.cfg.with_pbt and self.pbt_reward_shaping[self.curr_policy_id] is not None:
-            set_reward_shaping(self.env, self.pbt_reward_shaping[self.curr_policy_id], self.agent_idx)
-            set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
 
         self._env_set_curr_policy()
 
@@ -206,7 +204,7 @@ class ActorState:
         if done:
             report = self._episodic_stats(info)
 
-            set_training_info(self.env_training_info_interface, self.approx_env_steps.get(self.curr_policy_id, 0))
+            self._update_training_info()
 
             new_policy_id = self.policy_mgr.get_policy_for_agent(self.agent_idx, self.env_idx, self.global_env_idx)
             if new_policy_id != self.curr_policy_id:
@@ -297,7 +295,7 @@ class ActorState:
             episode_extra_stats=info.get("episode_extra_stats", dict()),
         )
 
-        if true_objective := info.get("true_objective", None):
+        if true_objective := info.get("true_objective", self.last_episode_reward):
             stats["true_objective"] = true_objective
 
         episode_wrapper_stats = record_episode_statistics_wrapper_stats(info)
@@ -337,7 +335,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         split_idx,
         buffer_mgr,
         sampling_device: str,
-        pbt_reward_shaping,  # TODO pbt reward
+        training_info: List[Optional[Dict[str, Any]]],
     ):
         """
         Ctor.
@@ -347,9 +345,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         :param worker_idx: idx of the parent worker
         :param split_idx: index of the environment group in double-buffered sampling (either 0 or 1). Always 0 when
         double-buffered sampling is disabled.
-        the trajectory buffers in shared memory.
-        :param pbt_reward_shaping: initial reward shaping dictionary, for configuration where PBT optimizes
-        reward coefficients in environments.
+        :param training_info: curr env steps, reward shaping scheme, etc.
         """
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
 
@@ -366,7 +362,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
         self.need_trajectory_buffers = self.num_envs * self.num_agents
 
-        self.pbt_reward_shaping = pbt_reward_shaping
+        self.training_info: List[Optional[Dict]] = training_info
 
         self.policy_mgr = AgentPolicyMapping(self.cfg, self.env_info)
 
@@ -408,7 +404,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
                     self.traj_buffer_queue,
                     self.traj_tensors,
                     self.policy_output_tensors[env_i, agent_idx],
-                    self.pbt_reward_shaping,
+                    self.training_info,
                     self.policy_mgr,
                 )
                 actor_states_env.append(actor_state)
@@ -418,12 +414,6 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             self.episode_rewards.append(episode_rewards_env)
 
         self._reset()
-
-    # TODO: implement this on the runner
-    def update_env_steps(self, env_steps):
-        for env_i in range(self.num_envs):
-            for agent_i in range(self.num_agents):
-                self.actor_states[env_i][agent_i].approx_env_steps = env_steps
 
     def _reset(self):
         """

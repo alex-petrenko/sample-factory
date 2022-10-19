@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import gym
 import numpy as np
@@ -45,7 +45,7 @@ class IdentityEnvMixedActions(gym.Env):
     def close(self):
         pass
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
 
@@ -87,7 +87,7 @@ class BatchedIdentityEnvMixedActions(gym.Env):
 
         return obss, rewards, terms, truncs, infos
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
     def close(self):
@@ -107,7 +107,7 @@ def override_defaults(parser):
     )
 
 
-def make_env(_env_name, _cfg, _cfg_env):
+def make_env(_env_name, _cfg, _cfg_env, render_mode: Optional[str] = None):
     return BatchedIdentityEnvMixedActions(4)
 
 
@@ -121,7 +121,13 @@ def register_test_components():
 def test_batched_mixed_action_dists():
     """Script entry point."""
     register_test_components()
-    argv = ["--algo=APPO", "--env=batched_mix_dist_env", "--experiment=test_batched_mixed_action_dists", "--device=cpu"]
+    argv = [
+        "--algo=APPO",
+        "--env=batched_mix_dist_env",
+        "--experiment=test_batched_mixed_action_dists",
+        "--device=cpu",
+        "--restart_behavior=overwrite",
+    ]
     parser, cfg = parse_sf_args(argv=argv)
 
     override_defaults(parser)
