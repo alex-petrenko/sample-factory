@@ -3,7 +3,7 @@ import copy
 from gym_art.quadrotor_multi.quad_experience_replay import ExperienceReplayWrapper
 
 from sf_examples.swarm_rl_examples.swarm_rl.additional_input import QuadsAdditionalInputWrapper
-from sf_examples.swarm_rl_examples.swarm_rl.compatability import QuadEnvCompatibility
+from sf_examples.swarm_rl_examples.swarm_rl.compatibility import QuadEnvCompatibility
 from sf_examples.swarm_rl_examples.swarm_rl.discrete_actions import QuadsDiscreteActionsWrapper
 from sf_examples.swarm_rl_examples.swarm_rl.reward_shaping import (
     DEFAULT_QUAD_REWARD_SHAPING,
@@ -19,7 +19,7 @@ class AnnealSchedule:
         self.anneal_env_steps = anneal_env_steps
 
 
-def make_quadrotor_env_single(cfg, **kwargs):
+def make_quadrotor_env_single(cfg, render_mode=None, **kwargs):
     from gym_art.quadrotor_single.quadrotor import QuadrotorEnv
 
     quad = "Crazyflie"
@@ -64,11 +64,11 @@ def make_quadrotor_env_single(cfg, **kwargs):
     if cfg.quads_clip_input:
         env = QuadsAdditionalInputWrapper(env)
 
-    env = QuadEnvCompatibility(env)
+    env = QuadEnvCompatibility(env, render_mode=render_mode)
     return env
 
 
-def make_quadrotor_env_multi(cfg, **kwargs):
+def make_quadrotor_env_multi(cfg, render_mode=None, **kwargs):
     from gym_art.quadrotor_multi.quadrotor_multi import QuadrotorEnvMulti
 
     quad = "Crazyflie"
@@ -160,14 +160,14 @@ def make_quadrotor_env_multi(cfg, **kwargs):
         annealing = None
 
     env = QuadsRewardShapingWrapper(env, reward_shaping_scheme=reward_shaping, annealing=annealing)
-    env = QuadEnvCompatibility(env)
+    env = QuadEnvCompatibility(env, render_mode=render_mode)
     return env
 
 
-def make_quadrotor_env(env_name, cfg=None, _env_config=None, **kwargs):
+def make_quadrotor_env(env_name, cfg=None, _env_config=None, render_mode=None, **kwargs):
     if env_name == "quadrotor_single":
-        return make_quadrotor_env_single(cfg, **kwargs)
+        return make_quadrotor_env_single(cfg, render_mode, **kwargs)
     elif env_name == "quadrotor_multi":
-        return make_quadrotor_env_multi(cfg, **kwargs)
+        return make_quadrotor_env_multi(cfg, render_mode, **kwargs)
     else:
         raise NotImplementedError
