@@ -1,3 +1,5 @@
+from typing import Optional
+
 try:
     import envpool
 except ImportError as e:
@@ -91,7 +93,7 @@ def atari_env_by_name(name):
     raise Exception("Unknown Atari env")
 
 
-def make_atari_env(env_name, cfg, env_config):
+def make_atari_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
     assert cfg.num_envs_per_worker == 1, "when using envpool, set num_envs_per_worker=1 and use --env_agents="
     atari_spec = atari_env_by_name(env_name)
 

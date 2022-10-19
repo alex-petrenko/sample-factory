@@ -1,3 +1,5 @@
+from typing import Optional
+
 try:
     import envpool
 except ImportError as e:
@@ -42,7 +44,7 @@ def mujoco_env_by_name(name):
     raise Exception("Unknown Mujoco env")
 
 
-def make_mujoco_env(env_name, cfg, env_config, **kwargs):
+def make_mujoco_env(env_name, cfg, env_config, render_mode: Optional[str] = None, **kwargs):
     assert cfg.batched_sampling, "batched sampling must be used when using envpool"
     assert cfg.num_envs_per_worker == 1, "when using envpool, set num_envs_per_worker=1 and use --env_agents="
     mujoco_spec = mujoco_env_by_name(env_name)
