@@ -380,6 +380,7 @@ class MaxAndSkipEnv(gym.Wrapper):
         # most recent raw observations (for max pooling across time steps)
         self._obs_buffer = np.zeros((2,) + env.observation_space.shape, dtype=env.observation_space.dtype)
         self._skip = skip
+        self._buffer_index = 0
 
     def step(self, action: int) -> GymStepReturn:
         """
@@ -393,10 +394,11 @@ class MaxAndSkipEnv(gym.Wrapper):
         terminated = truncated = False
         for i in range(self._skip):
             obs, reward, terminated, truncated, info = self.env.step(action)
-            if i == self._skip - 2:
-                self._obs_buffer[0] = obs
-            if i == self._skip - 1:
-                self._obs_buffer[1] = obs
+
+            if i > self._skip - 2:
+                self._obs_buffer[self._buffer_index] = obs
+                self._increment_buffer_index()
+
             total_reward += reward
             if terminated | truncated:
                 break
@@ -405,8 +407,16 @@ class MaxAndSkipEnv(gym.Wrapper):
 
         return max_frame, total_reward, terminated, truncated, info
 
+    def _increment_buffer_index(self):
+        self._buffer_index += 1
+        self._buffer_index %= 2
+
     def reset(self, **kwargs) -> Tuple[GymObs, Dict]:
-        return self.env.reset(**kwargs)
+        self._buffer_index = 0
+        obs, info = self.env.reset(**kwargs)
+        self._obs_buffer[self._buffer_index] = obs
+        self._increment_buffer_index()
+        return obs, info
 
 
 # wrapper from CleanRL / Stable Baselines
