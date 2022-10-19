@@ -17,7 +17,7 @@ class QuadEnvCompatibility(gym.Wrapper):
             env (LegacyEnv): the env to wrap, implemented with the old API
             render_mode (str): the render mode to use when rendering the environment, passed automatically to env.render
         """
-        self.env = env
+        gym.Wrapper.__init__(self, env)
         self._render_mode = render_mode
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
