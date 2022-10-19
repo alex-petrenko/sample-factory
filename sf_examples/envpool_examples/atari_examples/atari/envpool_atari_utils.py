@@ -97,8 +97,8 @@ def make_atari_env(env_name, cfg, env_config):
 
     env_kwargs = dict()
 
-    if hasattr(cfg, "render_mode"):
-        env_kwargs["render_mode"] = cfg.render_mode
+    # if hasattr(cfg, "render_mode"):
+    #     env_kwargs["render_mode"] = cfg.render_mode
 
     if atari_spec.default_timeout is not None:
         # envpool max_episode_steps does not take into account frameskip. see https://github.com/sail-sg/envpool/issues/195
@@ -112,6 +112,7 @@ def make_atari_env(env_name, cfg, env_config):
         num_envs=cfg.env_agents,
         reward_clip=True,
         episodic_life=True,
+        frame_skip=cfg.env_frameskip,
         **env_kwargs,
     )
     env = EnvPoolResetFixWrapper(env)
