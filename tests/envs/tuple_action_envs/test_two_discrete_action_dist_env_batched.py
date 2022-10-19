@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import gym
 import numpy as np
@@ -42,7 +42,7 @@ class IdentityEnvTwoDiscreteActions(gym.Env):
         terminated = truncated = self.current_step >= self.ep_length
         return self.state, reward, terminated, truncated, {}
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
     def close(self):
@@ -87,7 +87,7 @@ class BatchedIdentityEnvTwoDiscreteActions(gym.Env):
 
         return obss, rewards, terms, truncs, infos
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
     def close(self):
@@ -107,7 +107,7 @@ def override_defaults(parser):
     )
 
 
-def make_env(_env_name, _cfg, _cfg_env):
+def make_env(_env_name, _cfg, _cfg_env, render_mode: Optional[str] = None):
     return BatchedIdentityEnvTwoDiscreteActions(4)
 
 

@@ -333,7 +333,7 @@ def add_rl_args(p: ArgumentParser):
         default=None,
         type=str,
         nargs="*",
-        help="Which observation keys to use for normalization. If None, all observation keys are used",
+        help="Which observation keys to use for normalization. If None, all observation keys are used (be careful with this!)",
     )
 
     # decorrelating experience on startup (optional)

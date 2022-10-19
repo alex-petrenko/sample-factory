@@ -11,7 +11,7 @@ from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import make_runner
-from sample_factory.utils.typing import Config, Env, PolicyID
+from sample_factory.utils.typing import Config, Env, PolicyID, RenderMode
 from sample_factory.utils.utils import experiment_dir
 from sf_examples.dmlab_examples.dmlab_env import (
     DMLAB_ENVS,
@@ -29,8 +29,8 @@ class DmlabEnvWithCache:
     def __init__(self, level_caches: Optional[DmlabLevelCaches] = None):
         self.caches = level_caches
 
-    def make_env(self, env_name, cfg, env_config) -> Env:
-        return make_dmlab_env(env_name, cfg, env_config, self.caches)
+    def make_env(self, env_name, cfg, env_config, render_mode: RenderMode = None) -> Env:
+        return make_dmlab_env(env_name, cfg, env_config, render_mode, self.caches)
 
 
 def register_dmlab_envs(level_caches: Optional[DmlabLevelCaches] = None):

@@ -153,7 +153,7 @@ class TestExample:
     def test_full_run(self):
         """Actually train this little env and expect some reward."""
         cfg, eval_cfg = default_test_cfg()
-        cfg.train_for_env_steps = 100000
+        cfg.train_for_env_steps = 90000
         cfg.batch_size = 256
         cfg.batched_sampling = False
         cfg.serial_mode = False

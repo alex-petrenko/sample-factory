@@ -55,25 +55,29 @@ def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
     cv2.waitKey(delay=1)
 
 
-def render_frame(cfg, env, video_frames, num_episodes, last_render_start):
+def render_frame(cfg, env, video_frames, num_episodes, last_render_start) -> float:
+    render_start = time.time()
+
     if cfg.save_video:
-        frame = env.render(mode="rgb_array")
+        frame = env.render()
         if (len(video_frames) < cfg.video_frames) or (cfg.video_frames < 0 and num_episodes == 0):
             video_frames.append(frame)
     else:
         if not cfg.no_render:
             target_delay = 1.0 / cfg.fps if cfg.fps > 0 else 0
-            current_delay = time.time() - last_render_start
+            current_delay = render_start - last_render_start
             time_wait = target_delay - current_delay
 
             if time_wait > 0:
-                # log.info('Wait time %.3f', time_wait)
+                log.info("Wait time %.3f", time_wait)
                 time.sleep(time_wait)
 
             try:
-                env.render(mode="human")
-            except gym.error.Error as ex:
+                env.render()
+            except (gym.error.Error, TypeError) as ex:
                 debug_log_every_n(1000, f"Exception when calling env.render() {str(ex)}")
+
+    return render_start
 
 
 def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
@@ -90,7 +94,15 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
 
-    env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+    render_mode = "human"
+    if cfg.save_video:
+        render_mode = "rgb_array"
+    elif cfg.no_render:
+        render_mode = None
+
+    env = make_env_func_batched(
+        cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0), render_mode=render_mode
+    )
     env_info = extract_env_info(env, cfg)
 
     if hasattr(env.unwrapped, "reset_on_init"):
@@ -103,7 +115,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     device = torch.device("cpu" if cfg.device == "cpu" else "cuda")
     actor_critic.model_to_device(device)
 
-    # TODO: move this to a separate IO module
     policy_id = cfg.policy_index
     name_prefix = dict(latest="checkpoint", best="best")[cfg.load_checkpoint_kind]
     checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
@@ -129,7 +140,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     video_frames = []
     num_episodes = 0
 
-    with torch.inference_mode():
+    with torch.no_grad():
         while not max_frames_reached(num_frames):
             normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
 
@@ -148,14 +159,12 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
             # actions shape should be [num_agents, num_actions] even if it's [1, 1]
             if actions.ndim == 1:
                 actions = unsqueeze_tensor(actions, dim=-1)
-            actions = preprocess_actions(env_info, actions)  # TODO: move this to some utils module
+            actions = preprocess_actions(env_info, actions)
 
             rnn_states = policy_outputs["new_rnn_states"]
 
             for _ in range(render_action_repeat):
-
-                render_frame(cfg, env, video_frames, num_episodes, last_render_start)
-                last_render_start = time.time()
+                last_render_start = render_frame(cfg, env, video_frames, num_episodes, last_render_start)
 
                 obs, rew, terminated, truncated, infos = env.step(actions)
                 dones = make_dones(terminated, truncated)
@@ -242,11 +251,11 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
         if cfg.fps > 0:
             fps = cfg.fps
         else:
-            fps = 20
+            fps = 30
         generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps)
 
     if cfg.push_to_hub:
         generate_model_card(experiment_dir(cfg=cfg), cfg.algo, cfg.env, reward_list)
         push_to_hf(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", cfg.num_policies)
 
-    return ExperimentStatus.SUCCESS, np.mean(episode_rewards)
+    return ExperimentStatus.SUCCESS, float(np.mean(episode_rewards))

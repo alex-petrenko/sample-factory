@@ -1,3 +1,5 @@
+from typing import Optional
+
 import gym
 
 from sample_factory.utils.utils import is_module_available
@@ -35,7 +37,7 @@ def mujoco_env_by_name(name):
     raise Exception("Unknown Mujoco env")
 
 
-def make_mujoco_env(env_name, _cfg, _env_config, **kwargs):
+def make_mujoco_env(env_name, _cfg, _env_config, render_mode: Optional[str] = None, **kwargs):
     mujoco_spec = mujoco_env_by_name(env_name)
-    env = gym.make(mujoco_spec.env_id)
+    env = gym.make(mujoco_spec.env_id, render_mode=render_mode)
     return env

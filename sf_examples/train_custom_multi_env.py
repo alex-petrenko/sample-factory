@@ -29,7 +29,7 @@ class CustomMultiEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
 
     """
 
-    def __init__(self, full_env_name, cfg):
+    def __init__(self, full_env_name, cfg, render_mode: Optional[str] = None):
         TrainingInfoInterface.__init__(self)
 
         self.name = full_env_name  # optional
@@ -51,6 +51,8 @@ class CustomMultiEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
         self.reward_shaping = [dict(rew=-1.0) for _ in range(self.num_agents)]
 
         self.obs = None
+
+        self.render_mode = render_mode
 
     def _obs(self):
         if self.obs is None:
@@ -113,12 +115,12 @@ class CustomMultiEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
     def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_idx: int | slice) -> None:
         self.reward_shaping[agent_idx] = reward_shaping
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
 
-def make_custom_multi_env_func(full_env_name, cfg=None, _env_config=None):
-    return CustomMultiEnv(full_env_name, cfg)
+def make_custom_multi_env_func(full_env_name, cfg=None, _env_config=None, render_mode: Optional[str] = None):
+    return CustomMultiEnv(full_env_name, cfg, render_mode=render_mode)
 
 
 def add_extra_params_func(parser):

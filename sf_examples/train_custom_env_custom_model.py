@@ -9,7 +9,7 @@ python -m sf_examples.enjoy_custom_env_custom_model --algo=APPO --env=my_custom_
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import gym
 import numpy as np
@@ -27,7 +27,7 @@ from sample_factory.utils.typing import Config, ObsSpace
 
 # add "TrainingInfoInterface" and "RewardShapingInterface" just to demonstrate how to use them (and for testing)
 class CustomEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
-    def __init__(self, full_env_name, cfg):
+    def __init__(self, full_env_name, cfg, render_mode: Optional[str] = None):
         TrainingInfoInterface.__init__(self)
         self.name = full_env_name  # optional
         self.cfg = cfg
@@ -39,6 +39,8 @@ class CustomEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
         self.action_space = gym.spaces.Discrete(self.cfg.custom_env_num_actions)
 
         self.reward_shaping: Dict[str, Any] = dict(action_rew_coeff=0.01)
+
+        self.render_mode = render_mode
 
     def _obs(self):
         return np.float32(np.random.rand(self.channels, self.res, self.res))
@@ -58,7 +60,7 @@ class CustomEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
 
         return self._obs(), reward, terminated, truncated, dict()
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
     def get_default_reward_shaping(self) -> Dict[str, Any]:
@@ -68,8 +70,8 @@ class CustomEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
         self.reward_shaping = reward_shaping
 
 
-def make_custom_env_func(full_env_name, cfg=None, _env_config=None):
-    return CustomEnv(full_env_name, cfg)
+def make_custom_env_func(full_env_name, cfg=None, _env_config=None, render_mode: Optional[str] = None):
+    return CustomEnv(full_env_name, cfg, render_mode=render_mode)
 
 
 def add_extra_params(parser):

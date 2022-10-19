@@ -174,7 +174,7 @@ class MultiAgentEnvWorker:
 
 
 class MultiAgentEnv(gym.Env, RewardShapingInterface):
-    def __init__(self, num_agents, make_env_func, env_config, skip_frames):
+    def __init__(self, num_agents, make_env_func, env_config, skip_frames, render_mode):
         gym.Env.__init__(self)
         RewardShapingInterface.__init__(self)
 
@@ -211,6 +211,8 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
         self.reset_on_init = True
 
         self.initialized = False
+
+        self.render_mode = render_mode
 
     def get_default_reward_shaping(self):
         return self.default_reward_shaping
@@ -340,11 +342,18 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
         return obs, rew, terminated, truncated, infos
 
     # noinspection PyUnusedLocal
-    def render(self, *args, **kwargs):
+    def render(self):
         self.enable_rendering = True
 
         if self.last_obs is None:
             return
+
+        if self.render_mode is None:
+            return
+        elif self.render_mode == "human":
+            pass
+        else:
+            raise ValueError(f"{self.render_mode=} is not supported")
 
         render_multiagent = True
         if render_multiagent:

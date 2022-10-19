@@ -1,6 +1,6 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # isort: off
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 # noinspection PyUnresolvedReferences
 import isaacgym
@@ -63,11 +63,11 @@ class IsaacGymVecEnv(gym.Env):
             truncated = self._truncated
         return self._proc_obs_func(obs), rew, terminated, truncated, infos
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
 
-def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
+def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None, render_mode: Optional[str] = None) -> Env:
     task_name = full_env_name
     overrides = ige_task_cfg_overrides(task_name, cfg)
 
@@ -94,12 +94,19 @@ def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
 
     make_env = isaacgym_task_map[task_cfg["name"]]
 
+    if render_mode == "human":
+        headless = False
+    elif render_mode is None:
+        headless = True
+    else:
+        raise ValueError(f"{render_mode=} not supported by IsaacGym")
+
     if cfg.ige_api_version == "preview3":
         env = make_env(
             cfg=task_cfg,
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
-            headless=cfg.env_headless,
+            headless=headless,
         )
     elif cfg.ige_api_version == "preview4":
         env = make_env(
@@ -107,9 +114,9 @@ def make_isaacgym_env(full_env_name: str, cfg: Config, _env_config=None) -> Env:
             sim_device=sim_device,
             rl_device=rl_device,
             graphics_device_id=graphics_device_id,
-            headless=cfg.env_headless,
+            headless=headless,
             virtual_screen_capture=False,
-            force_render=not cfg.env_headless,
+            force_render=not headless,
         )
     else:
         raise ValueError(f"Unknown ige_api_version: {cfg.ige_api_version}")
@@ -129,7 +136,6 @@ def add_extra_params_func(parser):
         type=int,
         help="Num agents in each env (default: -1, means use default value from isaacgymenvs env yaml config file)",
     )
-    p.add_argument("--env_headless", default=True, type=str2bool, help="Headless == no rendering")
     p.add_argument(
         "--obs_key",
         default="obs",

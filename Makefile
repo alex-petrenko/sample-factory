@@ -46,7 +46,7 @@ check-codestyle:
 .PHONY: test
 
 test:
-	pytest -s
+	pytest -s --maxfail=2
 # ; echo "Tests finished. You might need to type 'reset' and press Enter to fix the terminal window"
 
 

@@ -105,6 +105,7 @@ class Runner(EventLoopObject, Configurable):
         self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
 
         self.total_env_steps_since_resume: Optional[int] = None
+        self.start_time: float = time.time()
 
         # currently, this applies only to the current run, not experiment as a whole
         # to change this behavior we'd need to save the state of the main loop to a filesystem
@@ -589,7 +590,7 @@ class Runner(EventLoopObject, Configurable):
     def _check_heartbeat(self):
         """
         Reports components whose last heartbeat signal is longer than self.heartbeat_report_sec.
-        If all components of the same time fail, stop the run
+        If all components of the same type fail, stop the run
         """
         curr_time = time.time()
         comp_list = []
@@ -609,11 +610,17 @@ class Runner(EventLoopObject, Configurable):
                 type_list.append(str(component_type))
 
         if len(none_list) > 0:
-            log.debug(f"Components not started: {', '.join(none_list)}")
+            wait_time = time.time() - self.start_time
+            log.debug(f"Components not started: {', '.join(none_list)}, {wait_time=:.1f} seconds")
+            if wait_time > 3 * self.heartbeat_report_sec:
+                log.error(f"Components take too long to start: {', '.join(none_list)}")
+                self._stop_training()
+
         if len(comp_list) > 0:
             log.error(f"No heartbeat for components: {', '.join(comp_list)}")
+
         if len(type_list) > 0:
-            log.error(f"Stopping training from lack of heartbeats from {', '.join(type_list)}")
+            log.error(f"Stopping training due to lack of heartbeats from {', '.join(type_list)}")
             self._stop_training()
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):

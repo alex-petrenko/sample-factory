@@ -18,6 +18,7 @@ from sample_factory.envs.env_utils import (
     find_wrapper_interface,
 )
 from sample_factory.utils.dicts import dict_of_lists_append
+from sample_factory.utils.typing import Config
 
 Actions = Any
 ListActions = Sequence[Actions]
@@ -314,12 +315,12 @@ class SequentialVectorizeWrapper(Wrapper, TrainingInfoInterface, RewardShapingIn
             e.close()
 
 
-def make_env_func_batched(cfg, env_config) -> BatchedVecEnv:
+def make_env_func_batched(cfg, env_config, render_mode: Optional[str] = None) -> BatchedVecEnv:
     """
     This should yield an environment that always returns a dict of PyTorch tensors (CPU- or GPU-side) or
     a dict of numpy arrays or a dict of lists (depending on what the environment returns in the first place).
     """
-    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
+    env = create_env(cfg.env, cfg=cfg, env_config=env_config, render_mode=render_mode)
 
     # At this point we can be sure that our environment outputs a dictionary of lists (or numpy arrays or tensors)
     # containing obs, rewards, etc. for each agent in the environment.
@@ -348,7 +349,7 @@ class NonBatchedVecEnv(Wrapper[ListObservations, ListActions]):
         super().__init__(env)
 
 
-def make_env_func_non_batched(cfg, env_config) -> NonBatchedVecEnv:
+def make_env_func_non_batched(cfg: Config, env_config, render_mode: Optional[str] = None) -> NonBatchedVecEnv:
     """
     This should yield an environment that always returns a list of {observations, rewards,
     dones, etc.}
@@ -356,6 +357,6 @@ def make_env_func_non_batched(cfg, env_config) -> NonBatchedVecEnv:
     (and therefore enables more sophisticated configurations where agents in the same env can be controlled
     by different policies and so on).
     """
-    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
+    env = create_env(cfg.env, cfg=cfg, env_config=env_config, render_mode=render_mode)
     env = NonBatchedVecEnv(env)
     return env

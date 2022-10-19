@@ -1,6 +1,7 @@
 import datetime
 import os
 from os.path import join
+from typing import Optional
 
 from gym.spaces import Discrete
 
@@ -234,6 +235,7 @@ def make_doom_env_impl(
     max_num_players=None,
     num_bots=0,  # for multi-agent
     custom_resolution=None,
+    render_mode: Optional[str] = None,
     **kwargs,
 ):
     skip_frames = skip_frames if skip_frames is not None else cfg.env_frameskip
@@ -247,6 +249,7 @@ def make_doom_env_impl(
             doom_spec.env_spec_file,
             skip_frames=skip_frames,
             async_mode=async_mode,
+            render_mode=render_mode,
         )
     else:
         timelimit = cfg.timelimit if cfg.timelimit is not None else doom_spec.timelimit
@@ -264,6 +267,7 @@ def make_doom_env_impl(
             async_mode=async_mode,
             respawn_delay=doom_spec.respawn_delay,
             timelimit=timelimit,
+            render_mode=render_mode,
         )
 
     record_to = cfg.record_to if "record_to" in cfg else None
@@ -317,7 +321,7 @@ def make_doom_env_impl(
     return env
 
 
-def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
+def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, render_mode: Optional[str] = None, **kwargs):
     skip_frames = cfg.env_frameskip
 
     if cfg.num_bots < 0:
@@ -340,6 +344,7 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
             num_bots=num_bots,
             skip_frames=1 if is_multiagent else skip_frames,  # multi-agent skipped frames are handled by the wrapper
             env_config=env_config,
+            render_mode=render_mode,
             **kwargs,
         )
 
@@ -353,6 +358,7 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
             make_env_func=make_env_func,
             env_config=env_config,
             skip_frames=skip_frames,
+            render_mode=render_mode,
         )
     else:
         # if we have only one agent, there's no need for multi-agent wrapper
@@ -363,12 +369,12 @@ def make_doom_multiplayer_env(doom_spec, cfg=None, env_config=None, **kwargs):
     return env
 
 
-def make_doom_env(env_name, cfg, env_config, **kwargs):
+def make_doom_env(env_name, cfg, env_config, render_mode: Optional[str] = None, **kwargs):
     spec = doom_env_by_name(env_name)
-    return make_doom_env_from_spec(spec, env_name, cfg, env_config, **kwargs)
+    return make_doom_env_from_spec(spec, env_name, cfg, env_config, render_mode, **kwargs)
 
 
-def make_doom_env_from_spec(spec, _env_name, cfg, env_config, **kwargs):
+def make_doom_env_from_spec(spec, _env_name, cfg, env_config, render_mode: Optional[str] = None, **kwargs):
     """
     Makes a Doom environment from a DoomSpec instance.
     _env_name is unused but we keep it, so functools.partial(make_doom_env_from_spec, env_spec) can registered
@@ -385,6 +391,6 @@ def make_doom_env_from_spec(spec, _env_name, cfg, env_config, **kwargs):
 
     if spec.num_agents > 1 or spec.num_bots > 0:
         # requires multiplayer setup (e.g. at least a host, not a singleplayer game)
-        return make_doom_multiplayer_env(spec, cfg=cfg, env_config=env_config, **kwargs)
+        return make_doom_multiplayer_env(spec, cfg=cfg, env_config=env_config, render_mode=render_mode, **kwargs)
     else:
-        return make_doom_env_impl(spec, cfg=cfg, env_config=env_config, **kwargs)
+        return make_doom_env_impl(spec, cfg=cfg, env_config=env_config, render_mode=render_mode, **kwargs)

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import gym
 import numpy as np
@@ -45,7 +45,7 @@ class IdentityEnvMixedActions(gym.Env):
     def close(self):
         pass
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
 
@@ -87,7 +87,7 @@ class BatchedIdentityEnvMixedActions(gym.Env):
 
         return obss, rewards, terms, truncs, infos
 
-    def render(self, mode="human"):
+    def render(self):
         pass
 
     def close(self):
@@ -107,7 +107,7 @@ def override_defaults(parser):
     )
 
 
-def make_env(_env_name, _cfg, _cfg_env):
+def make_env(_env_name, _cfg, _cfg_env, render_mode: Optional[str] = None):
     return BatchedIdentityEnvMixedActions(4)
 
 
