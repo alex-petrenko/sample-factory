@@ -92,6 +92,12 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     log.debug("Using action repeat %d during evaluation", render_action_repeat)
 
     cfg.env_frameskip = 1  # for evaluation
+
+    if "atari" in cfg.env:
+        # if the env is an Atari env, we need at least a frameskip of two in order to max over frames
+        cfg.env_frameskip = 4
+        render_action_repeat = 1
+
     cfg.num_envs = 1
 
     render_mode = "human"
