@@ -210,7 +210,13 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                             )
                         rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
-                        num_episodes += 1
+
+                        if cfg.use_record_episode_statistics:
+                            # we want the scores from the full episode not a single agent death (due to EpisodicLifeEnv wrapper)
+                            if "episode" in infos[agent_i].keys():
+                                num_episodes += 1
+                        else:
+                            num_episodes += 1
 
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
