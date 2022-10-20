@@ -3,15 +3,12 @@ import sys
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
-from sf_examples.envpool_examples.atari_examples.atari.envpool_atari_params import (
-    add_atari_env_args,
-    atari_override_defaults,
-)
-from sf_examples.envpool_examples.atari_examples.atari.envpool_atari_utils import ATARI_ENVS, make_atari_env
+from sf_examples.envpool_examples.atari.envpool_atari_params import add_atari_env_args, atari_override_defaults
+from sf_examples.envpool_examples.atari.envpool_atari_utils import ENVPOOL_ATARI_ENVS, make_atari_env
 
 
 def register_atari_envs():
-    for env in ATARI_ENVS:
+    for env in ENVPOOL_ATARI_ENVS:
         register_env(env.name, make_atari_env)
 
 
