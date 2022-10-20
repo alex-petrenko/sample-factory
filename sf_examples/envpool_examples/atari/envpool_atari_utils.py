@@ -5,7 +5,6 @@ try:
 except ImportError as e:
     print(e)
     print("Trying to import envpool when it is not installed. install with 'pip install envpool'")
-    raise e
 
 from sf_examples.atari_examples.atari.atari_utils import ATARI_ENVS, AtariSpec
 from sf_examples.envpool_examples.envpool_wrappers import (
