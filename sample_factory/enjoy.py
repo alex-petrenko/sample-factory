@@ -9,7 +9,7 @@ from torch import Tensor
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
-from sample_factory.algo.utils.action_distributions import ContinuousActionDistribution
+from sample_factory.algo.utils.action_distributions import argmax_actions
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
@@ -85,18 +85,13 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
     cfg = load_from_checkpoint(cfg)
 
-    render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
-    if render_action_repeat is None:
-        log.warning("Not using action repeat!")
-        render_action_repeat = 1
-    log.debug("Using action repeat %d during evaluation", render_action_repeat)
-
-    cfg.env_frameskip = 1  # for evaluation
-
-    if "atari" in cfg.env:
-        # if the env is an Atari env, we need at least a frameskip of two in order to max over frames
-        cfg.env_frameskip = 4
-        render_action_repeat = 1
+    eval_env_frameskip: int = cfg.env_frameskip if cfg.eval_env_frameskip is None else cfg.eval_env_frameskip
+    assert (
+        cfg.env_frameskip % eval_env_frameskip == 0
+    ), f"{cfg.env_frameskip=} must be divisible by {eval_env_frameskip=}"
+    render_action_repeat: int = cfg.env_frameskip // eval_env_frameskip
+    cfg.env_frameskip = cfg.eval_env_frameskip = eval_env_frameskip
+    log.debug(f"Using frameskip {cfg.env_frameskip} and {render_action_repeat=} for evaluation")
 
     cfg.num_envs = 1
 
@@ -157,10 +152,9 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
             # sample actions from the distribution by default
             actions = policy_outputs["actions"]
 
-            action_distribution = actor_critic.action_distribution()
-            if isinstance(action_distribution, ContinuousActionDistribution):
-                if not cfg.continuous_actions_sample:  # TODO: add similar option for discrete actions
-                    actions = action_distribution.means
+            if cfg.eval_deterministic:
+                action_distribution = actor_critic.action_distribution()
+                actions = argmax_actions(action_distribution)
 
             # actions shape should be [num_agents, num_actions] even if it's [1, 1]
             if actions.ndim == 1:

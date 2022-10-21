@@ -51,10 +51,6 @@ setup(
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that
         "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"] + _atari_deps + _mujoco_deps,
-        "dev_envpool": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine", "envpool"]
-        + _envpool_deps
-        + _atari_deps
-        + _mujoco_deps,
         "atari": _atari_deps,
         "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,

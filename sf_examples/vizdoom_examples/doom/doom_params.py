@@ -53,12 +53,13 @@ def doom_override_defaults(parser):
         ppo_clip_value=0.2,  # value used in all experiments in the paper
         obs_subtract_mean=0.0,
         obs_scale=255.0,
-        env_frameskip=4,
-        fps=35,
         exploration_loss="symmetric_kl",
         exploration_loss_coeff=0.001,
         normalize_returns=True,
         normalize_input=True,
+        env_frameskip=4,
+        eval_env_frameskip=1,  # this is for smoother rendering during evaluation
+        fps=35,
     )
 
 
