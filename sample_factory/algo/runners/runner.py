@@ -84,7 +84,8 @@ class Runner(EventLoopObject, Configurable):
         self.event_loop.owner = self
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
-        self.stopped = False
+        self.status: StatusCode = ExperimentStatus.SUCCESS
+        self.stopped: bool = False
 
         self.env_info: Optional[EnvInfo] = None
 
@@ -613,15 +614,15 @@ class Runner(EventLoopObject, Configurable):
             wait_time = time.time() - self.start_time
             log.debug(f"Components not started: {', '.join(none_list)}, {wait_time=:.1f} seconds")
             if wait_time > 3 * self.heartbeat_report_sec:
-                log.error(f"Components take too long to start: {', '.join(none_list)}")
-                self._stop_training()
+                log.error(f"Components take too long to start: {', '.join(none_list)}. Aborting the experiment!\n\n\n")
+                self._stop_training(failed=True)
 
         if len(comp_list) > 0:
             log.error(f"No heartbeat for components: {', '.join(comp_list)}")
 
         if len(type_list) > 0:
             log.error(f"Stopping training due to lack of heartbeats from {', '.join(type_list)}")
-            self._stop_training()
+            self._stop_training(failed=True)
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
@@ -693,7 +694,7 @@ class Runner(EventLoopObject, Configurable):
         if self._should_end_training():
             self._stop_training()
 
-    def _stop_training(self):
+    def _stop_training(self, failed: bool = False) -> None:
         if not self.stopped:
             self._propagate_training_info()
 
@@ -705,17 +706,28 @@ class Runner(EventLoopObject, Configurable):
             for timer in self.timers:
                 timer.stop()
             self.stop.emit(self.object_id)
+
+            if failed:
+                self.status = ExperimentStatus.FAILURE
+
             self.stopped = True
 
     def _component_stopped(self, component_obj_id, component_profiles: Dict[str, Timing]):
-        log.debug(f"Component {component_obj_id} stopped!")
-
+        remaining = []
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
-                del self.components_to_stop[i]
-                # if self.components_to_stop:
-                #     log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
-                break
+                log.debug(f"Component {component_obj_id} stopped!")
+                continue
+
+            if component.event_loop.process is not None and not component.event_loop.process.is_alive():
+                log.warning(f"Component {component.object_id} process died already! Don't wait for it.")
+                continue
+
+            remaining.append(component)
+
+        self.components_to_stop = remaining
+        if self.components_to_stop and self.status == ExperimentStatus.FAILURE:
+            log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
 
         self.component_profiles.update(component_profiles)
 
@@ -733,20 +745,20 @@ class Runner(EventLoopObject, Configurable):
 
     # noinspection PyBroadException
     def run(self) -> StatusCode:
-        status = ExperimentStatus.SUCCESS
-
         with self.timing.timeit("main_loop"):
             try:
                 evt_loop_status = self.event_loop.exec()
-                status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
+                self.status = (
+                    ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else self.status
+                )
                 self.stop.emit(self.object_id)
             except Exception:
                 log.exception(f"Uncaught exception in {self.object_id} evt loop")
-                status = ExperimentStatus.FAILURE
+                self.status = ExperimentStatus.FAILURE
 
         log.info(self.timing)
         if self.total_env_steps_since_resume is None:
             self.total_env_steps_since_resume = 0
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info("Collected %r, FPS: %.1f", self.env_steps, fps)
-        return status
+        return self.status
