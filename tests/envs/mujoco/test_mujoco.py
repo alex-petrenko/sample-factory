@@ -8,8 +8,8 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.train import make_runner
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log
-from sf_examples.mujoco_examples.mujoco.mujoco_utils import mujoco_available
-from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
+from sf_examples.mujoco.mujoco_utils import mujoco_available
+from sf_examples.mujoco.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 from tests.utils import clean_test_dir
 
 

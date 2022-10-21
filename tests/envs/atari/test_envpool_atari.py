@@ -6,8 +6,8 @@ import pytest
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
-from sf_examples.envpool_examples.atari.train_envpool_atari import parse_atari_args
-from sf_examples.envpool_examples.envpool_utils import envpool_available
+from sf_examples.envpool.atari.train_envpool_atari import parse_atari_args
+from sf_examples.envpool.envpool_utils import envpool_available
 from tests.utils import clean_test_dir
 
 
@@ -15,14 +15,14 @@ from tests.utils import clean_test_dir
 class TestEnvpoolAtariEnv:
     @pytest.fixture(scope="class", autouse=True)
     def register_atari_fixture(self):
-        from sf_examples.envpool_examples.atari.train_envpool_atari import register_atari_components
+        from sf_examples.envpool.atari.train_envpool_atari import register_atari_components
 
         register_atari_components()
 
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env(env_config):
-        from sf_examples.envpool_examples.atari.envpool_atari_utils import make_atari_env
+        from sf_examples.envpool.atari.envpool_atari_utils import make_atari_env
 
         return make_atari_env(
             "atari_beamrider", cfg=parse_atari_args(argv=["--algo=APPO", "--env=atari_beamrider"]), env_config=None

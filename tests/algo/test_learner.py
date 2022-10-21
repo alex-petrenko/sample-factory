@@ -14,7 +14,7 @@ from sample_factory.algo.utils.tensor_dict import cat_tensordicts
 from sample_factory.cfg.arguments import verify_cfg
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively
-from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
+from sf_examples.mujoco.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 
 
 def _learner_losses_res(learner: Learner, dataset: AttrDict, num_invalids: int) -> AttrDict:

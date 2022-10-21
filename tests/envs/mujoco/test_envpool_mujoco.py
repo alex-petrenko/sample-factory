@@ -8,9 +8,9 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.train import make_runner
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log
-from sf_examples.envpool_examples.envpool_utils import envpool_available
-from sf_examples.envpool_examples.mujoco.train_envpool_mujoco import parse_mujoco_cfg, register_mujoco_components
-from sf_examples.mujoco_examples.mujoco.mujoco_utils import mujoco_available
+from sf_examples.envpool.envpool_utils import envpool_available
+from sf_examples.envpool.mujoco.train_envpool_mujoco import parse_mujoco_cfg, register_mujoco_components
+from sf_examples.mujoco.mujoco_utils import mujoco_available
 from tests.utils import clean_test_dir
 
 

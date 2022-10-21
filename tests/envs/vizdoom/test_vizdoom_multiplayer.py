@@ -14,7 +14,7 @@ from sample_factory.utils.utils import log
 class TestDoom:
     @pytest.fixture(scope="class", autouse=True)
     def register_doom_fixture(self):
-        from sf_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+        from sf_examples.vizdoom.train_vizdoom import register_vizdoom_components
 
         register_vizdoom_components()
         yield
@@ -22,8 +22,8 @@ class TestDoom:
 
     @staticmethod
     def make_standard_dm(env_config, render_mode):
-        from sf_examples.vizdoom_examples.doom.doom_params import default_doom_cfg
-        from sf_examples.vizdoom_examples.doom.doom_utils import make_doom_env
+        from sf_examples.vizdoom.doom.doom_params import default_doom_cfg
+        from sf_examples.vizdoom.doom.doom_utils import make_doom_env
 
         cfg = default_doom_cfg()
         cfg.env_frameskip = 2
