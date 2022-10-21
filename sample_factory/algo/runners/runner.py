@@ -569,7 +569,8 @@ class Runner(EventLoopObject, Configurable):
             self._stop_training()
 
         for p_name, qsize in self.queue_size_dict.items():
-            debug_log_every_n(1000, f"Process: {p_name} has queue size: {qsize}")
+            if qsize > 5:
+                debug_log_every_n(1000, f"Process: {p_name} has queue size: {qsize}")
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
