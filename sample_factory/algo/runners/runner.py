@@ -719,9 +719,13 @@ class Runner(EventLoopObject, Configurable):
                 log.debug(f"Component {component_obj_id} stopped!")
                 continue
 
-            if component.event_loop.process is not None and not component.event_loop.process.is_alive():
-                log.warning(f"Component {component.object_id} process died already! Don't wait for it.")
-                continue
+            try:
+                if not component.event_loop.process.is_alive():
+                    log.warning(f"Component {component.object_id} process died already! Don't wait for it.")
+                    continue
+            except AttributeError:
+                # in serial mode there's no process, plus event_loop can be None for stopped components
+                pass
 
             remaining.append(component)
 

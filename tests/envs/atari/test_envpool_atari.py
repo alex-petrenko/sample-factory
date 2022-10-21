@@ -66,11 +66,11 @@ class TestEnvpoolAtariEnv:
         "env_name",
         [
             "atari_montezuma",
-            "atari_pong",
-            "atari_breakout",
+            "atari_spaceinvaders",
             # probably no reason to test on all of them, as they are kind of the same
+            # "atari_pong",
             # "atari_qbert",
-            # "atari_spaceinvaders",
+            # "atari_breakout",
             # "atari_asteroids",
             # "atari_gravitar",
             # "atari_mspacman",

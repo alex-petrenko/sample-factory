@@ -75,10 +75,11 @@ class TestEnvpoolMujoco:
             "mujoco_ant",
             "mujoco_halfcheetah",
             "mujoco_humanoid",
-            "mujoco_hopper",
-            "mujoco_reacher",
-            "mujoco_walker",
-            "mujoco_swimmer",
+            # limit the number of envs to speed up tests
+            # "mujoco_hopper",
+            # "mujoco_reacher",
+            # "mujoco_walker",
+            # "mujoco_swimmer",
         ],
     )
     @pytest.mark.parametrize("num_workers", [1])
