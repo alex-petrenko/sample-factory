@@ -8,6 +8,7 @@ python -m sf_examples.enjoy_gym_env --algo=APPO --experiment=example_gym_cartpol
 """
 
 import sys
+from typing import Optional
 
 import gym
 
@@ -16,8 +17,8 @@ from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 
 
-def make_gym_env_func(full_env_name, cfg=None, env_config=None):
-    return gym.make(full_env_name)
+def make_gym_env_func(full_env_name, cfg=None, env_config=None, render_mode: Optional[str] = None):
+    return gym.make(full_env_name, render_mode=render_mode)
 
 
 def register_custom_components():

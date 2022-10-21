@@ -3,7 +3,7 @@ import random
 import shutil
 import time
 from os.path import join
-from typing import Dict
+from typing import Dict, Optional
 
 import cv2
 import deepmind_lab
@@ -70,6 +70,7 @@ class DmlabGymEnv(gym.Env):
         gpu_index,
         dmlab_level_caches_per_policy: Dict[PolicyID, DmlabLevelCache] = None,
         extra_cfg=None,
+        render_mode: Optional[str] = None,
     ):
         self.width = res_w
         self.height = res_h
@@ -111,6 +112,8 @@ class DmlabGymEnv(gym.Env):
         if extra_cfg is not None:
             config.update(extra_cfg)
         config = {k: str(v) for k, v in config.items()}
+
+        self.render_mode: Optional[str] = render_mode
 
         self.level_cache_path = ensure_dir_exists(level_cache_path)
 
@@ -212,15 +215,15 @@ class DmlabGymEnv(gym.Env):
         info = {"num_frames": self.action_repeat}
         return self.last_observation, reward, terminated, truncated, info
 
-    def render(self, mode="human"):
+    def render(self) -> Optional[np.ndarray]:
         if self.last_observation is None and self.dmlab.is_running():
             self.last_observation = self.dmlab.observations()
 
         img = self.last_observation["obs"]
-        if mode == "rgb_array":
+        if self.render_mode == "rgb_array":
             return img
-        elif mode != "human":
-            raise Exception(f"Rendering mode {mode} not supported")
+        elif self.render_mode != "human":
+            raise Exception(f"Rendering mode {self.render_mode} not supported")
 
         img = np.transpose(img, (1, 2, 0))  # CHW to HWC
 

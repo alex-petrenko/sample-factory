@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import gym
@@ -9,7 +11,14 @@ from torch import Tensor
 
 from sample_factory.algo.utils.tensor_utils import dict_of_lists_cat
 from sample_factory.envs.create_env import create_env
+from sample_factory.envs.env_utils import (
+    RewardShapingInterface,
+    TrainingInfoInterface,
+    find_training_info_interface,
+    find_wrapper_interface,
+)
 from sample_factory.utils.dicts import dict_of_lists_append
+from sample_factory.utils.typing import Config
 
 Actions = Any
 ListActions = Sequence[Actions]
@@ -80,8 +89,8 @@ class BatchedMultiAgentWrapper(Wrapper[DictOfListsObservations, Actions]):
     def step(self, action) -> Tuple[DictOfListsObservations, Sequence, SeqBools, SeqBools, Sequence[Dict]]:
         action = action[0]
         obs, rew, terminated, truncated, info = self.env.step(action)
-        if terminated | truncated:
-            obs, info = self.env.reset()
+        if terminated | truncated:  # auto-resetting
+            obs, info["reset_info"] = self.env.reset()
         return self._obs(obs), [rew], [terminated], [truncated], [info]
 
 
@@ -105,7 +114,7 @@ class NonBatchedMultiAgentWrapper(Wrapper[ListObservations, ListActions]):
         action = action[0]
         obs, rew, terminated, truncated, info = self.env.step(action)
         if terminated or truncated:  # auto-resetting
-            obs, info = self.env.reset()
+            obs, info["reset_info"] = self.env.reset()
         return [obs], [rew], [terminated], [truncated], [info]
 
 
@@ -211,11 +220,12 @@ class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
         return obs, rew, terminated, truncated, infos
 
 
-class SequentialVectorizeWrapper(Wrapper):
+class SequentialVectorizeWrapper(Wrapper, TrainingInfoInterface, RewardShapingInterface):
     """Vector interface for multiple environments simulated sequentially on one worker."""
 
-    def __init__(self, envs):
-        super().__init__(envs[0])
+    def __init__(self, envs: Sequence):
+        Wrapper.__init__(self, envs[0])
+        TrainingInfoInterface.__init__(self)
         self.single_env_agents = envs[0].num_agents
         assert all(
             e.num_agents == self.single_env_agents for e in envs
@@ -225,6 +235,23 @@ class SequentialVectorizeWrapper(Wrapper):
         self.num_agents = self.single_env_agents * len(envs)
 
         self.obs = self.rew = self.terminated = self.truncated = self.infos = None
+
+        self.training_info_interfaces: Optional[List[TrainingInfoInterface]] = []
+        self.reward_shaping_interfaces: Optional[List[RewardShapingInterface]] = []
+        for env in envs:
+            env_train_info = find_training_info_interface(env)
+            if env_train_info is None:
+                self.training_info_interfaces = None
+                break
+            else:
+                self.training_info_interfaces.append(env_train_info)
+
+            env_rew_shaping = find_wrapper_interface(env, RewardShapingInterface)
+            if env_rew_shaping is None:
+                self.reward_shaping_interfaces = None
+                break
+            else:
+                self.reward_shaping_interfaces.append(env_rew_shaping)
 
     def reset(self, **kwargs) -> Tuple[Dict, List[Dict]]:
         infos = []
@@ -266,17 +293,34 @@ class SequentialVectorizeWrapper(Wrapper):
 
         return self.obs, self.rew, self.terminated, self.truncated, infos
 
+    def set_training_info(self, training_info: Dict) -> None:
+        for env_train_info in self.training_info_interfaces:
+            env_train_info.set_training_info(training_info)
+
+    def get_default_reward_shaping(self) -> Optional[Dict[str, Any]]:
+        if self.reward_shaping_interfaces is not None:
+            return self.reward_shaping_interfaces[0].get_default_reward_shaping()
+        else:
+            return None
+
+    def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_indices: int | slice) -> None:
+        assert isinstance(agent_indices, slice)
+        for agent_idx in range(agent_indices.start, agent_indices.stop):
+            env_idx = agent_idx // self.single_env_agents
+            env_agent_idx = agent_idx % self.single_env_agents
+            self.reward_shaping_interfaces[env_idx].set_reward_shaping(reward_shaping, env_agent_idx)
+
     def close(self):
         for e in self.envs:
             e.close()
 
 
-def make_env_func_batched(cfg, env_config) -> BatchedVecEnv:
+def make_env_func_batched(cfg, env_config, render_mode: Optional[str] = None) -> BatchedVecEnv:
     """
     This should yield an environment that always returns a dict of PyTorch tensors (CPU- or GPU-side) or
     a dict of numpy arrays or a dict of lists (depending on what the environment returns in the first place).
     """
-    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
+    env = create_env(cfg.env, cfg=cfg, env_config=env_config, render_mode=render_mode)
 
     # At this point we can be sure that our environment outputs a dictionary of lists (or numpy arrays or tensors)
     # containing obs, rewards, etc. for each agent in the environment.
@@ -305,7 +349,7 @@ class NonBatchedVecEnv(Wrapper[ListObservations, ListActions]):
         super().__init__(env)
 
 
-def make_env_func_non_batched(cfg, env_config) -> NonBatchedVecEnv:
+def make_env_func_non_batched(cfg: Config, env_config, render_mode: Optional[str] = None) -> NonBatchedVecEnv:
     """
     This should yield an environment that always returns a list of {observations, rewards,
     dones, etc.}
@@ -313,6 +357,6 @@ def make_env_func_non_batched(cfg, env_config) -> NonBatchedVecEnv:
     (and therefore enables more sophisticated configurations where agents in the same env can be controlled
     by different policies and so on).
     """
-    env = create_env(cfg.env, cfg=cfg, env_config=env_config)
+    env = create_env(cfg.env, cfg=cfg, env_config=env_config, render_mode=render_mode)
     env = NonBatchedVecEnv(env)
     return env

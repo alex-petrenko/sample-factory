@@ -20,7 +20,7 @@ def main():
     spec = doom_env_by_name(args.env)
     cfg = default_cfg(env=args.env)
     if spec.num_agents <= 1:
-        env = make_doom_env(args.env, cfg=cfg, custom_resolution="1280x720")
+        env = make_doom_env(args.env, cfg=cfg, env_config=None, render_mode="rgb_array", custom_resolution="1280x720")
     else:
         env = make_doom_env_impl(
             spec,
@@ -30,6 +30,7 @@ def main():
             num_agents=spec.num_agents,
             max_num_players=spec.num_agents,
             num_bots=spec.num_bots,
+            render_mode="rgb_array",
         )
 
     mode = "replay"
@@ -48,7 +49,7 @@ def main():
     while not game.is_episode_finished():
         # Use advance_action instead of make_action.
         game.advance_action()
-        img = env.render(mode="rgb_array")
+        img = env.render()
 
         frame_name = f"{frame_id:05d}.png"
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)

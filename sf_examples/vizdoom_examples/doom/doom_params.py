@@ -57,6 +57,8 @@ def doom_override_defaults(parser):
         fps=35,
         exploration_loss="symmetric_kl",
         exploration_loss_coeff=0.001,
+        normalize_returns=True,
+        normalize_input=True,
     )
 
 

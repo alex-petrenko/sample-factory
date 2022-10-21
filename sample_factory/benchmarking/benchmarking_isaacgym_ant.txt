@@ -120,7 +120,29 @@ train: 8.4075
 wait_for_trajectories: 0.0067, prepare_next_step: 0.3253, enqueue_policy_requests: 0.0246, process_policy_outputs: 0.2326, env_step: 29.4539, finalize_trajectories: 0.0152, complete_rollouts: 0.0085
 post_env_step: 1.4866
   process_env_step: 0.7230
-[2022-08-02 22:57:49,534][1273242] Loop Runner_EvtLoop terminating...
 [2022-08-02 22:57:49,534][1273242] Runner profile tree view:
 main_loop: 47.3281
 [2022-08-02 22:57:49,534][1273242] Collected {0: 10027008}, FPS: 211861.7
+
+v78
+python -m sf_examples.isaacgym_examples.train_isaacgym --algo=APPO --env=Ant --experiment=ant_v078 --train_for_env_steps=10000000 --use_rnn=False --recurrence=1 --serial_mode=True --async_rl=False --restart_behavior=restart
+[2022-10-12 20:55:10,496][805069] Batcher 0 profile tree view:
+batching: 0.0514, releasing_batches: 0.0065
+[2022-10-12 20:55:10,496][805069] InferenceWorker_p0-w0 profile tree view:
+update_model: 0.0404
+one_step: 0.0018
+  handle_policy_step: 4.3097
+    deserialize: 0.0471, stack: 0.0050, obs_to_device_normalize: 0.8609, forward: 2.6274, prepare_outputs: 0.4568, send_messages: 0.0704
+[2022-10-12 20:55:10,496][805069] Learner 0 profile tree view:
+misc: 0.0008, prepare_batch: 1.2483
+train: 8.4735
+  epoch_init: 0.0055, minibatch_init: 0.0720, losses_postprocess: 2.0041, kl_divergence: 0.4214, update: 3.5573, after_optimizer: 0.0486
+  calculate_losses: 1.2784
+    losses_init: 0.0021, forward_head: 0.1930, bptt_initial: 0.0079, bptt: 0.0107, tail: 0.5941, advantages_returns: 0.0896, losses: 0.2626
+[2022-10-12 20:55:10,496][805069] RolloutWorker_w0 profile tree view:
+wait_for_trajectories: 0.0086, enqueue_policy_requests: 0.4201, process_policy_outputs: 0.2640, env_step: 32.3259, finalize_trajectories: 0.0180, complete_rollouts: 0.0092
+post_env_step: 1.6537
+  process_env_step: 0.8048
+[2022-10-12 20:55:10,497][805069] Runner profile tree view:
+main_loop: 51.4596
+[2022-10-12 20:55:10,497][805069] Collected {0: 10092544}, FPS: 196125.5

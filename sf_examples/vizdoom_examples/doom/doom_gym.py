@@ -89,6 +89,7 @@ class VizdoomEnv(gym.Env):
         skip_frames=1,
         async_mode=False,
         record_to=None,
+        render_mode: Optional[str] = None,
     ):
         self.initialized = False
 
@@ -134,7 +135,6 @@ class VizdoomEnv(gym.Env):
 
         # only created if we call render() method
         self.screen = None
-        self.surf = None
 
         # record full episodes using VizDoom recording functionality
         self.record_to = record_to
@@ -169,6 +169,8 @@ class VizdoomEnv(gym.Env):
         self._num_episodes = 0
 
         self.mode = "algo"
+
+        self.render_mode = render_mode
 
         self.seed()
 
@@ -458,7 +460,11 @@ class VizdoomEnv(gym.Env):
         truncated = False
         return observation, reward, terminated, truncated, info
 
-    def render(self, mode="human"):
+    def render(self) -> Optional[np.ndarray]:
+        mode = self.render_mode
+        if mode is None:
+            return
+
         try:
             img = self.game.get_state().screen_buffer
             img = np.transpose(img, [1, 2, 0])
@@ -468,7 +474,6 @@ class VizdoomEnv(gym.Env):
             h, w = img.shape[:2]
             render_h, render_w = h, w
             max_w = 1280
-
             if w < max_w:
                 render_w = max_w
                 render_h = int(max_w * h / w)
@@ -481,10 +486,8 @@ class VizdoomEnv(gym.Env):
                 pygame.display.init()
                 self.screen = pygame.display.set_mode((render_w, render_h))
 
-            self.surf = pygame.surfarray.make_surface(np.rot90(img))
-            self.screen.blit(self.surf, (0, 0))
+            pygame.surfarray.blit_array(self.screen, img.swapaxes(0, 1))
             pygame.display.update()
-            # pygame.display.flip()
 
             return img
         except AttributeError:

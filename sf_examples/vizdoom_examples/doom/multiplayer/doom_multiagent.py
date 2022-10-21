@@ -1,5 +1,6 @@
 import copy
 import os
+from typing import Optional
 
 from sample_factory.utils.network import is_udp_port_available
 from sample_factory.utils.utils import log
@@ -38,6 +39,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         respawn_delay=0,
         timelimit=0.0,
         record_to=None,
+        render_mode: Optional[str] = None,
     ):
         super().__init__(
             action_space,
@@ -45,6 +47,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
             skip_frames=skip_frames,
             async_mode=async_mode,
             record_to=record_to,
+            render_mode=render_mode,
         )
 
         self.worker_index = 0
@@ -58,7 +61,7 @@ class VizdoomEnvMultiplayer(VizdoomEnv):
         self.update_state = True
 
         # # Removed bot curriculum learning in favor of randomly generated bots
-        # # hardcode bot names for consistency, otherwise they are generated randomly
+        # # hardcode bot names for consistency if needed
         # self.bot_names = [
         #     "Blazkowicz",
         #     "PerfectBlue",

@@ -5,13 +5,14 @@ import os
 import pickle
 from dataclasses import dataclass
 from os.path import join
-from typing import List
+from typing import Dict, List, Optional
 
 import gym
 
 from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.context import set_global_context, sf_global_context
 from sample_factory.algo.utils.make_env import BatchedVecEnv, NonBatchedVecEnv, make_env_func_batched
+from sample_factory.envs.env_utils import get_default_reward_shaping
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log, project_tmp_dir
 
@@ -26,6 +27,9 @@ class EnvInfo:
     action_splits: List[int]  # in the case of tuple actions, the splits for the actions
     all_discrete: bool  # in the case of tuple actions, whether the actions are all discrete
     frameskip: int
+    # potentially customizable reward shaping, a map of reward component names to their respective weights
+    # this can be used by PBT to optimize the reward shaping towards a sparse final objective
+    reward_shaping_scheme: Optional[Dict[str, float]] = None
 
 
 def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvInfo:
@@ -38,10 +42,7 @@ def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvI
 
     frameskip = cfg.env_frameskip
 
-    # TODO: PBT stuff (default reward shaping)
-    # self.reward_shaping_scheme = None
-    # if self.cfg.with_pbt:
-    #     self.reward_shaping_scheme = get_default_reward_shaping(tmp_env)
+    reward_shaping_scheme = get_default_reward_shaping(env)
 
     action_splits = None
     all_discrete = None
@@ -58,6 +59,7 @@ def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvI
         action_splits=action_splits,
         all_discrete=all_discrete,
         frameskip=frameskip,
+        reward_shaping_scheme=reward_shaping_scheme,
     )
     return env_info
 

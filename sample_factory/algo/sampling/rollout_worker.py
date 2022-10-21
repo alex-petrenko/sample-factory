@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 import psutil
 import torch
@@ -100,7 +100,8 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
 
         self.env_runners: List[VectorEnvRunner] = []
 
-        self.reward_shaping = [None for _ in range(self.cfg.num_policies)]
+        # training status updated by the runner
+        self.training_info: List[Optional[Dict[str, Any]]] = [None for _ in range(self.cfg.num_policies)]
 
         self.training_iteration: List[int] = [0] * self.cfg.num_policies
 
@@ -143,7 +144,7 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
                 split_idx,
                 self.buffer_mgr,
                 self.sampling_device,
-                self.reward_shaping,
+                self.training_info,
             )
 
             env_runner.init(self.timing)
@@ -291,6 +292,11 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
         # request a new trajectory (since they're now available), and finally send observations to the inference worker
         for split_idx in range(self.num_splits):
             self._maybe_send_policy_request(self.env_runners[split_idx])
+
+    def on_update_training_info(self, training_info: Dict[PolicyID, Dict[str, Any]]) -> None:
+        """Update training info, this will be propagated to environments using TrainingInfoInterface and RewardShapingInterface."""
+        for policy_id, info in training_info.items():
+            self.training_info[policy_id] = info
 
     def on_stop(self, *args):
         for env_runner in self.env_runners:

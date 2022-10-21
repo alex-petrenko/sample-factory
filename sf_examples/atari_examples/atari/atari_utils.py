@@ -1,3 +1,5 @@
+from typing import Optional
+
 import gym
 
 from sample_factory.envs.env_wrappers import (
@@ -41,14 +43,10 @@ def atari_env_by_name(name):
     raise Exception("Unknown Atari env")
 
 
-# noinspection PyUnusedLocal
-def make_atari_env(env_name, cfg, env_config):
+def make_atari_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
     atari_spec = atari_env_by_name(env_name)
 
-    env_kwargs = dict()
-    if hasattr(cfg, "render_mode"):
-        env_kwargs["render_mode"] = cfg.render_mode
-    env = gym.make(atari_spec.env_id, **env_kwargs)
+    env = gym.make(atari_spec.env_id, render_mode=render_mode)
 
     if atari_spec.default_timeout is not None:
         env._max_episode_steps = atari_spec.default_timeout

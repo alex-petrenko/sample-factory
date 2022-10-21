@@ -53,6 +53,7 @@ class TestAtariEnv:
         cfg.num_envs_per_worker = 1
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
+        cfg.decorrelate_envs_on_one_worker = False
         cfg.seed = 0
         cfg.device = "cpu"
 

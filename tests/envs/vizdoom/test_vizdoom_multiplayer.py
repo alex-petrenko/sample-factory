@@ -21,24 +21,24 @@ class TestDoom:
         reset_global_context()
 
     @staticmethod
-    def make_standard_dm(env_config):
+    def make_standard_dm(env_config, render_mode):
         from sf_examples.vizdoom_examples.doom.doom_params import default_doom_cfg
         from sf_examples.vizdoom_examples.doom.doom_utils import make_doom_env
 
         cfg = default_doom_cfg()
         cfg.env_frameskip = 2
-        env = make_doom_env("doom_deathmatch_full", cfg=cfg, env_config=env_config)
+        env = make_doom_env("doom_deathmatch_full", cfg=cfg, env_config=env_config, render_mode=render_mode)
         env.skip_frames = cfg.env_frameskip
         return env
 
     @staticmethod
     def doom_multiagent(make_multi_env, worker_index, num_steps=1000):
         env_config = AttrDict(worker_index=worker_index, vector_index=0, safe_init=False)
-        multi_env = make_multi_env(env_config)
-
+        visualize = False
+        render_mode = "human" if visualize else None
+        multi_env = make_multi_env(env_config, render_mode)
         obs, infos = multi_env.reset()
 
-        visualize = False
         start = time.time()
 
         for i in range(num_steps):

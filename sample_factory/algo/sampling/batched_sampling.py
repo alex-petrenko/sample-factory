@@ -15,6 +15,12 @@ from sample_factory.algo.utils.make_env import BatchedVecEnv, SequentialVectoriz
 from sample_factory.algo.utils.misc import EPISODIC, POLICY_ID_KEY
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.torch_utils import synchronize
+from sample_factory.envs.env_utils import (
+    TrainingInfoInterface,
+    find_training_info_interface,
+    set_reward_shaping,
+    set_training_info,
+)
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively_with_prefix
 from sample_factory.utils.typing import PolicyID
@@ -96,7 +102,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         split_idx,
         buffer_mgr,
         sampling_device: str,
-        pbt_reward_shaping,  # TODO pbt reward
+        training_info: List[Optional[Dict]],
     ):
         # TODO: comment
         """
@@ -109,8 +115,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         double-buffered sampling is disabled.
         :param buffer_mgr: a collection of all shared data structures used by the algorithm. Most importantly,
         the trajectory buffers in shared memory.
-        :param pbt_reward_shaping: initial reward shaping dictionary, for configuration where PBT optimizes
-        reward coefficients in environments.
+        :param training_info: curr env steps, reward shaping scheme, etc.
         """
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
 
@@ -120,6 +125,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         self.num_envs = num_envs
 
         self.vec_env: Optional[BatchedVecEnv | SequentialVectorizeWrapper] = None
+        self.env_training_info_interface: Optional[TrainingInfoInterface] = None
+
         self.last_obs = None
         self.last_rnn_state = None
         self.policy_id_buffer = None
@@ -130,7 +137,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
 
         self.curr_episode_reward = self.curr_episode_len = None
 
-        self.pbt_reward_shaping = pbt_reward_shaping  # TODO
+        self.training_info: List[Optional[Dict]] = training_info
 
         self.min_raw_rewards = self.max_raw_rewards = None
 
@@ -168,6 +175,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             self.vec_env = envs[0]
         else:
             self.vec_env = SequentialVectorizeWrapper(envs)
+
+        self.env_training_info_interface = find_training_info_interface(self.vec_env)
 
         self.last_obs, info = self.vec_env.reset()  # anything we need to do with info? Currently we ignore it
 
@@ -330,6 +339,11 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                 self.rollout_step = 0
                 # we will need to request a new trajectory buffer!
                 self.curr_traj_slice = self.curr_traj = None
+
+                if self.training_info[self.policy_id] is not None:
+                    reward_shaping = self.training_info[self.policy_id].get("reward_shaping", None)
+                    set_reward_shaping(self.vec_env, reward_shaping, slice(0, self.vec_env.num_agents))
+                    set_training_info(self.env_training_info_interface, self.training_info[self.policy_id])
 
         self.env_step_ready = True
         return complete_rollouts, episodic_stats
