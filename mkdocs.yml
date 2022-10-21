@@ -126,6 +126,7 @@ nav:
     - environment-integrations/mujoco.md
     - environment-integrations/atari.md
     - environment-integrations/vizdoom.md
+    - environment-integrations/swarm-rl.md
   - Release Notes:
     - release-notes/release-notes.md
   - Community:
