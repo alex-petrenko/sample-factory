@@ -623,13 +623,17 @@ def add_eval_args(parser):
         "--fps",
         default=0,
         type=int,
-        help="Enable sync mode with adjustable FPS. Default (0) means default, e.g. for Doom its FPS (~35), or unlimited if not specified by env. Leave at 0 for Doom multiplayer evaluation",
+        help="Enable rendering with adjustable FPS. Default (0) means default, e.g. for Doom its FPS (~35), or unlimited if not specified by env. Leave at 0 for Doom multiplayer evaluation",
     )
     parser.add_argument(
-        "--render_action_repeat",
+        "--eval_env_frameskip",
         default=None,
         type=int,
-        help="Repeat an action that many frames during evaluation. By default uses the value from env config (used during training).",
+        help="Env frameskip to use during evaluation. "
+        "If not specified, we use the same frameskip as during training (env_frameskip). "
+        "For some envs (i.e. VizDoom) we can set this to 1 to get smoother env rendering during evaluation. "
+        "If eval_env_frameskip is different from env_frameskip, we will repeat actions during evaluation "
+        "env_frameskip / eval_env_frameskip times to match the training regime.",
     )
     parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
 
@@ -653,10 +657,10 @@ def add_eval_args(parser):
     )
 
     parser.add_argument(
-        "--continuous_actions_sample",
-        default=True,
+        "--eval_deterministic",
+        default=False,
         type=str2bool,
-        help="True to sample from a continuous action distribution at test time, False to just take the mean",
+        help="False to sample from action distributions at test time. True to just use the argmax.",
     )
 
 

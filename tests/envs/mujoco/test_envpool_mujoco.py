@@ -8,13 +8,15 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.train import make_runner
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log
+from sf_examples.envpool.envpool_utils import envpool_available
+from sf_examples.envpool.mujoco.train_envpool_mujoco import parse_mujoco_cfg, register_mujoco_components
 from sf_examples.mujoco.mujoco_utils import mujoco_available
-from sf_examples.mujoco.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 from tests.utils import clean_test_dir
 
 
 @pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
-class TestMujoco:
+@pytest.mark.skipif(not envpool_available(), reason="envpool not installed")
+class TestEnvpoolMujoco:
     @pytest.fixture(scope="class", autouse=True)
     def register_mujoco_fixture(self):
         register_mujoco_components()
@@ -23,11 +25,11 @@ class TestMujoco:
     def _run_test_env(
         env: str = "mujoco_ant",
         num_workers: int = 8,
-        train_steps: int = 128,
-        batched_sampling: bool = False,
+        train_steps: int = 4096,
+        batched_sampling: bool = True,
         serial_mode: bool = True,
         async_rl: bool = False,
-        batch_size: int = 64,
+        batch_size: int = 2048,
         rollout: int = 8,
         expected_max_policy_lag: int = 100,
         customize_cfg_func: Optional[Callable[[Config], None]] = None,
@@ -35,14 +37,16 @@ class TestMujoco:
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
 
-        experiment_name = "test_" + env
+        experiment_name = f"test_envpool_{num_workers}_{env}"
 
         cfg = parse_mujoco_cfg(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
         cfg.async_rl = async_rl
         cfg.batched_sampling = batched_sampling
         cfg.num_workers = num_workers
-        cfg.num_envs_per_worker = 2
+        cfg.num_envs_per_worker = 1
+        cfg.worker_num_splits = 1
+        cfg.env_agents = 32
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
         cfg.rollout = rollout
@@ -71,39 +75,34 @@ class TestMujoco:
             "mujoco_ant",
             "mujoco_halfcheetah",
             "mujoco_humanoid",
-            "mujoco_hopper",
-            "mujoco_reacher",
-            "mujoco_walker",
-            "mujoco_swimmer",
+            # limit the number of envs to speed up tests
+            # "mujoco_hopper",
+            # "mujoco_reacher",
+            # "mujoco_walker",
+            # "mujoco_swimmer",
         ],
     )
-    @pytest.mark.parametrize("num_workers", [1, 8])
-    @pytest.mark.parametrize("batched_sampling", [False, True])
+    @pytest.mark.parametrize("num_workers", [1])
+    @pytest.mark.parametrize("batched_sampling", [True])
     def test_basic_envs(self, env_name, batched_sampling, num_workers):
         self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=batched_sampling)
 
     @pytest.mark.parametrize("env_name", ["mujoco_pendulum", "mujoco_doublependulum"])
-    @pytest.mark.parametrize("num_workers", [1, 8])
+    @pytest.mark.parametrize("num_workers", [1])
     def test_single_action_envs_batched(self, env_name, num_workers):
         """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
         self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=True)
 
-    @pytest.mark.parametrize("env_name", ["mujoco_pendulum", "mujoco_doublependulum"])
-    @pytest.mark.parametrize("num_workers", [1, 8])
-    def test_single_action_envs_non_batched(self, env_name, num_workers):
-        """These envs only have a single action and might cause unique problems with 0-D vs 1-D tensors."""
-        self._run_test_env(env=env_name, num_workers=num_workers, batched_sampling=False)
-
-    @pytest.mark.parametrize("batched_sampling", [False, True])
+    @pytest.mark.parametrize("batched_sampling", [True])
     def test_synchronous_rl_zero_lag(self, batched_sampling: bool):
         def no_lag_cfg(cfg: Config):
             cfg.num_epochs = cfg.num_batches_per_epoch = 1
 
         self._run_test_env(
             env="mujoco_ant",
-            num_workers=32,
-            train_steps=1024,
-            batch_size=512,
+            num_workers=1,
+            train_steps=4096,
+            batch_size=2048,
             batched_sampling=batched_sampling,
             serial_mode=False,
             async_rl=False,

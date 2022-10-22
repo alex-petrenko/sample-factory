@@ -11,12 +11,41 @@ on:
     - sf2
 
 jobs:
-  run-tests:
+  run-tests-ubuntu:
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.8', '3.9', '3.10']
-        os: ['ubuntu-latest', 'macos-latest']
+        os: ['ubuntu-latest']
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Add conda to system path
+      run: |
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        echo $CONDA/bin >> $GITHUB_PATH
+    - name: Install conda env & dependencies
+      run: |
+       pip install -e '.[atari, mujoco, envpool]'
+       conda list
+    - name: Install test dependencies
+      run: |
+        pip install pytest
+    - name: Run tests
+      run: |
+        # run all tests
+        pytest -s
+
+  run-tests-mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10']
+        os: ['macos-latest']
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3

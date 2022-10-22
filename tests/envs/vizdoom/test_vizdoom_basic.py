@@ -11,7 +11,7 @@ from tests.envs.utils import eval_env_performance
 class TestDoom:
     @pytest.fixture(scope="class", autouse=True)
     def register_doom_fixture(self):
-        from sf_examples.vizdoom_examples.train_vizdoom import register_vizdoom_components
+        from sf_examples.vizdoom.train_vizdoom import register_vizdoom_components
 
         register_vizdoom_components()
         yield  # this is where the actual test happens
@@ -20,15 +20,15 @@ class TestDoom:
     # noinspection PyUnusedLocal
     @staticmethod
     def make_env_singleplayer(env_config, **kwargs):
-        from sf_examples.vizdoom_examples.doom.doom_params import default_doom_cfg
-        from sf_examples.vizdoom_examples.doom.doom_utils import make_doom_env
+        from sf_examples.vizdoom.doom.doom_params import default_doom_cfg
+        from sf_examples.vizdoom.doom.doom_utils import make_doom_env
 
         return make_doom_env("doom_benchmark", cfg=default_doom_cfg(), env_config=env_config, **kwargs)
 
     @staticmethod
     def make_env_bots_hybrid_actions(env_config, **kwargs):
-        from sf_examples.vizdoom_examples.doom.doom_params import default_doom_cfg
-        from sf_examples.vizdoom_examples.doom.doom_utils import make_doom_env
+        from sf_examples.vizdoom.doom.doom_params import default_doom_cfg
+        from sf_examples.vizdoom.doom.doom_utils import make_doom_env
 
         return make_doom_env("doom_deathmatch_bots", cfg=default_doom_cfg(), env_config=env_config, **kwargs)
 
@@ -42,8 +42,8 @@ class TestDoom:
         eval_env_performance(self.make_env_bots_hybrid_actions, "doom")
 
     def test_doom_two_color(self):
-        from sf_examples.vizdoom_examples.doom.doom_params import default_doom_cfg
-        from sf_examples.vizdoom_examples.doom.doom_utils import make_doom_env
+        from sf_examples.vizdoom.doom.doom_params import default_doom_cfg
+        from sf_examples.vizdoom.doom.doom_utils import make_doom_env
 
         eval_env_performance(
             lambda env_config: make_doom_env("doom_two_colors_easy", cfg=default_doom_cfg(), env_config=None),
@@ -52,8 +52,8 @@ class TestDoom:
         )
 
     def test_recording(self):
-        from sf_examples.vizdoom_examples.doom.doom_params import default_doom_cfg
-        from sf_examples.vizdoom_examples.doom.doom_utils import make_doom_env
+        from sf_examples.vizdoom.doom.doom_params import default_doom_cfg
+        from sf_examples.vizdoom.doom.doom_utils import make_doom_env
 
         rec_dir = "/tmp/"
         cfg = default_doom_cfg()
@@ -67,7 +67,7 @@ class TestDoom:
         env.close()
 
         demo_dir = env.unwrapped.curr_demo_dir
-        from sf_examples.vizdoom_examples.doom.doom_gym import VizdoomEnv
+        from sf_examples.vizdoom.doom.doom_gym import VizdoomEnv
 
         demo_path = VizdoomEnv.demo_path(0, demo_dir)
 

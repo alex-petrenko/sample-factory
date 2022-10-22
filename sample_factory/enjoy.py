@@ -9,7 +9,7 @@ from torch import Tensor
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
-from sample_factory.algo.utils.action_distributions import ContinuousActionDistribution
+from sample_factory.algo.utils.action_distributions import argmax_actions
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
@@ -85,13 +85,14 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
     cfg = load_from_checkpoint(cfg)
 
-    render_action_repeat = cfg.render_action_repeat if cfg.render_action_repeat is not None else cfg.env_frameskip
-    if render_action_repeat is None:
-        log.warning("Not using action repeat!")
-        render_action_repeat = 1
-    log.debug("Using action repeat %d during evaluation", render_action_repeat)
+    eval_env_frameskip: int = cfg.env_frameskip if cfg.eval_env_frameskip is None else cfg.eval_env_frameskip
+    assert (
+        cfg.env_frameskip % eval_env_frameskip == 0
+    ), f"{cfg.env_frameskip=} must be divisible by {eval_env_frameskip=}"
+    render_action_repeat: int = cfg.env_frameskip // eval_env_frameskip
+    cfg.env_frameskip = cfg.eval_env_frameskip = eval_env_frameskip
+    log.debug(f"Using frameskip {cfg.env_frameskip} and {render_action_repeat=} for evaluation")
 
-    cfg.env_frameskip = 1  # for evaluation
     cfg.num_envs = 1
 
     render_mode = "human"
@@ -151,10 +152,9 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
             # sample actions from the distribution by default
             actions = policy_outputs["actions"]
 
-            action_distribution = actor_critic.action_distribution()
-            if isinstance(action_distribution, ContinuousActionDistribution):
-                if not cfg.continuous_actions_sample:  # TODO: add similar option for discrete actions
-                    actions = action_distribution.means
+            if cfg.eval_deterministic:
+                action_distribution = actor_critic.action_distribution()
+                actions = argmax_actions(action_distribution)
 
             # actions shape should be [num_agents, num_actions] even if it's [1, 1]
             if actions.ndim == 1:
@@ -204,7 +204,13 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                             )
                         rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
                         episode_reward[agent_i] = 0
-                        num_episodes += 1
+
+                        if cfg.use_record_episode_statistics:
+                            # we want the scores from the full episode not a single agent death (due to EpisodicLifeEnv wrapper)
+                            if "episode" in infos[agent_i].keys():
+                                num_episodes += 1
+                        else:
+                            num_episodes += 1
 
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):

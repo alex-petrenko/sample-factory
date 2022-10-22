@@ -3,8 +3,8 @@ import pytest
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
-from sf_examples.mujoco_examples.mujoco.mujoco_utils import mujoco_available
-from sf_examples.mujoco_examples.train_mujoco import parse_mujoco_cfg, register_mujoco_components
+from sf_examples.mujoco.mujoco_utils import mujoco_available
+from sf_examples.mujoco.train_mujoco import parse_mujoco_cfg, register_mujoco_components
 from sf_examples.sampler.use_simplified_sampling_api import generate_trajectories
 
 
