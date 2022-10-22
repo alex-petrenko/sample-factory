@@ -259,7 +259,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--with_vtrace",
-        default=True,
+        default=False,
         type=str2bool,
         help="Enables V-trace off-policy correction. If this is True, then GAE is not used",
     )
