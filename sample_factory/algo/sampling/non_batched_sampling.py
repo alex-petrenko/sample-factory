@@ -295,8 +295,7 @@ class ActorState:
             episode_extra_stats=info.get("episode_extra_stats", dict()),
         )
 
-        if true_objective := info.get("true_objective", self.last_episode_reward):
-            stats["true_objective"] = true_objective
+        stats["true_objective"] = info.get("true_objective", self.last_episode_reward)
 
         episode_wrapper_stats = record_episode_statistics_wrapper_stats(info)
         if episode_wrapper_stats is not None:
