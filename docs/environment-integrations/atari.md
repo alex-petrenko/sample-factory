@@ -16,7 +16,7 @@ The default parameters have been chosen to match CleanRL's configuration (see re
 TODO: provide parameters that result in faster training.
  
 
-To train a model in the `BreakoutNoFrameskip-v4` enviornment:
+To train a model in the `BreakoutNoFrameskip-v4` environment:
 
 ```
 python -m sf_examples.atari_examples.train_atari --algo=APPO --env=atari_breakout --experiment="Experiment Name"

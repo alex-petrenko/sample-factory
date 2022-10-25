@@ -12,7 +12,7 @@ from sample_factory.utils.utils import log
 class TestModel:
     @pytest.fixture(scope="class", autouse=True)
     def register_atari_fixture(self):
-        from sf_examples.atari_examples.train_atari import register_atari_components
+        from sf_examples.atari.train_atari import register_atari_components
 
         register_atari_components()
 
@@ -41,12 +41,13 @@ class TestModel:
                 observations = dict(obs=torch.rand([batch, 4, 84, 84]).to(device))
                 rnn_states = torch.rand([batch, get_rnn_size(cfg)]).to(device)
 
-            n = 200
+            n = 100
             for i in range(n):
                 with timing.add_time("forward"):
                     _ = actor_critic(observations, rnn_states)
 
-                log.debug("Progress %d/%d", i, n)
+                if i % 10 == 0:
+                    log.debug("Progress %d/%d", i, n)
 
         log.debug("Timing: %s", timing)
 

@@ -259,7 +259,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--with_vtrace",
-        default=True,
+        default=False,
         type=str2bool,
         help="Enables V-trace off-policy correction. If this is True, then GAE is not used",
     )
@@ -592,6 +592,14 @@ def add_default_env_args(p: ArgumentParser):
         help="Set to true if environment expects actions on GPU (i.e. as a GPU-side PyTorch tensor)",
     )
     p.add_argument(
+        "--env_gpu_observations",
+        default=True,
+        type=str2bool,
+        help="Setting this to True together with non-empty --actor_worker_gpus will make observations GPU-side PyTorch tensors. "
+        "Otherwise data will be on CPU. For CPU-based envs just set --actor_worker_gpus to empty list then this parameter does not matter.",
+    )
+
+    p.add_argument(
         "--env_frameskip",
         default=1,
         type=int,
@@ -623,22 +631,26 @@ def add_eval_args(parser):
         "--fps",
         default=0,
         type=int,
-        help="Enable sync mode with adjustable FPS. Default (0) means default, e.g. for Doom its FPS (~35), or unlimited if not specified by env. Leave at 0 for Doom multiplayer evaluation",
+        help="Enable rendering with adjustable FPS. Default (0) means default, e.g. for Doom its FPS (~35), or unlimited if not specified by env. Leave at 0 for Doom multiplayer evaluation",
     )
     parser.add_argument(
-        "--render_action_repeat",
+        "--eval_env_frameskip",
         default=None,
         type=int,
-        help="Repeat an action that many frames during evaluation. By default uses the value from env config (used during training).",
+        help="Env frameskip to use during evaluation. "
+        "If not specified, we use the same frameskip as during training (env_frameskip). "
+        "For some envs (i.e. VizDoom) we can set this to 1 to get smoother env rendering during evaluation. "
+        "If eval_env_frameskip is different from env_frameskip, we will repeat actions during evaluation "
+        "env_frameskip / eval_env_frameskip times to match the training regime.",
     )
     parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
 
     parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
     parser.add_argument(
         "--video_frames",
-        default=-1,
+        default=1e9,
         type=int,
-        help="Number of frames to render for the video. Defaults to -1 which renders an entire episode",
+        help="Number of frames to render for the video. Defaults to 1e9 which will be the same as having video_frames = max_num_frames. You can also set to -1 which only renders an entire episode",
     )
     parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
     parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
@@ -653,10 +665,10 @@ def add_eval_args(parser):
     )
 
     parser.add_argument(
-        "--continuous_actions_sample",
-        default=True,
+        "--eval_deterministic",
+        default=False,
         type=str2bool,
-        help="True to sample from a continuous action distribution at test time, False to just take the mean",
+        help="False to sample from action distributions at test time. True to just use the argmax.",
     )
 
 

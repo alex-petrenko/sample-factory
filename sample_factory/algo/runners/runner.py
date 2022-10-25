@@ -9,7 +9,7 @@ from os.path import isdir, join
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
-from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
+from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, process_name, signal
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.learning.batcher import Batcher
@@ -36,6 +36,7 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, StatusCode
 from sample_factory.utils.utils import (
     cfg_file,
+    debug_log_every_n,
     ensure_dir_exists,
     experiment_dir,
     init_file_logger,
@@ -84,7 +85,8 @@ class Runner(EventLoopObject, Configurable):
         self.event_loop.owner = self
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
 
-        self.stopped = False
+        self.status: StatusCode = ExperimentStatus.SUCCESS
+        self.stopped: bool = False
 
         self.env_info: Optional[EnvInfo] = None
 
@@ -175,6 +177,7 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
 
         self.heartbeat_dict = {}
+        self.queue_size_dict = {}
 
         self.components_to_stop: List[EventLoopObject] = []
         self.component_profiles: Dict[str, Timing] = dict()
@@ -573,9 +576,15 @@ class Runner(EventLoopObject, Configurable):
             self.heartbeat_dict[component_type] = {}
         type_dict = self.heartbeat_dict[component_type]
         type_dict[component.object_id] = None
+
+        # setup up queue_size report with heartbeat, grouped by event_loop_process_name
+        p_name = process_name(component.event_loop.process)
+        if p_name not in self.queue_size_dict:
+            self.queue_size_dict[p_name] = 0
+
         component.heartbeat.connect(self._receive_heartbeat)
 
-    def _receive_heartbeat(self, component_type: type, component_id: str):
+    def _receive_heartbeat(self, component_type: type, component_id: str, p_name: str, qsize: int):
         """
         Record the time the most recent heartbeat was received
         """
@@ -586,6 +595,7 @@ class Runner(EventLoopObject, Configurable):
         elif curr_time - heartbeat_time > self.heartbeat_report_sec:
             log.info(f"Heartbeat reconnected after {int(curr_time - heartbeat_time)} seconds from {component_id}")
         self.heartbeat_dict[component_type][component_id] = curr_time
+        self.queue_size_dict[p_name] = qsize
 
     def _check_heartbeat(self):
         """
@@ -613,15 +623,19 @@ class Runner(EventLoopObject, Configurable):
             wait_time = time.time() - self.start_time
             log.debug(f"Components not started: {', '.join(none_list)}, {wait_time=:.1f} seconds")
             if wait_time > 3 * self.heartbeat_report_sec:
-                log.error(f"Components take too long to start: {', '.join(none_list)}")
-                self._stop_training()
+                log.error(f"Components take too long to start: {', '.join(none_list)}. Aborting the experiment!\n\n\n")
+                self._stop_training(failed=True)
 
         if len(comp_list) > 0:
             log.error(f"No heartbeat for components: {', '.join(comp_list)}")
 
         if len(type_list) > 0:
             log.error(f"Stopping training due to lack of heartbeats from {', '.join(type_list)}")
-            self._stop_training()
+            self._stop_training(failed=True)
+
+        for p_name, qsize in self.queue_size_dict.items():
+            if qsize > 5:
+                debug_log_every_n(1000, f"Process: {p_name} has queue size: {qsize}")
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
@@ -693,7 +707,7 @@ class Runner(EventLoopObject, Configurable):
         if self._should_end_training():
             self._stop_training()
 
-    def _stop_training(self):
+    def _stop_training(self, failed: bool = False) -> None:
         if not self.stopped:
             self._propagate_training_info()
 
@@ -705,17 +719,32 @@ class Runner(EventLoopObject, Configurable):
             for timer in self.timers:
                 timer.stop()
             self.stop.emit(self.object_id)
+
+            if failed:
+                self.status = ExperimentStatus.FAILURE
+
             self.stopped = True
 
     def _component_stopped(self, component_obj_id, component_profiles: Dict[str, Timing]):
-        log.debug(f"Component {component_obj_id} stopped!")
-
+        remaining = []
         for i, component in enumerate(self.components_to_stop):
             if component.object_id == component_obj_id:
-                del self.components_to_stop[i]
-                # if self.components_to_stop:
-                #     log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
-                break
+                log.debug(f"Component {component_obj_id} stopped!")
+                continue
+
+            try:
+                if not component.event_loop.process.is_alive():
+                    log.warning(f"Component {component.object_id} process died already! Don't wait for it.")
+                    continue
+            except AttributeError:
+                # in serial mode there's no process, plus event_loop can be None for stopped components
+                pass
+
+            remaining.append(component)
+
+        self.components_to_stop = remaining
+        if self.components_to_stop and self.status == ExperimentStatus.FAILURE:
+            log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
 
         self.component_profiles.update(component_profiles)
 
@@ -733,20 +762,20 @@ class Runner(EventLoopObject, Configurable):
 
     # noinspection PyBroadException
     def run(self) -> StatusCode:
-        status = ExperimentStatus.SUCCESS
-
         with self.timing.timeit("main_loop"):
             try:
                 evt_loop_status = self.event_loop.exec()
-                status = ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else status
+                self.status = (
+                    ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else self.status
+                )
                 self.stop.emit(self.object_id)
             except Exception:
                 log.exception(f"Uncaught exception in {self.object_id} evt loop")
-                status = ExperimentStatus.FAILURE
+                self.status = ExperimentStatus.FAILURE
 
         log.info(self.timing)
         if self.total_env_steps_since_resume is None:
             self.total_env_steps_since_resume = 0
         fps = self.total_env_steps_since_resume / self.timing.main_loop
         log.info("Collected %r, FPS: %.1f", self.env_steps, fps)
-        return status
+        return self.status

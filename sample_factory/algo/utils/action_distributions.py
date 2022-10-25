@@ -70,6 +70,17 @@ def sample_actions_log_probs(distribution):
         return actions, log_prob_actions
 
 
+def argmax_actions(distribution):
+    if isinstance(distribution, TupleActionDistribution):
+        return distribution.argmax()
+    elif hasattr(distribution, "probs"):
+        return torch.argmax(distribution.probs, dim=-1)
+    elif hasattr(distribution, "means"):
+        return distribution.means
+    else:
+        raise NotImplementedError(f"Action distribution type {type(distribution)} does not support argmax!")
+
+
 # noinspection PyAbstractClass
 class CategoricalActionDistribution:
     def __init__(self, raw_logits):
@@ -207,6 +218,10 @@ class TupleActionDistribution:
     def sample(self):
         list_of_action_batches = [d.sample() for d in self.distributions]
         return self._flatten_actions(list_of_action_batches)
+
+    def argmax(self):
+        list_of_action_batches = [argmax_actions(d) for d in self.distributions]
+        return torch.cat(list_of_action_batches).unsqueeze(0)
 
     def log_prob(self, actions):
         # split into batches of actions from individual distributions

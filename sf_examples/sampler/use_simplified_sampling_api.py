@@ -10,7 +10,7 @@ from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_sep
 from sample_factory.algo.utils.rl_utils import samples_per_trajectory
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log
-from sf_examples.atari_examples.train_atari import parse_atari_args, register_atari_components
+from sf_examples.atari.train_atari import parse_atari_args, register_atari_components
 
 
 def _print_fps_stats(cfg: Config, fps_stats: Deque):
