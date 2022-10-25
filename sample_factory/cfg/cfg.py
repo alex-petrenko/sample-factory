@@ -648,9 +648,9 @@ def add_eval_args(parser):
     parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
     parser.add_argument(
         "--video_frames",
-        default=-1,
+        default=1e9,
         type=int,
-        help="Number of frames to render for the video. Defaults to -1 which renders an entire episode",
+        help="Number of frames to render for the video. Defaults to 1e9 which will be the same as having video_frames = max_num_frames. You can also set to -1 which only renders an entire episode",
     )
     parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
     parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
