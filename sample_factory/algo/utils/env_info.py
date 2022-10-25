@@ -23,7 +23,7 @@ class EnvInfo:
     action_space: gym.Space
     num_agents: int
     gpu_actions: bool  # whether actions provided by the agent should be on GPU or not
-    gpu_observations: bool  # whether environment expects data on GPU or not
+    gpu_observations: bool  # whether environment provides data (obs, etc.) on GPU or not
     action_splits: List[int]  # in the case of tuple actions, the splits for the actions
     all_discrete: bool  # in the case of tuple actions, whether the actions are all discrete
     frameskip: int

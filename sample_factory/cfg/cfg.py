@@ -595,7 +595,8 @@ def add_default_env_args(p: ArgumentParser):
         "--env_gpu_observations",
         default=True,
         type=str2bool,
-        help="Set to true if environment expects data on GPU, If this is true we expect data to be on the device determined by actor_worker_gpus, otherwise it will be on CPU",
+        help="Setting this to True together with non-empty --actor_worker_gpus will make observations GPU-side PyTorch tensors. "
+             "Otherwise data will be on CPU. For CPU-based envs just set --actor_worker_gpus to empty list then this parameter does not matter.",
     )
 
     p.add_argument(
