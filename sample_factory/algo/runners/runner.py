@@ -9,7 +9,7 @@ from os.path import isdir, join
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
-from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, signal
+from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, Timer, process_name, signal
 from tensorboardX import SummaryWriter
 
 from sample_factory.algo.learning.batcher import Batcher
@@ -36,6 +36,7 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID, StatusCode
 from sample_factory.utils.utils import (
     cfg_file,
+    debug_log_every_n,
     ensure_dir_exists,
     experiment_dir,
     init_file_logger,
@@ -176,6 +177,7 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.heartbeat_report_sec, self._check_heartbeat)
 
         self.heartbeat_dict = {}
+        self.queue_size_dict = {}
 
         self.components_to_stop: List[EventLoopObject] = []
         self.component_profiles: Dict[str, Timing] = dict()
@@ -574,9 +576,15 @@ class Runner(EventLoopObject, Configurable):
             self.heartbeat_dict[component_type] = {}
         type_dict = self.heartbeat_dict[component_type]
         type_dict[component.object_id] = None
+
+        # setup up queue_size report with heartbeat, grouped by event_loop_process_name
+        p_name = process_name(component.event_loop.process)
+        if p_name not in self.queue_size_dict:
+            self.queue_size_dict[p_name] = 0
+
         component.heartbeat.connect(self._receive_heartbeat)
 
-    def _receive_heartbeat(self, component_type: type, component_id: str):
+    def _receive_heartbeat(self, component_type: type, component_id: str, p_name: str, qsize: int):
         """
         Record the time the most recent heartbeat was received
         """
@@ -587,6 +595,7 @@ class Runner(EventLoopObject, Configurable):
         elif curr_time - heartbeat_time > self.heartbeat_report_sec:
             log.info(f"Heartbeat reconnected after {int(curr_time - heartbeat_time)} seconds from {component_id}")
         self.heartbeat_dict[component_type][component_id] = curr_time
+        self.queue_size_dict[p_name] = qsize
 
     def _check_heartbeat(self):
         """
@@ -623,6 +632,10 @@ class Runner(EventLoopObject, Configurable):
         if len(type_list) > 0:
             log.error(f"Stopping training due to lack of heartbeats from {', '.join(type_list)}")
             self._stop_training(failed=True)
+
+        for p_name, qsize in self.queue_size_dict.items():
+            if qsize > 5:
+                debug_log_every_n(1000, f"Process: {p_name} has queue size: {qsize}")
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
