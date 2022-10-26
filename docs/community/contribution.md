@@ -59,6 +59,12 @@ If you would like to work on any of the open Issues:
 	```bash
 	make format
 	```
+ 
+	If you want to enable auto format checking before every commit, you can run the following command: 
+	```bash
+	pre-commit install
+	```
+
 7. Run unittests with the following command:
 	```bash
 	make test
