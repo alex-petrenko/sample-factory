@@ -51,7 +51,7 @@ Activate your conda environment with `bash` and `conda activate sf2` then `cd sa
 
 Run your runner script - an example mujuco runner (replace run, slurm_sbatch_template, and slurm_workdir with appropriate values)
 ```
-python -m sample_factory.runner.run --runner=slurm --slurm_workdir=./slurm_mujoco --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/runner/slurm/sbatch_template.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.mujoco_examples.experiments.mujoco_all_envs
+python -m sample_factory.runner.run --runner=slurm --slurm_workdir=./slurm_mujoco --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/runner/slurm/sbatch_template.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.mujoco.experiments.mujoco_all_envs
 ```
 
 The `slurm_gpus_per_job` and `slurm_cpus_per_gpu` determine the resources allocated to each job. You can view the jobs without running them by setting `slurm_print_only=True`.

@@ -10,7 +10,7 @@ pip install sample-factory[atari]
 
 ### Running Experiments
 
-Run Atari experiments with the scripts in `sf_examples.atari_examples`.
+Run Atari experiments with the scripts in `sf_examples.atari`.
 
 The default parameters have been chosen to match CleanRL's configuration (see reports below) and are not tuned for throughput.
 TODO: provide parameters that result in faster training.
@@ -19,24 +19,24 @@ TODO: provide parameters that result in faster training.
 To train a model in the `BreakoutNoFrameskip-v4` enviornment:
 
 ```
-python -m sf_examples.atari_examples.train_atari --algo=APPO --env=atari_breakout --experiment="Experiment Name"
+python -m sf_examples.atari.train_atari --algo=APPO --env=atari_breakout --experiment="Experiment Name"
 ```
 
 To visualize the training results, use the `enjoy_atari` script:
 
 ```
-python -m sf_examples.atari_examples.enjoy_atari --algo=APPO --env=atari_breakout --experiment="Experiment Name"
+python -m sf_examples.atari.enjoy_atari --algo=APPO --env=atari_breakout --experiment="Experiment Name"
 ```
 
 Multiple experiments can be run in parallel with the runner module. `atari_envs` is an example runner script that runs atari envs with 4 seeds. 
 
 ```
-python -m sample_factory.runner.run --run=sf_examples.atari_examples.experiments.atari_envs --runner=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1
+python -m sample_factory.runner.run --run=sf_examples.atari.experiments.atari_envs --runner=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1
 ```
 
 #### List of Supported Environments
 
-Specify the environment to run with the `--env` command line parameter. The following Atari v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.atari_examples.atari.atari_utils`
+Specify the environment to run with the `--env` command line parameter. The following Atari v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.atari.atari.atari_utils`
 
 | Atari Environment Name   | Atari Command Line Parameter |
 | -----------------------   | ------------------------------------- |
