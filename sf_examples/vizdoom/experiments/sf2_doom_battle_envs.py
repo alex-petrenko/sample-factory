@@ -1,5 +1,5 @@
-from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
-from sample_factory.runner.runs.run_utils import seeds
+from sample_factory.launcher.launcher_utils import seeds
+from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 
 _params = ParamGrid(
     [

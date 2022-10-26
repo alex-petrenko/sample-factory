@@ -1,4 +1,4 @@
-from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 
 _params = ParamGrid(
     [
@@ -24,4 +24,4 @@ _experiments = [
 
 
 RUN_DESCRIPTION = RunDescription("atari_envs", experiments=_experiments)
-# python -m sample_factory.runner.run --run=sf_examples.atari.experiments.atari_envs --runner=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1
+# python -m sample_factory.launcher.run --run=sf_examples.atari.experiments.atari_envs --backend=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1

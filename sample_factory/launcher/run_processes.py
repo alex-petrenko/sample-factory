@@ -1,5 +1,5 @@
 """Run many experiments, hyperparameter sweeps, etc."""
-
+import argparse
 import os
 import subprocess
 import sys
@@ -7,6 +7,22 @@ import time
 from os.path import join
 
 from sample_factory.utils.utils import ensure_dir_exists, log
+
+
+def add_os_parallelism_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument("--max_parallel", default=4, type=int, help="Maximum simultaneous experiments")
+    parser.add_argument(
+        "--experiments_per_gpu",
+        default=-1,
+        type=int,
+        help="How many experiments can we squeeze on a single GPU. "
+        "Specify this option if and only if you are using launcher to run several experiments using OS-level"
+        "parallelism (--launcher=processes)."
+        "In any other case use default value (-1) for not altering CUDA_VISIBLE_DEVICES at all."
+        "This will allow your experiments to use all GPUs available (as many as --num_gpu allows)"
+        "Helpful when e.g. you are running a single big PBT experiment.",
+    )
+    return parser
 
 
 def run(run_description, args):

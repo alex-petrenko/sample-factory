@@ -429,7 +429,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
             if self.cfg.decorrelate_envs_on_one_worker:
                 env_i_split = self.num_envs * self.split_idx + env_i
-                decorrelate_steps = self.cfg.rollout * env_i_split + self.cfg.rollout * random.randint(0, 4)
+                decorrelate_steps = self.cfg.rollout * env_i_split
 
                 log.info("Decorrelating experience for %d frames...", decorrelate_steps)
                 for decorrelate_step in range(decorrelate_steps):

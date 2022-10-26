@@ -1,4 +1,4 @@
-from sample_factory.runner.run_description import Experiment, RunDescription
+from sample_factory.launcher.run_description import Experiment, RunDescription
 
 _experiment = Experiment(
     "bots_ssl2_fs2",

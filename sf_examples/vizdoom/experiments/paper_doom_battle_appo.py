@@ -1,4 +1,4 @@
-from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 
 _params = ParamGrid(
     [

@@ -1,4 +1,4 @@
-from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 
 _params = ParamGrid(
     [
@@ -26,4 +26,4 @@ _experiments = [
 ]
 
 
-RUN_DESCRIPTION = RunDescription("paper_doom_basic_envs_appo_v97_fs4", experiments=_experiments)
+RUN_DESCRIPTION = RunDescription("paper_doom_basic_envs", experiments=_experiments)

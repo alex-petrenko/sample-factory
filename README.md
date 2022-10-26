@@ -74,10 +74,10 @@ Otherwise numerical instabilities can occur in certain environments, especially 
 * More summaries related to the new loss
 
 ##### v1.120.2
-* More improvements and fixes in runner interface, including support for NGC cluster
+* More improvements and fixes in launcher interface, including support for NGC cluster
 
 ##### v1.120.1
-* Runner interface improvements for Slurm
+* Launcher interface improvements for Slurm
 
 ##### v1.120.0
 * Support inactive agents. To deactivate an agent for a portion of the episode the environment should return `info={'is_active': False}` for the inactive agent. Useful for environments such as hide-n-seek.
@@ -327,16 +327,16 @@ A total list of WandB settings:
 Once the experiment is started the link to the monitored session is going to be available in the logs (or by searching in Wandb Web console).
 
 
-### Runner interface
+### Launcher interface
 
 Sample Factory provides a simple interface that allows users to run experiments with multiple seeds
 (or hyperparameter searches) with optimal distribution of work across GPUs.
 The configuration of such experiments is done through Python scripts.
 
-Here's an example runner script that we used to train agents for 6 basic VizDoom environments with 10 seeds each:
+Here's an example launcher script that we used to train agents for 6 basic VizDoom environments with 10 seeds each:
 
 ```
-from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
+from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('seed', [0, 1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888, 9999]),
@@ -356,35 +356,24 @@ RUN_DESCRIPTION = RunDescription('doom_basic_envs_appo', experiments=_experiment
 
 ```
 
-Runner script should be importable (i.e. be in your project or in PYTHONPATH), and should define a single variable
-`RUN_DESCRIPTION`, which contains a list of experiments (each experiment can be a hyperparameter search), as well as some auxiliary parameters.
+Launcher script should be importable (i.e. be in your project or in PYTHONPATH), and should define a single variable
+`RUN_DESCRIPTION` of type `RunDescription`, which contains a list of experiments (each experiment can be a hyperparameter search), as well as some auxiliary parameters.
 
 When such a script is saved i.e. at `myproject/train_10_seeds.py` in your project using Sample Factory, you can use this command to
 execute it:
 
 ```
-python -m sample_factory.runner.run --run=myproject.train_10_seeds --runner=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
+python -m sample_factory.launcher.run --run=myproject.train_10_seeds --backend=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
 ``` 
 
 This will cycle through the requested configurations, training 12 experiments at the same time, 3 per GPU on 4 GPUs using local OS-level parallelism.
 
-Runner supports other backends for parallel execution: `--runner=slurm` and `--runner=ngc` for Slurm and NGC support respectively.
+Launcher supports other backends for parallel execution: `--backend=slurm` and `--backend=ngc` for Slurm and NGC support respectively.
 
 Individual experiments will be stored in `train_dir/run_name` so the whole experiment can be easily monitored
 with a single Tensorboard command.
 
-Find more information on runner API in [runner/README.md](https://github.com/alex-petrenko/sample-factory/blob/master/sample_factory/runner/README.md).
-
-### Dummy sampler
-
-This tool can be useful if you want to estimate the upper bound on performance of any reinforcement learning
-algorithm, i.e. how fast the environment can be sampled by a dumb random policy.
-
-```
-This achieves 90000+ FPS on a 10-core workstation:
-python -m sample_factory.run_algorithm --algo=DUMMY_SAMPLER --env=doom_benchmark --num_workers=20 --num_envs_per_worker=1 --experiment=dummy_sampler --sample_env_frames=5000000
-
-```
+Find more information on launcher API in [launcher/README.md](https://github.com/alex-petrenko/sample-factory/blob/master/sample_factory/launcher/README.md).
 
 ### Tests
 

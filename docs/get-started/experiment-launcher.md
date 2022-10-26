@@ -1,4 +1,6 @@
-### SampleFactory Runner API reference
+### SampleFactory Launcher API reference
+
+[//]: # (TODO: this needs to be updated for sf2)
 
 Sample Factory provides a simple interface that allows users to run experiments with multiple seeds (or hyperparameter searches) with optimal distribution of work across GPUs.
 The configuration of such experiments is done through Python scripts.

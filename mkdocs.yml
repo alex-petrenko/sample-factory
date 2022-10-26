@@ -64,13 +64,16 @@ plugins:
 # Footer
 extra:
   social:
-  # [TODO] change to Aleksei
     - icon: fontawesome/solid/paper-plane
-      link: mailto:ming@huggingface.co
+      link: mailto:apetrenko1991@gmail.com
     - icon: fontawesome/brands/github
-      link: https://github.com/wmFrank
+      link: https://github.com/alex-petrenko
     - icon: fontawesome/brands/linkedin
-      link: https://www.linkedin.com/in/ming-wang-frank/
+      link: https://www.linkedin.com/in/apetrenko-nn/
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/apetrenko_nn
+    - icon: fontawesome/user
+      link: https://alex-petrenko.github.io/
 
 # Extensions
 markdown_extensions:
@@ -121,6 +124,7 @@ nav:
     - get-started/basic-usage.md
     - get-started/running-experiments.md
     - get-started/running-slurm.md
+    - get-started/experiment-launcher.md
     - get-started/huggingface.md
   - Environment Integrations:
     - environment-integrations/mujoco.md

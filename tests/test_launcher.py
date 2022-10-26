@@ -4,9 +4,9 @@ from os.path import join, split
 
 import numpy as np
 
-from sample_factory.runner.run import runner_argparser
-from sample_factory.runner.run_description import Experiment, ParamGrid, ParamList, RunDescription
-from sample_factory.runner.run_processes import run
+from sample_factory.launcher.run import launcher_argparser
+from sample_factory.launcher.run_description import Experiment, ParamGrid, ParamList, RunDescription
+from sample_factory.launcher.run_processes import run
 from sample_factory.utils.utils import ensure_dir_exists, project_tmp_dir
 
 
@@ -42,7 +42,7 @@ class TestParams:
         assert param_combinations[-1] == {"p1": 1, "p2": "c", "p3": {}}
 
 
-class TestRunner:
+class TestLauncher:
     def test_experiment(self):
         params = ParamGrid([("p1", [3.14, 2.71]), ("p2", ["a", "b", "c"])])
         cmd = "python super_rl.py"
@@ -85,7 +85,7 @@ class TestRunner:
         root_dir_name = "__test_run__"
         rd = RunDescription(root_dir_name, experiments)
 
-        args = runner_argparser().parse_args([])
+        args = launcher_argparser().parse_args([])
         args.max_parallel = 8
         args.pause_between = 0
         args.train_dir = train_dir

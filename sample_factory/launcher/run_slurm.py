@@ -16,7 +16,7 @@ from sample_factory.utils.utils import log, str2bool
 SBATCH_TEMPLATE_DEFAULT = (
     "#!/bin/bash\n"
     # "source /homes/petrenko/miniconda3/etc/profile.d/conda.sh\n"
-    "conda activate sample-factory\n"
+    "conda activate sf2\n"
     "cd ~/sample-factory\n"
 )
 
@@ -30,7 +30,10 @@ def add_slurm_args(parser):
         "--slurm_print_only", default=False, type=str2bool, help="Just print commands to the console without executing"
     )
     parser.add_argument(
-        "--slurm_workdir", default=None, type=str, help="Optional workdir. Used by slurm runner to store logfiles etc."
+        "--slurm_workdir",
+        default=None,
+        type=str,
+        help="Optional workdir. Used by slurm launcher to store logfiles etc.",
     )
     parser.add_argument(
         "--slurm_partition",

@@ -1,4 +1,4 @@
-from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 
 _params = ParamGrid(
     [
@@ -34,10 +34,6 @@ _experiments = [
 ]
 
 RUN_DESCRIPTION = RunDescription(
-    "doom_bots_v60_sweep",
+    "doom_bots_sweep",
     experiments=_experiments,
-    pause_between_experiments=120,
-    use_gpus=4,
-    experiments_per_gpu=1,
-    max_parallel=4,
 )
