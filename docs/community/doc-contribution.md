@@ -8,12 +8,7 @@
 2. install common dependencies
 
 ```bash
-pip install mkdocs-material
-pip install mkdocs-minify-plugin
-pip install mkdocs-redirects
-pip install mkdocs-git-revision-date-localized-plugin
-pip install mkdocs-git-committers-plugin-2
-pip install mkdocs-git-authors-plugin
+pip install mkdocs-material mkdocs-minify-plugin mkdocs-redirects mkdocs-git-revision-date-localized-plugin mkdocs-git-committers-plugin-2 mkdocs-git-authors-plugin
 ```
 
 3. serve the website locally
