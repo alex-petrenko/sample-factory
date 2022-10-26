@@ -1,17 +1,17 @@
-# 🤗 HuggingFace Hub Integration
+# 🤗 Hugging Face Hub Integration
 
-Sample Factory has integrations with 🤗 HuggingFace Hub to push models with evaluation results and training metrics to the hub. 
+Sample Factory has integrations with 🤗 Hugging Face Hub to push models with evaluation results and training metrics to the hub. 
 
 ### Setting Up
 
-The HuggingFace Hub requires `git lfs` to download model files.
+The Hugging Face Hub requires `git lfs` to download model files.
 
 ```
 sudo apt install git-lfs
 git lfs install
 ```
 
-To upload files to the HuggingFace Hub, you need to [sign up](https://huggingface.co/join) and log in to your HuggingFace account with:
+To upload files to the Hugging Face Hub, you need to [sign up](https://huggingface.co/join) and log in to your Hugging Face account with:
 
 ```
 huggingface-cli login
@@ -23,7 +23,7 @@ As part of the `huggingface-cli login`, you should generate a token with write a
 
 #### Using the load_from_hub Scipt
 
-To download a model from the HuggingFace Hub to use with Sample-Factory, use the `load_from_hub` script:
+To download a model from the Hugging Face Hub to use with Sample-Factory, use the `load_from_hub` script:
 
 ```
 python -m sample_factory.huggingface.load_from_hub -r <HuggingFace_repo_id> -d <train_dir_path>
@@ -37,10 +37,10 @@ The command line arguments are:
 
 #### Download Model Repository Directly
 
-HuggingFace repositories can be downloaded directly using `git clone`:
+Hugging Face repositories can be downloaded directly using `git clone`:
 
 ```
-git clone <URL of HuggingFace Repo>
+git clone <URL of Hugging Face Repo>
 ```
 
 #### Using Downloaded Models with Sample-Factory
