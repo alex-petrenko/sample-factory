@@ -262,6 +262,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
     if cfg.push_to_hub:
         generate_model_card(experiment_dir(cfg=cfg), cfg.algo, cfg.env, reward_list)
-        push_to_hf(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", cfg.num_policies)
+        push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository, cfg.num_policies)
 
     return ExperimentStatus.SUCCESS, float(np.mean(episode_rewards))
