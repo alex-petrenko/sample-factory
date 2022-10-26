@@ -37,7 +37,7 @@ python -m sample_factory.runner.run --run=megaverse_rl.runs.single_agent --runne
 Or you could run experiments on slurm:
 
 ```
-python -m sample_factory.runner.run --run=megaverse_rl.runs.single_agent --runner=slurm --slurm_workdir=./slurm_megaverse --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/runner/slurm/sbatch_template.sh --pause_between=1 --slurm_print_only=False
+python -m sample_factory.runner.run --run=megaverse_rl.runs.single_agent --runner=slurm --slurm_workdir=./slurm_megaverse --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False
 ```
 
 
