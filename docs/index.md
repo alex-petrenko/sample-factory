@@ -6,6 +6,7 @@
 
 # Sample Factory
 
+
 Codebase for high throughput asynchronous reinforcement learning.
 
 **Paper:** https://arxiv.org/abs/2006.11751
@@ -16,12 +17,12 @@ Codebase for high throughput asynchronous reinforcement learning.
 
 **Videos:** https://sites.google.com/view/sample-factory
 
-VizDoom agents trained with Sample Factory playing in real time:
+Atari, DMLab-30, ViZDoom and Mujoco agents trained with Sample Factory playing in real time:
+<video width="38.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari_grid_57_60s.mp4" type="video/mp4"></video>
+<video width="60.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab30_grid_30_30s.mp4" type="video/mp4"></video>
+<video width="63.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom_grid_12_30s.mp4" type="video/mp4"></video>
+<video width="35.8%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>
 
-<p align="middle">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="400">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="400">
-</p> 
 
 #### When should I use Sample Factory?
 

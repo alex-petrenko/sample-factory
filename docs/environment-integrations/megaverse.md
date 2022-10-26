@@ -1,5 +1,7 @@
 # Megaverse
 
+<video width="800" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/megaverse_grid_4.mp4" type="video/mp4"></video>
+
 Megaverse is a dedicated high-throughput RL environment with batched GPU rendering.
 
 This document demonstrates an example of _external_ integration, i.e. another project _using_ Sample Factory as a library.
@@ -50,9 +52,9 @@ python -m sample_factory.runner.run --run=megaverse_rl.runs.single_agent --runne
 
 An example APPO model trained on Megaverse environments is uploaded to the HuggingFace Hub. The models have all been trained for 2G steps.
 
-| Environment | HuggingFace Hub Models                                    |
-| -------- |-----------------------------------------------------------|
-| TowerBuilding    | https://huggingface.co/wmFrank/sample-factory-2-megaverse |
+| Environment   | HuggingFace Hub Models                                    |
+| ------------- | --------------------------------------------------------- |
+| TowerBuilding | https://huggingface.co/wmFrank/sample-factory-2-megaverse |
 
 
 #### Videos

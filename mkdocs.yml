@@ -126,8 +126,9 @@ nav:
     - environment-integrations/mujoco.md
     - environment-integrations/atari.md
     - environment-integrations/vizdoom.md
-    - environment-integrations/megaverse.md
     - environment-integrations/dmlab.md
+    - environment-integrations/megaverse.md
+    - environment-integrations/envpool.md
   - Customizing Sample Factory:
     - customize/custom_environments.md
     - customize/custom_models.md

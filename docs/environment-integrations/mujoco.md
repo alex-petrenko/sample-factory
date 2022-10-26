@@ -1,5 +1,5 @@
-# MuJoCo Integrations
-
+# MuJoCo
+<video width="800" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>
 ### Installation
 
 Install Sample-Factory with MuJoCo dependencies with PyPI:
@@ -35,7 +35,7 @@ python -m sample_factory.runner.run --run=sf_examples.mujoco_examples.experiment
 Specify the environment to run with the `--env` command line parameter. The following MuJoCo v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.mujoco_examples.mujoco.mujoco_utils`
 
 | MuJoCo Environment Name   | Sample-Factory Command Line Parameter |
-| -----------------------   | ------------------------------------- |
+| ------------------------- | ------------------------------------- |
 | Ant-v4                    | mujoco_ant                            |
 | HalfCheetah-v4            | mujoco_halfcheetah                    |
 | Hopper-v4                 | mujoco_hopper                         |
@@ -66,17 +66,17 @@ Various APPO models trained on MuJoCo environments are uploaded to the HuggingFa
 
 The models below are the best models from the experiment against CleanRL above. The evaluation metrics here are obtained by running the model 10 times.
 
-| Environment | HuggingFace Hub Models | Evaluation Metrics |
-| ----------- | ---------------------- | ------------------ |
-| Ant-v4      | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-ant | 5876.09 +/- 166.99 |
-| HalfCheetah-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-halfcheetah | 6262.56 +/- 67.29 |
-| Humanoid-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-humanoid | 5439.48 +/- 1314.24 |
-| Walker2d-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-walker | 5487.74 +/- 48.96 |
-| Hopper-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-hopper | 2793.44 +/- 642.58 |
-| InvertedDoublePendulum-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-doublependulum | 9350.13 +/- 1.31 |
-| InvertedPendulum-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-pendulum | 1000.00 +/- 0.00 |
-| Reacher-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-reacher | -4.53 +/- 1.79 |
-| Swimmer-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-swimmer | 117.28 +/- 2.91 |
+| Environment               | HuggingFace Hub Models                                                       | Evaluation Metrics  |
+| ------------------------- | ---------------------------------------------------------------------------- | ------------------- |
+| Ant-v4                    | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-ant            | 5876.09 +/- 166.99  |
+| HalfCheetah-v4            | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-halfcheetah    | 6262.56 +/- 67.29   |
+| Humanoid-v4               | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-humanoid       | 5439.48 +/- 1314.24 |
+| Walker2d-v4               | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-walker         | 5487.74 +/- 48.96   |
+| Hopper-v4                 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-hopper         | 2793.44 +/- 642.58  |
+| InvertedDoublePendulum-v4 | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-doublependulum | 9350.13 +/- 1.31    |
+| InvertedPendulum-v4       | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-pendulum       | 1000.00 +/- 0.00    |
+| Reacher-v4                | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-reacher        | -4.53 +/- 1.79      |
+| Swimmer-v4                | https://huggingface.co/andrewzhang505/sample-factory-2-mujoco-swimmer        | 117.28 +/- 2.91     |
 
 #### Videos
 

@@ -1,5 +1,5 @@
-# VizDoom Integrations
-
+# VizDoom
+<video width="800" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom_grid_12_30s.mp4" type="video/mp4"></video>
 ### Installation
 
 To install VizDoom just follow system setup instructions from the original repository ([VizDoom linux_deps](https://github.com/mwydmuch/ViZDoom/blob/master/doc/Building.md#linux_deps)),
