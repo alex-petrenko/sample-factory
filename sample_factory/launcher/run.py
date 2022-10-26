@@ -27,7 +27,6 @@ def launcher_argparser(args) -> argparse.ArgumentParser:
         help="Launcher backend, use OS multiprocessing by default",
     )
     parser.add_argument("--pause_between", default=1, type=int, help="Pause in seconds between processes")
-    parser.add_argument("--num_gpus", default=1, type=int, help="How many GPUs to use")
     parser.add_argument(
         "--experiment_suffix", default="", type=str, help="Append this to the name of the experiment dir"
     )

@@ -1,4 +1,5 @@
-"""Run many experiments, hyperparameter sweeps, etc."""
+"""Run groups of experiments, hyperparameter sweeps, etc."""
+
 import argparse
 import os
 import subprocess
@@ -10,6 +11,7 @@ from sample_factory.utils.utils import ensure_dir_exists, log
 
 
 def add_os_parallelism_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument("--num_gpus", default=1, type=int, help="How many local GPUs to use")
     parser.add_argument("--max_parallel", default=4, type=int, help="Maximum simultaneous experiments")
     parser.add_argument(
         "--experiments_per_gpu",

@@ -107,20 +107,23 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
     """
     good_config: bool = True
 
+    def cfg_error(msg: str) -> None:
+        nonlocal good_config
+        good_config = False
+        log.error(msg)
+
     if cfg.num_envs_per_worker % cfg.worker_num_splits != 0:
-        log.error(
+        cfg_error(
             f"{cfg.num_envs_per_worker=} must be a multiple of {cfg.worker_num_splits=}"
             f" (for double-buffered sampling you need to use even number of envs per worker)"
         )
-        good_config = False
 
     if cfg.normalize_returns and cfg.with_vtrace:
         # When we use vtrace the logic for calculating returns is different - we need to recalculate them
         # on every minibatch, because important sampling depends on the trained policy.
         # Current implementation of normalized returns assumed that we can calculate returns once per experience
         # batch.
-        log.error("Normalized returns are not supported with vtrace!")
-        good_config = False
+        cfg_error("Normalized returns are not supported with vtrace!")
 
     if cfg.async_rl and cfg.serial_mode:
         log.warning(
@@ -145,7 +148,7 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
             # everything is fine
             pass
         else:
-            log.error(
+            cfg_error(
                 "In sync mode the goal is to avoid policy lag. In order to achieve this we "
                 "alternate between collecting experience and training on it.\nThus sync mode requires "
                 "the sampler to collect the exact amount of experience required for training in one "
@@ -153,15 +156,15 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
                 "The easiest option is to enable async mode using --async_rl=True.\n"
                 "Alternatively you can use information below to change number of workers, or batch size, etc.:\n"
             )
-            log.error(
+            cfg_error(
                 f"Number of samples collected per rollout by all workers: "
                 f"{cfg.num_workers=} * {cfg.num_envs_per_worker=} * {env_info.num_agents=} * {cfg.rollout=} // {cfg.num_policies=} = {samples_from_all_workers_per_rollout}"
             )
-            log.error(
+            cfg_error(
                 f"Number of samples processed per training iteration on one learner: "
                 f"{cfg.num_batches_per_epoch=} * {cfg.batch_size=} = {samples_per_training_iteration}"
             )
-            log.error(
+            cfg_error(
                 f"Ratio is {samples_per_training_iteration / samples_from_all_workers_per_rollout} (should be a positive integer)"
             )
             good_config = False
@@ -172,6 +175,20 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
             "Probably requires a deterministic policy to agent mapping to guarantee that we always collect the "
             "same amount of experience per policy."
         )
+
+    if cfg.use_rnn:
+        if cfg.recurrence <= 1:
+            cfg_error(
+                f"{cfg.recurrence=} must be > 1 to train an RNN. Recommeded value is recurrence == {cfg.rollout=}."
+            )
+
+        if cfg.with_vtrace and cfg.recurrence != cfg.rollout:
+            cfg_error(f"{cfg.recurrence=} must be equal to {cfg.rollout=} when using vtrace.")
+    else:
+        if cfg.recurrence > 1:
+            log.warning(
+                f"{cfg.recurrence=} is set but {cfg.use_rnn=} is False. Consider setting {cfg.recurrence=} to 1 for maximum performance."
+            )
 
     return good_config
 
