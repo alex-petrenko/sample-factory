@@ -68,6 +68,6 @@ etc. Consult experiment-specific `cfg.json` and the source code for full list of
 
 `sample_factory.envs.dmlab.dmlab_model` and `sample_factory.envs.doom.doom_model` demonstrate how to handle environment-specific
 additional input spaces (e.g. natural language and/or numerical vector inputs).
-Script `sample_factory_examples/train_custom_env_custom_model.py` demonstrates how users can define a fully custom
+Script `sf_examples/train_custom_env_custom_model.py` demonstrates how users can define a fully custom
 environment-specific encoder. Whenever a fully custom actor-critic architecture is required, users are welcome
 to override `_ActorCriticBase` following examples in `sample_factory/algorithms/appo/model.py`.

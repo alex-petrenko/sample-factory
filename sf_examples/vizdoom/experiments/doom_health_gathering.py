@@ -10,12 +10,12 @@ _params = ParamGrid(
 _experiments = [
     Experiment(
         "health_0_255",
-        "python -m sf_examples.vizdoom_examples.train_vizdoom --train_for_env_steps=40000000 --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=12 --num_policies=1 --batch_size=2048 --wide_aspect_ratio=False",
+        "python -m sf_examples.vizdoom.train_vizdoom --train_for_env_steps=40000000 --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=12 --num_policies=1 --batch_size=2048 --wide_aspect_ratio=False",
         _params.generate_params(randomize=False),
     ),
     Experiment(
         "health_128_128",
-        "python -m sf_examples.vizdoom_examples.train_vizdoom --train_for_env_steps=40000000 --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=12 --num_policies=1 --batch_size=2048 --wide_aspect_ratio=False --obs_subtract_mean=128.0 --obs_scale=128.0",
+        "python -m sf_examples.vizdoom.train_vizdoom --train_for_env_steps=40000000 --algo=APPO --env_frameskip=4 --use_rnn=True --num_workers=20 --num_envs_per_worker=12 --num_policies=1 --batch_size=2048 --wide_aspect_ratio=False --obs_subtract_mean=128.0 --obs_scale=128.0",
         _params.generate_params(randomize=False),
     ),
 ]
