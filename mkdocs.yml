@@ -1,5 +1,4 @@
-# [TODO] may change
-site_name: Sample-Factory Doc
+site_name: Sample-Factory Documentation
 
 # Repository
 repo_name: alex-petrenko/sample-factory
@@ -8,6 +7,7 @@ repo_url: https://github.com/alex-petrenko/sample-factory
 # Configuration
 theme:
   name: material
+  nav_style: dark
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
@@ -72,7 +72,7 @@ extra:
       link: https://www.linkedin.com/in/apetrenko-nn/
     - icon: fontawesome/brands/twitter
       link: https://twitter.com/apetrenko_nn
-    - icon: fontawesome/user
+    - icon: fontawesome/solid/user
       link: https://alex-petrenko.github.io/
 
 # Extensions
