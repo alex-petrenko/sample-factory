@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - sf2
+    - ci-python-version
   pull_request:
     branches:
     - master
