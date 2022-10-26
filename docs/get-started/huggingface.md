@@ -1,6 +1,6 @@
-# HuggingFace Hub Integration
+# 🤗 HuggingFace Hub Integration
 
-Sample Factory has integrations with HuggingFace Hub to push models with evaluation results and training metrics to the hub. 
+Sample Factory has integrations with 🤗 HuggingFace Hub to push models with evaluation results and training metrics to the hub. 
 
 ### Setting Up
 
@@ -11,7 +11,7 @@ sudo apt install git-lfs
 git lfs install
 ```
 
-To upload files to the HuggingFace Hub, you need to log in to your HuggingFace account with:
+To upload files to the HuggingFace Hub, you need to [sign up](https://huggingface.co/join) and log in to your HuggingFace account with:
 
 ```
 huggingface-cli login
