@@ -30,6 +30,7 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install conda env & dependencies
       run: |
+       conda install python=${{ matrix.python-version }}
        pip install -e '.[atari, mujoco, envpool]'
        conda list
     - name: Install test dependencies
@@ -59,6 +60,7 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install conda env & dependencies
       run: |
+       conda install python=${{ matrix.python-version }}
        pip install -e '.[atari, mujoco]'
        conda list
     - name: Install test dependencies
