@@ -85,7 +85,7 @@ class TestLauncher:
         root_dir_name = "__test_run__"
         rd = RunDescription(root_dir_name, experiments)
 
-        args = launcher_argparser().parse_args([])
+        args = launcher_argparser([]).parse_args([])
         args.max_parallel = 8
         args.pause_between = 0
         args.train_dir = train_dir
