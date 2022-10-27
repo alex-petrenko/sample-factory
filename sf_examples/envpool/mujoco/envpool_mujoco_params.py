@@ -1,4 +1,11 @@
-def mujoco_override_defaults(env, parser):
+import argparse
+
+
+def mujoco_override_defaults(env: str, parser: argparse.ArgumentParser) -> None:
+    # High-throughput parameters.
+    # See sf_examples/mujoco/mujoco_params.py for more standard parameters similar to SB3/CleanRL that are known
+    # to provide good sample efficiency
+
     parser.set_defaults(
         batched_sampling=False,
         num_workers=8,
