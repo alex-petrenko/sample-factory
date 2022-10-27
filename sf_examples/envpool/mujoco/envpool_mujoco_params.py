@@ -14,7 +14,7 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
         train_for_env_steps=10000000,
         encoder_mlp_layers=[256, 128, 64],
         nonlinearity="elu",  # as in https://github.com/Denys88/rl_games/blob/d8645b2678c0d8a6e98a6e3f2b17f0ecfbff71ad/rl_games/configs/mujoco/ant_envpool.yaml#L24
-        kl_loss_coeff=0.01,
+        kl_loss_coeff=0.1,
         use_rnn=False,
         adaptive_stddev=False,
         policy_initialization="torch_default",
@@ -22,12 +22,12 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
         rollout=64,
         max_grad_norm=1.0,
         num_epochs=4,
-        num_batches_per_epoch=2,
-        batch_size=2048,  # 2048 * 2 = 4096 env steps per training iteration
+        num_batches_per_epoch=4,
+        batch_size=2048,  # 2048 * 4 = 8192 env steps per training iteration
         ppo_clip_ratio=0.2,
         value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
-        learning_rate=3e-4,
+        learning_rate=3e-4,  # does not matter because it will be adaptively changed anyway
         lr_schedule="kl_adaptive_epoch",
         lr_schedule_kl_threshold=0.008,
         shuffle_minibatches=False,
@@ -50,7 +50,7 @@ def add_mujoco_envpool_env_args(env, parser, evaluation: bool = False) -> None:
     # in case we need to add more args in the future
     parser.add_argument(
         "--env_agents",
-        default=1 if evaluation else 64,
+        default=1 if evaluation else 128,
         type=int,
         help="Num agents in each envpool (if used)",
     )

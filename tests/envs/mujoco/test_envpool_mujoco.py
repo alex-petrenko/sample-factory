@@ -9,7 +9,6 @@ from sample_factory.train import make_runner
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log
 from sf_examples.envpool.envpool_utils import envpool_available
-from sf_examples.envpool.mujoco.train_envpool_mujoco import parse_mujoco_cfg, register_mujoco_components
 from sf_examples.mujoco.mujoco_utils import mujoco_available
 from tests.utils import clean_test_dir
 
@@ -19,6 +18,8 @@ from tests.utils import clean_test_dir
 class TestEnvpoolMujoco:
     @pytest.fixture(scope="class", autouse=True)
     def register_mujoco_fixture(self):
+        from sf_examples.envpool.mujoco.train_envpool_mujoco import register_mujoco_components
+
         register_mujoco_components()
 
     @staticmethod
@@ -38,6 +39,8 @@ class TestEnvpoolMujoco:
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
 
         experiment_name = f"test_envpool_{num_workers}_{env}"
+
+        from sf_examples.envpool.mujoco.train_envpool_mujoco import parse_mujoco_cfg
 
         cfg = parse_mujoco_cfg(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
         cfg.serial_mode = serial_mode
