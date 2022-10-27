@@ -9,8 +9,8 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
     parser.set_defaults(
         batched_sampling=True,
         num_workers=1,  # envpool takes care of parallelization, so use only 1 worker?
-        num_envs_per_worker=1,  # two envs per worker for double-buffered sampling
-        worker_num_splits=1,  # enable double-buffered sampling (step one whole envpool at a time)
+        num_envs_per_worker=1,  # two envs per worker for double-buffered sampling, one for single-buffered
+        worker_num_splits=1,  # change to 2 to enable double-buffered sampling
         train_for_env_steps=10000000,
         encoder_mlp_layers=[256, 128, 64],
         nonlinearity="elu",  # as in https://github.com/Denys88/rl_games/blob/d8645b2678c0d8a6e98a6e3f2b17f0ecfbff71ad/rl_games/configs/mujoco/ant_envpool.yaml#L24
@@ -40,8 +40,8 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
         value_bootstrap=True,
         experiment_summaries_interval=3,
         save_every_sec=15,
-        serial_mode=True,  # we're running with 1 worker in sync mode, so might as well run everything in one process
         async_rl=False,
+        serial_mode=True,  # we're running with 1 worker in sync mode, so might as well run everything in one process
     )
 
 
