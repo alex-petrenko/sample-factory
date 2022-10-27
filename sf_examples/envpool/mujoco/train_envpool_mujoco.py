@@ -19,14 +19,13 @@ def register_mujoco_components():
 
 def parse_mujoco_cfg(argv=None, evaluation: bool = False) -> Config:
     parser, partial_cfg = parse_sf_args(argv=argv, evaluation=evaluation)
-    add_mujoco_envpool_env_args(partial_cfg.env, parser)
+    add_mujoco_envpool_env_args(partial_cfg.env, parser, evaluation)
     mujoco_envpool_override_defaults(partial_cfg.env, parser)
     final_cfg = parse_full_cfg(parser, argv)
     return final_cfg
 
 
 def main():
-    """Script entry point."""
     register_mujoco_components()
     cfg = parse_mujoco_cfg()
     status = run_rl(cfg)

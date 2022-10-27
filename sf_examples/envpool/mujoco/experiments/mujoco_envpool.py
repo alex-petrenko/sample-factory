@@ -4,11 +4,24 @@ from sample_factory.utils.algo_version import ALGO_VERSION
 _params = ParamGrid(
     [
         ("seed", [00, 11, 22]),
-        ("env", ["mujoco_ant", "mujoco_humanoid", "mujoco_halfcheetah", "mujoco_hopper"]),
+        (
+            "env",
+            [
+                "mujoco_ant",
+                "mujoco_halfcheetah",
+                "mujoco_hopper",
+                "mujoco_humanoid",
+                "mujoco_doublependulum",
+                "mujoco_pendulum",
+                "mujoco_reacher",
+                "mujoco_swimmer",
+                "mujoco_walker",
+            ],
+        ),
     ]
 )
 
-vstr = f"mujoco_envpool_baseline_v{ALGO_VERSION}"
+vstr = f"mujoco_envpool_v{ALGO_VERSION}"
 cli = (
     f"python -m sf_examples.envpool.mujoco.train_envpool_mujoco "
     f"--train_for_env_steps=10000000 --with_wandb=True --wandb_tags {vstr} --wandb_group=sf2_{vstr}"

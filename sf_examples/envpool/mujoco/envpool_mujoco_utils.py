@@ -5,6 +5,7 @@ try:
 except ImportError as e:
     print(e)
     print("Trying to import envpool when it is not install. install with 'pip install envpool'")
+    raise e
 
 
 from sf_examples.envpool.envpool_wrappers import EnvPoolResetFixWrapper
@@ -20,7 +21,7 @@ def mujoco_env_by_name(name):
 
 def make_mujoco_env(env_name, cfg, env_config, render_mode: Optional[str] = None, **kwargs):
     assert cfg.batched_sampling, "batched sampling must be used when using envpool"
-    assert cfg.num_envs_per_worker == 1, "when using envpool, set num_envs_per_worker=1 and use --env_agents="
+    # assert cfg.num_envs_per_worker == 1, "when using envpool, set num_envs_per_worker=1 and use --env_agents="
     mujoco_spec = mujoco_env_by_name(env_name)
     env_kwargs = dict()
     if env_config is not None:
