@@ -1,10 +1,9 @@
-from sample_factory.launcher.launcher_utils import seeds
 from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from sample_factory.utils.algo_version import ALGO_VERSION
 
 _params = ParamGrid(
     [
-        ("seed", seeds(3)),
+        ("seed", 00, 11, 22),
         ("env", ["mujoco_ant", "mujoco_humanoid", "mujoco_halfcheetah", "mujoco_hopper"]),
     ]
 )

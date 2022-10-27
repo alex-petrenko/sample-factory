@@ -1,16 +1,16 @@
 import argparse
 
 
-def mujoco_override_defaults(env: str, parser: argparse.ArgumentParser) -> None:
+def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) -> None:
     # High-throughput parameters.
     # See sf_examples/mujoco/mujoco_params.py for more standard parameters similar to SB3/CleanRL that are known
     # to provide good sample efficiency
 
     parser.set_defaults(
-        batched_sampling=False,
+        batched_sampling=True,
         num_workers=8,
-        num_envs_per_worker=8,
-        worker_num_splits=2,
+        num_envs_per_worker=1,
+        worker_num_splits=1,
         train_for_env_steps=10000000,
         encoder_mlp_layers=[64, 64],
         env_frameskip=1,
@@ -45,11 +45,11 @@ def mujoco_override_defaults(env: str, parser: argparse.ArgumentParser) -> None:
 
 
 # noinspection PyUnusedLocal
-def add_mujoco_env_args(env, parser):
+def add_mujoco_envpool_env_args(env, parser):
     # in case we need to add more args in the future
     parser.add_argument(
         "--env_agents",
-        default=2,
+        default=8,
         type=int,
         help="Num agents in each envpool (if used)",
     )
