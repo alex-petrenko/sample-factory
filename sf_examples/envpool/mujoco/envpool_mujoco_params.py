@@ -2,7 +2,7 @@ import argparse
 
 
 def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) -> None:
-    # High-throughput parameters.
+    # High-throughput parameters optimized for wall-time performance (e.g. getting the highest reward in 10 minutes).
     # See sf_examples/mujoco/mujoco_params.py for more standard parameters similar to SB3/CleanRL that are known
     # to provide good sample efficiency
 
@@ -38,8 +38,9 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
         normalize_input=True,
         normalize_returns=True,
         value_bootstrap=True,
-        experiment_summaries_interval=3,
+        experiment_summaries_interval=15,
         save_every_sec=15,
+        save_best_every_sec=15,
         async_rl=False,
         serial_mode=True,  # we're running with 1 worker in sync mode, so might as well run everything in one process
     )
