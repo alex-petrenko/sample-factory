@@ -24,7 +24,7 @@ _params = ParamGrid(
 vstr = f"mujoco_envpool_v{ALGO_VERSION}"
 cli = (
     f"python -m sf_examples.envpool.mujoco.train_envpool_mujoco "
-    f"--train_for_env_steps=10000000 --with_wandb=True --wandb_tags {vstr} --wandb_group=sf2_{vstr}"
+    f"--train_for_env_steps=100000000 --with_wandb=True --wandb_tags {vstr} --wandb_group=sf2_{vstr}"
 )
 
 _experiments = [Experiment(f"{vstr}", cli, _params.generate_params(False))]
