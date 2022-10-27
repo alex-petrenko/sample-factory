@@ -27,7 +27,7 @@ python -m sf_examples.mujoco_examples.enjoy_mujoco --algo=APPO --env=mujoco_ant 
 Multiple experiments can be run in parallel with the runner module. `mujoco_all_envs` is an example runner script that runs all mujoco envs with 10 seeds. 
 
 ```
-python -m sample_factory.runner.run --run=sf_examples.mujoco_examples.experiments.mujoco_all_envs --runner=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=0
+python -m sample_factory.launcher.run --run=sf_examples.mujoco_examples.experiments.mujoco_all_envs --runner=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=0
 ```
 
 #### List of Supported Environments
