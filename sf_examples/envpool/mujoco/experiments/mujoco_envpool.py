@@ -3,7 +3,7 @@ from sample_factory.utils.algo_version import ALGO_VERSION
 
 _params = ParamGrid(
     [
-        ("seed", 00, 11, 22),
+        ("seed", [00, 11, 22]),
         ("env", ["mujoco_ant", "mujoco_humanoid", "mujoco_halfcheetah", "mujoco_hopper"]),
     ]
 )
