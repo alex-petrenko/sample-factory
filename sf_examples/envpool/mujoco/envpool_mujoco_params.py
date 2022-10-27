@@ -1,5 +1,7 @@
 import argparse
 
+from sf_examples.envpool.envpool_utils import add_envpool_common_args
+
 
 def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) -> None:
     # High-throughput parameters optimized for wall-time performance (e.g. getting the highest reward in 10 minutes).
@@ -55,3 +57,5 @@ def add_mujoco_envpool_env_args(env, parser, evaluation: bool = False) -> None:
         type=int,
         help="Num agents in each envpool (if used)",
     )
+
+    add_envpool_common_args(env, parser)

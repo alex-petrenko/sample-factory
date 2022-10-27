@@ -1,4 +1,8 @@
+import logging
+import multiprocessing
 from typing import Optional
+
+from sample_factory.utils.utils import log
 
 try:
     import envpool
@@ -26,7 +30,20 @@ def make_mujoco_env(env_name, cfg, env_config, render_mode: Optional[str] = None
     env_kwargs = dict()
     if env_config is not None:
         env_kwargs["seed"] = env_config.env_id
-    env = envpool.make(mujoco_spec.env_id, env_type="gym", num_envs=cfg.env_agents, **env_kwargs)
+
+    log.debug(
+        f"Envpool uses {cfg.envpool_num_threads} threads and thread affinity offset {cfg.envpool_thread_affinity_offset}"
+    )
+
+    env = envpool.make(
+        mujoco_spec.env_id,
+        env_type="gym",
+        num_envs=cfg.env_agents,
+        batch_size=cfg.env_agents,  # step all agents at the same time
+        num_threads=cfg.envpool_num_threads,  # defaults to batch_size == num_envs which is not what we want (will create waay too many threads)
+        thread_affinity_offset=cfg.envpool_thread_affinity_offset,
+        **env_kwargs,
+    )
     env = EnvPoolResetFixWrapper(env)
     env.num_agents = cfg.env_agents
     return env
