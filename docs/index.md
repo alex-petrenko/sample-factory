@@ -6,16 +6,21 @@
 
 # Sample Factory
 
+Codebase for high throughput synchronous and asynchronous reinforcement learning.
 
-Codebase for high throughput asynchronous reinforcement learning.
+**Resources:**
 
-**Paper:** https://arxiv.org/abs/2006.11751
+* **Documentation:** [https://samplefactory.dev](https://samplefactory.dev) 
 
-**Cite:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
+* **Paper:** https://arxiv.org/abs/2006.11751
 
-**Talk:** https://youtu.be/lLG17LKKSZc
+* **Citation:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
 
-**Videos:** https://sites.google.com/view/sample-factory
+
+[//]: # (* **Talk &#40;circa 2021&#41;:** https://youtu.be/lLG17LKKSZc)
+
+[//]: # ()
+[//]: # (* **Videos:** https://sites.google.com/view/sample-factory)
 
 Atari, DMLab-30, ViZDoom and Mujoco agents trained with Sample Factory playing in real time:
 <video width="38.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari_grid_57_60s.mp4" type="video/mp4"></video>
