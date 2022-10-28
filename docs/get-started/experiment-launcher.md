@@ -13,13 +13,13 @@ See [README](https://github.com/alex-petrenko/sample-factory#runner-interface) f
 
 ```
 Parallelize with local multiprocessing:
-$ python -m sample_factory.runner.run --run=paper_doom_battle2_appo --runner=processes --max_parallel=4 --pause_between=10 --experiments_per_gpu=1 --num_gpus=4
+$ python -m sample_factory.launcher.run --run=paper_doom_battle2_appo --runner=processes --max_parallel=4 --pause_between=10 --experiments_per_gpu=1 --num_gpus=4
 
 Parallelize with Slurm:
-$ python -m sample_factory.runner.run --run=megaverse_rl.runs.single_agent --runner=slurm --slurm_workdir=./megaverse_single_agent --experiment_suffix=slurm --pause_between=1 --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=12 --slurm_sbatch_template=./megaverse_rl/slurm/sbatch_template.sh --slurm_print_only=False
+$ python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --runner=slurm --slurm_workdir=./megaverse_single_agent --experiment_suffix=slurm --pause_between=1 --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=12 --slurm_sbatch_template=./megaverse_rl/slurm/sbatch_template.sh --slurm_print_only=False
 
 Parallelize with NGC (https://ngc.nvidia.com/):
-$ python -m sample_factory.runner.run --run=rlgpu.run_scripts.dexterous_manipulation --runner=ngc --ngc_job_template=run_scripts/ngc_job_16g_1gpu.template --ngc_print_only=False --train_dir=/workspace/train_dir
+$ python -m sample_factory.launcher.run --run=rlgpu.run_scripts.dexterous_manipulation --runner=ngc --ngc_job_template=run_scripts/ngc_job_16g_1gpu.template --ngc_print_only=False --train_dir=/workspace/train_dir
 ```
 
 ##### All command-line options:
@@ -50,7 +50,7 @@ Arguments:
   --train_dir TRAIN_DIR
                         Directory for sub-experiments
   --run RUN             Name of the python module that describes the run, e.g.
-                        sample_factory.runner.runs.doom_battle_hybrid
+                        sf_examples.vizdoom.experiments.doom_basic
   --runner {processes,slurm,ngc}
   --pause_between PAUSE_BETWEEN
                         Pause in seconds between processes
@@ -94,7 +94,7 @@ NGC-related:
 A typical runner script:
 
 ```
-from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
+from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('seed', [0, 1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888, 9999]),

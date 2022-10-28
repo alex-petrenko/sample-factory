@@ -31,7 +31,7 @@ pip install -e .
 
 To run a custom runner script for SF2 on slurm, you may need to write your own slurm_sbatch_template and/or runner script.
 
-slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See an example at `./sample_factory/runner/slurm/sbatch_template.sh`. Variables in the bash script can be added in `sample_factory.runner.run_slurm`.
+slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See an example at `./sample_factory/launcher/slurm/sbatch_template.sh`. Variables in the bash script can be added in `sample_factory.launcher.run_slurm`.
 
 The runner script controls the python command slurm will run. Examples are located in `sf_examples`. You can run multiple experiments with different parameters using `ParamGrid`.
 
@@ -51,7 +51,7 @@ Activate your conda environment with `bash` and `conda activate sf2` then `cd sa
 
 Run your runner script - an example mujuco runner (replace run, slurm_sbatch_template, and slurm_workdir with appropriate values)
 ```
-python -m sample_factory.runner.run --runner=slurm --slurm_workdir=./slurm_mujoco --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.mujoco.experiments.mujoco_all_envs
+python -m sample_factory.launcher.run --runner=slurm --slurm_workdir=./slurm_mujoco --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.mujoco.experiments.mujoco_all_envs
 ```
 
 The `slurm_gpus_per_job` and `slurm_cpus_per_gpu` determine the resources allocated to each job. You can view the jobs without running them by setting `slurm_print_only=True`.

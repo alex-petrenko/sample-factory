@@ -62,7 +62,7 @@ The configuration of such experiments is done through Python scripts.
 Here's an example runner script that we used to train agents for 6 basic VizDoom environments with 10 seeds each:
 
 ```
-from sample_factory.runner.run_description import RunDescription, Experiment, ParamGrid
+from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
 
 _params = ParamGrid([
     ('seed', [0, 1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888, 9999]),
@@ -89,7 +89,7 @@ When such a script is saved i.e. at `myproject/train_10_seeds.py` in your projec
 execute it:
 
 ```
-python -m sample_factory.runner.run --run=myproject.train_10_seeds --runner=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
+python -m sample_factory.launcher.run --run=myproject.train_10_seeds --runner=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
 ``` 
 
 This will cycle through the requested configurations, training 12 experiments at the same time, 3 per GPU on 4 GPUs using local OS-level parallelism.
