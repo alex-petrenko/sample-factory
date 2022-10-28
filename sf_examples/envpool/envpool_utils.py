@@ -17,7 +17,7 @@ def add_envpool_common_args(env, parser) -> None:
 
     parser.add_argument(
         "--envpool_thread_affinity_offset",
-        default=0,
+        default=-1,
         type=int,
         help="The start id of binding thread. -1 means not to use thread affinity in thread pool. More information: https://envpool.readthedocs.io/en/latest/content/python_interface.html",
     )

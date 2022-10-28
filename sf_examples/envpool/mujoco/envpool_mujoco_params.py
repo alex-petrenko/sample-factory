@@ -24,8 +24,8 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
         rollout=64,
         max_grad_norm=1.0,
         num_epochs=4,
-        num_batches_per_epoch=4,
-        batch_size=2048,  # 2048 * 4 = 8192 env steps per training iteration
+        num_batches_per_epoch=2,
+        batch_size=2048,  # 2048 * 2 = 8192 env steps per training iteration
         ppo_clip_ratio=0.2,
         value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
@@ -53,7 +53,7 @@ def add_mujoco_envpool_env_args(env, parser, evaluation: bool = False) -> None:
     # in case we need to add more args in the future
     parser.add_argument(
         "--env_agents",
-        default=1 if evaluation else 128,
+        default=1 if evaluation else 64,
         type=int,
         help="Num agents in each envpool (if used)",
     )
