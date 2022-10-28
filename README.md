@@ -12,24 +12,26 @@
 
 # Sample Factory
 
-Codebase for high throughput asynchronous reinforcement learning.
+Codebase for high throughput synchronous and asynchronous reinforcement learning.
 
-**Paper:** https://arxiv.org/abs/2006.11751
+**Resources:**
 
-**Cite:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
+* **Documentation:** [https://samplefactory.dev](https://samplefactory.dev) 
 
-**Talk:** https://youtu.be/lLG17LKKSZc
+* **Paper:** https://arxiv.org/abs/2006.11751
 
-**Videos:** https://sites.google.com/view/sample-factory
+* **Citation:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
+
+* **Discord:** [https://discord.gg/BCfHWaSMkr](https://discord.gg/BCfHWaSMkr)
+
+[//]: # (* **Talk &#40;circa 2021&#41;:** https://youtu.be/lLG17LKKSZc)
 
 VizDoom agents trained with Sample Factory playing in real time:
 
-Atari, DMLab-30, ViZDoom and Mujoco agents trained with Sample Factory playing in real time:
-<video width="38.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari_grid_57_60s.mp4" type="video/mp4"></video>
-<video width="60.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab30_grid_30_30s.mp4" type="video/mp4"></video>
-<video width="63.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom_grid_12_30s.mp4" type="video/mp4"></video>
-<video width="35.8%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>
- 
+<p align="middle">
+<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="400">
+<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="400">
+</p> 
 
 #### When should I use Sample Factory?
 
@@ -47,45 +49,6 @@ Consider using Sample Factory if you train agents in these environments.
 
 4. Sample Factory can be a good choice as a prototype for a single node in a distributed RL system or as a reference
 codebase for other types of async RL algorithms.
-
-## Recent releases
-
-##### v1.121.4
-* Support Weights and Biases (see section "WandB support")
-* More configurable population-based training: 
-can set from command line whether or not to mutate gamma, plus the perturbation magnitude for all float hyperparams can also be set from command line:
-```
---pbt_optimize_gamma: Whether to optimize gamma, discount factor, or not (experimental) (default: False)
---pbt_perturb_min: When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max] (default: 1.05)
---pbt_perturb_max: When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max] (default: 1.5)
-```
-
-##### v1.121.3
-* Fixed a small bug related to population-based training (a reward shaping dictionary was assumed to be a flat dict,
-while it could be a nested dict in some envs)
-
-##### v1.121.2
-* Fixed a bug that prevented Vizdoom *.cfg and *.wad files from being copied to site-packages during installation from PyPI
-* Added example on how to use custom Vizdoom envs without modifying the source code (`sample_factory_examples/train_custom_vizdoom_env.py`)
-
-##### v1.121.0
-* Added fixed KL divergence penalty as in https://arxiv.org/pdf/1707.06347.pdf 
-Its usage is highly encouraged in environments with continuous action spaces (i.e. set --kl_loss_coeff=1.0).
-Otherwise numerical instabilities can occur in certain environments, especially when the policy lag is high
-
-* More summaries related to the new loss
-
-##### v1.120.2
-* More improvements and fixes in launcher interface, including support for NGC cluster
-
-##### v1.120.1
-* Launcher interface improvements for Slurm
-
-##### v1.120.0
-* Support inactive agents. To deactivate an agent for a portion of the episode the environment should return `info={'is_active': False}` for the inactive agent. Useful for environments such as hide-n-seek.
-* Improved memory consumption and performance with better shared memory management.
-* Experiment logs are now saved into the experiment folder as `sf_log.txt`
-* DMLab-related bug fixes (courtesy of @donghoonlee04 and @sungwoong. Thank you!)
 
 ## Installation
 

@@ -1,5 +1,18 @@
 # Recent releases
 
+##### v2.0.0
+
+**Major update, adds new functionality, changes API and configuration parameters**
+
+* Major API update
+* Synchronous and asynchronous training modes
+* Serial and parallel execution modes
+* Support for vectorized and GPU-accelerated environments in batched sampling mode
+* Integration with Hugging Face Hub
+* New environment integrations, CI, and documentation
+
+See v1 to v2 transition guide for details.
+
 ##### v1.121.4
 * Support Weights and Biases (see section "WandB support")
 * More configurable population-based training: 
