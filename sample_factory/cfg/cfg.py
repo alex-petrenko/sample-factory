@@ -196,7 +196,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--normalize_returns",
-        default=False,
+        default=True,
         type=str2bool,
         help="Whether to use running mean and standard deviation to normalize discounted returns",
     )
@@ -324,7 +324,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--normalize_input",
-        default=False,
+        default=True,
         type=str2bool,
         help="Whether to use running mean and standard deviation to normalize observations",
     )
