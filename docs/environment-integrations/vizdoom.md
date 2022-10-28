@@ -74,8 +74,8 @@ python -m sf_examples.vizdoom.train_vizdoom --env=doom_benchmark --algo=APPO --e
 1. We reproduced the paper results in SF2 in the Battle and Battle2 and compared the results using input normalization. Input normalization has improved results in the Battle environment. This experiment with input normalization was run with `sf_examples.vizdoom.experiments.sf2_doom_battle_envs`. Note that `normalize_input=True` is set compared to the results from the paper
     - https://wandb.ai/andrewzhang505/sample_factory/reports/VizDoom-Battle-Environments--VmlldzoyMzcyODQx
 
-2. In SF2's bot environments (deathmatch_bots and duel_bots), we trained the agents against randomly generated bots as opposed to a curriculum of increasing bot difficulty. This is because the ViZDoom environment no longer provides the bots used in the curriculum, and SF2 no longer requires the curriculum to train properly. However, due to the differences in bot difficulty, the current training results are no longer comparable to the paper. An example training curve on deathmatch_bots with the same parameters as in the paper is shown below:
-    - https://wandb.ai/andrewzhang505/sample_factory/reports/ViZDoom-Deathmatch-Bots--VmlldzoyNzY2NDI1
+2. In SF2's bot environments (deathmatch_bots and duel_bots), we trained the agents against randomly generated bots as opposed to a curriculum of increasing bot difficulty. This is because the ViZDoom environment no longer provides the bots used in the curriculum, and SF2 no longer requires the curriculum to train properly. However, due to the differences in bot difficulty, the current training results are no longer comparable to the paper. An example training curve on deathmatch_bots with the same parameters as in the paper is shown below. Additionally, the report includes 8 agents trained using PBT against duel-bots with normalization and we were able to get better results than the Sample-Factory paper:
+    - https://wandb.ai/andrewzhang505/sample_factory/reports/ViZDoom-Bots--VmlldzoyNzY2NDI1
 
 #### Models
 
@@ -85,6 +85,8 @@ The models below are the best models from the input normalization experiment abo
 | ----------- | ------------------------------------------------------------------- | ------------------ |
 | Battle      | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle  | 59.37 +/- 3.93     |
 | Battle2     | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2 | 36.40 +/- 4.20     |
+| Deathmatch-Bots | https://huggingface.co/andrewzhang505/doom_deathmatch_bots      | 85.66 +/- 28.53    |
+| Duel-Bots   | https://huggingface.co/andrewzhang505/doom_duel_bots_pbt            | 55.39 +/- 17.13    |
 
 #### Videos
 
@@ -97,3 +99,13 @@ The models below are the best models from the input normalization experiment abo
 
 <p align="center">
 <video class="w-full" src="https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
+
+##### Doom Deathmatch Bots
+
+<p align="center">
+<video class="w-full" src="https://huggingface.co/andrewzhang505/doom_deathmatch_bots/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
+
+##### Doom Duel Bots PBT
+
+<p align="center">
+<video class="w-full" src="https://huggingface.co/andrewzhang505/doom_duel_bots_pbt/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>

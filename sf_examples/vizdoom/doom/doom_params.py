@@ -60,6 +60,7 @@ def doom_override_defaults(parser):
         env_frameskip=4,
         eval_env_frameskip=1,  # this is for smoother rendering during evaluation
         fps=35,  # for evaluation only
+        heartbeat_reporting_interval=600,
     )
 
 
