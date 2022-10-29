@@ -365,6 +365,11 @@ This can create problems for certain types of environment that require global pe
 separate thread (or process if that's required) and communicates. `doom_multiagent_wrapper.py` is an example,
 although not optimal.
 
+## Videos
+
+https://user-images.githubusercontent.com/5497775/198790331-c44c21b3-ba9a-43e8-bc66-29db3ca5e77a.mp4
+
+
 ## Citation
 
 If you use this repository in your work or otherwise wish to cite it, please make reference to our ICML2020 paper.
