@@ -369,6 +369,12 @@ although not optimal.
 
 https://user-images.githubusercontent.com/5497775/198790331-c44c21b3-ba9a-43e8-bc66-29db3ca5e77a.mp4
 
+<video width="35.8%" controls autoplay loop muted playsinline><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>
+
+
+<video src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari_grid_57_60s.mp4" width=180 />
+<video src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" width=180 />
+
 
 ## Citation
 
