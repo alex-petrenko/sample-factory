@@ -183,16 +183,18 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                         finished_episode[agent_i] = True
                         rew = episode_reward[agent_i].item()
                         episode_rewards[agent_i].append(rew)
-                        if cfg.use_record_episode_statistics:
-                            if "episode" in infos[agent_i].keys():
-                                reward_list.append(infos[agent_i]["episode"]["r"])
-                        else:
-                            reward_list.append(rew)
+                        # if cfg.use_record_episode_statistics:
+                        #     if "episode" in infos[agent_i].keys():
+                        #         reward_list.append(infos[agent_i]["episode"]["r"])
+                        # else:
+                        #     reward_list.append(rew)
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):
                             true_objective = infos[agent_i].get("true_objective", rew)
                         true_objectives[agent_i].append(true_objective)
+                        reward_list.append(true_objective)
+                        print(reward_list)
 
                         if verbose:
                             log.info(
