@@ -27,8 +27,7 @@ Codebase for high throughput synchronous and asynchronous reinforcement learning
 
 [//]: # (* **Talk &#40;circa 2021&#41;:** https://youtu.be/lLG17LKKSZc)
 
-VizDoom agents trained with Sample Factory playing in real time:
-
+ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 <p align="middle">
 <img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom.gif" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
 <img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/isaac.gif" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
