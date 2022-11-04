@@ -30,9 +30,15 @@ Codebase for high throughput synchronous and asynchronous reinforcement learning
 VizDoom agents trained with Sample Factory playing in real time:
 
 <p align="middle">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="400">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="400">
-</p> 
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom.gif" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/isaac.gif" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab.gif" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/refs%2Fpr%2F1/megaverse.gif" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco.gif" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari.gif" width="330" alt="Atari agents traned using Sample Factory 2.0">
+</p>
 
 #### When should I use Sample Factory?
 

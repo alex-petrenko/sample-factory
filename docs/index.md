@@ -27,11 +27,24 @@ Codebase for high throughput synchronous and asynchronous reinforcement learning
 [//]: # ()
 [//]: # (* **Videos:** https://sites.google.com/view/sample-factory)
 
-Atari, DMLab-30, ViZDoom and Mujoco agents trained with Sample Factory playing in real time:
-<video width="38.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari_grid_57_60s.mp4" type="video/mp4"></video>
-<video width="60.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab30_grid_30_30s.mp4" type="video/mp4"></video>
-<video width="63.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom_grid_12_30s.mp4" type="video/mp4"></video>
-<video width="35.8%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>
+ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
+
+<p align="middle">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom.gif" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/isaac.gif" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab.gif" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/refs%2Fpr%2F1/megaverse.gif" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari.gif" width="330" alt="Atari agents traned using Sample Factory 2.0">
+<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco.gif" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
+</p>
+
+[//]: # (Video autoplay does not seem to work in some browsers? Use gifs for now.)
+[//]: # (<video width="38.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari_grid_57_60s.mp4" type="video/mp4"></video>)
+[//]: # (<video width="60.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab30_grid_30_30s.mp4" type="video/mp4"></video>)
+[//]: # (<video width="63.5%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom_grid_12_30s.mp4" type="video/mp4"></video>)
+[//]: # (<video width="35.8%" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>)
 
 
 #### When should I use Sample Factory?
