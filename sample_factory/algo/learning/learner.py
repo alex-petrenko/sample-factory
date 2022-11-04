@@ -335,7 +335,7 @@ class Learner(Configurable):
         assert checkpoint is not None
 
         checkpoint_dir = self.checkpoint_dir(self.cfg, self.policy_id)
-        tmp_filepath = join(checkpoint_dir, f".{name_prefix}_temp")
+        tmp_filepath = join(checkpoint_dir, f"{name_prefix}_temp")
         checkpoint_name = f"{name_prefix}_{self.train_step:09d}_{self.env_steps}{name_suffix}.pth"
         filepath = join(checkpoint_dir, checkpoint_name)
         if verbose:
