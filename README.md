@@ -29,15 +29,18 @@ Codebase for high throughput synchronous and asynchronous reinforcement learning
 
 ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 <p align="middle">
-<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/vizdoom.gif" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
-<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/isaac.gif" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/vizdoom.gif?raw=true" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/isaac.gif?raw=true" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
 <br/>
-<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab.gif" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
-<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/refs%2Fpr%2F1/megaverse.gif" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/dmlab.gif?raw=true" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/megaverse.gif?raw=true" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
 <br/>
-<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco.gif" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
-<img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/atari.gif" width="330" alt="Atari agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/mujoco.gif?raw=true" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/atari.gif?raw=true" width="330" alt="Atari agents traned using Sample Factory 2.0">
 </p>
+
+
+
 
 #### When should I use Sample Factory?
 

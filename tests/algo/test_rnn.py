@@ -46,7 +46,7 @@ class TestPackedSequences:
             norm = torch.norm(packed_out - loopy_out)
 
             assert norm < norm_tolerance
-            assert np.allclose(packed_out.detach().numpy(), loopy_out.detach().numpy(), atol=2e-6)
+            assert np.allclose(packed_out.detach().numpy(), loopy_out.detach().numpy(), atol=4e-6)
 
     @pytest.mark.parametrize("T", [37])
     @pytest.mark.parametrize("N", [64])
