@@ -8,7 +8,7 @@ from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, buil
 
 class TestPackedSequences:
     @staticmethod
-    def check_packed_version_matching_loopy_version(T, N, D, random_dones, norm_tolerance=2e-6):
+    def check_packed_version_matching_loopy_version(T, N, D, random_dones, norm_tolerance=4e-6):
         rnn = nn.GRU(D, D, 1)
 
         for _ in range(100):
