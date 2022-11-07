@@ -40,7 +40,7 @@ jobs:
     - name: Run tests
       uses: nick-fields/retry@v2
       with:
-        timeout_minutes: 2
+        timeout_minutes: 30
         max_attempts: 3
         command: pytest -s
 
@@ -70,6 +70,8 @@ jobs:
       run: |
         pip install pytest
     - name: Run tests
-      run: |
-        # run all tests
-        pytest -s
+      uses: nick-fields/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: pytest -s
