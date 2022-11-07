@@ -1,6 +1,7 @@
 [![tests](https://github.com/alex-petrenko/sample-factory/actions/workflows/test-ci.yml/badge.svg?branch=sf2)](https://github.com/alex-petrenko/sample-factory/actions/workflows/test-ci.yml)
 [![codecov](https://codecov.io/gh/alex-petrenko/sample-factory/branch/sf2/graph/badge.svg?token=9EHMIU5WYV)](https://codecov.io/gh/alex-petrenko/sample-factory)
 [![pre-commit](https://github.com/alex-petrenko/sample-factory/actions/workflows/pre-commit.yml/badge.svg?branch=sf2)](https://github.com/alex-petrenko/sample-factory/actions/workflows/pre-commit.yml)
+[![docs](https://github.com/alex-petrenko/sample-factory/actions/workflows/docs.yml/badge.svg)](https://samplefactory.dev)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/alex-petrenko/sample-factory/blob/master/LICENSE)
@@ -12,22 +13,34 @@
 
 # Sample Factory
 
-Codebase for high throughput asynchronous reinforcement learning.
+Codebase for high throughput synchronous and asynchronous reinforcement learning.
 
-**Paper:** https://arxiv.org/abs/2006.11751
+**Resources:**
 
-**Cite:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
+* **Documentation:** [https://samplefactory.dev](https://samplefactory.dev) 
 
-**Talk:** https://youtu.be/lLG17LKKSZc
+* **Paper:** https://arxiv.org/abs/2006.11751
 
-**Videos:** https://sites.google.com/view/sample-factory
+* **Citation:** [BibTeX](https://github.com/alex-petrenko/sample-factory#citation)
 
-VizDoom agents trained with Sample Factory playing in real time:
+* **Discord:** [https://discord.gg/BCfHWaSMkr](https://discord.gg/BCfHWaSMkr)
 
+[//]: # (* **Talk &#40;circa 2021&#41;:** https://youtu.be/lLG17LKKSZc)
+
+ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 <p align="middle">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/battle.gif?raw=true" width="400">
-<img src="https://github.com/alex-petrenko/sample-factory/blob/master/gifs/duel.gif?raw=true" width="400">
-</p> 
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/vizdoom.gif?raw=true" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/isaac.gif?raw=true" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/dmlab.gif?raw=true" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/megaverse.gif?raw=true" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/mujoco.gif?raw=true" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/atari.gif?raw=true" width="330" alt="Atari agents traned using Sample Factory 2.0">
+</p>
+
+
+
 
 #### When should I use Sample Factory?
 
@@ -45,45 +58,6 @@ Consider using Sample Factory if you train agents in these environments.
 
 4. Sample Factory can be a good choice as a prototype for a single node in a distributed RL system or as a reference
 codebase for other types of async RL algorithms.
-
-## Recent releases
-
-##### v1.121.4
-* Support Weights and Biases (see section "WandB support")
-* More configurable population-based training: 
-can set from command line whether or not to mutate gamma, plus the perturbation magnitude for all float hyperparams can also be set from command line:
-```
---pbt_optimize_gamma: Whether to optimize gamma, discount factor, or not (experimental) (default: False)
---pbt_perturb_min: When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max] (default: 1.05)
---pbt_perturb_max: When PBT mutates a float hyperparam, it samples the change magnitude randomly from the uniform distribution [pbt_perturb_min, pbt_perturb_max] (default: 1.5)
-```
-
-##### v1.121.3
-* Fixed a small bug related to population-based training (a reward shaping dictionary was assumed to be a flat dict,
-while it could be a nested dict in some envs)
-
-##### v1.121.2
-* Fixed a bug that prevented Vizdoom *.cfg and *.wad files from being copied to site-packages during installation from PyPI
-* Added example on how to use custom Vizdoom envs without modifying the source code (`sample_factory_examples/train_custom_vizdoom_env.py`)
-
-##### v1.121.0
-* Added fixed KL divergence penalty as in https://arxiv.org/pdf/1707.06347.pdf 
-Its usage is highly encouraged in environments with continuous action spaces (i.e. set --kl_loss_coeff=1.0).
-Otherwise numerical instabilities can occur in certain environments, especially when the policy lag is high
-
-* More summaries related to the new loss
-
-##### v1.120.2
-* More improvements and fixes in launcher interface, including support for NGC cluster
-
-##### v1.120.1
-* Launcher interface improvements for Slurm
-
-##### v1.120.0
-* Support inactive agents. To deactivate an agent for a portion of the episode the environment should return `info={'is_active': False}` for the inactive agent. Useful for environments such as hide-n-seek.
-* Improved memory consumption and performance with better shared memory management.
-* Experiment logs are now saved into the experiment folder as `sf_log.txt`
-* DMLab-related bug fixes (courtesy of @donghoonlee04 and @sungwoong. Thank you!)
 
 ## Installation
 
@@ -399,6 +373,11 @@ This can create problems for certain types of environment that require global pe
 (e.g. OpenGL context). The solution should be an environment wrapper that starts the environment in a 
 separate thread (or process if that's required) and communicates. `doom_multiagent_wrapper.py` is an example,
 although not optimal.
+
+## Videos
+
+https://user-images.githubusercontent.com/5497775/198790331-c44c21b3-ba9a-43e8-bc66-29db3ca5e77a.mp4
+
 
 ## Citation
 
