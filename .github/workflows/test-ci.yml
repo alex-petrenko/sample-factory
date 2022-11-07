@@ -42,8 +42,7 @@ jobs:
       with:
         timeout_minutes: 2
         max_attempts: 3
-        command: ｜
-          pytest -s
+        command: pytest -s
 
   run-tests-mac:
     strategy:
