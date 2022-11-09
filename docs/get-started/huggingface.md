@@ -1,4 +1,4 @@
-# 🤗 Hugging Face Hub Integration
+# Hugging Face 🤗 Hub Integration
 
 Sample Factory has integrations with 🤗 Hugging Face Hub to push models with evaluation results and training metrics to the hub. 
 
