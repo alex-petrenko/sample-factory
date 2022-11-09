@@ -77,7 +77,13 @@ Adding custom models in sample factory is simple, but if you get stuck feel free
 
 
 ### Actor Critic models in sample factory
-Actor Critic models in Sample Factory are composed of three components, Encoders, Cores and Decoders. You can register custom versions of each component, or you can register an entire Actor Critic model.
+Actor Critic models in Sample Factory are composed of three components:
+
+- Encoders - Process input observations (images, vectors) and map them to a vector.
+- Cores - Intergrate vectors from one or more encoders, can optionally include an LSTM in a memory-based agent.
+- Decoders - Apply addition linear layers to the output of the model core.
+ 
+You can register custom versions of each component, or you can register an entire Actor Critic model.
 
 
 ### Custom model template
