@@ -123,6 +123,7 @@ nav:
     - get-started/installation.md
     - get-started/basic-usage.md
     - get-started/running-experiments.md
+    - get-started/customizing.md
     - get-started/running-slurm.md
     - get-started/experiment-launcher.md
     - get-started/huggingface.md
@@ -133,9 +134,6 @@ nav:
     - environment-integrations/dmlab.md
     - environment-integrations/megaverse.md
     - environment-integrations/envpool.md
-  - Customizing Sample Factory:
-    - customize/custom_environments.md
-    - customize/custom_models.md
   - Release Notes:
     - release-notes/release-notes.md
   - Community:
