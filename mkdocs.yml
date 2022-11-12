@@ -124,6 +124,7 @@ nav:
     - get-started/basic-usage.md
     - get-started/running-experiments.md
     - get-started/customizing.md
+    - get-started/cfg-params.md
     - get-started/running-slurm.md
     - get-started/experiment-launcher.md
     - get-started/huggingface.md
