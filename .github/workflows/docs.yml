@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - sf2
-      - sf2-cfg-docs
 jobs:
   deploy:
     runs-on: ubuntu-latest
