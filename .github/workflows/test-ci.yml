@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - sf2
+    - sf2-ci-fail-fix
   pull_request:
     branches:
     - master
@@ -39,9 +40,9 @@ jobs:
     - name: Run tests
       uses: nick-fields/retry@v2
       with:
-        timeout_minutes: 30
-        max_attempts: 3
-        command: pytest -s
+        timeout_minutes: 1000
+        max_attempts: 1
+        command: pytest -s tests/examples/test_example_sampler.py
 
   run-tests-mac:
     strategy:
@@ -71,6 +72,6 @@ jobs:
     - name: Run tests
       uses: nick-fields/retry@v2
       with:
-        timeout_minutes: 30
-        max_attempts: 3
-        command: pytest -s
+        timeout_minutes: 1000
+        max_attempts: 1
+        command: pytest -s tests/examples/test_example_sampler.py

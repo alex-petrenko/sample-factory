@@ -10,7 +10,7 @@ from sf_examples.sampler.use_simplified_sampling_api import generate_trajectorie
 
 class TestSampler:
     @pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
-    @pytest.mark.parametrize("batched_sampling", [False, True])
+    @pytest.mark.parametrize("batched_sampling", [False] * 50 + [True] * 50)
     def test_sampler(self, batched_sampling: bool):
         # test on Mujoco because why not
         register_mujoco_components()
