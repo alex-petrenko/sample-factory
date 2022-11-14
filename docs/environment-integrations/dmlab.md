@@ -14,7 +14,7 @@ Command lines for running experiments with these datasets are provided in the se
 
 ### Running Experiments
 
-Run DMLab experiments with the scripts in `sf_examples.dmlab_examples`. 
+Run DMLab experiments with the scripts in `sf_examples.dmlab`. 
 
 Example of training in the DMLab watermaze environment for 1B environment steps
 
