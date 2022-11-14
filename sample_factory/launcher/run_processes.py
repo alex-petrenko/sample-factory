@@ -19,7 +19,7 @@ def add_os_parallelism_args(parser: argparse.ArgumentParser) -> argparse.Argumen
         type=int,
         help="How many experiments can we squeeze on a single GPU. "
         "Specify this option if and only if you are using launcher to run several experiments using OS-level"
-        "parallelism (--launcher=processes)."
+        "parallelism (--backend=processes)."
         "In any other case use default value (-1) for not altering CUDA_VISIBLE_DEVICES at all."
         "This will allow your experiments to use all GPUs available (as many as --num_gpu allows)"
         "Helpful when e.g. you are running a single big PBT experiment.",

@@ -53,13 +53,13 @@ A total list of WandB settings:
 Once the experiment is started the link to the monitored session is going to be available in the logs (or by searching in Wandb Web console).
 
 
-### Runner interface
+### Launcher interface
 
 Sample Factory provides a simple interface that allows users to run experiments with multiple seeds
 (or hyperparameter searches) with optimal distribution of work across GPUs.
 The configuration of such experiments is done through Python scripts.
 
-Here's an example runner script that we used to train agents for 6 basic VizDoom environments with 10 seeds each:
+Here's an example launcher script that we used to train agents for 6 basic VizDoom environments with 10 seeds each:
 
 ```
 from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
@@ -89,12 +89,12 @@ When such a script is saved i.e. at `myproject/train_10_seeds.py` in your projec
 execute it:
 
 ```
-python -m sample_factory.launcher.run --run=myproject.train_10_seeds --runner=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
+python -m sample_factory.launcher.run --run=myproject.train_10_seeds --backend=processes --max_parallel=12 --pause_between=10 --experiments_per_gpu=3 --num_gpus=4
 ``` 
 
 This will cycle through the requested configurations, training 12 experiments at the same time, 3 per GPU on 4 GPUs using local OS-level parallelism.
 
-Runner supports other backends for parallel execution: `--runner=slurm` and `--runner=ngc` for Slurm and NGC support respectively.
+Runner supports other backends for parallel execution: `--backend=slurm` and `--backend=ngc` for Slurm and NGC support respectively.
 
 Individual experiments will be stored in `train_dir/run_name` so the whole experiment can be easily monitored
 with a single Tensorboard command.

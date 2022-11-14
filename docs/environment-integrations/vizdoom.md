@@ -23,7 +23,7 @@ Run at any point to visualize the experiment:
 python -m sf_examples.vizdoom.enjoy_vizdoom --env=doom_battle --algo=APPO --experiment=doom_battle_w20_v20
 ```
 
-Runner scripts are also provided in `sf_examples.vizdoom.experiments` to run experiments in parallel or on slurm.
+Launcher scripts are also provided in `sf_examples.vizdoom.experiments` to run experiments in parallel or on slurm.
 
 #### Reproducing Paper Results
 

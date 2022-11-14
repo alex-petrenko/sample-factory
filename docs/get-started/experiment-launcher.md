@@ -13,35 +13,35 @@ See [README](https://github.com/alex-petrenko/sample-factory#runner-interface) f
 
 ```
 Parallelize with local multiprocessing:
-$ python -m sample_factory.launcher.run --run=paper_doom_battle2_appo --runner=processes --max_parallel=4 --pause_between=10 --experiments_per_gpu=1 --num_gpus=4
+$ python -m sample_factory.launcher.run --run=paper_doom_battle2_appo --backend=processes --max_parallel=4 --pause_between=10 --experiments_per_gpu=1 --num_gpus=4
 
 Parallelize with Slurm:
-$ python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --runner=slurm --slurm_workdir=./megaverse_single_agent --experiment_suffix=slurm --pause_between=1 --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=12 --slurm_sbatch_template=./megaverse_rl/slurm/sbatch_template.sh --slurm_print_only=False
+$ python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --backend=slurm --slurm_workdir=./megaverse_single_agent --experiment_suffix=slurm --pause_between=1 --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=12 --slurm_sbatch_template=./megaverse_rl/slurm/sbatch_template.sh --slurm_print_only=False
 
 Parallelize with NGC (https://ngc.nvidia.com/):
-$ python -m sample_factory.launcher.run --run=rlgpu.run_scripts.dexterous_manipulation --runner=ngc --ngc_job_template=run_scripts/ngc_job_16g_1gpu.template --ngc_print_only=False --train_dir=/workspace/train_dir
+$ python -m sample_factory.launcher.run --run=rlgpu.run_scripts.dexterous_manipulation --backend=ngc --ngc_job_template=run_scripts/ngc_job_16g_1gpu.template --ngc_print_only=False --train_dir=/workspace/train_dir
 ```
 
 ##### All command-line options:
 ```
-usage: runner.py [-h] [--train_dir TRAIN_DIR] [--run RUN]
-                 [--runner {processes,slurm,ngc}]
-                 [--pause_between PAUSE_BETWEEN] [--num_gpus NUM_GPUS]
-                 [--experiments_per_gpu EXPERIMENTS_PER_GPU]
-                 [--max_parallel MAX_PARALLEL]
-                 [--experiment_suffix EXPERIMENT_SUFFIX]
+usage: run.py [-h] [--train_dir TRAIN_DIR] [--run RUN]
+              [--backend {processes,slurm,ngc}]
+              [--pause_between PAUSE_BETWEEN] [--num_gpus NUM_GPUS]
+              [--experiments_per_gpu EXPERIMENTS_PER_GPU]
+              [--max_parallel MAX_PARALLEL]
+              [--experiment_suffix EXPERIMENT_SUFFIX]
 
 # Slurm-related:
-                 [--slurm_gpus_per_job SLURM_GPUS_PER_JOB]
-                 [--slurm_cpus_per_gpu SLURM_CPUS_PER_GPU]
-                 [--slurm_print_only SLURM_PRINT_ONLY]
-                 [--slurm_workdir SLURM_WORKDIR]
-                 [--slurm_partition SLURM_PARTITION]
-                 [--slurm_sbatch_template SLURM_SBATCH_TEMPLATE]
+              [--slurm_gpus_per_job SLURM_GPUS_PER_JOB]
+              [--slurm_cpus_per_gpu SLURM_CPUS_PER_GPU]
+              [--slurm_print_only SLURM_PRINT_ONLY]
+              [--slurm_workdir SLURM_WORKDIR]
+              [--slurm_partition SLURM_PARTITION]
+              [--slurm_sbatch_template SLURM_SBATCH_TEMPLATE]
 
 # NGC-related
-                 [--ngc_job_template NGC_JOB_TEMPLATE]
-                 [--ngc_print_only NGC_PRINT_ONLY]
+              [--ngc_job_template NGC_JOB_TEMPLATE]
+              [--ngc_print_only NGC_PRINT_ONLY]
 ```
 
 ```
@@ -51,7 +51,7 @@ Arguments:
                         Directory for sub-experiments
   --run RUN             Name of the python module that describes the run, e.g.
                         sf_examples.vizdoom.experiments.doom_basic
-  --runner {processes,slurm,ngc}
+  --backend {processes,slurm,ngc}
   --pause_between PAUSE_BETWEEN
                         Pause in seconds between processes
   --num_gpus NUM_GPUS   How many GPUs to use (only for local multiprocessing)
@@ -71,7 +71,7 @@ Slurm-related:
   --slurm_print_only SLURM_PRINT_ONLY
                         Just print commands to the console without executing
   --slurm_workdir SLURM_WORKDIR
-                        Optional workdir. Used by slurm runner to store
+                        Optional workdir. Used by slurm launcher to store
                         logfiles etc.
   --slurm_partition SLURM_PARTITION
                         Adds slurm partition, i.e. for "gpu" it will add "-p
@@ -89,9 +89,9 @@ NGC-related:
 ```
 
 
-#### Runner script API
+#### Launcher script API
 
-A typical runner script:
+A typical launcher script:
 
 ```
 from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
@@ -111,7 +111,7 @@ _experiments = [
 RUN_DESCRIPTION = RunDescription('doom_basic_envs_appo', experiments=_experiments)
 ```
 
-Runner script should expose a RunDescription object named `RUN_DESCRIPTION` that contains a list of experiments to run and some auxiliary parameters.
+Launcher script should expose a RunDescription object named `RUN_DESCRIPTION` that contains a list of experiments to run and some auxiliary parameters.
 `RunDescription` parameter reference:
 
 ```
@@ -126,7 +126,7 @@ Runner script should expose a RunDescription object named `RUN_DESCRIPTION` that
         :param experiment_dirs_sf_format: adds an additional --experiments_root parameter, used only by SampleFactory.
                set to False for other applications.
         :param experiment_arg_name: CLI argument of the underlying experiment that determines it's unique name
-               to be generated by the runner. Default: --experiment
+               to be generated by the launcher. Default: --experiment
         :param experiment_dir_arg_name: CLI argument for the root train dir of your experiment. Default: --train_dir
         :param customize_experiment_name: whether to add a hyperparameter combination to the experiment name
         :param param_prefix: most experiments will use "--" prefix for each parameter, but some apps don't have this
