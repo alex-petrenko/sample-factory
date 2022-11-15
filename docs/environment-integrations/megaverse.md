@@ -28,16 +28,16 @@ To visualize the training results, use the `enjoy_megaverse` script:
 python -m megaverse_rl.enjoy_megaverse --algo=APPO --env=TowerBuilding --experiment=TowerBuilding --megaverse_num_envs_per_instance=1 --fps=20 --megaverse_use_vulkan=True
 ```
 
-Multiple experiments can be run in parallel with the runner module. `megaverse_envs` is an example runner script that runs atari envs with 4 seeds. 
+Multiple experiments can be run in parallel with the launcher module. `megaverse_envs` is an example launcher script that runs atari envs with 4 seeds. 
 
 ```
-python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --runner=processes --max_parallel=2  --pause_between=1 --experiments_per_gpu=2 --num_gpus=1
+python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --backend=processes --max_parallel=2  --pause_between=1 --experiments_per_gpu=2 --num_gpus=1
 ```
 
 Or you could run experiments on slurm:
 
 ```
-python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --runner=slurm --slurm_workdir=./slurm_megaverse --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False
+python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --backend=slurm --slurm_workdir=./slurm_megaverse --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False
 ```
 
 

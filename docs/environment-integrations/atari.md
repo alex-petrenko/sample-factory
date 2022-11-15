@@ -29,10 +29,10 @@ To visualize the training results, use the `enjoy_atari` script:
 python -m sf_examples.atari.enjoy_atari --algo=APPO --env=atari_breakout --experiment="Experiment Name"
 ```
 
-Multiple experiments can be run in parallel with the runner module. `atari_envs` is an example runner script that runs atari envs with 4 seeds. 
+Multiple experiments can be run in parallel with the launcher module. `atari_envs` is an example launcher script that runs atari envs with 4 seeds. 
 
 ```
-python -m sample_factory.launcher.run --run=sf_examples.atari.experiments.atari_envs --runner=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1
+python -m sample_factory.launcher.run --run=sf_examples.atari.experiments.atari_envs --backend=processes --max_parallel=8  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1
 ```
 
 ### List of Supported Environments

@@ -10,29 +10,29 @@ pip install sample-factory[mujoco]
 
 ### Running Experiments
 
-Run MuJoCo experiments with the scripts in `sf_examples.mujoco_examples`. The default parameters have been chosen to match CleanRL's results in the report below.
+Run MuJoCo experiments with the scripts in `sf_examples.mujoco`. The default parameters have been chosen to match CleanRL's results in the report below.
 
 To train a model in the `Ant-v4` enviornment:
 
 ```
-python -m sf_examples.mujoco_examples.train_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
+python -m sf_examples.mujoco.train_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
 ```
 
 To visualize the training results, use the `enjoy_mujoco` script:
 
 ```
-python -m sf_examples.mujoco_examples.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
+python -m sf_examples.mujoco.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
 ```
 
-Multiple experiments can be run in parallel with the runner module. `mujoco_all_envs` is an example runner script that runs all mujoco envs with 10 seeds. 
+Multiple experiments can be run in parallel with the launcher module. `mujoco_all_envs` is an example launcher script that runs all mujoco envs with 10 seeds. 
 
 ```
-python -m sample_factory.launcher.run --run=sf_examples.mujoco_examples.experiments.mujoco_all_envs --runner=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=0
+python -m sample_factory.launcher.run --run=sf_examples.mujoco.experiments.mujoco_all_envs --backend=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=0
 ```
 
 #### List of Supported Environments
 
-Specify the environment to run with the `--env` command line parameter. The following MuJoCo v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.mujoco_examples.mujoco.mujoco_utils`
+Specify the environment to run with the `--env` command line parameter. The following MuJoCo v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.mujoco.mujoco.mujoco_utils`
 
 | MuJoCo Environment Name   | Sample-Factory Command Line Parameter |
 | ------------------------- | ------------------------------------- |

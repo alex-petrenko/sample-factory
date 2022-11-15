@@ -1,4 +1,4 @@
-# How to use SF2 on Slurm
+# How to use Sample-Factory on Slurm
 
 This doc contains instructions for running Sample-Factory v2 using slurm
 
@@ -19,7 +19,7 @@ Install Miniconda
 
 Make new conda environment `conda create --name sf2` then `conda activate sf2`
 
-Download Sample-Factory and install dependencies for SF2
+Download Sample-Factory and install dependencies for Sample-Factory
 ```
 git clone https://github.com/alex-petrenko/sample-factory.git
 cd sample-factory
@@ -27,13 +27,13 @@ git checkout sf2
 pip install -e .
 ```
 
-### Necessary scripts in SF2
+### Necessary scripts in Sample-Factory
 
-To run a custom runner script for SF2 on slurm, you may need to write your own slurm_sbatch_template and/or runner script.
+To run a custom launcher script for Sample-Factory on slurm, you may need to write your own slurm_sbatch_template and/or launcher script.
 
-slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See an example at `./sample_factory/launcher/slurm/sbatch_template.sh`. Variables in the bash script can be added in `sample_factory.launcher.run_slurm`.
+slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See an example at `./sample_factory/launcher/slurm/sbatch_timeout.sh`. Variables in the bash script can be added in `sample_factory.launcher.run_slurm`.
 
-The runner script controls the python command slurm will run. Examples are located in `sf_examples`. You can run multiple experiments with different parameters using `ParamGrid`.
+The launcher script controls the python command slurm will run. Examples are located in `sf_examples`. You can run multiple experiments with different parameters using `ParamGrid`.
 
 #### Timeout Batch Script
 
@@ -41,7 +41,7 @@ If your slurm cluster has time limits for jobs, you can use the `sbatch_timeout.
 
 The time limit can be set with the `slurm_timeout` command line argument. It defaults to `0` which runs the job with no time limit. It is recommended the timeout be set to slightly less than the time limit of your job. For example, if the time limit is 24 hours, you should set `--slurm_timeout=23h`
 
-### Running runner scripts
+### Running launcher scripts
 
 Return to the login node with `exit`
 
@@ -49,9 +49,9 @@ Setup slurm output folder `mkdir sf2`
 
 Activate your conda environment with `bash` and `conda activate sf2` then `cd sample-factory`
 
-Run your runner script - an example mujuco runner (replace run, slurm_sbatch_template, and slurm_workdir with appropriate values)
+Run your launcher script - an example mujuco launcher (replace run, slurm_sbatch_template, and slurm_workdir with appropriate values)
 ```
-python -m sample_factory.launcher.run --runner=slurm --slurm_workdir=./slurm_mujoco --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.mujoco.experiments.mujoco_all_envs
+python -m sample_factory.launcher.run --backend=slurm --slurm_workdir=./slurm_mujoco --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False --run=sf_examples.mujoco.experiments.mujoco_all_envs
 ```
 
 The `slurm_gpus_per_job` and `slurm_cpus_per_gpu` determine the resources allocated to each job. You can view the jobs without running them by setting `slurm_print_only=True`.
