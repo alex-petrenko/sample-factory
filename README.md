@@ -130,7 +130,7 @@ def is_multiagent_env(env):
  
 ## Using Sample Factory
  
-Once Sample Factpry is installed, it defines two main entry points, one for training, and one for algorithm evaluation:
+Once Sample Factory is installed, it defines two main entry points, one for training, and one for algorithm evaluation:
 * `sample_factory.algorithms.appo.train_appo`
 * `sample_factory.algorithms.appo.enjoy_appo`
 
