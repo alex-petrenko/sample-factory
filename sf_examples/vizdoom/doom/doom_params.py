@@ -41,9 +41,10 @@ def add_doom_env_eval_args(parser):
     """Arguments used only during evaluation."""
     parser.add_argument(
         "--record_to",
-        default=join(os.getcwd(), "..", "recs"),
+        # default=join(os.getcwd(), "..", "recs"),
+        default=None,
         type=str,
-        help="Record episodes to this folder.",
+        help="Record episodes to this folder. It is recommended to use --save_video instead of --record_to for bots environments.",
     )
 
 

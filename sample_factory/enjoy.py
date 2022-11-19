@@ -193,8 +193,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                         if isinstance(infos, (list, tuple)):
                             true_objective = infos[agent_i].get("true_objective", rew)
                         true_objectives[agent_i].append(true_objective)
-                        reward_list.append(true_objective)
-                        print(reward_list)
 
                         if verbose:
                             log.info(
@@ -211,8 +209,10 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                             # we want the scores from the full episode not a single agent death (due to EpisodicLifeEnv wrapper)
                             if "episode" in infos[agent_i].keys():
                                 num_episodes += 1
+                                reward_list.append(true_objective)
                         else:
                             num_episodes += 1
+                            reward_list.append(true_objective)
 
                 # if episode terminated synchronously for all agents, pause a bit before starting a new one
                 if all(dones):
