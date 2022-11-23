@@ -63,3 +63,10 @@ test-cov:
 test-cov-core:
 	pytest --cov=./ --cov-config=./.core-coveragerc -v
 # ; echo "Tests finished. You might need to type 'reset' and press Enter to fix the terminal window"
+
+
+# docs
+.PHONY: docs
+
+docs:
+	bash ./docs/cfg-params.sh && mkdocs serve

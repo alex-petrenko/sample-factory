@@ -3,7 +3,7 @@
 ## workflows
 1. clone the target repo 
     
-    *It should contain a ‘docs’ folder, a ‘mkdocs.yml’ config file, a ‘docs.yml’ github actions file.*
+    *It should contain a ‘docs’ folder, ‘mkdocs.yml’ config file, and ‘docs.yml’ github actions file.*
     
 2. install common dependencies
 

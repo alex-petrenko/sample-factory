@@ -13,10 +13,9 @@
 
 # Sample Factory
 
-High-throughput synchronous and asynchronous reinforcement learning.
+High-throughput reinforcement learning codebase.
 
-This Readme provides only a brief overview of the library.
-For documentation and other resources please refer to the links below:
+**Resources:**
 
 * **Documentation:** [https://samplefactory.dev](https://samplefactory.dev) 
 
@@ -30,9 +29,21 @@ For documentation and other resources please refer to the links below:
 
 ### What is Sample Factory?
 
-Sample Factory is one of the fastest RL libraries.
-Instead of implementing multiple algorithm families, we focus on one very efficient
-implementation of policy gradients (PPO).
+Sample Factory is one of the fastest RL libraries. Instead of implementing multiple algorithm families,
+we focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
+
+Below are ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
+
+<p align="middle">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/vizdoom.gif?raw=true" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/isaac.gif?raw=true" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/dmlab.gif?raw=true" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/megaverse.gif?raw=true" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
+<br/>
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/mujoco.gif?raw=true" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/atari.gif?raw=true" width="330" alt="Atari agents traned using Sample Factory 2.0">
+</p>
 
 **Key features:**
 
@@ -46,22 +57,11 @@ implementation of policy gradients (PPO).
 * Vector-based, image-based, dictionary observation spaces
 * Automatically creates a model architecture by parsing action/observation space specification. Supports custom model architectures
 * Library is designed to be imported into other projects, custom environments are first-class citizens
-* Elaborate WandB and Tensorboard summaries, custom metrics
+* Detailed WandB and Tensorboard summaries, custom metrics
 * HuggingFace integration (upload trained models and metrics to the Hub)
-* Automatic testing with GitHub Actions
-* Multiple example environment integrations with tuned parameters, i.e. below are ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
+* Multiple example environment integrations with tuned parameters
 
-<p align="middle">
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/vizdoom.gif?raw=true" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/isaac.gif?raw=true" width="360" alt="IsaacGym agents traned using Sample Factory 2.0">
-<br/>
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/dmlab.gif?raw=true" width="380" alt="DMLab-30 agents traned using Sample Factory 2.0">
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/megaverse.gif?raw=true" width="340" alt="Megaverse agents traned using Sample Factory 2.0">
-<br/>
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/mujoco.gif?raw=true" width="390" alt="Mujoco agents traned using Sample Factory 2.0">
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/atari.gif?raw=true" width="330" alt="Atari agents traned using Sample Factory 2.0">
-</p>
-
+This Readme provides only a brief overview of the library. Visit full documentation at [https://samplefactory.dev](https://samplefactory.dev) for more details.
 
 ## Installation
 
