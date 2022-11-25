@@ -136,6 +136,7 @@ nav:
     - Monitoring Experiments:
       - 05-monitoring/tensorboard.md
       - 05-monitoring/wandb.md
+      - 05-monitoring/custom-metrics.md
   - Advanced Guides:
     - 06-pbt/pbt.md
   - Miscellaneous:

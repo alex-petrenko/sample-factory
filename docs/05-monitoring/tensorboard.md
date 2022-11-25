@@ -4,7 +4,7 @@ Sample Factory uses Tensorboard summaries.
 Run Tensorboard to monitor any running or finished experiment:
 
 ```bash
-tensorboard --logdir=<your_experiment_dir> --port=6006`
+tensorboard --logdir=<your_experiment_dir> --port=6006
 ```
 
 ## Monitoring multiple experiments
