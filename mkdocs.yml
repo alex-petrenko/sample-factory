@@ -137,8 +137,10 @@ nav:
       - 05-monitoring/tensorboard.md
       - 05-monitoring/wandb.md
       - 05-monitoring/custom-metrics.md
-  - Advanced Guides:
+  - Advanced Topics:
     - 06-pbt/pbt.md
+    - Performance Optimization:
+      - 07-advanced-topics/profiling.md
   - Miscellaneous:
     - 08-miscellaneous/tests.md
   - Environment Integrations:
@@ -148,6 +150,7 @@ nav:
     - 09-environment-integrations/dmlab.md
     - 09-environment-integrations/megaverse.md
     - 09-environment-integrations/envpool.md
+    - 09-environment-integrations/isaacgym.md
   - Huggingface Integration:
     - 10-huggingface/huggingface.md
   - Release Notes:
