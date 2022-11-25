@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-FILE=docs/2-configuration/cfg-params.md
+FILE=docs/02-configuration/cfg-params.md
 
 cat << EOF > $FILE
 # Full Parameter Reference
