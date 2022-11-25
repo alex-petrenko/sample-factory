@@ -66,7 +66,7 @@ test-cov-core:
 
 
 # docs
-.PHONY: docs
+.PHONY: docs-serve
 
-docs:
+docs-serve:
 	bash ./docs/cfg-params.sh && mkdocs serve

@@ -13,9 +13,7 @@
 
 # Sample Factory
 
-High-throughput reinforcement learning codebase.
-
-**Resources:**
+High-throughput reinforcement learning codebase. Resources:
 
 * **Paper:** https://arxiv.org/abs/2006.11751
 
@@ -23,12 +21,14 @@ High-throughput reinforcement learning codebase.
 
 * **Talk (circa 2021):** https://youtu.be/lLG17LKKSZc
 
-### What is Sample Factory?
+## What is Sample Factory?
 
-Sample Factory is one of the fastest RL libraries. Instead of implementing multiple algorithm families,
-we focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
+Sample Factory is one of the fastest RL libraries.
+We focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
 
-Below are ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
+Sample Factory is thoroughly tested, used by a number of researchers and practitioners, and is actively maintained.
+Our implementation is known to reach SOTA performance in a variety of domains in a short amount of time.
+Clips below demonstrate ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 
 <p align="middle">
 <img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/vizdoom.gif?raw=true" width="360" alt="VizDoom agents traned using Sample Factory 2.0">
@@ -41,7 +41,7 @@ Below are ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents train
 <img src="https://github.com/alex-petrenko/sf_assets/blob/main/gifs/atari.gif?raw=true" width="330" alt="Atari agents traned using Sample Factory 2.0">
 </p>
 
-**Key features:**
+## Key features
 
 * Highly optimized algorithm architecture for maximum learning throughput
 * Synchronous and asynchronous training regimes
@@ -56,3 +56,10 @@ Below are ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents train
 * Detailed WandB and Tensorboard summaries, custom metrics
 * HuggingFace integration (upload trained models and metrics to the Hub)
 * Multiple example environment integrations with tuned parameters
+
+## Next steps
+
+Check out the following guides to get started:
+
+* [Installation](01-get-started/installation.md)
+* [Basic Usage](01-get-started/basic-usage.md)
