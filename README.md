@@ -32,7 +32,7 @@ High-throughput reinforcement learning codebase.
 Sample Factory is one of the fastest RL libraries.
 We focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
 
-Sample Factory is thoroughly tested, used by a number of researchers and practitioners, and is actively maintained.
+Sample Factory is thoroughly tested, used by many researchers and practitioners, and is actively maintained.
 Our implementation is known to reach SOTA performance in a variety of domains in a short amount of time.
 Clips below demonstrate ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 

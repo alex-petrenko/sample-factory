@@ -137,6 +137,7 @@ nav:
       - 05-monitoring/tensorboard.md
       - 05-monitoring/wandb.md
       - 05-monitoring/custom-metrics.md
+      - 05-monitoring/metrics-reference.md
   - Advanced Topics:
     - 06-pbt/pbt.md
     - Performance Optimization:

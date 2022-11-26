@@ -163,8 +163,6 @@ class Learner(Configurable):
         # do not need frequent summaries for longer experiments
         self.summary_rate_decay_seconds = LinearDecay([(0, 5), (100000, 120), (1000000, 240)])
         self.last_summary_time = 0
-
-        # TODO: fix milestone mechanism
         self.last_milestone_time = 0
 
         # shared tensor used to share the latest policy version between processes
