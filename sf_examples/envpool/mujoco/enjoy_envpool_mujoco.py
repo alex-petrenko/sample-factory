@@ -5,7 +5,6 @@ from sf_examples.mujoco.train_mujoco import parse_mujoco_cfg, register_mujoco_co
 
 
 def main():
-    """Script entry point."""
     register_mujoco_components()
     cfg = parse_mujoco_cfg(evaluation=True)
     status = enjoy(cfg)

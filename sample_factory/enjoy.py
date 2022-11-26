@@ -71,7 +71,7 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start) -> flo
             time_wait = target_delay - current_delay
 
             if time_wait > 0:
-                log.info("Wait time %.3f", time_wait)
+                # log.info("Wait time %.3f", time_wait)
                 time.sleep(time_wait)
 
             try:

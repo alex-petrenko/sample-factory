@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: 3.x
+          python-version: 3.8
       - name: install dependencies
         run: |
           pip install mkdocs-material
@@ -19,5 +19,8 @@ jobs:
           pip install mkdocs-git-revision-date-localized-plugin
           pip install mkdocs-git-committers-plugin-2
           pip install mkdocs-git-authors-plugin
+          pip install -e .
+      - name: generate config params doc
+        run: bash ./docs/cfg-params.sh
       - name: deploy the website
         run: mkdocs gh-deploy --force
