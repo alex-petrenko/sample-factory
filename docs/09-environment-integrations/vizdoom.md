@@ -87,6 +87,7 @@ The models below are the best models from the input normalization experiment abo
 | Battle2     | https://huggingface.co/andrewzhang505/sample-factory-2-doom-battle2 | 36.40 +/- 4.20     |
 | Deathmatch-Bots | https://huggingface.co/andrewzhang505/doom_deathmatch_bots      | 85.66 +/- 28.53    |
 | Duel-Bots   | https://huggingface.co/andrewzhang505/doom_duel_bots_pbt            | 55.39 +/- 17.13    |
+| Duel        | https://huggingface.co/andrewzhang505/doom-duel-selfplay            |     |
 
 #### Videos
 
@@ -109,3 +110,8 @@ The models below are the best models from the input normalization experiment abo
 
 <p align="center">
 <video class="w-full" src="https://huggingface.co/andrewzhang505/doom_duel_bots_pbt/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
+
+##### Doom Duel Multi-Agent
+
+<p align="center">
+<video class="w-full" src="https://huggingface.co/andrewzhang505/doom-duel-selfplay/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
