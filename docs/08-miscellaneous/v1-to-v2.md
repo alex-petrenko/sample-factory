@@ -12,6 +12,7 @@ please check [Custom Environments](../03-customization/custom-environments.md) a
 [Custom Models](../03-customization/custom-models.md) for the new API.
 
 Some configuration parameters were renamed:
+
 * `--ppo_epochs` -> `--num_epochs`
 * `--num_batches_per_iteration` -> `--num_batches_per_epoch`
 * `--num_minibatches_to_accumulate` -> `--num_batches_to_accumulate` (also changed semantically, check the cfg reference)
@@ -22,5 +23,5 @@ The name `Runner` now refers to an entirely different concept, a class that hand
 Entities `ActorWorker` and `PolicyWorker` were renamed to `RolloutWorker` and `InferenceWorker` respectively.
 
 Due to the gravity of the changes it is difficult to provide a comprehensive migration guide. If you recently
-updated your codebase to use Sample Factory v2.0, please consider sharing your experience and contribute to
-this guide! :)
+updated your codebase to use Sample Factory v2.0, please consider sharing your experience and [contribute](../12-community/contribution.md)
+to this guide! :)

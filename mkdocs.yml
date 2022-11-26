@@ -144,6 +144,7 @@ nav:
       - 07-advanced-topics/profiling.md
   - Miscellaneous:
     - 08-miscellaneous/tests.md
+    - 08-miscellaneous/v1-to-v2.md
   - Environment Integrations:
     - 09-environment-integrations/mujoco.md
     - 09-environment-integrations/atari.md
