@@ -18,7 +18,7 @@ pip install -e .
 
 ### Running Experiments
 
-The environments can be run from the `swarm_rl` folder in the downloaded `quad-swarm-rl` directory. 
+The environments can be run from the `quad_swarm_rl` folder in the downloaded `quad-swarm-rl` directory instead of from `sample-factory` directly. 
 
 Experiments can be run with the `train` script and viewed with the `enjoy` script. If you are running custom experiments, it is recommended to use the `quad_multi_mix_baseline` runner script and make any modifications as needed. See `sf2_single_drone` and `sf2_multi_drone` runner scripts for an examples.
 
