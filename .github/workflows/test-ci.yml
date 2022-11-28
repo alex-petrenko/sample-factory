@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - sf2
+    - sf2-ci-fix
   pull_request:
     branches:
     - master
@@ -36,6 +37,12 @@ jobs:
     - name: Install test dependencies
       run: |
         pip install pytest
+    - name: Run Pre-check
+      uses: nick-fields/retry@v2
+      with:
+        timeout_minutes: 10
+        max_attempts: 5
+        command: pytest -s tests/test_precheck.py
     - name: Run tests
       run: |
         # run all tests
@@ -66,6 +73,12 @@ jobs:
     - name: Install test dependencies
       run: |
         pip install pytest
+    - name: Run Pre-check
+      uses: nick-fields/retry@v2
+      with:
+        timeout_minutes: 10
+        max_attempts: 5
+        command: pytest -s tests/test_precheck.py
     - name: Run tests
       run: |
         # run all tests
