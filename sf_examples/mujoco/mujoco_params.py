@@ -30,6 +30,7 @@ def mujoco_override_defaults(env, parser):
         recurrence=1,
         normalize_input=True,
         normalize_returns=True,
+        value_bootstrap=True,
         experiment_summaries_interval=3,
         save_every_sec=15,
         serial_mode=False,

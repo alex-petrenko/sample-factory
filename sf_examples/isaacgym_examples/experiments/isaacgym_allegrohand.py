@@ -1,4 +1,4 @@
-from sample_factory.runner.run_description import Experiment, ParamGrid, RunDescription
+from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from sf_examples.isaacgym_examples.experiments.isaacgym_runs import base_cli, vstr
 
 _params = ParamGrid(
@@ -25,5 +25,5 @@ _experiments = [
 RUN_DESCRIPTION = RunDescription(f"allegrohand_{vstr}", experiments=_experiments)
 
 
-# Run locally: python -m sample_factory.runner.run --run=sample_factory.runner.runs.isaacgym_allegrohand --runner=processes --max_parallel=1 --experiments_per_gpu=1 --num_gpus=1
-# Run on Slurm: python -m sample_factory.runner.run --run=sample_factory.runner.runs.isaacgym_allegrohand --runner=slurm --slurm_workdir=./slurm_isaacgym --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/runner/slurm/sbatch_template.sh --pause_between=1 --slurm_print_only=False
+# Run locally: python -m sample_factory.launcher.run --run=sf_examples.isaacgym_examples.experiments.isaacgym_allegrohand --backend=processes --max_parallel=1 --experiments_per_gpu=1 --num_gpus=1
+# Run on Slurm: python -m sample_factory.launcher.run --run=sf_examples.isaacgym_examples.experiments.isaacgym_allegrohand --backend=slurm --slurm_workdir=./slurm_isaacgym --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False

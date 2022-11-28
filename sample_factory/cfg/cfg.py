@@ -196,7 +196,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--normalize_returns",
-        default=False,
+        default=True,
         type=str2bool,
         help="Whether to use running mean and standard deviation to normalize discounted returns",
     )
@@ -324,7 +324,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument(
         "--normalize_input",
-        default=False,
+        default=True,
         type=str2bool,
         help="Whether to use running mean and standard deviation to normalize observations",
     )
@@ -657,8 +657,12 @@ def add_eval_args(parser):
     parser.add_argument("--max_num_episodes", default=1e9, type=int, help="Maximum number of episodes to render")
 
     parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
-    parser.add_argument("--hf_username", default=None, type=str, help="HuggingFace username")
-    parser.add_argument("--hf_repository", default=None, type=str, help="Name of HuggingFace repository")
+    parser.add_argument(
+        "--hf_repository",
+        default=None,
+        type=str,
+        help="The full repo_id to push to on the HuggingFace Hub. Must be of the form <username>/<repo_name>",
+    )
 
     parser.add_argument(
         "--policy_index", default=0, type=int, help="Policy to evaluate in case of multi-policy training"

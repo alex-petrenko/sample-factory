@@ -59,7 +59,7 @@ def doom_override_defaults(parser):
         normalize_input=True,
         env_frameskip=4,
         eval_env_frameskip=1,  # this is for smoother rendering during evaluation
-        fps=35,
+        fps=35,  # for evaluation only
     )
 
 

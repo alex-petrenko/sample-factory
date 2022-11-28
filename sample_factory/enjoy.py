@@ -69,7 +69,7 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start) -> flo
             time_wait = target_delay - current_delay
 
             if time_wait > 0:
-                log.info("Wait time %.3f", time_wait)
+                # log.info("Wait time %.3f", time_wait)
                 time.sleep(time_wait)
 
             try:
@@ -262,6 +262,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
     if cfg.push_to_hub:
         generate_model_card(experiment_dir(cfg=cfg), cfg.algo, cfg.env, reward_list)
-        push_to_hf(experiment_dir(cfg=cfg), f"{cfg.hf_username}/{cfg.hf_repository}", cfg.num_policies)
+        push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository, cfg.num_policies)
 
     return ExperimentStatus.SUCCESS, float(np.mean(episode_rewards))

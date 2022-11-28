@@ -757,6 +757,9 @@ class Runner(EventLoopObject, Configurable):
         for component, profile in self.component_profiles:
             log.info(profile)
 
+        for w in self.writers.values():
+            w.flush()
+
         assert self.event_loop.owner is self
         self.event_loop.stop()
 

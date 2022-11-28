@@ -1,5 +1,4 @@
-# [TODO] may change
-site_name: Sample-Factory Doc
+site_name: Sample Factory Documentation
 
 # Repository
 repo_name: alex-petrenko/sample-factory
@@ -8,6 +7,7 @@ repo_url: https://github.com/alex-petrenko/sample-factory
 # Configuration
 theme:
   name: material
+  nav_style: dark
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
@@ -64,13 +64,16 @@ plugins:
 # Footer
 extra:
   social:
-  # [TODO] change to Aleksei
     - icon: fontawesome/solid/paper-plane
-      link: mailto:ming@huggingface.co
+      link: mailto:apetrenko1991@gmail.com
     - icon: fontawesome/brands/github
-      link: https://github.com/wmFrank
+      link: https://github.com/alex-petrenko
     - icon: fontawesome/brands/linkedin
-      link: https://www.linkedin.com/in/ming-wang-frank/
+      link: https://www.linkedin.com/in/apetrenko-nn/
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/apetrenko_nn
+    - icon: fontawesome/solid/user
+      link: https://alex-petrenko.github.io/
 
 # Extensions
 markdown_extensions:
@@ -117,20 +120,43 @@ markdown_extensions:
 nav:
   - Overview: index.md
   - Get Started:
-    - get-started/installation.md
-    - get-started/basic-usage.md
-    - get-started/running-experiments.md
-    - get-started/running-slurm.md
-    - get-started/huggingface.md
+    - 01-get-started/installation.md
+    - 01-get-started/basic-usage.md
+  - Basic Guides:
+    - Configuration:
+      - 02-configuration/configuration.md
+      - 02-configuration/cfg-params.md
+    - Customization:
+      - 03-customization/custom-environments.md
+      - 03-customization/custom-multi-agent-environments.md
+      - 03-customization/custom-models.md
+    - Running Experiments:
+      - 04-experiments/experiment-launcher.md
+      - 04-experiments/slurm-details.md
+    - Monitoring Experiments:
+      - 05-monitoring/tensorboard.md
+      - 05-monitoring/wandb.md
+      - 05-monitoring/custom-metrics.md
+  - Advanced Topics:
+    - 06-pbt/pbt.md
+    - Performance Optimization:
+      - 07-advanced-topics/profiling.md
+  - Miscellaneous:
+    - 08-miscellaneous/tests.md
   - Environment Integrations:
-    - environment-integrations/mujoco.md
-    - environment-integrations/atari.md
-    - environment-integrations/vizdoom.md
-    - environment-integrations/megaverse.md
-    - environment-integrations/swarm-rl.md
+    - 09-environment-integrations/mujoco.md
+    - 09-environment-integrations/atari.md
+    - 09-environment-integrations/vizdoom.md
+    - 09-environment-integrations/dmlab.md
+    - 09-environment-integrations/megaverse.md
+    - 09-environment-integrations/envpool.md
+    - 09-environment-integrations/isaacgym.md
+    - 09-environment-integrations/swarm-rl.md
+  - Huggingface Integration:
+    - 10-huggingface/huggingface.md
   - Release Notes:
-    - release-notes/release-notes.md
+    - 11-release-notes/release-notes.md
   - Community:
-    - community/contribution.md
-    - community/doc-contribution.md
-    - community/citation.md
+    - 12-community/contribution.md
+    - 12-community/doc-contribution.md
+    - 12-community/citation.md

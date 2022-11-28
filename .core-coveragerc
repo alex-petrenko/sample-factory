@@ -2,7 +2,7 @@
 omit =
     setup.py
     tests/*
-    sample_factory/runner/runs/*
-    sf_examples/dmlab_examples/*
+    sf_examples/*/experiments/*
+    sf_examples/dmlab/*
     sf_examples/isaacgym_examples/*
-    sf_examples/vizdoom_examples/*
+    sf_examples/vizdoom/*

@@ -101,7 +101,7 @@ class TestMujoco:
 
         self._run_test_env(
             env="mujoco_ant",
-            num_workers=32,
+            num_workers=8,
             train_steps=1024,
             batch_size=512,
             batched_sampling=batched_sampling,

@@ -295,7 +295,7 @@ class ActorState:
             episode_extra_stats=info.get("episode_extra_stats", dict()),
         )
 
-        if true_objective := info.get("true_objective", self.last_episode_reward):
+        if (true_objective := info.get("true_objective", self.last_episode_reward)) is not None:
             stats["true_objective"] = true_objective
 
         episode_wrapper_stats = record_episode_statistics_wrapper_stats(info)
@@ -429,7 +429,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
             if self.cfg.decorrelate_envs_on_one_worker:
                 env_i_split = self.num_envs * self.split_idx + env_i
-                decorrelate_steps = self.cfg.rollout * env_i_split + self.cfg.rollout * random.randint(0, 4)
+                decorrelate_steps = self.cfg.rollout * env_i_split
 
                 log.info("Decorrelating experience for %d frames...", decorrelate_steps)
                 for decorrelate_step in range(decorrelate_steps):

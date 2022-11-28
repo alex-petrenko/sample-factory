@@ -2,10 +2,10 @@
 Example of how to use VizDoom env API to use your own custom VizDoom environment with Sample Factory.
 
 To train:
-python -m sf_examples.vizdoom_examples.train_custom_vizdoom_env --algo=APPO --env=doom_my_custom_env --experiment=doom_my_custom_env_example --save_every_sec=5 --experiment_summaries_interval=10
+python -m sf_examples.vizdoom.train_custom_vizdoom_env --algo=APPO --env=doom_my_custom_env --experiment=doom_my_custom_env_example --save_every_sec=5 --experiment_summaries_interval=10
 
 After training for a desired period of time, evaluate the policy by running:
-python -m sf_examples.vizdoom_examples.enjoy_custom_vizdoom_env --algo=APPO --env=doom_my_custom_env --experiment=doom_my_custom_env_example
+python -m sf_examples.vizdoom.enjoy_custom_vizdoom_env --algo=APPO --env=doom_my_custom_env --experiment=doom_my_custom_env_example
 
 """
 import argparse

@@ -16,6 +16,8 @@ from sample_factory.envs.env_utils import get_default_reward_shaping
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log, project_tmp_dir
 
+ENV_INFO_PROTOCOL_VERSION = 1
+
 
 @dataclass
 class EnvInfo:
@@ -30,6 +32,10 @@ class EnvInfo:
     # potentially customizable reward shaping, a map of reward component names to their respective weights
     # this can be used by PBT to optimize the reward shaping towards a sparse final objective
     reward_shaping_scheme: Optional[Dict[str, float]] = None
+
+    # version of the protocol, used to detect changes in the EnvInfo class and invalidate the cache if needed
+    # bump this version if you make any changes to the EnvInfo class
+    env_info_protocol_version: Optional[int] = None
 
 
 def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvInfo:
@@ -60,6 +66,7 @@ def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvI
         all_discrete=all_discrete,
         frameskip=frameskip,
         reward_shaping_scheme=reward_shaping_scheme,
+        env_info_protocol_version=ENV_INFO_PROTOCOL_VERSION,
     )
     return env_info
 
@@ -107,7 +114,8 @@ def obtain_env_info_in_a_separate_process(cfg: Config) -> EnvInfo:
         log.debug(f"Loading env info from cache: {cache_filename}")
         with open(cache_filename, "rb") as fobj:
             env_info = pickle.load(fobj)
-            return env_info
+            if env_info.env_info_protocol_version == ENV_INFO_PROTOCOL_VERSION:
+                return env_info
 
     sf_context = sf_global_context()
 

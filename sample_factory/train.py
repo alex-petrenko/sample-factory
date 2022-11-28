@@ -32,7 +32,7 @@ def run_rl(cfg: Config):
     cfg, runner = make_runner(cfg)
 
     # here we can register additional message or summary handlers
-    # see sf_examples/dmlab_examples/train_dmlab.py for example
+    # see sf_examples/dmlab/train_dmlab.py for example
 
     status = runner.init()
     if status == ExperimentStatus.SUCCESS:

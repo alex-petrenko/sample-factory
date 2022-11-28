@@ -5,16 +5,16 @@ or `pip install -e .[mujoco]` in the sample-factory directory.
 
 ## Running Experiments
 
-To run a single experiment, use the `sf_examples.mujoco_examples.train_mujoco` script. An example command is
-`python -m sf_examples.mujoco_examples.train_mujoco --algo=APPO --env=mujoco_ant --experiment=experiment_name`.
+To run a single experiment, use the `sf_examples.mujoco.train_mujoco` script. An example command is
+`python -m sf_examples.mujoco.train_mujoco --algo=APPO --env=mujoco_ant --experiment=experiment_name`.
 
-To run multiple experiments in parallel, use the runner script at `sf_examples.mujoco_examples.experiments.mujoco_all_envs`.
-An example command is `python -m sample_factory.runner.run --run=sf_examples.mujoco_examples.experiments.mujoco_all_envs --runner=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=test`
+To run multiple experiments in parallel, use the launcher script at `sf_examples.mujoco.experiments.mujoco_all_envs`.
+An example command is `python -m sample_factory.launcher.run --run=sf_examples.mujoco.experiments.mujoco_all_envs --backend=processes --max_parallel=4  --pause_between=1 --experiments_per_gpu=10000 --num_gpus=1 --experiment_suffix=test`
 
 ## Showing Experiment Results
 
-To display videos of experiments, use the `sf_examples.mujoco_examples.enjoy_mujoco` script. An example command is 
-`python -m sf_examples.mujoco_examples.enjoy_mujoco --env=mujoco_ant --algo=APPO --experiment=experiment_name`
+To display videos of experiments, use the `sf_examples.mujoco.enjoy_mujoco` script. An example command is 
+`python -m sf_examples.mujoco.enjoy_mujoco --env=mujoco_ant --algo=APPO --experiment=experiment_name`
 
 ## Supported MuJoCo environments
 
@@ -32,7 +32,7 @@ SF2 supports the following MuJoCo v4 environments:
 - mujoco_pusher
 - mujoco_swimmer
 
-More environments can be added in `sf_examples.mujoco_examples.mujoco.mujoco_utils`
+More environments can be added in `sf_examples.mujoco.mujoco_utils`
 
 ## Benchmark Results
 
