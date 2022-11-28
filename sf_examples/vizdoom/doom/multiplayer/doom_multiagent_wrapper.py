@@ -219,18 +219,12 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
         return self.default_reward_shaping
 
     def set_reward_shaping(self, reward_shaping: dict, agent_indices: Union[int, slice]):
-        if isinstance(agent_indices, slice):
-            for agent_idx in range(agent_indices.start, agent_indices.stop):
-                self.current_reward_shaping[agent_idx] = reward_shaping
-                self.set_env_attr(
-                    agent_idx,
-                    "unwrapped.reward_shaping_interface.reward_shaping_scheme",
-                    reward_shaping,
-                )
-        else:
-            self.current_reward_shaping[agent_indices] = reward_shaping
+        if isinstance(agent_indices, int):
+            agent_indices = slice(agent_indices, agent_indices + 1)
+        for agent_idx in range(agent_indices.start, agent_indices.stop):
+            self.current_reward_shaping[agent_idx] = reward_shaping
             self.set_env_attr(
-                agent_indices,
+                agent_idx,
                 "unwrapped.reward_shaping_interface.reward_shaping_scheme",
                 reward_shaping,
             )
@@ -370,17 +364,6 @@ class MultiAgentEnv(gym.Env, RewardShapingInterface):
             return obs_grid
         else:
             raise ValueError(f"{self.render_mode=} is not supported")
-
-        # render_multiagent = True
-        # if render_multiagent:
-        #     obs_display = [o["obs"] for o in self.last_obs]
-        #     obs_grid = concat_grid(obs_display)
-        #     cv2.imshow("vizdoom", obs_grid)
-        # else:
-        #     obs_display = self.last_obs[0]["obs"]
-        #     cv2.imshow("vizdoom", cvt_doom_obs(obs_display))
-
-        # cv2.waitKey(1)
 
     def close(self):
         if self.workers is not None:

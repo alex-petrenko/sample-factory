@@ -27,14 +27,16 @@ def run_test_env_multi(cfg: Config, eval_cfg: Config, **kwargs):
 
 class TestExampleMulti:
     @pytest.mark.parametrize("async_rl", [False, True])
-    @pytest.mark.parametrize("train_steps", [512])
-    def test_sanity(self, async_rl: bool, train_steps: int):
+    @pytest.mark.parametrize("train_steps", [1024])
+    @pytest.mark.parametrize("batched_sampling", [False, True])
+    def test_sanity(self, async_rl: bool, train_steps: int, batched_sampling: bool):
         cfg, eval_cfg = default_multi_cfg()
         cfg.async_rl = async_rl
         cfg.train_for_env_steps = train_steps
-        cfg.num_workers = 1
-        cfg.batch_size = 128
+        cfg.num_workers = 2
+        cfg.batch_size = 256
         cfg.serial_mode = True
+        cfg.batched_sampling = batched_sampling
 
         run_test_env_multi(
             cfg,
@@ -49,6 +51,7 @@ class TestExampleMulti:
         cfg.train_for_env_steps = 100000
         cfg.num_workers = 8
         cfg.batch_size = 512
+        cfg.batched_sampling = True
 
         run_test_env_multi(
             cfg,

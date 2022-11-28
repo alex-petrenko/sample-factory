@@ -185,11 +185,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                         finished_episode[agent_i] = True
                         rew = episode_reward[agent_i].item()
                         episode_rewards[agent_i].append(rew)
-                        # if cfg.use_record_episode_statistics:
-                        #     if "episode" in infos[agent_i].keys():
-                        #         reward_list.append(infos[agent_i]["episode"]["r"])
-                        # else:
-                        #     reward_list.append(rew)
 
                         true_objective = rew
                         if isinstance(infos, (list, tuple)):
@@ -211,7 +206,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                             # we want the scores from the full episode not a single agent death (due to EpisodicLifeEnv wrapper)
                             if "episode" in infos[agent_i].keys():
                                 num_episodes += 1
-                                reward_list.append(true_objective)
+                                reward_list.append(infos[agent_i]["episode"]["r"])
                         else:
                             num_episodes += 1
                             reward_list.append(true_objective)

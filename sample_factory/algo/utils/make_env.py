@@ -154,12 +154,12 @@ class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
             env = BatchedDictObservationsWrapper(env)
         if not is_multiagent_env(env):
             env = BatchedMultiAgentWrapper(env)
+        else:
+            env = BatchedListToDictWrapper(env)
+
         is_multiagent, num_agents = get_multiagent_info(env)
         self.is_multiagent: bool = is_multiagent
         self.num_agents: int = num_agents
-
-        if num_agents > 1:
-            env = BatchedListToDictWrapper(env)
 
         self._convert_obs_func: Dict[str, BatchedVecEnv.ConvertFunc] = dict()
         self._convert_rew_func = self._convert_terminated_func = self._convert_truncated_func = None
