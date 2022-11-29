@@ -30,7 +30,7 @@ The quadrotor environments have many unique parameters that can be found in `qua
 
 1. Comparison using a single drone between normalized (input and return normalization) and un-normalized experiments. Normalization helped the drones learn in around half the number of steps.
     - https://wandb.ai/andrewzhang505/sample_factory/reports/Quad-Swarm-RL--VmlldzoyMzU1ODQ1
-2. Experiments with 8 drones in scenarios with and without obstacles. All experiments used input and return normalization.
+2. Experiments with 8 drones in scenarios with and without obstacles. All experiments used input and return normalization. Research and development are still being done on multi-drone scenarios to reduce the number of collisions.
     - https://wandb.ai/andrewzhang505/sample_factory/reports/Quad-Swarm-RL-Multi-Drone--VmlldzoyNDkwNDQ0
 
 #### Models
@@ -47,13 +47,3 @@ Single drone with normalization flying between dynamic goals.
 
 <p align="center">
 <video class="w-full" src="https://huggingface.co/andrewzhang505/quad-swarm-single-drone-sf2/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
-
-8 drones flying to static different goals with no obstacles.
-
-<p align="center">
-<video class="w-full" src="https://huggingface.co/andrewzhang505/quad-swarm-rl-multi-drone-no-obstacles/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
-
-8 drones flying to static different goals with dynamic obstacles.
-
-<p align="center">
-<video class="w-full" src="https://huggingface.co/andrewzhang505/quad-swarm-rl-multi-drone-obstacles/resolve/main/replay.mp4" controls="" autoplay="" loop=""></video></p>
