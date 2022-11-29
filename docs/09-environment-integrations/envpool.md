@@ -10,7 +10,7 @@ pip install sample-factory[mujoco,envpool]
 ```
 
 ### Running Experiments
-[EnvPool](https://envpool.readthedocs.io/en/latest/) is a C++-based batched environment pool with pybind11 and thread pool. It has high performance (~1M raw FPS with Atari games, ~3M raw FPS with Mujoco simulator.
+[EnvPool](https://envpool.readthedocs.io/en/latest/) is a C++-based batched environment pool with pybind11 and thread pool. It has high performance (~1M raw FPS with Atari games, ~3M raw FPS with Mujoco simulator).
 
 We provide examples for envpool for Atari and Mujoco environments. The default parameters provide reasonable training speed, but can be tuning based on your machine configuration to achieve higher throughput.
 

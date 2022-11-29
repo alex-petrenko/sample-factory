@@ -95,7 +95,8 @@ class RunDescription:
 
 ## Using a launcher script
 
-The script above can be executed using one of the following backends.
+The script above can be executed using one of several backends.
+Additional backends are a welcome contribution! Please submit PRs :)
 
 ### "Local" backend (multiprocessing)
 

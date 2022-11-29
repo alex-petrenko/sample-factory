@@ -46,6 +46,15 @@ increase memory usage and policy lag. See example command lines below to find a 
 _Must be even_ for the double-buffered sampling to work. Disable double-buffered sampling by setting `--worker_num_splits=1`
 to use odd number of envs per worker (e.g. 1 env per worker). (Default: 2)
 
+## Evaluation script parameters
+
+Evaluation scripts (i.e. `sf_examples/atari/enjoy_atari.py`) use the same configuration parameters as training scripts
+for simplicity, although of course many of them are ignored as they don't affect evaluation.
+
+In addition to that, evaluation scripts provide additional parameters, see `add_eval_args()` in `sample_factory/cfg/cfg.py`.
+[HuggingFace Hub integration guide](../10-huggingface/huggingface.md) provides a good overview of the important parameters
+such as `--save_video`, check it out!
+
 ## Full list of parameters
 
 Please see the [Full Parameter Reference](cfg-params.md) auto-generated using the `--help`
