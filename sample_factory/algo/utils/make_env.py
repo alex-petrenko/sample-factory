@@ -17,7 +17,7 @@ from sample_factory.envs.env_utils import (
     find_training_info_interface,
     find_wrapper_interface,
 )
-from sample_factory.utils.dicts import dict_of_lists_append
+from sample_factory.utils.dicts import dict_of_lists_append, list_of_dicts_to_dict_of_lists
 from sample_factory.utils.typing import Config
 
 Actions = Any
@@ -130,6 +130,20 @@ class NonBatchedDictObservationsWrapper(_DictObservationsWrapper[ListOfDictObser
         return [dict(obs=o) for o in obs], rew, terminated, truncated, info
 
 
+class BatchedListToDictWrapper(Wrapper[DictOfListsObservations, Actions]):
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        if isinstance(obs, list):
+            return list_of_dicts_to_dict_of_lists(obs), info
+        return obs, info
+
+    def step(self, action):
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        if isinstance(obs, list):
+            return list_of_dicts_to_dict_of_lists(obs), rew, terminated, truncated, info
+        return obs, rew, terminated, truncated, info
+
+
 class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
     """Ensures that the env returns a dictionary of tensors for observations, and tensors for rewards and dones."""
 
@@ -140,6 +154,9 @@ class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
             env = BatchedDictObservationsWrapper(env)
         if not is_multiagent_env(env):
             env = BatchedMultiAgentWrapper(env)
+        else:
+            env = BatchedListToDictWrapper(env)
+
         is_multiagent, num_agents = get_multiagent_info(env)
         self.is_multiagent: bool = is_multiagent
         self.num_agents: int = num_agents

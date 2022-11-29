@@ -113,7 +113,10 @@ class CustomMultiEnv(gym.Env, TrainingInfoInterface, RewardShapingInterface):
         return self.reward_shaping[0]
 
     def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_idx: int | slice) -> None:
-        self.reward_shaping[agent_idx] = reward_shaping
+        if isinstance(agent_idx, int):
+            agent_idx = slice(agent_idx, agent_idx + 1)
+        for idx in range(agent_idx.start, agent_idx.stop):
+            self.reward_shaping[idx] = reward_shaping
 
     def render(self):
         pass

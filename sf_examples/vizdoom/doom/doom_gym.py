@@ -633,7 +633,7 @@ class VizdoomEnv(gym.Env):
 
                 for frame in range(skip_frames):
                     doom._actions_flattened = actions
-                    _, rew, _, _ = env.step(actions)
+                    _, rew, _, _, _ = env.step(actions)
 
                     new_total_rew = total_rew + rew
                     if new_total_rew != total_rew:

@@ -41,9 +41,10 @@ def add_doom_env_eval_args(parser):
     """Arguments used only during evaluation."""
     parser.add_argument(
         "--record_to",
-        default=join(os.getcwd(), "..", "recs"),
+        # default=join(os.getcwd(), "..", "recs"),
+        default=None,
         type=str,
-        help="Record episodes to this folder.",
+        help="Record episodes to this folder. This records a demo that can be replayed at full resolution. Currently, this does not work for bot environments so it is recommended to use --save_video to record episodes at lower resolution instead for such environments",
     )
 
 
@@ -60,6 +61,7 @@ def doom_override_defaults(parser):
         env_frameskip=4,
         eval_env_frameskip=1,  # this is for smoother rendering during evaluation
         fps=35,  # for evaluation only
+        heartbeat_reporting_interval=600,
     )
 
 
