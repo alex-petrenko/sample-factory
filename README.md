@@ -118,7 +118,7 @@ testing and evaluating the library and for adopting it in his own research.
 * [Edward Beeching](https://edbeeching.github.io/) for his numerous awesome contributions to the codebase, including
 hybrid action distributions, new version of the custom model builder, multiple environment integrations, and also
 for promoting the library through the HuggingFace integration!
-* Andrew Zhang and Ming Wang for numerous contributions to the codebase and documentation during their HuggingFace internships!
+* Andrew Zhang and [Ming Wang](https://www.mingwang.me/) for numerous contributions to the codebase and documentation during their HuggingFace internships!
 * [Thomas Wolf](https://thomwolf.io/) and others at HuggingFace for the incredible (and unexpected) support and for the amazing
 work they are doing for the open-source community.
 * [Erik Wijmans](https://wijmans.xyz/) for feedback and insights and for his awesome implementation of RNN backprop using PyTorch's `PackedSequence`, multi-layer RNNs, and other features!
