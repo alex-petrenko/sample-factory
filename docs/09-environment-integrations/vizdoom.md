@@ -8,7 +8,7 @@ after which the latest VizDoom can be installed from PyPI:
 
 ### Running Experiments
 
-Run MuJoCo experiments with the scripts in `sf_examples.vizdoom`. 
+Run experiments with the scripts in `sf_examples.vizdoom`.
 
 Train for 4B env steps (also can be stopped at any time with Ctrl+C and resumed by using the same cmd).
 This is more or less optimal training setup for a 10-core machine.

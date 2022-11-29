@@ -32,7 +32,7 @@ High-throughput reinforcement learning codebase.
 Sample Factory is one of the fastest RL libraries.
 We focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
 
-Sample Factory is thoroughly tested, used by a number of researchers and practitioners, and is actively maintained.
+Sample Factory is thoroughly tested, used by many researchers and practitioners, and is actively maintained.
 Our implementation is known to reach SOTA performance in a variety of domains in a short amount of time.
 Clips below demonstrate ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 
@@ -104,6 +104,35 @@ tensorboard --logdir=./train_dir
 
 To continue from here, copy and modify one of the existing env integrations to train agents in your own custom environment. We provide
 examples for all kinds of supported environments, please refer to the [documentation](https://samplefactory.dev) for more details.
+
+## Acknowledgements
+
+This project would not be possible without amazing contributions from many people. I would like to thank:
+
+* [Vladlen Koltun](https://vladlen.info) for amazing guidance and support, especially in the early stages of the project, for
+helping me solidify the ideas that eventually became this library.
+* My academic advisor [Gaurav Sukhatme](https://viterbi.usc.edu/directory/faculty/Sukhatme/Gaurav) for supporting this project
+over the years of my PhD and for being overall an awesome mentor.
+* [Zhehui Huang](https://zhehui-huang.github.io/) for his contributions to the original ICML submission, his diligent work on
+testing and evaluating the library and for adopting it in his own research.
+* [Edward Beeching](https://edbeeching.github.io/) for his numerous awesome contributions to the codebase, including
+hybrid action distributions, new version of the custom model builder, multiple environment integrations, and also
+for promoting the library through the HuggingFace integration!
+* Andrew Zhang and Ming Wang for numerous contributions to the codebase and documentation during their HuggingFace internships!
+* [Thomas Wolf](https://thomwolf.io/) and others at HuggingFace for the incredible (and unexpected) support and for the amazing
+work they are doing for the open-source community.
+* [Erik Wijmans](https://wijmans.xyz/) for feedback and insights and for his awesome implementation of RNN backprop using PyTorch's `PackedSequence`, multi-layer RNNs, and other features!
+* [Tushar Kumar](https://www.linkedin.com/in/tushartk/) for contributing to the original paper and for his help
+with the [fast queue implementation](https://github.com/alex-petrenko/faster-fifo).
+* [Costa Huang](https://costa.sh/) for developing CleanRL, for his work on benchmarking RL algorithms, and for awesome feedback
+and insights!
+* [Denys Makoviichuk](https://github.com/Denys88/rl_games) for developing rl_games, a very fast RL library, for inspiration and 
+feedback on numerous features of this library (such as return normalizations, adaptive learning rate, and others).
+* [Eugene Vinitsky](https://eugenevinitsky.github.io/) for adopting this library in his own research and for his valuable feedback.
+* All my labmates at RESL who used Sample Factory in their projects and provided feedback and insights!
+
+Huge thanks to all the people who are not mentioned here for your code contributions, PRs, issues, and questions!
+This project would not be possible without a community!
 
 ## Citation
 

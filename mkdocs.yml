@@ -137,12 +137,14 @@ nav:
       - 05-monitoring/tensorboard.md
       - 05-monitoring/wandb.md
       - 05-monitoring/custom-metrics.md
+      - 05-monitoring/metrics-reference.md
   - Advanced Topics:
     - 06-pbt/pbt.md
     - Performance Optimization:
       - 07-advanced-topics/profiling.md
   - Miscellaneous:
     - 08-miscellaneous/tests.md
+    - 08-miscellaneous/v1-to-v2.md
   - Environment Integrations:
     - 09-environment-integrations/mujoco.md
     - 09-environment-integrations/atari.md

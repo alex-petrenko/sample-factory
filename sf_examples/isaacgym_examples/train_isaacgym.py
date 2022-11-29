@@ -1,7 +1,5 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # isort: off
-from typing import List, Tuple, Dict, Optional
-
 # noinspection PyUnresolvedReferences
 import isaacgym
 
@@ -10,6 +8,7 @@ import isaacgym
 import os
 import sys
 from os.path import join
+from typing import Dict, List, Optional, Tuple
 
 import gym
 import torch
@@ -241,12 +240,10 @@ env_configs = dict(
         encoder_mlp_layers=[512, 256, 128],
         gamma=0.99,
         rollout=16,
-        recurrence=16,
-        use_rnn=False,
         learning_rate=5e-3,
         lr_schedule_kl_threshold=0.02,
         reward_scale=0.01,
-        num_epochs=5,
+        num_epochs=4,
         max_grad_norm=1.0,
         num_batches_per_epoch=8,
     ),

@@ -5,12 +5,13 @@
 Sample Factory is an open source project, so all contributions and suggestions are welcome.
 
 You can contribute in many different ways: giving ideas, answering questions, reporting bugs, proposing enhancements, 
-improving the documentation, fixing bugs,...
+improving the documentation, fixing bugs.
 
-Many thanks in advance to every contributor.
+Many thanks in advance to every contributor!
 
 
 ## How to work on an open Issue?
+
 You have the list of open Issues at: https://github.com/alex-petrenko/sample-factory/issues
 
 Some of them may have the label `help wanted`: that means that any contributor is welcomed!
@@ -91,3 +92,5 @@ If you would like to work on any of the open Issues:
    ```
 
 9. Once you are satisfied, go the webpage of your fork on GitHub. Click on "Pull request" to send your to the project maintainers for review.
+
+See also [additional notes](doc-contribution.md) on how to contribute to the documentation website.

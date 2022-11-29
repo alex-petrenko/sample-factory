@@ -1,5 +1,3 @@
-import logging
-import multiprocessing
 from typing import Optional
 
 from sample_factory.utils.utils import log

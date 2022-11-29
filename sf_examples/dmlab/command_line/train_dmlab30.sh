@@ -5,7 +5,7 @@ python -m sf.algorithms.appo.train_appo \
 --dmlab_renderer=software \
 --decorrelate_experience_max_seconds=60 \
 --reset_timeout_seconds=300 \
---encoder_custom=dmlab_instructions --encoder_type=resnet --encoder_subtype=resnet_impala --encoder_extra_fc_layers=1 --hidden_size=256 --nonlinearity=relu --rnn_type=lstm \
+--encoder_custom=dmlab_instructions --encoder_type=resnet --encoder_subtype=resnet_impala --hidden_size=256 --nonlinearity=relu --rnn_type=lstm \
 --dmlab_extended_action_set=True \
 --num_policies=1 --with_pbt=False \
 --experiment=dmlab_30_resnet_v83
