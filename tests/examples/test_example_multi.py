@@ -51,7 +51,7 @@ class TestExampleMulti:
         cfg.train_for_env_steps = 100000
         cfg.num_workers = 8
         cfg.batch_size = 512
-        cfg.batched_sampling = True
+        cfg.batched_sampling = False
 
         run_test_env_multi(
             cfg,

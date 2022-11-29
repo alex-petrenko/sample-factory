@@ -44,7 +44,7 @@ def add_doom_env_eval_args(parser):
         # default=join(os.getcwd(), "..", "recs"),
         default=None,
         type=str,
-        help="Record episodes to this folder. This records a demo that can be replayed at full resolution. Currently, this does not work for bot environments so it is recommended to use --save_video to record episodes at lower resolution instead of such environments",
+        help="Record episodes to this folder. This records a demo that can be replayed at full resolution. Currently, this does not work for bot environments so it is recommended to use --save_video to record episodes at lower resolution instead for such environments",
     )
 
 
