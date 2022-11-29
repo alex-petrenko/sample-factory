@@ -1,7 +1,5 @@
 # this is here just to guarantee that isaacgym is imported before PyTorch
 # isort: off
-from typing import List, Tuple, Dict, Optional
-
 # noinspection PyUnresolvedReferences
 import isaacgym
 
@@ -10,6 +8,7 @@ import isaacgym
 import os
 import sys
 from os.path import join
+from typing import Dict, List, Optional, Tuple
 
 import gym
 import torch
