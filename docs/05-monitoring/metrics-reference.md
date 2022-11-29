@@ -45,7 +45,7 @@ if the trajectories were too stale and exceeded `--max_policy_lag`.
 By default this section only contains the `true_objective` metrics: `policy_stats/avg_true_objective`, 
 `policy_stats/avg_true_objective_max`, `policy_stats/avg_true_objective_min`.
 This will reflect the `true_objective` value if the environment returns one in the `info` dictionary
-(see [PBT](../06-pbt/pbt.md) for more details).
+(see [PBT](../07-advanced-topics/pbt.md) for more details).
 
 If `true_objective` is not specified these metrics should be equal to the scalar environment reward.
 

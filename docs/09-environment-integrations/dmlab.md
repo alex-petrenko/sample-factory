@@ -1,6 +1,7 @@
 # DeepMind Lab
 <img src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/dmlab.gif" width="800" alt="DMLab-30 agents traned using Sample Factory 2.0">
-### Installation
+
+## Installation
 
 Installation DeepMind Lab can be time consuming. If you are on a Linux system, we provide a prebuilt [wheel](https://drive.google.com/file/d/1hAKAkl85HE8JsHXfXbdkF0CrLdiGyuoL/view?usp=sharing).
 
@@ -12,7 +13,7 @@ Installation DeepMind Lab can be time consuming. If you are on a Linux system, w
 of pre-generated environment layouts (see paper for details).
 Command lines for running experiments with these datasets are provided in the sections below.
 
-### Running Experiments
+## Running Experiments
 
 Run DMLab experiments with the scripts in `sf_examples.dmlab`. 
 
@@ -30,8 +31,7 @@ python -m sf_examples.dmlab.train_dmlab --env=dmlab_30 --train_for_env_steps=100
 ```
 
 
-
-### Models
+## Models
 The models below are the best models from the input normalization experiment above. The evaluation metrics here are obtained by running the experiment 10 times with different seeds.  
 
 | DMLab Command Line Parameter | DMLab Environment name | Model Checkpooints                                                           |

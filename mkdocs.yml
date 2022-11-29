@@ -139,7 +139,9 @@ nav:
       - 05-monitoring/custom-metrics.md
       - 05-monitoring/metrics-reference.md
   - Advanced Topics:
-    - 06-pbt/pbt.md
+    - 07-advanced-topics/inactive-agents.md
+    - 07-advanced-topics/multi-policy-training.md
+    - 07-advanced-topics/pbt.md
     - 07-advanced-topics/passing-info.md
     - 07-advanced-topics/observer.md
     - Performance Optimization:
