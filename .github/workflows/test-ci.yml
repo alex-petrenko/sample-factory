@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - sf2
+    - sf2-small-fix
   pull_request:
     branches:
     - master
@@ -41,11 +42,11 @@ jobs:
       with:
         timeout_minutes: 10
         max_attempts: 5
-        command: pytest -s tests/test_precheck.py
+        command: pytest -s tests/test_precheck.py | pytest -s tests/algo/test_pbt.py
     - name: Run tests
       run: |
         # run all tests
-        pytest -s
+        pytest -s -k "not torch_tensor_share"
 
   run-tests-mac:
     strategy:
@@ -77,8 +78,8 @@ jobs:
       with:
         timeout_minutes: 10
         max_attempts: 5
-        command: pytest -s tests/test_precheck.py
+        command: pytest -s tests/test_precheck.py  | pytest -s tests/algo/test_pbt.py
     - name: Run tests
       run: |
         # run all tests
-        pytest -s
+        pytest -s -k "not torch_tensor_share"
