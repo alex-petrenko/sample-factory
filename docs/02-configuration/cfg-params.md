@@ -441,10 +441,10 @@ optional arguments:
   --heartbeat_interval HEARTBEAT_INTERVAL
                         How often in seconds components send a heartbeat
                         signal to the runner to verify they are not stuck
-                        (default: 10)
+                        (default: 20)
   --heartbeat_reporting_interval HEARTBEAT_REPORTING_INTERVAL
                         How often in seconds the runner checks for heartbeats
-                        (default: 60)
+                        (default: 180)
   --train_for_env_steps TRAIN_FOR_ENV_STEPS
                         Stop after all policies are trained for this many env
                         steps (default: 10000000000)

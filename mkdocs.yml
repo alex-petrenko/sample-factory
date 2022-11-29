@@ -140,6 +140,8 @@ nav:
       - 05-monitoring/metrics-reference.md
   - Advanced Topics:
     - 06-pbt/pbt.md
+    - 07-advanced-topics/passing-info.md
+    - 07-advanced-topics/observer.md
     - Performance Optimization:
       - 07-advanced-topics/profiling.md
   - Miscellaneous:
