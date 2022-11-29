@@ -2,8 +2,6 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from tests.examples.test_example_multi import default_multi_cfg, run_test_env_multi
-
 
 def subp(q, test_idx_: int):
     t = q.get()
