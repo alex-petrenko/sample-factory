@@ -138,6 +138,8 @@ nav:
       - 05-monitoring/wandb.md
       - 05-monitoring/custom-metrics.md
       - 05-monitoring/metrics-reference.md
+  - Architecture:
+    - 06-architecture/overview.md
   - Advanced Topics:
     - 07-advanced-topics/inactive-agents.md
     - 07-advanced-topics/multi-policy-training.md
