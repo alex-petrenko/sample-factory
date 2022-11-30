@@ -9,7 +9,7 @@ Install IsaacGymEnvs from https://github.com/NVIDIA-Omniverse/IsaacGymEnvs.
 
 ### Running Experiments
 
-Run IsaacGym experiments using scripts from the `sf_examples.isaacgym_examples` folder. Currently, we support the Ant, Humanoid, and AllegroHand environments out of the box, and more environments can be added in `train_isaacgym.py`.
+Run IsaacGym experiments using scripts from the `sf_examples.isaacgym_examples` folder. Currently, we support the AllegroHand, Ant, Anymal, AnymalTerrain, BallBalance, Cartpole , Humanoid, and ShadowHand  environments out of the box, and more environments can be added in `train_isaacgym.py`.
 
 To run an experiment in the Ant environment:
 ```
@@ -33,11 +33,11 @@ python -m sample_factory.launcher.run --run=sf_examples.isaacgym_examples.experi
 
 #### Models
 
-| Environment               | HuggingFace Hub Models                                                       | Evaluation Metrics  |
-| ------------------------- | ---------------------------------------------------------------------------- | ------------------- |
-| Ant                       | https://huggingface.co/andrewzhang505/isaacgym_ant                           | 11830.10 +/- 875.26 |
-| Humanoid                  | https://huggingface.co/andrewzhang505/isaacgym_humanoid                      | 8839.07 +/- 407.26  |
-| AllegroHand               | https://huggingface.co/andrewzhang505/isaacgym_allegrohand                   | 3608.18 +/- 1062.94 |
+| Environment | HuggingFace Hub Models                                     | Evaluation Metrics  |
+| ----------- | ---------------------------------------------------------- | ------------------- |
+| Ant         | https://huggingface.co/andrewzhang505/isaacgym_ant         | 11830.10 +/- 875.26 |
+| Humanoid    | https://huggingface.co/andrewzhang505/isaacgym_humanoid    | 8839.07 +/- 407.26  |
+| AllegroHand | https://huggingface.co/andrewzhang505/isaacgym_allegrohand | 3608.18 +/- 1062.94 |
 
 #### Videos
 
