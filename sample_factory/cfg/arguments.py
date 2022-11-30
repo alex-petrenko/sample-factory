@@ -18,7 +18,7 @@ from sample_factory.cfg.cfg import (
 )
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import cfg_file, get_git_commit_hash, log
+from sample_factory.utils.utils import cfg_file, get_git_commit_hash, get_top_level_script, log
 
 
 def parse_sf_args(
@@ -91,6 +91,7 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
 
     args.cli_args = vars(cli_args)
     args.git_hash, args.git_repo_name = get_git_commit_hash()
+    args.train_script = get_top_level_script()
     return args
 
 
