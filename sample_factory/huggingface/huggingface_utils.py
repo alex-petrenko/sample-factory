@@ -50,7 +50,7 @@ def generate_model_card(
 A(n) **{algo}** model trained on the **{env}** environment.\n
 This model was trained using Sample-Factory 2.0: https://github.com/alex-petrenko/sample-factory.
 Documentation for how to use Sample-Factory can be found at https://www.samplefactory.dev/\n\n
-**Downloading the model**\n
+## Downloading the model\n
 After installing Sample-Factory, download the model with:
 ```
 python -m sample_factory.huggingface.load_from_hub -r {repo_id}
@@ -59,7 +59,7 @@ python -m sample_factory.huggingface.load_from_hub -r {repo_id}
 
     if enjoy_name is not None:
         readme += f"""
-**Using the model**\n
+## Using the model\n
 To run the model after download, use the `enjoy` script corresponding to this environment:
 ```
 python -m {enjoy_name} --algo={algo} --env={env} --train_dir=./train_dir --experiment={repo_name}
@@ -71,7 +71,7 @@ See https://www.samplefactory.dev/10-huggingface/huggingface/ for more details
 
     if train_name is not None:
         readme += f"""
-**Training with this model**\n
+## Training with this model\n
 To continue training with this model, use the `train` script corresponding to this environment:
 ```
 python -m {train_name} --algo={algo} --env={env} --train_dir=./train_dir --experiment={repo_name} --restart_behavior=resume --train_for_env_steps=10000000000
