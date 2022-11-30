@@ -43,7 +43,7 @@ Hugging Face repositories can be downloaded directly using `git clone`:
 git clone <URL of Hugging Face Repo>
 ```
 
-#### Using Downloaded Models with Sample-Factory
+#### Using Downloaded Models with Sample Factory
 
 After downloading the model, you can run the models in the repo with the enjoy script corresponding to your environment. For example, if you are downloading a `mujoco-ant` model, it can be run with:
 

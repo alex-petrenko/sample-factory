@@ -2,7 +2,7 @@
 <video width="800" controls autoplay><source src="https://huggingface.co/datasets/edbeeching/sample_factory_videos/resolve/main/mujoco_grid_9.mp4" type="video/mp4"></video>
 ### Installation
 
-Install Sample-Factory with MuJoCo dependencies with PyPI:
+Install Sample Factory with MuJoCo dependencies with PyPI:
 
 ```
 pip install sample-factory[mujoco]
@@ -34,8 +34,8 @@ python -m sample_factory.launcher.run --run=sf_examples.mujoco.experiments.mujoc
 
 Specify the environment to run with the `--env` command line parameter. The following MuJoCo v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.mujoco.mujoco.mujoco_utils`
 
-| MuJoCo Environment Name   | Sample-Factory Command Line Parameter |
-| ------------------------- | ------------------------------------- |
+| MuJoCo Environment Name   | Sample Factory Command Line Parameter |
+| ------------------------- |---------------------------------------|
 | Ant-v4                    | mujoco_ant                            |
 | HalfCheetah-v4            | mujoco_halfcheetah                    |
 | Hopper-v4                 | mujoco_hopper                         |
@@ -51,13 +51,13 @@ Specify the environment to run with the `--env` command line parameter. The foll
 
 #### Reports
 
-1. Sample-Factory was benchmarked on MuJoCo against CleanRL. Sample-Factory was able to achieve similar sample efficiency as CleanRL using the same parameters.
+1. Sample Factory was benchmarked on MuJoCo against CleanRL. Sample-Factory was able to achieve similar sample efficiency as CleanRL using the same parameters.
     - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-w-o-EnvPool--VmlldzoyMjMyMTQ0
 
-2. Sample-Factory can run experiments synchronously or asynchronously, with asynchronous execution usually having worse sample efficiency but runs faster. MuJoCo's environments were compared using the two modes in Sample-Factory
+2. Sample Factory can run experiments synchronously or asynchronously, with asynchronous execution usually having worse sample efficiency but runs faster. MuJoCo's environments were compared using the two modes in Sample-Factory
     - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Synchronous-vs-Asynchronous--VmlldzoyMzEzNDUz
 
-3. Sample-Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL
+3. Sample Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL
     - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-Wall-Time--VmlldzoyMzg2MDA3
 
 #### Models

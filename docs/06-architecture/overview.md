@@ -5,7 +5,7 @@ RL system requires a rather sophisticated architecture. This document describes 
 
 The following diagram shows the main components of the system and the data flow between them. Please see sections below for more details.
 
-<img src="https://github.com/alex-petrenko/sf_assets/blob/main/docs/arch/arch_diag.png?raw=true" alt="Architecture Diagram">
+<img src="https://github.com/alex-petrenko/sf_assets/blob/main/docs/arch/arch_diag.png?raw=true" alt="Architecture Diagram" width="1280">
 
 ## High-level design
 
@@ -13,7 +13,7 @@ At the core of Sample Factory structure is the idea that RL training can be spli
 each one of them focusing on a specific task. This enables a modular design where these components can be
 accelerated/parallelized independently, allowing us to achieve the maximum performance on any RL task.
 
-Components interact asynchronously by sending and receving messages (signals, see a dedicated section on message passing).
+Components interact asynchronously by sending and receving messages (aka signals, see a [dedicated section on message passing](06-architecture/message-passing.md)).
 Typically separate components live on different event loops in different processes, although the system is agnostic of
 whether this is true and it is thus possible to run multiple (or even all components) on a single event loop in a single process. 
 
@@ -78,11 +78,11 @@ Trajectory datasets flow in and updated parameters flow out.
 ## Terminology
 
 * **rollout** or **trajectory** is a sequence of observations, actions, rewards, etc. produced by a single agent.
-* **dataset** (or sometimes just **batch**) is a collection of trajectories produced by >=1 agents.
+* **dataset** (or **training batch** or sometimes just **batch**) is a collection of trajectories produced by >=1 agents.
 * Datasets are split into **minibatches** and >=1 **epochs** of SGD are performed.
 Minibatch size is determined by `--batch_size` and number of epochs is determined by `--num_epochs`. Dataset size is
 `batch_size * num_batches_per_epoch`, and in total `batch_size * num_batches_per_epoch * num_epochs` SGD steps are performed
 on each dataset (sorry for the obvious confusion between "batch" and "minibatch" terms, the parameter names are kept largely for legacy reasons).
 * **signals** are messages sent between components. Signals are connected to slots, which are functions that are called
-when a signal is received. This mechanism is inspired by Qt's signals and slots (see the dedicated section on message passing).
+when a signal is received. This mechanism is inspired by Qt's signals and slots (see the [dedicated section on message passing](06-architecture/message-passing.md)).
 * **shared memory buffers** are PyTorch tensors shared between processes, created with `share_memory_()` method.

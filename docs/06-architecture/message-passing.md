@@ -28,10 +28,17 @@ it will fail at runtime. This can also be used to your advantage by allowing to 
 payload with appropriate runtime checks.
 * Signals can be connected to slots only before the processes are spawned, i.e. only during system initialization.
 This is mostly done by the `Runner` in `connect_components()`.
-* Signal-slot mechanism in the current implementation can represent one-to-one, one-to-many, and many-to-many connections,
-but not many-to-one. This is because by design each EventLoop has its own corresponding event queue.
-For many-to-one connections we use queues explicitly, e.g. RolloutWorkers explicitly push requests for new actions
-into queues corresponding to a policy that controls the agent, and this queue can be processed by multiple InferenceWorkers:
+* * There's not argument validation for signals and slots. If you connect a slot to a signal with a different signature,
+it will fail at runtime. This can also be used to your advantage by allowing to propagate arbitrary data as
+payload with appropriate runtime checks.
+* It is currently impossible to connect a slot to a signal if emitter and receiver objects belong to event loops
+already running in different processes (although it should be possible to implement this feature).
+Connect signals to slots during system initialization.
+* Signal-slot mechanism in the current implementation can't implement a message passing protocol where
+only a single copy of the signal is received by the subscribers. Signals are always delivered to all connected slots.
+Use a FIFO multiprocessing queue if you want only one receiver to receive the signal.
+For example, RolloutWorkers explicitly push requests for new actions
+into queues corresponding to a policy that controls the agent, and this queue can be processed by any of the multiple InferenceWorkers:
 `inference_queues[policy_id].put(policy_request)`
 
 Please see https://github.com/alex-petrenko/signal-slot for more information.

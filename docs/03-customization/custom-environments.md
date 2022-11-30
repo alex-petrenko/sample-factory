@@ -74,7 +74,7 @@ if __name__ == "__main__":
 ```
 
 Training can now be started with `python train_custom_env.py --env=custom_env_name --experiment=CustomEnv`. Note that this train script
-can be defined in your own codebase, or in the sample-factory codebase (in case you forked the repo).
+can be defined in your own codebase, or in the Sample Factory codebase (in case you forked the repo).
 
 ### Environment factory function parameters
 

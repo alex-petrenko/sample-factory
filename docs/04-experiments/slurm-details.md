@@ -18,7 +18,7 @@ Install Miniconda:
 
 Make new conda environment `conda create --name sf2` then `conda activate sf2`
 
-Download Sample-Factory and install dependencies for Sample-Factory
+Download Sample Factory and install dependencies for Sample-Factory
 ```
 git clone https://github.com/alex-petrenko/sample-factory.git
 cd sample-factory
@@ -27,9 +27,9 @@ pip install -e .
 # install additional env dependencies here
 ```
 
-## Necessary scripts in Sample-Factory
+## Necessary scripts in Sample Factory
 
-To run a custom launcher script for Sample-Factory on slurm, you may need to write your own slurm_sbatch_template and/or launcher script.
+To run a custom launcher script for Sample Factory on slurm, you may need to write your own slurm_sbatch_template and/or launcher script.
 
 slurm_sbatch_template is a bash script that run by slurm before your python script. It includes commands to activate your conda environment etc. See an example at `./sample_factory/launcher/slurm/sbatch_timeout.sh`. Variables in the bash script can be added in `sample_factory.launcher.run_slurm`.
 

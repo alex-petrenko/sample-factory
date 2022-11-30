@@ -51,7 +51,7 @@ theme:
     - search.highlight
 
 # Copyright
-copyright: Copyright &copy; 2022, Sample-Factory. All rights reserved.
+copyright: Copyright &copy; 2022, Sample Factory. All rights reserved.
 
 # Plugins
 plugins:
@@ -71,7 +71,7 @@ extra:
     - icon: fontawesome/brands/linkedin
       link: https://www.linkedin.com/in/apetrenko-nn/
     - icon: fontawesome/brands/twitter
-      link: https://twitter.com/apetrenko_nn
+      link: https://twitter.com/petrenko_ai
     - icon: fontawesome/solid/user
       link: https://alex-petrenko.github.io/
 
@@ -140,7 +140,13 @@ nav:
       - 05-monitoring/metrics-reference.md
   - Architecture:
     - 06-architecture/overview.md
+    - 06-architecture/message-passing.md
   - Advanced Topics:
+    - 07-advanced-topics/sync-async.md
+    - 07-advanced-topics/double-buffered.md
+    - 07-advanced-topics/batched-non-batched.md
+    - 07-advanced-topics/serial-mode.md
+    - 07-advanced-topics/normalizations.md
     - 07-advanced-topics/inactive-agents.md
     - 07-advanced-topics/multi-policy-training.md
     - 07-advanced-topics/pbt.md

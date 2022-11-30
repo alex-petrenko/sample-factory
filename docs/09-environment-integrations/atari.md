@@ -3,7 +3,7 @@
 
 ### Installation
 
-Install Sample-Factory with Atari dependencies with PyPI:
+Install Sample Factory with Atari dependencies with PyPI:
 
 ```
 pip install sample-factory[atari]
@@ -103,5 +103,5 @@ Various APPO models trained on Atari environments are uploaded to the HuggingFac
 
 ### Reports
 
-- Sample-Factory was benchmarked on Atari against CleanRL and Baselines. Sample-Factory was able to achieve similar sample efficiency as CleanRL and Baselines using the same parameters.
+- Sample Factory was benchmarked on Atari against CleanRL and Baselines. Sample Factory was able to achieve similar sample efficiency as CleanRL and Baselines using the same parameters.
     - https://wandb.ai/wmfrank/atari-benchmark/reports/Atari-Sample-Factory2-Baselines-CleanRL--VmlldzoyMzEyNjIw
