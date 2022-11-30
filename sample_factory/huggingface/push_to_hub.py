@@ -22,7 +22,7 @@ def main():
         json_params = json.load(json_file)
         cfg = AttrDict(json_params)
 
-    generate_model_card(args.experiment_dir, cfg.algo, cfg.env)
+    generate_model_card(args.experiment_dir, cfg.algo, cfg.env, args.hf_repository)
     push_to_hf(args.experiment_dir, args.hf_repository, cfg.num_policies)
 
 
