@@ -15,7 +15,7 @@ environments as multi-agent,
 i.e. single-agent environments are automatically treated as multi-agent environments with one agent with the use of a wrapper.
 
 In rare cases we may deal with an environment that should not be additionally wrapped, i.e. a single-agent version
-of a multi-agent env may already return lists of lenght 1. In this case, your environment should define a member variable
+of a multi-agent env may already return lists of length 1. In this case, your environment should define a member variable
 `is_multiagent=True`, and Sample Factory will not wrap it.
 
 ## Examples

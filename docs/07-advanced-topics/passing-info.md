@@ -40,6 +40,6 @@ you can actually do it without knowing anything about the outer training loop.
 
 An alternative approach is to implement curriculum based on the agent's performance in the current environment instance,
 i.e. by averaging episodic statistics over the last N episodes. This way the resulting curriculum is more smooth and stochastic,
-which can actuall create more robust policies, since different environment instances can be at different levels of difficulty and
+which can actually create more robust policies, since different environment instances can be at different levels of difficulty and
 thus produce more diverse data.
 We used this approach to train our agents against bots in the [original Sample Factory paper](https://arxiv.org/abs/2006.11751).

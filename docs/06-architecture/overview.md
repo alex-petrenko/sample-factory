@@ -31,16 +31,16 @@ These are the main components of Sample Factory:
 
 * **Rollout Workers** are responsible for environment simulation. Rollout workers receive actions from the policy,
 do environment `step()` and produce observations after each step and full trajectories after `--rollout` steps.
-* **Inference Workers** receive observations and hidden states and produce actions. Policy on each inference worker
+* **Inference Workers** receive observations and hidden states and produce actions. The policy on each inference worker
 is updated after each SGD step on the learner.
 * **Batcher** receives trajectories from rollout workers, puts them together and produces datasets of data for the learner.
 * **Learner** gets batches of data from the batcher, splits them into minibatches and does `--num_epochs` of
 stochastic gradient descent. After each SGD step the updated weights are written to shared memory buffers and the corresponding
 signal is broadcasted.
-* **Runner** is a component that bootstaps the whole system, receives all sorts of statistics from other components and
+* **Runner** is a component that bootstraps the whole system, receives all sorts of statistics from other components and
 takes care of logging and summary writing.
 
-**Sampler**, although technically its own component that can send and receive signals, in the typical configuration
+* **Sampler**, although technically its own component that can send and receive signals, in the typical configuration
 is nothing more than a thin wrapper around Rollout/Inference workers and serves as an interface to the rest of the system.
 (Although this interface allows us to create alternative samplers i.e. single-process synchronous JAX-optimized sampler is an idea)
 
