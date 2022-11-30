@@ -1,6 +1,6 @@
 # Observer Interface
 
-Sample Factory version 2 introduces a new feature: you can wrap RL algorithm with a custom `Observer` object
+Sample Factory version 2 introduces a new feature: you can wrap the RL algorithm with a custom `Observer` object
 which allows you to interact with the RL training process in an arbitrary way.
 
 ## `AlgoObserver`

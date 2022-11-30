@@ -28,5 +28,6 @@ To run Sample Factory with one of the available environment integrations, please
 - [Megaverse](../09-environment-integrations/megaverse.md)
 - [Envpool](../09-environment-integrations/envpool.md)
 - [Isaac Gym](../09-environment-integrations/isaacgym.md)
+- [Quad-Swarm-RL](../09-environment-integrations/swarm-rl.md)
 
 Sample Factory allows users to easily add custom environments and models, refer to [Customizing Sample Factory](../03-customization/custom-environments.md) for more information.

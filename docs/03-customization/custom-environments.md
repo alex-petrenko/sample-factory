@@ -3,7 +3,7 @@
 Training agents in your own environment with sample-factory is straightforward,
 but if you get stuck feel free to raise an issue on our [GitHub Page](https://github.com/alex-petrenko/sample-factory/issues).
 
-We recommend look at our example environment integrations such as [Atari](../09-environment-integrations/atari.md)
+We recommend looking at our example environment integrations such as [Atari](../09-environment-integrations/atari.md)
 or [ViZDoom](../09-environment-integrations/vizdoom.md) before using your own environment.
 
 ## Custom environment template
@@ -16,7 +16,7 @@ In order to integrate your own environment with Sample Factory, the following st
 * Add any custom parameters that will be parsed by Sample Factory alongside the default parameters (optional).
 
 We provide the following template, which you can modify to intergrate your environment.
-We assume your environment conforms to a [gym](https://github.com/openai/gym) 0.26 API (5-tuple).
+We assume your environment conforms to the [gym](https://github.com/openai/gym) 0.26 API (5-tuple).
 
 ```python3
 from typing import Optional
@@ -95,7 +95,7 @@ See `sample_factory/envs/create_env.py` for more details.
 
 ## Evaluation script template
 
-Evaluation script template is even more straightforward. Note that we just reuse functions already defined in the training script.
+The evaluation script template is even more straightforward. Note that we just reuse functions already defined in the training script.
 
 ```python3
 import sys
