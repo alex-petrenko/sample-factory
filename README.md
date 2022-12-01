@@ -13,7 +13,7 @@
 
 # Sample Factory
 
-High-throughput reinforcement learning codebase.
+High-throughput reinforcement learning codebase. Version 2.0.0 is out! 🤗
 
 **Resources:**
 
@@ -49,21 +49,22 @@ Clips below demonstrate ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atar
 
 **Key features:**
 
-* Highly optimized algorithm architecture for maximum learning throughput
-* Synchronous and asynchronous training regimes
-* Serial (single-process) mode for easy debugging
-* Optimal performance in both CPU-based and GPU-accelerated environments
-* Single- & multi-agent training, self-play, supports training multiple policies at once on one or many GPUs
-* Population-Based Training (PBT)
+* Highly optimized algorithm [architecture](https://www.samplefactory.dev/06-architecture/overview/) for maximum learning throughput
+* [Synchronous and asynchronous](https://www.samplefactory.dev/07-advanced-topics/sync-async/) training regimes
+* [Serial (single-process) mode](https://www.samplefactory.dev/07-advanced-topics/serial-mode/) for easy debugging
+* Optimal performance in both CPU-based and [GPU-accelerated environments](https://www.samplefactory.dev/09-environment-integrations/isaacgym/)
+* Single- & multi-agent training, self-play, supports [training multiple policies](https://www.samplefactory.dev/07-advanced-topics/multi-policy-training/) at once on one or many GPUs
+* Population-Based Training ([PBT](https://www.samplefactory.dev/07-advanced-topics/multi-policy-training/))
 * Discrete, continuous, hybrid action spaces
 * Vector-based, image-based, dictionary observation spaces
-* Automatically creates a model architecture by parsing action/observation space specification. Supports custom model architectures
-* Library is designed to be imported into other projects, custom environments are first-class citizens
-* Detailed WandB and Tensorboard summaries, custom metrics
-* HuggingFace integration (upload trained models and metrics to the Hub)
-* Multiple example environment integrations with tuned parameters
+* Automatically creates a model architecture by parsing action/observation space specification. Supports [custom model architectures](https://www.samplefactory.dev/03-customization/custom-models/)
+* Library is designed to be imported into other projects, [custom environments](https://www.samplefactory.dev/03-customization/custom-environments/) are first-class citizens
+* Detailed [WandB and Tensorboard summaries](https://www.samplefactory.dev/05-monitoring/metrics-reference/), [custom metrics](https://www.samplefactory.dev/05-monitoring/custom-metrics/)
+* [HuggingFace 🤗 integration](https://www.samplefactory.dev/10-huggingface/huggingface/) (upload trained models and metrics to the Hub)
+* [Multiple](https://www.samplefactory.dev/09-environment-integrations/mujoco/) [example](https://www.samplefactory.dev/09-environment-integrations/atari/) [environment](https://www.samplefactory.dev/09-environment-integrations/vizdoom/) [integrations](https://www.samplefactory.dev/09-environment-integrations/dmlab/) with tuned parameters and trained models
 
-This Readme provides only a brief overview of the library. Visit full documentation at [https://samplefactory.dev](https://samplefactory.dev) for more details.
+This Readme provides only a brief overview of the library.
+Visit full documentation at [https://samplefactory.dev](https://samplefactory.dev) for more details.
 
 ## Installation
 
