@@ -2,7 +2,7 @@ name: docs
 on:
   push:
     branches:
-      - sf2
+      - master
 jobs:
   deploy:
     runs-on: ubuntu-latest
