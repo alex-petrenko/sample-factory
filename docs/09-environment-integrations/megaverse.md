@@ -28,7 +28,7 @@ To visualize the training results, use the `enjoy_megaverse` script:
 python -m megaverse_rl.enjoy_megaverse --algo=APPO --env=TowerBuilding --experiment=TowerBuilding --megaverse_num_envs_per_instance=1 --fps=20 --megaverse_use_vulkan=True
 ```
 
-Multiple experiments can be run in parallel with the launcher module. `megaverse_envs` is an example launcher script that runs atari envs with 4 seeds. 
+Multiple experiments can be run in parallel with the launcher module. `megaverse_envs` is an example launcher script that runs megaverse envs with 5 seeds. 
 
 ```
 python -m sample_factory.launcher.run --run=megaverse_rl.runs.single_agent --backend=processes --max_parallel=2  --pause_between=1 --experiments_per_gpu=2 --num_gpus=1
@@ -61,8 +61,4 @@ An example APPO model trained on Megaverse environments is uploaded to the Huggi
 
 ##### Tower Building with single agent
 
-<video width="500" controls><source src="https://user-images.githubusercontent.com/30235642/195955230-6fd36729-7356-41ca-87ce-bd231b01e8d4.mp4" type="video/mp4"></video>
-
-##### Tower Building with four agents
-
-<video width="1000" controls><source src="https://user-images.githubusercontent.com/30235642/195955237-062e7c1c-1d0b-4ec7-8a0c-904f98f29c7b.mp4" type="video/mp4"></video>
+<video width="500" controls><source src="https://huggingface.co/wmFrank/sample-factory-2-megaverse/resolve/main/replay.mp4" type="video/mp4"></video>
