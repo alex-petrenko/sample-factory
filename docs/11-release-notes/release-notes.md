@@ -1,5 +1,10 @@
 # Recent releases
 
+##### v2.0.1
+
+* Added mujoco & isaacgym examples to the PyPI package
+* Added missing `__init__.py` files
+
 ##### v2.0.0
 
 **Major update, adds new functionality, changes API and configuration parameters**

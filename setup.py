@@ -31,7 +31,7 @@ setup(
     description="High throughput asynchronous reinforcement learning framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="2.0.0",
+    version="2.0.1",
     url="https://github.com/alex-petrenko/sample-factory",
     author="Aleksei Petrenko",
     license="MIT",
@@ -70,7 +70,7 @@ setup(
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },
     package_dir={"": "./"},
-    packages=setuptools.find_packages(where="./", include="sample_factory*"),
+    packages=setuptools.find_packages(where="./", include=["sample_factory*", "sf_examples*"]),
     include_package_data=True,
     python_requires=">=3.8",
 )

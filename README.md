@@ -83,7 +83,7 @@ Use command line to train an agent using one of the existing integrations, e.g. 
 python -m sf_examples.mujoco.train_mujoco --env=mujoco_ant --experiment=Ant --train_dir=./train_dir
 ```
 
-Stop the experiment when the desired performance is reached and then evaluate the agent:
+Stop the experiment (Ctrl+C) when the desired performance is reached and then evaluate the agent:
 
 ```bash
 python -m sf_examples.mujoco.enjoy_mujoco --env=mujoco_ant --experiment=Ant --train_dir=./train_dir
