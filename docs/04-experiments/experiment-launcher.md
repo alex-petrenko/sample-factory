@@ -100,7 +100,7 @@ Additional backends are a welcome contribution! Please submit PRs :)
 
 ### "Local" backend (multiprocessing)
 
-This will run all experiments on a single 4-GPU machine, scheduling 2 experiments per GPU, so running 8 experiments in parallel until all 90 are done.
+Command line below will run all experiments on a single 4-GPU machine, scheduling 2 experiments per GPU, so running 8 experiments in parallel until all 90 are done.
 Note how we pass the full path to the launcher script using `--run` argument.
 The script should be in your Python path in a way that you should be able to import the module using the path you pass to `--run` (because this is what the Launcher internally does).
 

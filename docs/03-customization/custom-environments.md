@@ -1,10 +1,10 @@
 # Custom environments
 
-Training agents in your own environment with sample-factory is straightforward,
+Training agents in your own environment with Sample Factory is straightforward,
 but if you get stuck feel free to raise an issue on our [GitHub Page](https://github.com/alex-petrenko/sample-factory/issues).
 
 We recommend looking at our example environment integrations such as [Atari](../09-environment-integrations/atari.md)
-or [ViZDoom](../09-environment-integrations/vizdoom.md) before using your own environment.
+or [MuJoCo](../09-environment-integrations/mujoco.md) before using your own environment.
 
 ## Custom environment template
 

@@ -7,7 +7,7 @@ Sample Factory is an open source project, so all contributions and suggestions a
 You can contribute in many different ways: giving ideas, answering questions, reporting bugs, proposing enhancements, 
 improving the documentation, fixing bugs.
 
-Many thanks in advance to every contributor!
+Huge thanks in advance to every contributor!
 
 
 ## How to work on an open Issue?

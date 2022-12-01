@@ -1,15 +1,15 @@
 # Tensorboard
 
 Sample Factory uses Tensorboard summaries.
-Run Tensorboard to monitor any running or finished experiment:
+Run Tensorboard to monitor any running or finished experiments:
 
 ```bash
-tensorboard --logdir=<your_experiment_dir> --port=6006
+tensorboard --logdir=<your_train_dir> --port=6006
 ```
 
 ## Monitoring multiple experiments
 
-Additionally, we provide a helper script that has nice command line interface to monitor the experiment folders using wildcards:
+Additionally, we provide a helper script that has nice command line interface to monitor select experiment folders using wildcards:
 
 ```bash
 python -m sample_factory.utils.tb --dir=./train_dir '*name_mask*' '*another*mask*'

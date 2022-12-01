@@ -23,9 +23,9 @@ PBT works similar to a genetic algorithm. A population of agents is trained simu
 * Each agent is assigned a set of hyperparameters (e.g. learning rate, entropy coefficient, reward function coefficients, etc.)
 * Each agent is trained for a fixed number of steps (e.g. 5M steps)
 * At the end of this meta-training epoch, the performance of all agents is ranked:
-  * Agents with top K % of performance are unchanged, we just keep training them
-  * Agents with bottom K % of performance are replaced by a copy of a random top-K % agent with mutated hyperparameters.
-  * Agents in the middle keep their weights but also get mutated hyperparameters.
+    * Agents with top K % of performance are unchanged, we just keep training them
+    * Agents with bottom K % of performance are replaced by a copy of a random top-K % agent with mutated hyperparameters.
+    * Agents in the middle keep their weights but also get mutated hyperparameters.
 * Proceed to the next meta-training epoch.
 
 Current version of PBT is implemented for a single machine. The perfect setup is a multi-GPU server that can train multiple agents at the same time.
@@ -37,7 +37,7 @@ yields much more robust results compared to self-play with a single policy.
 ## Providing "True Objective" to PBT
 
 In order to optimize for a true objective, you need to return it from the environment.
-Just add it to the `info` dictionary returned by the environment, e.g.:
+Just add it to the `info` dictionary returned by the environment at the last step of the episode, e.g.:
 
 ```python
 def step(self, action):

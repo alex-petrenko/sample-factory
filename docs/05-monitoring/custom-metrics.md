@@ -1,10 +1,10 @@
 # Custom Summaries
 
-## Environmemt-specific info
+## Environment-specific info
 
 It is often useful to monitor custom training metrics, i.e. certain environment-specific aspects of agent's performance.
 
-You can add custom monitored metrics by adding `"episode_extra_stats" = { ... }` to the environment's `info` dictionary.
+You can add custom monitored metrics by adding `info["episode_extra_stats"] = { ... }` to the environment's `info` dictionary returned from the `step()` function on the last step of the episode.
 
 See `sf_examples/dmlab/wrappers/reward_shaping.py` for example. Here we add information about 
 agent's performance on individual levels in DMLab-30.

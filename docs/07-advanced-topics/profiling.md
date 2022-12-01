@@ -154,6 +154,9 @@ the actual backward pass happens.
 Thus one should not rely too heavily on timing your code for GPU profiling.
 Take a look at CUDA profiling, i.e. here is a [Pytorch tutorial](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html).
 
+Also check out [this tutorial](https://www.youtube.com/watch?v=I4MjX598ZYs&list=PLGywud_-HlCORC0c4uj97oppQrGiB6JNy)
+for some advanced RL profiling techniques.
+
 ## Profiling with standard Python profilers (cProfile or yappi)
 
 In most RL workloads in Sample Factory it can be difficult to use standard profiling tools because the full application

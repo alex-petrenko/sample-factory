@@ -10,9 +10,11 @@ pip install sample-factory[mujoco]
 
 ### Running Experiments
 
-Run MuJoCo experiments with the scripts in `sf_examples.mujoco`. The default parameters have been chosen to match CleanRL's results in the report below.
+Run MuJoCo experiments with the scripts in `sf_examples.mujoco`.
+The default parameters have been chosen to match CleanRL's results in the report below (please note
+that we can achieve even faster training on a multi-core machine with more optimal parameters).
 
-To train a model in the `Ant-v4` enviornment:
+To train a model in the `Ant-v4` environment:
 
 ```
 python -m sf_examples.mujoco.train_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
@@ -32,7 +34,7 @@ python -m sample_factory.launcher.run --run=sf_examples.mujoco.experiments.mujoc
 
 #### List of Supported Environments
 
-Specify the environment to run with the `--env` command line parameter. The following MuJoCo v4 environments are supported out of the box, and more enviornments can be added as needed in `sf_examples.mujoco.mujoco.mujoco_utils`
+Specify the environment to run with the `--env` command line parameter. The following MuJoCo v4 environments are supported out of the box, and more environments can be added as needed in `sf_examples.mujoco.mujoco.mujoco_utils`
 
 | MuJoCo Environment Name   | Sample Factory Command Line Parameter |
 | ------------------------- |---------------------------------------|
@@ -57,8 +59,9 @@ Specify the environment to run with the `--env` command line parameter. The foll
 2. Sample Factory can run experiments synchronously or asynchronously, with asynchronous execution usually having worse sample efficiency but runs faster. MuJoCo's environments were compared using the two modes in Sample-Factory
     - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Synchronous-vs-Asynchronous--VmlldzoyMzEzNDUz
 
-3. Sample Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL
-    - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-Wall-Time--VmlldzoyMzg2MDA3
+[//]: # (3. Sample Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL)
+
+[//]: # (    - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-Wall-Time--VmlldzoyMzg2MDA3)
 
 #### Models
 
@@ -80,7 +83,7 @@ The models below are the best models from the experiment against CleanRL above. 
 
 #### Videos
 
-Below are some video examples of agents in various MuJoCo envioronments. Videos for all enviornments can be found in the HuggingFace Hub pages linked above.
+Below are some video examples of agents in various MuJoCo envioronments. Videos for all environments can be found in the HuggingFace Hub pages linked above.
 
 ##### HalfCheetah-v4
 <p align="center">

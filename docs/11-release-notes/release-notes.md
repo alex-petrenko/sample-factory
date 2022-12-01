@@ -4,14 +4,14 @@
 
 **Major update, adds new functionality, changes API and configuration parameters**
 
-* Major API update
+* Major API update, codebase rewritten from scratch for better maintainability and clarity
 * Synchronous and asynchronous training modes
 * Serial and parallel execution modes
 * Support for vectorized and GPU-accelerated environments in batched sampling mode
 * Integration with Hugging Face Hub
-* New environment integrations, CI, and documentation
+* New environment integrations, CI, and 40+ documentation pages
 
-See v1 to v2 transition guide for details.
+See [v1 to v2](../08-miscellaneous/v1-to-v2.md) transition guide for details.
 
 ##### v1.121.4
 * Support Weights and Biases (see section "WandB support")

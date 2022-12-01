@@ -4,7 +4,7 @@ Sample Factory uses a custom mechanism for communication between components insp
 Unlike in Qt, signals and slots can be used not only across threads, but also across processes.
 The implementation of this mechanism is available as a separate repository [here](https://github.com/alex-petrenko/signal-slot).
 
-The main idea can be summaries as follows:
+The main idea can be summarised as follows:
 
 * Application is a collection of `EventLoop`s. Each `EventLoop` is an infinite loop that occupies a thread or a process.
 * Logic of the system is implemented in `EventLoopObject` components that live on `EventLoop`s.
@@ -23,14 +23,11 @@ and RolloutWorker's `advance_rollouts()` slot is connected to this signal.
 
 ## Implementation details
 
-* There's not argument validation for signals and slots. If you connect a slot to a signal with a different signature,
+* There's no argument validation for signals and slots. If you connect a slot to a signal with a different signature,
 it will fail at runtime. This can also be used to your advantage by allowing to propagate arbitrary data as
 payload with appropriate runtime checks.
 * Signals can be connected to slots only before the processes are spawned, i.e. only during system initialization.
 This is mostly done by the `Runner` in `connect_components()`.
-* * There's not argument validation for signals and slots. If you connect a slot to a signal with a different signature,
-it will fail at runtime. This can also be used to your advantage by allowing to propagate arbitrary data as
-payload with appropriate runtime checks.
 * It is currently impossible to connect a slot to a signal if emitter and receiver objects belong to event loops
 already running in different processes (although it should be possible to implement this feature).
 Connect signals to slots during system initialization.

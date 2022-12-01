@@ -5,7 +5,7 @@ Sample Factory supports training multiple policies at the same time with `--num_
 ## Single-agent environments
 
 Multi-policy training with single-agent environments is equivalent to just running multiple experiments with
-different seeds. We actually recommend doing that because experiment monitoring is easier this way.
+different seeds. We actually recommend running separate experiments in this case because experiment monitoring is easier this way.
 
 ## Multi-agent environments
 
@@ -38,7 +38,7 @@ GPU 1: policy 1, policy 3
 
 ### Multi-policy training in different modes
 
-All features of multi-policy training (including mixing different policies in one env) is only supported with
+All features of multi-policy training (including mixing different policies in one env) are only supported with
 asynchronous (`--async_rl=True`) non-batched (`--batched_sampling=False`) training.
 
 In synchronous mode we can still use multi-policy training, but the mapping between agents and policies is fixed

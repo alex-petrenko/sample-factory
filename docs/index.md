@@ -19,15 +19,15 @@ High-throughput reinforcement learning codebase. Resources:
 
 * **Discord:** [https://discord.gg/BCfHWaSMkr](https://discord.gg/BCfHWaSMkr)
 
-* **Talk (circa 2021):** https://youtu.be/lLG17LKKSZc
+[//]: # (* **Talk &#40;circa 2021&#41;:** https://youtu.be/lLG17LKKSZc)
 
 ## What is Sample Factory?
 
-Sample Factory is one of the fastest RL libraries.
-We focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
+Sample Factory is one of the fastest RL libraries 
+focused on very efficient synchronous and asynchronous implementations of policy gradients (PPO). 
 
 Sample Factory is thoroughly tested, used by many researchers and practitioners, and is actively maintained.
-Our implementation is known to reach SOTA performance in a variety of domains in a short amount of time.
+Our implementation is known to reach SOTA performance in a variety of domains while minimizing RL experiment training time and hardware requirements.
 Clips below demonstrate ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atari agents trained with Sample Factory:
 
 <p align="middle">
@@ -43,19 +43,19 @@ Clips below demonstrate ViZDoom, IsaacGym, DMLab-30, Megaverse, Mujoco, and Atar
 
 ## Key features
 
-* Highly optimized algorithm architecture for maximum learning throughput
-* Synchronous and asynchronous training regimes
-* Serial (single-process) mode for easy debugging
-* Optimal performance in both CPU-based and GPU-accelerated environments
-* Single- & multi-agent training, self-play, supports training multiple policies at once on one or many GPUs
-* Population-Based Training (PBT)
+* Highly optimized algorithm [architecture](06-architecture/overview.md) for maximum learning throughput
+* [Synchronous and asynchronous](07-advanced-topics/sync-async.md) training regimes
+* [Serial (single-process) mode](07-advanced-topics/serial-mode.md) for easy debugging
+* Optimal performance in both CPU-based and [GPU-accelerated environments](09-environment-integrations/isaacgym.md)
+* Single- & multi-agent training, self-play, supports [training multiple policies](07-advanced-topics/multi-policy-training.md) at once on one or many GPUs
+* Population-Based Training ([PBT](07-advanced-topics/pbt.md))
 * Discrete, continuous, hybrid action spaces
 * Vector-based, image-based, dictionary observation spaces
-* Automatically creates a model architecture by parsing action/observation space specification. Supports custom model architectures
-* Library is designed to be imported into other projects, custom environments are first-class citizens
-* Detailed WandB and Tensorboard summaries, custom metrics
-* HuggingFace integration (upload trained models and metrics to the Hub)
-* Multiple example environment integrations with tuned parameters
+* Automatically creates a model architecture by parsing action/observation space specification. Supports [custom model architectures](03-customization/custom-models.md)
+* Library is designed to be imported into other projects, [custom environments](03-customization/custom-environments.md) are first-class citizens
+* Detailed [WandB and Tensorboard summaries](05-monitoring/metrics-reference.md), [custom metrics](05-monitoring/custom-metrics.md)
+* [HuggingFace 🤗 integration](10-huggingface/huggingface.md) (upload trained models and metrics to the Hub)
+* [Multiple](09-environment-integrations/mujoco.md) [example](09-environment-integrations/atari.md) [environment](09-environment-integrations/vizdoom.md) [integrations](09-environment-integrations/dmlab.md) with tuned parameters and trained models
 
 ## Next steps
 

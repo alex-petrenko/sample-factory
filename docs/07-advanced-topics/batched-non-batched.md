@@ -1,6 +1,6 @@
 # Batched/Non-Batched Sampling
 
-Sample Factory has two different implementations of the sampling process: batched and non-batched.
+Sample Factory has two different implementations of the RolloutWorker: batched and non-batched.
 You can switch between them using `--batched_sampling=[True|False]` argument.
 
 ## Non-Batched Sampling
@@ -14,12 +14,12 @@ be very useful for multi-agent, self-play, and PBT setups.
 
 A downside of this mode is that we have to batch individual observations from rollout workers before we can do inference on
 the GPU (because GPUs are most efficient with big batches).
-This makes non-batched mode very inefficient for vectorized environments like [IsaacGym](09-environment-integrations/isaacgym.md).
+This makes non-batched mode very inefficient for vectorized environments like [IsaacGym](../09-environment-integrations/isaacgym.md).
 
 ## Batched Sampling
 
-Batched mode is perfect for massively vectorized environments like [IsaacGym](09-environment-integrations/isaacgym.md) and
-[EnvPool](09-environment-integrations/envpool.md).
+Batched mode is perfect for massively vectorized environments like [IsaacGym](../09-environment-integrations/isaacgym.md) or
+[EnvPool](../09-environment-integrations/envpool.md).
 It assumes that the observations are available in one large tensor that we can directly give to the inference worker
 for processing.
 

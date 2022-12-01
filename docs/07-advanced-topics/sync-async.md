@@ -1,6 +1,6 @@
 # Synchronous/Asynchronous RL
 
-Sample Factory version 2 supports two training modes: synchronous and asynchronous.
+Since version 2.0 Sample Factory supports two training modes: synchronous and asynchronous.
 You can switch between them by setting `--async_rl=False` or `--async_rl=True` in the command line.
 
 ## Synchronous RL
@@ -46,7 +46,7 @@ The following animations may provide further insight into the difference between
 
 Note that the "Sync RL" animation is not 100% accurate to how SF works, we actually still do collect the
 experience asynchronously within the rollout, but then pause during training.
-"Sync RL" is closer to how a traditional RL implementation operates (e.g. OpenAI Baselines) and the comparison
+"Sync RL" animation is closer to how a traditional RL implementation operates (e.g. OpenAI Baselines) and the comparison
 between the two shows why Sample Factory is often much faster.
 
 ## Vectorized environments

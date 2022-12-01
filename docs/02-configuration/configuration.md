@@ -41,10 +41,29 @@ You can also use `--restart_behavior=[resume|restart|overwrite]` to control this
 - `--num_workers` defaults to number of logical cores in the system, which will give the best throughput in
 most scenarios.
 
-- `--num_envs_per_worker` will greatly affect the performance. Large values (20-30) improve hardware utilization but
-increase memory usage and policy lag. See example command lines below to find a value that works for your system.
-_Must be even_ for the double-buffered sampling to work. Disable double-buffered sampling by setting `--worker_num_splits=1`
+- `--num_envs_per_worker` will greatly affect the performance. Large values (15-30) improve hardware utilization but
+increase memory usage and policy lag. _Must be even_ for the double-buffered sampling to work. Disable double-buffered sampling by setting `--worker_num_splits=1`
 to use odd number of envs per worker (e.g. 1 env per worker). (Default: 2)
+A good rule of thumb is to set this to relatively low value (e.g. 4 or 8 for common envs) and then increase it until you see
+no more performance improvements or you start losing sample efficiency due to the [policy lag](../07-advanced-topics/policy-lag.md).
+
+- `--rollout` is the length of trajectory collected by each agent.
+
+- `--batch_size` is the minibatch size for SGD.
+- `--num_batches_per_epoch` is the number of minibatches the training batch (dataset) is split into.
+- `--num_epochs` is the number of epochs on the learner over one training batch (dataset).
+
+The above six parameters (`batch_size, num_batches_per_epoch, rollout, num_epochs, num_workers, num_envs_per_worker`) have the
+biggest influence on the data regime of the RL algorithm and thus on the sample efficiency and the training speed.
+
+`num_workers`, `num_envs_per_worker`, and `rollout` define how many samples are collected per iteration (one rollout for all envs), which is
+`sampling_size = num_workers * num_envs_per_worker * rollout` (note that this is further multiplied by env's `num_agents` for multi-agent envs).
+
+`batch_size` and `num_batches_per_epoch` define how many samples are used for training per iteration.
+
+If `sampling_size >> batch_size` then we will need many iterations of training to go through the data, which
+will make some experience stale by the time it is used for training (**policy lag**). See [Policy Lag](../07-advanced-topics/policy-lag.md)
+for additional information.
 
 ## Evaluation script parameters
 

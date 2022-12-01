@@ -74,11 +74,13 @@ python -m sf_examples.vizdoom.train_vizdoom --env=doom_benchmark --algo=APPO --e
 1. We reproduced the paper results in SF2 in the Battle and Battle2 and compared the results using input normalization. Input normalization has improved results in the Battle environment. This experiment with input normalization was run with `sf_examples.vizdoom.experiments.sf2_doom_battle_envs`. Note that `normalize_input=True` is set compared to the results from the paper
     - https://wandb.ai/andrewzhang505/sample_factory/reports/VizDoom-Battle-Environments--VmlldzoyMzcyODQx
 
-2. In SF2's bot environments (deathmatch_bots and duel_bots), we trained the agents against randomly generated bots as opposed to a curriculum of increasing bot difficulty. This is because the ViZDoom environment no longer provides the bots used in the curriculum, and SF2 no longer requires the curriculum to train properly. However, due to the differences in bot difficulty, the current training results are no longer comparable to the paper. An example training curve on deathmatch_bots with the same parameters as in the paper is shown below. Additionally, the report includes 8 agents trained using PBT against duel-bots with normalization and we were able to get better results than the Sample Factory paper:
+2. In SF2's bot environments (deathmatch_bots and duel_bots), we trained the agents against randomly generated bots as opposed to a curriculum of increasing bot difficulty.
+This is because the latest version of ViZDoom environment no longer provides the bots used in the curriculum, and SF2 no longer requires the curriculum to train properly. However, due to the differences in bot difficulty, the current training results are no longer comparable to the paper. An example training curve on deathmatch_bots with the same parameters as in the paper is shown below. Additionally, the report includes 8 agents trained using PBT against duel-bots with normalization and we were able to get better results than the Sample Factory paper:
     - https://wandb.ai/andrewzhang505/sample_factory/reports/ViZDoom-Bots--VmlldzoyNzY2NDI1
 
 3. We also trained in the `doom_duel` multi-agent environment using self play. The training metrics of the experiment can be found on the Hugging Face Hub: https://huggingface.co/andrewzhang505/doom-duel-selfplay/tensorboard
-    - The reward scaling done by PBT can be found under `zz_pbt`. For example in this experiment, the reward scaling related to damage dealt `rew_DAMAGECOUNT_0` increase 10x from 0.01 to around 0.15 at max.
+    - The reward scaling done by PBT can be found under `zz_pbt`. For example in this experiment, the reward scaling related to damage dealt `rew_DAMAGECOUNT_0`
+   increase more than 10x from 0.01 to around 0.15 at max.
     - The `true_objective` reported corresponds to the fraction of matches won. In this experiment, the agents performed fairly equally as seen under `policy_stats/avg_true_objective` as agents rarely win over 60% of matches.
 
 #### Models
