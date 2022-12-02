@@ -59,9 +59,8 @@ Specify the environment to run with the `--env` command line parameter. The foll
 2. Sample Factory can run experiments synchronously or asynchronously, with asynchronous execution usually having worse sample efficiency but runs faster. MuJoCo's environments were compared using the two modes in Sample-Factory
     - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Synchronous-vs-Asynchronous--VmlldzoyMzEzNDUz
 
-[//]: # (3. Sample Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL)
-
-[//]: # (    - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-Wall-Time--VmlldzoyMzg2MDA3)
+3. Sample Factory comparison with CleanRL in terms of wall time. Both experiments are run on a 16 core machine with 1 GPU. Sample-Factory was able to complete 10M samples 5 times as fast as CleanRL
+    - https://wandb.ai/andrewzhang505/sample_factory/reports/MuJoCo-Sample-Factory-vs-CleanRL-Wall-Time--VmlldzoyMzg2MDA3
 
 #### Models
 
