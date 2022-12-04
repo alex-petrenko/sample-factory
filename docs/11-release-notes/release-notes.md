@@ -1,5 +1,10 @@
 # Recent releases
 
+##### v2.0.2
+
+* `cfg.json` renamed to `config.json` for consistency with other HuggingFace integrations
+* We can still load from legacy checkpoints (`cfg.json` will be renamed to `config.json`)
+
 ##### v2.0.1
 
 * Added mujoco & isaacgym examples to the PyPI package

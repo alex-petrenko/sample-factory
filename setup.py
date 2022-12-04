@@ -31,7 +31,7 @@ setup(
     description="High throughput asynchronous reinforcement learning framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="2.0.1",
+    version="2.0.2",
     url="https://github.com/alex-petrenko/sample-factory",
     author="Aleksei Petrenko",
     license="MIT",
@@ -55,7 +55,7 @@ setup(
         "filelock",
         "opencv-python",
         "wandb>=0.12.9",
-        "huggingface-hub<1.0",
+        "huggingface-hub>=0.10.0,<1.0",
     ],
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that
