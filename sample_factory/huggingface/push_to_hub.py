@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 
 from sample_factory.huggingface.huggingface_utils import generate_model_card, push_to_hf
 from sample_factory.utils.attr_dict import AttrDict
@@ -17,7 +18,7 @@ def main():
     parser.add_argument("-d", "--experiment_dir", help="Path to your experiment directory", type=str)
     args = parser.parse_args()
 
-    cfg_file = os.path.join(args.experiment_dir, "cfg.json")
+    cfg_file = os.path.join(args.experiment_dir, "config.json")
     with open(cfg_file, "r") as json_file:
         json_params = json.load(json_file)
         cfg = AttrDict(json_params)
@@ -27,4 +28,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

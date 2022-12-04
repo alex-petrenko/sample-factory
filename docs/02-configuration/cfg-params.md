@@ -114,11 +114,11 @@ optional arguments:
   --env ENV             Name of the environment to use (default: None)
   --experiment EXPERIMENT
                         Unique experiment name. This will also be the name for
-                        the experiment folder in the train dir.If the
+                        the experiment folder in the train dir. If the
                         experiment folder with this name aleady exists the
                         experiment will be RESUMED!Any parameters passed from
                         command line that do not match the parameters stored
-                        in the experiment cfg.json file will be overridden.
+                        in the experiment config.json file will be overridden.
                         (default: default_experiment)
   --train_dir TRAIN_DIR
                         Root for all experiments (default:

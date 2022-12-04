@@ -51,7 +51,7 @@ After downloading the model, you can run the models in the repo with the enjoy s
 python -m sf_examples.mujoco.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<repo_name> --train_dir=./train_dir
 ```
 
-Note, you may have to specify the `--train_dir` if your local train_dir has a different path than the one in the `cfg.json`
+Note, you may have to specify the `--train_dir` if your local train_dir has a different path than the one in the `config.json`
 
 ### Uploading Models
 

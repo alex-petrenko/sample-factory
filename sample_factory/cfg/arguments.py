@@ -18,7 +18,7 @@ from sample_factory.cfg.cfg import (
 )
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import cfg_file, get_git_commit_hash, get_top_level_script, log
+from sample_factory.utils.utils import cfg_file, cfg_file_old, get_git_commit_hash, get_top_level_script, log
 
 
 def parse_sf_args(
@@ -218,13 +218,24 @@ def default_cfg(algo="APPO", env="env", experiment="test"):
 
 
 def load_from_checkpoint(cfg: Config) -> AttrDict:
-    filename = cfg_file(cfg)
-    if not os.path.isfile(filename):
-        raise Exception(f"Could not load saved parameters for experiment {cfg.experiment} (file {filename} not found)")
+    cfg_filename = cfg_file(cfg)
+    cfg_filename_old = cfg_file_old(cfg)
 
-    with open(filename, "r") as json_file:
+    if not os.path.isfile(cfg_filename) and os.path.isfile(cfg_filename_old):
+        # rename old config file
+        log.warning(f"Loading legacy config file {cfg_filename_old} instead of {cfg_filename}")
+        os.rename(cfg_filename_old, cfg_filename)
+
+    if not os.path.isfile(cfg_filename):
+        raise Exception(
+            f"Could not load saved parameters for experiment {cfg.experiment} "
+            f"(file {cfg_filename} not found). Check that you have the correct experiment name "
+            f"and --train_dir is set correctly."
+        )
+
+    with open(cfg_filename, "r") as json_file:
         json_params = json.load(json_file)
-        log.warning("Loading existing experiment configuration from %s", filename)
+        log.warning("Loading existing experiment configuration from %s", cfg_filename)
         loaded_cfg = AttrDict(json_params)
 
     # override the parameters in config file with values passed from command line

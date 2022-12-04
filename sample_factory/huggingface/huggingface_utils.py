@@ -130,7 +130,7 @@ def push_to_hf(dir_path: str, repo_name: str, num_policies: int = 1):
             )
 
     # Upload files
-    files = ["cfg.json", "README.md", "replay.mp4"]
+    files = ["config.json", "README.md", "replay.mp4"]
     for f in files:
         if os.path.exists(os.path.join(dir_path, f)):
             upload_file(

@@ -16,7 +16,7 @@ def add_basic_cli_args(p: ArgumentParser):
         default="default_experiment",
         help="Unique experiment name. This will also be the name for the experiment folder in the train dir."
         "If the experiment folder with this name aleady exists the experiment will be RESUMED!"
-        "Any parameters passed from command line that do not match the parameters stored in the experiment cfg.json file will be overridden.",
+        "Any parameters passed from command line that do not match the parameters stored in the experiment config.json file will be overridden.",
     )
     p.add_argument("--train_dir", default=join(os.getcwd(), "train_dir"), type=str, help="Root for all experiments")
     p.add_argument(

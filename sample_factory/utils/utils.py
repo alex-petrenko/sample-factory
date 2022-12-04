@@ -412,9 +412,13 @@ def summaries_dir(experiment_dir_, mkdir=True) -> str:
     return maybe_ensure_dir_exists(join(experiment_dir_, ".summary"), mkdir)
 
 
-def cfg_file(cfg):
-    params_file = join(experiment_dir(cfg=cfg), "cfg.json")
-    return params_file
+def cfg_file(cfg: Config) -> str:
+    return join(experiment_dir(cfg=cfg), "config.json")
+
+
+def cfg_file_old(cfg: Config) -> str:
+    """Filename used before SF 2.0.2. Keep for compatibility."""
+    return join(experiment_dir(cfg=cfg), "cfg.json")
 
 
 def git_root():

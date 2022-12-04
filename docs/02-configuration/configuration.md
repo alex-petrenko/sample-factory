@@ -14,11 +14,11 @@ Default parameter values and their help strings are defined in `sample_factory/c
 Besides that, additional parameters can be defined in specific environment integrations, for example in
 `sf_examples/envpool/mujoco/envpool_mujoco_params.py`.
 
-## cfg.json
+## config.json
 
 Once the new experiment is started, a directory containing experiment-related files is created in `--train_dir`
 location (or `./train_dir` in `cwd` if `--train_dir` is not passed from command line). This directory contains a file
-`cfg.json` where all the experiment parameters are saved (including those instantiated from their default values).
+`config.json` where all the experiment parameters are saved (including those instantiated from their default values).
 
 In addition to that, selected parameter values are printed to the console and thus are saved to `sf_log.txt` file in the experiment directory.
 Running an experiment and then stopping it to check the parameter values is a good practice to make sure
@@ -33,7 +33,7 @@ that the experiment is configured as expected.
 If the experiment folder with the name already exists the experiment (by default) will be _resumed_!
 Resuming experiments after a stop is the default behavior in Sample Factory. 
 When the experiment is resumed from command line are taken into account, unspecified parameters will be loaded from the existing experiment
-`cfg.json` file. If you want to start a new experiment, delete the old experiment folder or change the experiment name.
+`config.json` file. If you want to start a new experiment, delete the old experiment folder or change the experiment name.
 You can also use `--restart_behavior=[resume|restart|overwrite]` to control this behavior.
         
 - `--train_dir` location for all experiments folders, defaults to `./train_dir`.
