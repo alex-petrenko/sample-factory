@@ -266,4 +266,4 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
         )
         push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository, cfg.num_policies)
 
-    return ExperimentStatus.SUCCESS, float(np.mean(episode_rewards))
+    return ExperimentStatus.SUCCESS, float(np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]))
