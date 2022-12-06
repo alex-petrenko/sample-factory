@@ -264,6 +264,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
         generate_model_card(
             experiment_dir(cfg=cfg), cfg.algo, cfg.env, cfg.hf_repository, reward_list, enjoy_name, cfg.train_script
         )
-        push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository, cfg.num_policies)
+        push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository)
 
     return ExperimentStatus.SUCCESS, float(np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]))
