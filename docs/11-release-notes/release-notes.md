@@ -4,10 +4,11 @@
 
 * `cfg.json` renamed to `config.json` for consistency with other HuggingFace integrations
 * We can still load from legacy checkpoints (`cfg.json` will be renamed to `config.json`)
+* Fixed a bug in enjoy.py with multi-agent envs
 
 ##### v2.0.1
 
-* Added mujoco & isaacgym examples to the PyPI package
+* Added MuJoCo & IsaacGym examples to the PyPI package
 * Added missing `__init__.py` files
 
 ##### v2.0.0

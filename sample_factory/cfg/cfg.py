@@ -258,6 +258,13 @@ def add_rl_args(p: ArgumentParser):
         help="Maximum absolute change in value estimate until it is clipped. Sensitive to value magnitude",
     )
     p.add_argument(
+        "--ppo_loss_decoupled",
+        default=False,
+        type=str2bool,
+        help="Whether to decouple the policy and value loss TODO: comment",
+    )
+
+    p.add_argument(
         "--with_vtrace",
         default=False,
         type=str2bool,
