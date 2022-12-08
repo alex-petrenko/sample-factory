@@ -27,7 +27,7 @@ from sample_factory.algo.utils.misc import (
     ExperimentStatus,
 )
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.cfg.arguments import cfg_dict, cfg_str, verify_cfg
+from sample_factory.cfg.arguments import cfg_dict, cfg_str, preprocess_cfg
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively
@@ -545,7 +545,7 @@ class Runner(EventLoopObject, Configurable):
             self.reward_shaping[policy_id] = self.env_info.reward_shaping_scheme
 
         # check for any incompatible arguments
-        if not verify_cfg(self.cfg, self.env_info):
+        if not preprocess_cfg(self.cfg, self.env_info):
             return ExperimentStatus.FAILURE
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
