@@ -110,34 +110,19 @@ Note, you may have to adjust `--train_for_env_steps` to a suitably high number a
     repocard.metadata_save(readme_path, metadata)
 
 
-def push_to_hf(dir_path: str, repo_name: str, num_policies: int = 1):
+def push_to_hf(dir_path: str, repo_name: str):
     repo_url = HfApi().create_repo(
         repo_id=repo_name,
         private=False,
         exist_ok=True,
     )
 
-    # Upload folders
-    folders = [".summary"]
-    for policy_id in range(num_policies):
-        folders.append(f"checkpoint_p{policy_id}")
-    for f in folders:
-        if os.path.exists(os.path.join(dir_path, f)):
-            upload_folder(
-                repo_id=repo_name,
-                folder_path=os.path.join(dir_path, f),
-                path_in_repo=f,
-            )
-
-    # Upload files
-    files = ["config.json", "README.md", "replay.mp4"]
-    for f in files:
-        if os.path.exists(os.path.join(dir_path, f)):
-            upload_file(
-                repo_id=repo_name,
-                path_or_fileobj=os.path.join(dir_path, f),
-                path_in_repo=f,
-            )
+    upload_folder(
+        repo_id=repo_name,
+        folder_path=dir_path,
+        path_in_repo=".",
+        ignore_patterns=[".git/*"],
+    )
 
     log.info(f"The model has been pushed to {repo_url}")
 

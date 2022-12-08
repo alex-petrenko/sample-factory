@@ -19,12 +19,23 @@ def main():
     args = parser.parse_args()
 
     cfg_file = os.path.join(args.experiment_dir, "config.json")
+
+    if not os.path.isfile(cfg_file):
+        old_cfg_file = os.path.join(args.experiment_dir, "cfg.json")
+        if os.path.isfile(old_cfg_file):
+            os.rename(old_cfg_file, cfg_file)
+        else:
+            raise Exception(
+                f"Could not load saved parameters for experiment {args.experiment_dir} "
+                f"(file {cfg_file} not found). Check that you have the correct experiment directory."
+            )
+
     with open(cfg_file, "r") as json_file:
         json_params = json.load(json_file)
         cfg = AttrDict(json_params)
 
     generate_model_card(args.experiment_dir, cfg.algo, cfg.env, args.hf_repository)
-    push_to_hf(args.experiment_dir, args.hf_repository, cfg.num_policies)
+    push_to_hf(args.experiment_dir, args.hf_repository)
 
 
 if __name__ == "__main__":

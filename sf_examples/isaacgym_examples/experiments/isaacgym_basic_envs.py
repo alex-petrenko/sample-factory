@@ -6,7 +6,8 @@ _params = ParamGrid(
     [
         ("seed", seeds(3)),
         ("env", ["Ant", "Humanoid"]),
-        (("use_rnn", "recurrence"), ([False, 1], [True, 16])),  # train recurrent and non-recurrent models
+        # should be 16 recurrence for Ant and 32 for Humanoid
+        # (("use_rnn", "recurrence"), ([False, 1], [True, 16])),  # train recurrent and non-recurrent models
     ]
 )
 

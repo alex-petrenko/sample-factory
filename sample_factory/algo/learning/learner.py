@@ -553,6 +553,7 @@ class Learner(Configurable):
         # calculate policy head outside of recurrent loop
         with self.timing.add_time("forward_head"):
             head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
+            minibatch_size: int = head_outputs.size(0)
 
         # initial rnn states
         with self.timing.add_time("bptt_initial"):
@@ -575,14 +576,16 @@ class Learner(Configurable):
                 with self.timing.add_time("bptt_forward_core"):
                     core_output_seq, _ = self.actor_critic.forward_core(head_output_seq, rnn_states)
                 core_outputs = build_core_out_from_seq(core_output_seq, inverted_select_inds)
+                del core_output_seq
             else:
                 core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
 
-        num_trajectories = head_outputs.size(0) // recurrence
+            del head_outputs
+
+        num_trajectories = minibatch_size // recurrence
+        assert core_outputs.shape[0] == minibatch_size
 
         with self.timing.add_time("tail"):
-            assert core_outputs.shape[0] == head_outputs.shape[0]
-
             # calculate policy tail outside of recurrent loop
             result = self.actor_critic.forward_tail(core_outputs, values_only=False, sample_actions=False)
             action_distribution = self.actor_critic.action_distribution()
@@ -603,6 +606,8 @@ class Learner(Configurable):
             clip_ratio = torch.clamp(clip_ratio, 0.05, 20.0)
 
             values = result["values"].squeeze()
+
+            del core_outputs
 
         # these computations are not the part of the computation graph
         with torch.no_grad(), self.timing.add_time("advantages_returns"):
@@ -668,7 +673,16 @@ class Learner(Configurable):
             old_values = mb["values"]
             value_loss = self._value_loss(values, old_values, targets, clip_value, valids, num_invalids)
 
-        return action_distribution, policy_loss, exploration_loss, kl_old, kl_loss, value_loss, locals()
+        loss_summaries = dict(
+            ratio=ratio,
+            clip_ratio_low=clip_ratio_low,
+            clip_ratio_high=clip_ratio_high,
+            values=result["values"],
+            adv=adv,
+            adv_std=adv_std,
+        )
+
+        return action_distribution, policy_loss, exploration_loss, kl_old, kl_loss, value_loss, loss_summaries
 
     def _train(
         self, gpu_buffer: TensorDict, batch_size: int, experience_size: int, num_invalids: int
@@ -678,7 +692,7 @@ class Learner(Configurable):
             early_stopping_tolerance = 1e-6
             early_stop = False
             prev_epoch_actor_loss = 1e9
-            epoch_actor_losses = torch.empty([self.cfg.num_batches_per_epoch], device=self.device)
+            epoch_actor_losses = [0] * self.cfg.num_batches_per_epoch
 
             # recent mean KL-divergences per minibatch, this used by LR schedulers
             recent_kls = []
@@ -738,15 +752,16 @@ class Learner(Configurable):
                         kl_old,
                         kl_loss,
                         value_loss,
-                        loss_locals,
+                        loss_summaries,
                     ) = self._calculate_losses(mb, num_invalids)
 
                 with timing.add_time("losses_postprocess"):
                     # noinspection PyTypeChecker
                     actor_loss: Tensor = policy_loss + exploration_loss + kl_loss
-                    epoch_actor_losses[batch_num] = actor_loss
                     critic_loss = value_loss
                     loss: Tensor = actor_loss + critic_loss
+
+                    epoch_actor_losses[batch_num] = float(actor_loss)
 
                     high_loss = 30.0
                     if torch.abs(loss) > high_loss:
@@ -773,7 +788,7 @@ class Learner(Configurable):
                         kl_old = action_distribution.kl_divergence(old_action_distribution)
                         kl_old = masked_select(kl_old, mb.valids, num_invalids)
 
-                    kl_old_mean = kl_old.mean().item()
+                    kl_old_mean = float(kl_old.mean().item())
                     recent_kls.append(kl_old_mean)
                     if kl_old.max().item() > 100:
                         log.warning(f"KL-divergence is very high: {kl_old.max().item():.4f}")
@@ -817,8 +832,9 @@ class Learner(Configurable):
                     should_record_summaries |= force_summaries
                     if should_record_summaries:
                         # hacky way to collect all of the intermediate variables for summaries
-                        summary_vars = {**loss_locals, **locals()}
+                        summary_vars = {**locals(), **loss_summaries}
                         stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
+                        del summary_vars
                         force_summaries = False
 
                     # make sure everything (such as policy weights) is committed to shared device memory
@@ -830,7 +846,7 @@ class Learner(Configurable):
             if self.lr_scheduler.invoke_after_each_epoch():
                 self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
 
-            new_epoch_actor_loss = epoch_actor_losses.mean().item()
+            new_epoch_actor_loss = float(np.mean(epoch_actor_losses))
             loss_delta_abs = abs(prev_epoch_actor_loss - new_epoch_actor_loss)
             if loss_delta_abs < early_stopping_tolerance:
                 early_stop = True
@@ -865,7 +881,7 @@ class Learner(Configurable):
         )
         stats.grad_norm = grad_norm
         stats.loss = var.loss
-        stats.value = var.result["values"].mean()
+        stats.value = var.values.mean()
         stats.entropy = var.action_distribution.entropy().mean()
         stats.policy_loss = var.policy_loss
         stats.kl_loss = var.kl_loss
@@ -888,7 +904,7 @@ class Learner(Configurable):
             ratio_max = valid_ratios.max().detach()
             # log.debug('Learner %d ratio mean min max %.4f %.4f %.4f', self.policy_id, ratio_mean.cpu().item(), ratio_min.cpu().item(), ratio_max.cpu().item())
 
-            value_delta = torch.abs(var.values - var.old_values)
+            value_delta = torch.abs(var.values - var.mb.values)
             value_delta_avg, value_delta_max = value_delta.mean(), value_delta.max()
 
             stats.kl_divergence = var.kl_old_mean
