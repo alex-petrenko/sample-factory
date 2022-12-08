@@ -3,8 +3,8 @@ from sf_examples.isaacgym_examples.experiments.isaacgym_runs import base_cli, vs
 
 _params = ParamGrid(
     [
-        ("seed", [1111, 2222, 3333, 4444, 5555]),
-        ("env", ["Ant, Humanoid"]),
+        ("seed", [1111, 2222, 3333, 4444, 5555, 6666]),
+        ("env", ["Ant", "Humanoid"]),
         ("use_rnn", [True, False]),  # train recurrent and non-recurrent models
         # ("num_epochs", [4, 6]),
         ("ppo_loss_decoupled", [True, False]),
