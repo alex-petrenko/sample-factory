@@ -155,13 +155,13 @@ def add_rl_args(p: ArgumentParser):
         "rollout, although for PBT training it is currently recommended that rollout << episode_len"
         "(see function finalize_trajectory in actor_worker.py)",
     )
-    # TODO: force set recurrence to rollout len if we use rnns - we don't currently support unequal recurrence and rollout anyway
     p.add_argument(
         "--recurrence",
-        default=32,
+        default=-1,
         type=int,
-        help="Trajectory length for backpropagation through time. If recurrence=1 there is no backpropagation through time, and experience is shuffled completely randomly"
-        "For V-trace recurrence should be equal to rollout length.",
+        help="Trajectory length for backpropagation through time. "
+        "Default value (-1) sets recurrence to rollout length for RNNs and to 1 (no recurrence) for feed-forward nets. "
+        "If you train with V-trace recurrence should be equal to rollout length.",
     )
     p.add_argument(
         "--shuffle_minibatches",

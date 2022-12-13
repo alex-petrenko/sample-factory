@@ -95,6 +95,14 @@ def postprocess_args(args, argv, parser) -> argparse.Namespace:
     return args
 
 
+def preprocess_cfg(cfg: Config, env_info: EnvInfo) -> bool:
+    if cfg.recurrence == -1:
+        cfg.recurrence = cfg.rollout if cfg.use_rnn else 1
+        log.debug(f"Automatically setting recurrence to {cfg.recurrence}")
+
+    return verify_cfg(cfg, env_info)
+
+
 def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
     """
     Do some checks to make sure this is a viable configuration.
