@@ -1,5 +1,9 @@
 # Recent releases
 
+##### v2.0.3
+
+* Automatically set `--recurrence` based on feed-forward vs RNN training
+
 ##### v2.0.2
 
 * `cfg.json` renamed to `config.json` for consistency with other HuggingFace integrations
