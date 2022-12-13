@@ -422,17 +422,6 @@ class Learner(Configurable):
             self.policy_to_load = None
 
     @staticmethod
-    def _policy_loss_decoupled(is_ratio, clip_ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids: int):
-        clipped_ratio = torch.clamp(clip_ratio, clip_ratio_low, clip_ratio_high)
-        loss_unclipped = clip_ratio * adv
-        loss_clipped = clipped_ratio * adv
-        loss = is_ratio * torch.min(loss_unclipped, loss_clipped)
-        loss = masked_select(loss, valids, num_invalids)
-        loss = -loss.mean()
-
-        return loss
-
-    @staticmethod
     def _policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids: int):
         clipped_ratio = torch.clamp(ratio, clip_ratio_low, clip_ratio_high)
         loss_unclipped = ratio * adv
@@ -537,7 +526,7 @@ class Learner(Configurable):
         return mb
 
     def _calculate_losses(
-        self, epoch: int, mb: AttrDict, num_invalids: int
+        self, mb: AttrDict, num_invalids: int
     ) -> Tuple[ActionDistribution, Tensor, Tensor | float, Optional[Tensor], Tensor | float, Tensor, Dict]:
         with torch.no_grad(), self.timing.add_time("losses_init"):
             recurrence: int = self.cfg.recurrence
@@ -588,30 +577,16 @@ class Learner(Configurable):
         with self.timing.add_time("tail"):
             # calculate policy tail outside of recurrent loop
             result = self.actor_critic.forward_tail(core_outputs, values_only=False, sample_actions=False)
-            values = result["values"].squeeze()
-
             action_distribution = self.actor_critic.action_distribution()
             log_prob_actions = action_distribution.log_prob(mb.actions)
-
-            # probability ratio (regular PPO): pi / pi_old
-            ratio = torch.exp(log_prob_actions - mb.log_prob_actions)
-
-            # clipping ratio: pi / pi_prox
-            clip_ratio = torch.exp(log_prob_actions - mb.proximal_log_prob_actions)
+            ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
             # super large/small values can cause numerical problems and are probably noise anyway
             ratio = torch.clamp(ratio, 0.05, 20.0)
-            clip_ratio = torch.clamp(clip_ratio, 0.05, 20.0)
 
-            # importance sampling ratio: pi_prox / pi_old
-            with torch.no_grad():
-                is_ratio = torch.exp(mb.proximal_log_prob_actions - mb.log_prob_actions)
-                is_ratio = torch.clamp(is_ratio, 0.05, 20.0)
+            values = result["values"].squeeze()
 
-                if epoch == 0:
-                    mb.proximal_log_prob_actions[:] = log_prob_actions
-
-                del core_outputs  # hopefully to save some CUDA memory
+            del core_outputs
 
         # these computations are not the part of the computation graph
         with torch.no_grad(), self.timing.add_time("advantages_returns"):
@@ -663,13 +638,8 @@ class Learner(Configurable):
             adv = (adv - adv_mean) / torch.clamp_min(adv_std, 1e-7)  # normalize advantage
 
         with self.timing.add_time("losses"):
-            if self.cfg.ppo_loss_decoupled:
-                policy_loss = self._policy_loss_decoupled(
-                    is_ratio, clip_ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids
-                )
-            else:
-                policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids)
-
+            # noinspection PyTypeChecker
+            policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids)
             exploration_loss = self.exploration_loss_func(action_distribution, valids, num_invalids)
             kl_old, kl_loss = self.kl_loss_func(
                 self.actor_critic.action_space, mb.action_logits, action_distribution, valids, num_invalids
@@ -724,14 +694,6 @@ class Learner(Configurable):
 
             assert self.actor_critic.training
 
-            # self.actor_critic(
-            #     gpu_buffer["normalized_obs"], gpu_buffer["rnn_states"]
-            # )  # TODO: don't sample actions (speedup)
-            # proximal_action_distributions = self.actor_critic.action_distribution()
-            # gpu_buffer["proximal_log_prob_actions"] = proximal_action_distributions.log_prob(gpu_buffer["actions"])
-
-            gpu_buffer["proximal_log_prob_actions"] = gpu_buffer["log_prob_actions"].detach().clone()
-
         for epoch in range(self.cfg.num_epochs):
             with timing.add_time("epoch_init"):
                 if early_stop:
@@ -742,10 +704,10 @@ class Learner(Configurable):
 
             for batch_num in range(len(minibatches)):
                 with torch.no_grad(), timing.add_time("minibatch_init"):
-                    mb_indices = minibatches[batch_num]
+                    indices = minibatches[batch_num]
 
                     # current minibatch consisting of short trajectory segments with length == recurrence
-                    mb = self._get_minibatch(gpu_buffer, mb_indices)
+                    mb = self._get_minibatch(gpu_buffer, indices)
 
                     # enable syntactic sugar that allows us to access dict's keys as object attributes
                     mb = AttrDict(mb)
@@ -759,7 +721,7 @@ class Learner(Configurable):
                         kl_loss,
                         value_loss,
                         loss_summaries,
-                    ) = self._calculate_losses(epoch, mb, num_invalids)
+                    ) = self._calculate_losses(mb, num_invalids)
 
                 with timing.add_time("losses_postprocess"):
                     # noinspection PyTypeChecker
