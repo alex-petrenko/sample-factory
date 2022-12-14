@@ -148,7 +148,9 @@ class ActorState:
             return self._process_action_space(actions, is_discrete=False)
         elif isinstance(self.env_info.action_space, gym.spaces.Tuple):
             out_actions = []
-            for split, space in zip(np.split(actions, self.env_info.action_splits), self.env_info.action_space):
+            for split, space in zip(
+                np.split(actions, np.cumsum(self.env_info.action_splits)), self.env_info.action_space
+            ):
                 is_discrete = isinstance(space, gym.spaces.Discrete)
                 out_actions.append(self._process_action_space(split, is_discrete))
             return out_actions
