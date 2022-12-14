@@ -47,6 +47,53 @@ def mujoco_envpool_override_defaults(env: str, parser: argparse.ArgumentParser) 
         serial_mode=True,  # we're running with 1 worker in sync mode, so might as well run everything in one process
     )
 
+    if env in env_configs:
+        parser.set_defaults(**env_configs[env])
+
+
+env_configs = dict(
+    mujoco_ant=dict(
+        encoder_mlp_layers=[128, 64, 32],
+        nonlinearity="elu",
+        learning_rate=3e-4,
+        rollout=64,
+        num_epochs=4,
+        num_batches_per_epoch=2,
+    ),
+    mujoco_halfcheetah=dict(
+        encoder_mlp_layers=[128, 64, 32],
+        nonlinearity="elu",
+        learning_rate=5e-4,
+        rollout=256,
+        num_epochs=5,
+        num_batches_per_epoch=8,
+    ),
+    mujoco_humanoid=dict(
+        encoder_mlp_layers=[512, 256, 128],
+        nonlinearity="elu",
+        learning_rate=3e-4,
+        rollout=128,
+        num_epochs=5,
+        num_batches_per_epoch=4,
+    ),
+    mujoco_hopper=dict(
+        encoder_mlp_layers=[256, 128, 64],
+        nonlinearity="elu",
+        learning_rate=5e-4,
+        rollout=64,
+        num_epochs=5,
+        num_batches_per_epoch=2,
+    ),
+    mujoco_walker=dict(
+        encoder_mlp_layers=[256, 128, 64],
+        nonlinearity="elu",
+        learning_rate=3e-4,
+        rollout=128,
+        num_epochs=5,
+        num_batches_per_epoch=4,
+    ),
+)
+
 
 # noinspection PyUnusedLocal
 def add_mujoco_envpool_env_args(env, parser, evaluation: bool = False) -> None:
