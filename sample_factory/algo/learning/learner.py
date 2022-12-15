@@ -758,7 +758,7 @@ class Learner(Configurable):
 
                     kl_old_mean = float(kl_old.mean().item())
                     recent_kls.append(kl_old_mean)
-                    if kl_old.max().item() > 100:
+                    if kl_old.numel() > 0 and kl_old.max().item() > 100:
                         log.warning(f"KL-divergence is very high: {kl_old.max().item():.4f}")
 
                 # update the weights
