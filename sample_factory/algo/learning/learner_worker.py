@@ -24,6 +24,7 @@ from sample_factory.utils.typing import Config, PolicyID, GpuID
 from sample_factory.utils.utils import init_file_logger, log
 from sample_factory.algo.utils.multiprocessing_utils import init_process_dist
 
+SCHEDULE_SAVE_OFFSET = 10
 def init_learner_process(sf_context: SampleFactoryContext, learner_worker: LearnerWorker, rank: int, size: int):
     if size > 1:
         init_process_dist(rank, size)
@@ -78,6 +79,8 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
 
         self.cache_cleanup_timer = Timer(self.event_loop, 30)
         self.cache_cleanup_timer.timeout.connect(self._cleanup_cache)
+        self.scheduled_saves = []
+        self.scheduled_policy_version = -1
 
     @signal
     def initialized(self):
@@ -106,6 +109,24 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
     @signal
     def stop(self):
         ...
+
+    @signal
+    def set_scheduled_save(self):
+        ...
+    def on_set_scheduled_save(self, policy_version):
+        self.scheduled_policy_version = policy_version.clone()
+
+    def schedule_save(self) -> bool:
+        self.scheduled_saves.append(self.save)
+        self.set_scheduled_save.emit(self.learner.policy_versions_tensor[self.policy_id] + SCHEDULE_SAVE_OFFSET)
+
+    def schedule_save_best(self, policy_id: PolicyID, metric: str, metric_value: float) -> bool:
+        self.scheduled_saves.append(partial(self.save_best, policy_id, metric, metric_value))
+        self.set_scheduled_save.emit(self.learner.policy_versions_tensor[self.policy_id] + SCHEDULE_SAVE_OFFSET)
+
+    def schedule_save_milestone(self) -> None:
+        self.scheduled_saves.append(self.save_milestone)
+        self.set_scheduled_save.emit(self.learner.policy_versions_tensor[self.policy_id] + SCHEDULE_SAVE_OFFSET)
 
     def save(self) -> bool:
         if self.learner.save():
@@ -158,6 +179,12 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.finished_training_iteration.emit(self.training_iteration_since_resume)
         if stats is not None:
             self.report_msg.emit(stats)
+
+        if self.scheduled_policy_version == self.learner.policy_versions_tensor[self.policy_id]:
+            if self.cfg.gpu_per_policy > 1:
+                self.learner.optimizer.consolidate_state_dict()
+            while len(self.scheduled_saves) > 0:
+                self.scheduled_saves.pop()()
 
     # noinspection PyMethodMayBeStatic
     def _cleanup_cache(self):

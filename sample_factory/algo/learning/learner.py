@@ -31,6 +31,9 @@ from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID, GpuID
 from sample_factory.utils.utils import ensure_dir_exists, experiment_dir, log
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.optim import ZeroRedundancyOptimizer as ZRO
+from torch.distributed.algorithms.ddp_comm_hooks.ddp_zero_hook import hook_with_zero_step
+from torch.distributed.algorithms.ddp_comm_hooks.default_hooks import allreduce_hook
 
 class LearningRateScheduler:
     def update(self, current_lr, recent_kls):
@@ -215,6 +218,12 @@ class Learner(Configurable):
         log.debug(self.actor_critic)
         self.actor_critic.model_to_device(self.device)
 
+        if self.cfg.gpu_per_policy > 1:
+            log.debug("Wrapping model with DDP")
+            self.actor_critic = DDP(self.actor_critic, 
+                                    device_ids=[self.device], 
+                                    output_device=self.device, 
+                                    static_graph=True)
         def share_mem(t):
             if t is not None and not t.is_cuda:
                 return t.share_memory_()
@@ -230,17 +239,18 @@ class Learner(Configurable):
         optimizer_cls = optimizer_cls[self.cfg.optimizer]
         log.debug(f"Using optimizer {optimizer_cls}")
 
-        self.optimizer = optimizer_cls(self.actor_critic.parameters(),
-                                        lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
-                                        betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
-                                        eps=self.cfg.adam_eps)
+        if self.cfg.gpu_per_policy == 1:
+            self.optimizer = optimizer_cls(self.actor_critic.parameters(),
+                                            lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
+                                            betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+                                            eps=self.cfg.adam_eps)
+        else:
+            self.optimizer = ZRO(self.actor_critic.parameters(), 
+                                 optimizer_cls,
+                                 lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
+                                 betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+                                 eps=self.cfg.adam_eps)
 
-        if self.cfg.gpu_per_policy > 1:
-            log.debug("Wrapping model with DDP")
-            self.actor_critic = DDP(self.actor_critic, 
-                                    device_ids=[self.device], 
-                                    output_device=self.device, 
-                                    static_graph=True)
         self.load_from_checkpoint(self.policy_id)
         self.param_server.init(self.actor_critic, self.train_step, self.device)
         self.policy_versions_tensor[self.policy_id] = self.train_step

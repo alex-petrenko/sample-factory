@@ -694,10 +694,12 @@ class Runner(EventLoopObject, Configurable):
 
                 for sampler_component in sampler.heartbeat_components():
                     self._setup_component_heartbeat(sampler_component)
+                self.learners[policy_id][0].set_scheduled_save.connect(self.learners[policy_id][gpu_id].on_set_scheduled_save)
 
-            self.save_periodic.connect(self.learners[policy_id][0].save)
-            self.save_best.connect(self.learners[policy_id][0].save_best)
-            self.save_milestone.connect(self.learners[policy_id][0].save_milestone)
+            self.save_periodic.connect(self.learners[policy_id][0].schedule_save)
+            self.save_best.connect(self.learners[policy_id][0].schedule_save_best)
+            self.save_milestone.connect(self.learners[policy_id][0].schedule_save_milestone)
+
 
         # final cleanup
         self.all_components_stopped.connect(self._on_everything_stopped)
