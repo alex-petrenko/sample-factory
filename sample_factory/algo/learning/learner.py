@@ -918,7 +918,8 @@ class Learner(Configurable):
 
         # this caused numerical issues on some versions of PyTorch with second moment reaching infinity
         adam_max_second_moment = 0.0
-        for key, tensor_state in self.optimizer.state.items():
+        optimizer = self.optimizer if self.cfg.gpu_per_policy == 1 else self.optimizer.optim
+        for key, tensor_state in optimizer.state.items():
             adam_max_second_moment = max(tensor_state["exp_avg_sq"].max().item(), adam_max_second_moment)
         stats.adam_max_second_moment = adam_max_second_moment
 
