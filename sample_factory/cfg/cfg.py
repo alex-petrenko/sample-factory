@@ -529,6 +529,12 @@ def add_model_args(p: ArgumentParser):
     )
     p.add_argument("--rnn_num_layers", default=1, type=int, help="Number of RNN layers to use if use_rnn is True")
 
+    p.add_argument(
+        "--gpu_per_policy",
+        default=1,
+        type=int,
+        help="Number of GPUs to use per policy. If set to -1, all available GPUs will be used.",
+    )
     # Decoder settings. Decoder appears between policy core (RNN) and action/critic heads.
     p.add_argument(
         "--decoder_mlp_layers",

@@ -178,6 +178,16 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
             )
             good_config = False
 
+    if cfg.gpu_per_policy > 1:
+        if cfg.normalize_returns:
+            cfg_error("normalize_returns is not supported with gpu_per_policy > 1")
+        if cfg.num_policies != 1:
+            cfg_error("gpu_per_policy > 1 is only supported for single policy experiments.")
+            
+    if cfg.batch_size % cfg.gpu_per_policy != 0:
+        cfg_error(
+            f"{cfg.batch_size=} must be a multiple of {cfg.gpu_per_policy=}."
+        )
     if sync_rl and cfg.num_policies > 1:
         log.warning(
             "Sync mode is not fully tested with multi-policy training. Use at your own risk. "

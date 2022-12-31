@@ -10,7 +10,7 @@ from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.utils.typing import StatusCode
 from sample_factory.utils.utils import log
-
+from functools import partial
 
 class ParallelRunner(Runner):
     def __init__(self, cfg):
@@ -25,22 +25,26 @@ class ParallelRunner(Runner):
         mp_ctx = get_mp_ctx(self.cfg.serial_mode)
 
         for policy_id in range(self.cfg.num_policies):
-            batcher_event_loop = EventLoop("batcher_evt_loop")
-            self.batchers[policy_id] = self._make_batcher(batcher_event_loop, policy_id)
-            batcher_event_loop.owner = self.batchers[policy_id]
+            self.batchers[policy_id] = {}
+            self.learners[policy_id] = {}
+            for gpu_id in range(self.cfg.gpu_per_policy):
+                batcher_event_loop = EventLoop("batcher_evt_loop")
+                self.batchers[policy_id][gpu_id] = self._make_batcher(batcher_event_loop, policy_id, gpu_id)
+                batcher_event_loop.owner = self.batchers[policy_id][gpu_id]
+                learner_proc = EventLoopProcess(f"learner_proc{policy_id}-{gpu_id}", 
+                                                mp_ctx, 
+                                                init_func=partial(init_learner_process, size=self.cfg.gpu_per_policy, rank=gpu_id))
+                self.processes.append(learner_proc)
 
-            learner_proc = EventLoopProcess(f"learner_proc{policy_id}", mp_ctx, init_func=init_learner_process)
-            self.processes.append(learner_proc)
+                self.learners[policy_id][gpu_id] = self._make_learner(
+                    learner_proc.event_loop,
+                    policy_id,
+                    gpu_id,
+                )
+                learner_proc.event_loop.owner = self.learners[policy_id][gpu_id]
+                learner_proc.set_init_func_args((sf_global_context(), self.learners[policy_id][gpu_id]))
 
-            self.learners[policy_id] = self._make_learner(
-                learner_proc.event_loop,
-                policy_id,
-                self.batchers[policy_id],
-            )
-            learner_proc.event_loop.owner = self.learners[policy_id]
-            learner_proc.set_init_func_args((sf_global_context(), self.learners[policy_id]))
-
-        self.sampler = self._make_sampler(ParallelSampler, self.event_loop)
+        self.samplers = [self._make_sampler(ParallelSampler, self.event_loop, gpu_id) for gpu_id in range(self.cfg.gpu_per_policy)]
 
         self.connect_components()
         return status
@@ -61,5 +65,6 @@ class ParallelRunner(Runner):
             log.debug(f"Waiting for process {p.name} to stop...")
             p.join()
 
-        self.sampler.join()
+        for sampler in self.samplers:
+            sampler.join()
         super()._on_everything_stopped()

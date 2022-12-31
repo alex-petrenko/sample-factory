@@ -15,7 +15,7 @@ from torch.nn import Module
 from sample_factory.algo.learning.rnn_utils import build_core_out_from_seq, build_rnn_inputs
 from sample_factory.algo.utils.action_distributions import get_action_distribution, is_continuous_action_space
 from sample_factory.algo.utils.env_info import EnvInfo
-from sample_factory.algo.utils.misc import LEARNER_ENV_STEPS, POLICY_ID_KEY, STATS_KEY, TRAIN_STATS, memory_stats
+from sample_factory.algo.utils.misc import LEARNER_ENV_STEPS, POLICY_ID_KEY, GPU_ID_KEY, STATS_KEY, TRAIN_STATS, memory_stats
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
 from sample_factory.algo.utils.rl_utils import gae_advantages, prepare_and_normalize_obs
@@ -28,9 +28,9 @@ from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID
+from sample_factory.utils.typing import ActionDistribution, Config, InitModelData, PolicyID, GpuID
 from sample_factory.utils.utils import ensure_dir_exists, experiment_dir, log
-
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 class LearningRateScheduler:
     def update(self, current_lr, recent_kls):
@@ -129,13 +129,15 @@ class Learner(Configurable):
         env_info: EnvInfo,
         policy_versions_tensor: Tensor,
         policy_id: PolicyID,
-        param_server: ParameterServer,
+        gpu_id: GpuID,
+        param_server: ParameterServer
     ):
         Configurable.__init__(self, cfg)
 
-        self.timing = Timing(name=f"Learner {policy_id} profile")
+        self.timing = Timing(name=f"Learner {policy_id} Gpu {gpu_id} profile")
 
         self.policy_id = policy_id
+        self.gpu_id = gpu_id
 
         self.env_info = env_info
 
@@ -167,8 +169,7 @@ class Learner(Configurable):
 
         # shared tensor used to share the latest policy version between processes
         self.policy_versions_tensor: Tensor = policy_versions_tensor
-
-        self.param_server: ParameterServer = param_server
+        self.param_server = param_server
 
         self.exploration_loss_func: Optional[Callable] = None
         self.kl_loss_func: Optional[Callable] = None
@@ -204,7 +205,7 @@ class Learner(Configurable):
             np.random.seed(self.cfg.seed)
 
         # initialize device
-        self.device = policy_device(self.cfg, self.policy_id)
+        self.device = policy_device(self.cfg, self.policy_id if self.cfg.gpu_per_policy == 1 else self.gpu_id)
 
         log.debug("Initializing actor-critic model on device %s", self.device)
 
@@ -221,10 +222,7 @@ class Learner(Configurable):
 
         # noinspection PyProtectedMember
         self.actor_critic._apply(share_mem)
-        self.actor_critic.train()
-
-        params = list(self.actor_critic.parameters())
-
+        self.actor_critic.train()       
         optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
         if self.cfg.optimizer not in optimizer_cls:
             raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
@@ -232,13 +230,17 @@ class Learner(Configurable):
         optimizer_cls = optimizer_cls[self.cfg.optimizer]
         log.debug(f"Using optimizer {optimizer_cls}")
 
-        self.optimizer = optimizer_cls(
-            params,
-            lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
-            betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
-            eps=self.cfg.adam_eps,
-        )
+        self.optimizer = optimizer_cls(self.actor_critic.parameters(),
+                                        lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
+                                        betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+                                        eps=self.cfg.adam_eps)
 
+        if self.cfg.gpu_per_policy > 1:
+            log.debug("Wrapping model with DDP")
+            self.actor_critic = DDP(self.actor_critic, 
+                                    device_ids=[self.device], 
+                                    output_device=self.device, 
+                                    static_graph=True)
         self.load_from_checkpoint(self.policy_id)
         self.param_server.init(self.actor_critic, self.train_step, self.device)
         self.policy_versions_tensor[self.policy_id] = self.train_step
@@ -249,7 +251,8 @@ class Learner(Configurable):
 
         self.is_initialized = True
 
-        return model_initialization_data(self.cfg, self.policy_id, self.actor_critic, self.train_step, self.device)
+        actor_critic_module = self.actor_critic if self.cfg.gpu_per_policy == 1 else self.actor_critic.module
+        return model_initialization_data(self.cfg, self.policy_id, actor_critic_module, self.train_step, self.device)
 
     @staticmethod
     def checkpoint_dir(cfg, policy_id):
@@ -285,7 +288,10 @@ class Learner(Configurable):
             self.train_step = checkpoint_dict["train_step"]
             self.env_steps = checkpoint_dict["env_steps"]
             self.best_performance = checkpoint_dict.get("best_performance", self.best_performance)
-        self.actor_critic.load_state_dict(checkpoint_dict["model"])
+        if self.cfg.gpu_per_policy == 1:
+            self.actor_critic.load_state_dict(checkpoint_dict["model"])
+        else:
+            self.actor_critic.module.load_state_dict(checkpoint_dict["model"])
         self.optimizer.load_state_dict(checkpoint_dict["optimizer"])
         self.curr_lr = checkpoint_dict.get("curr_lr", self.cfg.learning_rate)
 
@@ -315,11 +321,16 @@ class Learner(Configurable):
         self.train_step += 1
 
     def _get_checkpoint_dict(self):
+        if self.cfg.gpu_per_policy == 1:
+            model_state_dict = self.actor_critic.state_dict()
+        else:
+            model_state_dict = self.actor_critic.module.state_dict()
+        
         checkpoint = {
             "train_step": self.train_step,
             "env_steps": self.env_steps,
             "best_performance": self.best_performance,
-            "model": self.actor_critic.state_dict(),
+            "model": model_state_dict,
             "optimizer": self.optimizer.state_dict(),
             "curr_lr": self.curr_lr,
         }
@@ -528,6 +539,7 @@ class Learner(Configurable):
     def _calculate_losses(
         self, mb: AttrDict, num_invalids: int
     ) -> Tuple[ActionDistribution, Tensor, Tensor | float, Optional[Tensor], Tensor | float, Tensor, Dict]:
+        actor_critic = self.actor_critic if self.cfg.gpu_per_policy == 1 else self.actor_critic.module
         with torch.no_grad(), self.timing.add_time("losses_init"):
             recurrence: int = self.cfg.recurrence
 
@@ -541,7 +553,7 @@ class Learner(Configurable):
 
         # calculate policy head outside of recurrent loop
         with self.timing.add_time("forward_head"):
-            head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
+            head_outputs = actor_critic.forward_head(mb.normalized_obs)
             minibatch_size: int = head_outputs.size(0)
 
         # initial rnn states
@@ -556,18 +568,20 @@ class Learner(Configurable):
                     mb.rnn_states,
                     recurrence,
                 )
+                is_seq = True
             else:
                 rnn_states = mb.rnn_states[::recurrence]
+                is_seq = False
 
         # calculate RNN outputs for each timestep in a loop
         with self.timing.add_time("bptt"):
             if self.cfg.use_rnn:
                 with self.timing.add_time("bptt_forward_core"):
-                    core_output_seq, _ = self.actor_critic.forward_core(head_output_seq, rnn_states)
+                    core_output_seq, _ = self.actor_critic(head_output_seq, rnn_states, is_seq=is_seq)
                 core_outputs = build_core_out_from_seq(core_output_seq, inverted_select_inds)
                 del core_output_seq
             else:
-                core_outputs, _ = self.actor_critic.forward_core(head_outputs, rnn_states)
+                core_outputs, _ = self.actor_critic(head_outputs, rnn_states, is_seq=is_seq)
 
             del head_outputs
 
@@ -576,8 +590,8 @@ class Learner(Configurable):
 
         with self.timing.add_time("tail"):
             # calculate policy tail outside of recurrent loop
-            result = self.actor_critic.forward_tail(core_outputs, values_only=False, sample_actions=False)
-            action_distribution = self.actor_critic.action_distribution()
+            result = actor_critic.forward_tail(core_outputs, values_only=False, sample_actions=False)
+            action_distribution = actor_critic.action_distribution()
             log_prob_actions = action_distribution.log_prob(mb.actions)
             ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
 
@@ -642,7 +656,7 @@ class Learner(Configurable):
             policy_loss = self._policy_loss(ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids)
             exploration_loss = self.exploration_loss_func(action_distribution, valids, num_invalids)
             kl_old, kl_loss = self.kl_loss_func(
-                self.actor_critic.action_space, mb.action_logits, action_distribution, valids, num_invalids
+                actor_critic.action_space, mb.action_logits, action_distribution, valids, num_invalids
             )
             old_values = mb["values"]
             value_loss = self._value_loss(values, old_values, targets, clip_value, valids, num_invalids)
@@ -679,18 +693,19 @@ class Learner(Configurable):
             num_sgd_steps = 0
             stats_and_summaries: Optional[AttrDict] = None
 
-            # When it is time to record train summaries, we randomly sample epoch/batch for which the summaries are
-            # collected to get equal representation from different stages of training.
-            # Half the time, we record summaries from the very large step of training. There we will have the highest
-            # KL-divergence and ratio of PPO-clipped samples, which makes this data even more useful for analysis.
-            # Something to consider: maybe we should have these last-batch metrics in a separate summaries category?
-            with_summaries = self._should_save_summaries()
-            if np.random.rand() < 0.5:
-                summaries_epoch = np.random.randint(0, self.cfg.num_epochs)
-                summaries_batch = np.random.randint(0, self.cfg.num_batches_per_epoch)
-            else:
-                summaries_epoch = self.cfg.num_epochs - 1
-                summaries_batch = self.cfg.num_batches_per_epoch - 1
+            if self.gpu_id == 0:
+                # When it is time to record train summaries, we randomly sample epoch/batch for which the summaries are
+                # collected to get equal representation from different stages of training.
+                # Half the time, we record summaries from the very large step of training. There we will have the highest
+                # KL-divergence and ratio of PPO-clipped samples, which makes this data even more useful for analysis.
+                # Something to consider: maybe we should have these last-batch metrics in a separate summaries category?
+                with_summaries = self._should_save_summaries() 
+                if np.random.rand() < 0.5:
+                    summaries_epoch = np.random.randint(0, self.cfg.num_epochs)
+                    summaries_batch = np.random.randint(0, self.cfg.num_batches_per_epoch)
+                else:
+                    summaries_epoch = self.cfg.num_epochs - 1
+                    summaries_batch = self.cfg.num_batches_per_epoch - 1
 
             assert self.actor_critic.training
 
@@ -750,7 +765,7 @@ class Learner(Configurable):
                     if kl_old is None:
                         # calculate KL-divergence with the behaviour policy action distribution
                         old_action_distribution = get_action_distribution(
-                            self.actor_critic.action_space,
+                            self.actor_critic.action_space if self.cfg.gpu_per_policy == 1 else self.actor_critic.module.action_space,
                             mb.action_logits,
                         )
                         kl_old = action_distribution.kl_divergence(old_action_distribution)
@@ -794,16 +809,19 @@ class Learner(Configurable):
                     if self.lr_scheduler.invoke_after_each_minibatch():
                         self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
 
-                    # collect and report summaries
-                    should_record_summaries = with_summaries
-                    should_record_summaries &= epoch == summaries_epoch and batch_num == summaries_batch
-                    should_record_summaries |= force_summaries
-                    if should_record_summaries:
-                        # hacky way to collect all of the intermediate variables for summaries
-                        summary_vars = {**locals(), **loss_summaries}
-                        stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
-                        del summary_vars
-                        force_summaries = False
+                    if self.gpu_id == 0:
+                        with timing.add_time("record summaries"):
+                            # collect and report summaries
+                            should_record_summaries = with_summaries
+                            should_record_summaries &= epoch == summaries_epoch and batch_num == summaries_batch
+                            should_record_summaries |= force_summaries
+                            if should_record_summaries:
+                                # hacky way to collect all of the intermediate variables for summaries
+                                summary_vars = {**locals(), **loss_summaries}
+
+                                stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
+                                del summary_vars
+                                force_summaries = False
 
                     # make sure everything (such as policy weights) is committed to shared device memory
                     synchronize(self.cfg, self.device)
@@ -839,7 +857,7 @@ class Learner(Configurable):
         stats.lr = self.curr_lr
         stats.actual_lr = train_loop_vars.actual_lr  # potentially scaled because of masked data
 
-        stats.update(self.actor_critic.summaries())
+        stats.update(self.actor_critic.summaries() if self.cfg.gpu_per_policy == 1 else self.actor_critic.module.summaries())
 
         stats.valids_fraction = var.mb.valids.float().mean()
         stats.same_policy_fraction = (var.mb.policy_id == self.policy_id).float().mean()
@@ -914,7 +932,7 @@ class Learner(Configurable):
 
         # hold the lock while we alter the state of the normalizer since they can be used in other processes too
         with self.param_server.policy_lock:
-            normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
+            normalized_obs = prepare_and_normalize_obs(self.actor_critic if self.cfg.gpu_per_policy == 1 else self.actor_critic.module, obs)
 
         # restore original shape
         for key, x in normalized_obs.items():
@@ -923,6 +941,10 @@ class Learner(Configurable):
         return normalized_obs
 
     def _prepare_batch(self, batch: TensorDict) -> Tuple[TensorDict, int, int]:
+        if self.cfg.gpu_per_policy > 1:
+            actor_critic = self.actor_critic.module
+        else:
+            actor_critic = self.actor_critic
         with torch.no_grad():
             # create a shallow copy so we can modify the dictionary
             # we still reference the same buffers though
@@ -945,7 +967,7 @@ class Learner(Configurable):
 
             # calculate estimated value for the next step (T+1)
             normalized_last_obs = buff["normalized_obs"][:, -1]
-            next_values = self.actor_critic(normalized_last_obs, buff["rnn_states"][:, -1], values_only=True)["values"]
+            next_values = actor_critic(normalized_last_obs, buff["rnn_states"][:, -1], values_only=True)["values"]
             buff["values"][:, -1] = next_values
 
             if self.cfg.normalize_returns:
@@ -954,7 +976,7 @@ class Learner(Configurable):
                 # rl_games PPO uses a similar approach, see:
                 # https://github.com/Denys88/rl_games/blob/7b5f9500ee65ae0832a7d8613b019c333ecd932c/rl_games/algos_torch/models.py#L51
                 denormalized_values = buff["values"].clone()  # need to clone since normalizer is in-place
-                self.actor_critic.returns_normalizer(denormalized_values, denormalize=True)
+                actor_critic.returns_normalizer(denormalized_values, denormalize=True)
             else:
                 # values are not normalized in this case, so we can use them as is
                 denormalized_values = buff["values"]
@@ -998,7 +1020,7 @@ class Learner(Configurable):
 
             # return normalization parameters are only used on the learner, no need to lock the mutex
             if self.cfg.normalize_returns:
-                self.actor_critic.returns_normalizer(buff["returns"])  # in-place
+                actor_critic.returns_normalizer(buff["returns"])  # in-place
 
             num_invalids = dataset_size - buff["valids"].sum().item()
             if num_invalids > 0:
@@ -1040,7 +1062,7 @@ class Learner(Configurable):
             else:
                 self.env_steps += experience_size
 
-            stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id}
+            stats = {LEARNER_ENV_STEPS: self.env_steps, POLICY_ID_KEY: self.policy_id, GPU_ID_KEY: self.gpu_id}
             if train_stats is not None:
                 if train_stats is not None:
                     stats[TRAIN_STATS] = train_stats

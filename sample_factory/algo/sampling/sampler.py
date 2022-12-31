@@ -14,7 +14,7 @@ from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.multiprocessing_utils import get_mp_ctx
 from sample_factory.algo.utils.shared_buffers import BufferMgr
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.utils.typing import Config, MpQueue, PolicyID
+from sample_factory.utils.typing import Config, MpQueue, PolicyID, GpuID
 from sample_factory.utils.utils import log
 
 
@@ -23,7 +23,7 @@ class AbstractSampler(EventLoopObject, Configurable):
         self,
         event_loop: EventLoop,
         buffer_mgr: BufferMgr,
-        param_servers: Dict[PolicyID, ParameterServer],
+        param_servers: Dict[PolicyID, Dict[GpuID, ParameterServer]],
         cfg: Config,
         env_info: EnvInfo,
         unique_name: str,
@@ -32,7 +32,7 @@ class AbstractSampler(EventLoopObject, Configurable):
         Configurable.__init__(self, cfg)
 
         self.buffer_mgr: BufferMgr = buffer_mgr
-        self.policy_param_server: Dict[PolicyID, ParameterServer] = param_servers
+        self.policy_param_server: Dict[PolicyID, Dict[GpuID, ParameterServer]] = param_servers
         self.env_info: EnvInfo = env_info
 
     @signal
@@ -83,12 +83,12 @@ class Sampler(AbstractSampler, ABC):
         self,
         event_loop: EventLoop,
         buffer_mgr: BufferMgr,
-        param_servers: Dict[PolicyID, ParameterServer],
+        param_servers: Dict[PolicyID, Dict[GpuID, ParameterServer]],
         cfg: Config,
         env_info: EnvInfo,
+        gpu_id: GpuID
     ):
-        unique_name = Sampler.__name__
-        AbstractSampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info, unique_name)
+        AbstractSampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info, f"Sampler-g{gpu_id}")
 
         self.inference_queues: Dict[PolicyID, MpQueue] = {
             p: get_queue(cfg.serial_mode) for p in range(self.cfg.num_policies)
@@ -105,11 +105,12 @@ class Sampler(AbstractSampler, ABC):
     def _inference_workers_initialized(self):
         ...
 
-    def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
+    def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, gpu_id: GpuID, param_server: ParameterServer):
         return InferenceWorker(
             event_loop,
             policy_id,
             worker_idx,
+            gpu_id,
             self.buffer_mgr,
             param_server,
             self.inference_queues[policy_id],
@@ -117,8 +118,8 @@ class Sampler(AbstractSampler, ABC):
             self.env_info,
         )
 
-    def _make_rollout_worker(self, event_loop, worker_idx: int):
-        return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info)
+    def _make_rollout_worker(self, event_loop, worker_idx: int, gpu_id: GpuID):
+        return RolloutWorker(event_loop, worker_idx, self.buffer_mgr, self.inference_queues, self.cfg, self.env_info, gpu_id)
 
     def _for_each_inference_worker(self, func: Callable[[InferenceWorker], None]) -> None:
         for policy_id in range(self.cfg.num_policies):
@@ -180,7 +181,7 @@ class Sampler(AbstractSampler, ABC):
 
     def _inference_worker_ready(self, policy_id: PolicyID, worker_idx: int):
         assert not self.inference_workers[policy_id][worker_idx].is_ready
-        log.info(f"Inference worker {policy_id}-{worker_idx} is ready!")
+        log.info(f"Inference worker {policy_id}-{worker_idx}-{self.inference_workers[policy_id][worker_idx].gpu_id} is ready!")
         self.inference_workers[policy_id][worker_idx].is_ready = True
 
         # check if all workers for all policies are ready
@@ -213,21 +214,22 @@ class SerialSampler(Sampler):
         self,
         event_loop: EventLoop,
         buffer_mgr,
-        param_servers: Dict[PolicyID, ParameterServer],
+        param_servers: Dict[PolicyID, Dict[GpuID, ParameterServer]],
         cfg: Config,
         env_info: EnvInfo,
+        gpu_id: int,
     ):
-        Sampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info)
+        Sampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info, gpu_id)
 
         for policy_id in range(self.cfg.num_policies):
             self.inference_workers[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
                 param_server = self.policy_param_server[policy_id]
-                inference_worker = self._make_inference_worker(self.event_loop, policy_id, i, param_server)
+                inference_worker = self._make_inference_worker(self.event_loop, policy_id, i, gpu_id, param_server)
                 self.inference_workers[policy_id].append(inference_worker)
 
         for i in range(self.cfg.num_workers):
-            rollout_worker = self._make_rollout_worker(self.event_loop, i)
+            rollout_worker = self._make_rollout_worker(self.event_loop, i, gpu_id)
             self.rollout_workers.append(rollout_worker)
 
         self._connect_internal_components()
@@ -244,25 +246,28 @@ class ParallelSampler(Sampler):
         self,
         event_loop: EventLoop,
         buffer_mgr,
-        param_servers: Dict[PolicyID, ParameterServer],
+        param_servers: Dict[PolicyID, Dict[GpuID, ParameterServer]],
         cfg: Config,
         env_info: EnvInfo,
+        gpu_id: GpuID
     ):
-        Sampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info)
+        Sampler.__init__(self, event_loop, buffer_mgr, param_servers, cfg, env_info, gpu_id)
         self.processes: List[EventLoopProcess] = []
         mp_ctx = get_mp_ctx(cfg.serial_mode)
 
         for policy_id in range(self.cfg.num_policies):
             self.inference_workers[policy_id] = []
             for i in range(self.cfg.policy_workers_per_policy):
-                inference_proc = EventLoopProcess(
-                    f"inference_proc{policy_id}-{i}", mp_ctx, init_func=init_inference_process
-                )
+                inference_proc = EventLoopProcess(f"inference_proc_p{policy_id}w{i}g{gpu_id}", 
+                                                mp_ctx, 
+                                                init_func=init_inference_process)
+                
                 self.processes.append(inference_proc)
                 inference_worker = self._make_inference_worker(
                     inference_proc.event_loop,
                     policy_id,
                     i,
+                    gpu_id,
                     self.policy_param_server[policy_id],
                 )
                 inference_proc.event_loop.owner = inference_worker
@@ -272,7 +277,7 @@ class ParallelSampler(Sampler):
         for i in range(self.cfg.num_workers):
             rollout_proc = EventLoopProcess(f"rollout_proc{i}", mp_ctx, init_func=init_rollout_worker_process)
             self.processes.append(rollout_proc)
-            rollout_worker = self._make_rollout_worker(rollout_proc.event_loop, i)
+            rollout_worker = self._make_rollout_worker(rollout_proc.event_loop, i, gpu_id)
             rollout_proc.event_loop.owner = rollout_worker
             rollout_proc.set_init_func_args((sf_global_context(), rollout_worker))
             self.rollout_workers.append(rollout_worker)

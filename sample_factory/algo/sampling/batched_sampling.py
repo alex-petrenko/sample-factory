@@ -23,7 +23,7 @@ from sample_factory.envs.env_utils import (
 )
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively_with_prefix
-from sample_factory.utils.typing import PolicyID
+from sample_factory.utils.typing import PolicyID, GpuID
 from sample_factory.utils.utils import log
 
 
@@ -103,6 +103,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         buffer_mgr,
         sampling_device: str,
         training_info: List[Optional[Dict]],
+        gpu_id: GpuID
     ):
         # TODO: comment
         """
@@ -120,6 +121,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
 
         self.policy_id = worker_idx % self.cfg.num_policies
+        self.gpu_id = gpu_id
         log.debug(f"EnvRunner {worker_idx}-{split_idx} uses policy {self.policy_id}")
 
         self.num_envs = num_envs
@@ -158,7 +160,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             env_config = AttrDict(
                 worker_index=self.worker_idx,
                 vector_index=vector_idx,
-                env_id=env_id,
+                env_id=env_id * self.gpu_id,
             )
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)

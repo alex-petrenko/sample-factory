@@ -33,7 +33,7 @@ from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import PolicyID, StatusCode
+from sample_factory.utils.typing import PolicyID, StatusCode, GpuID
 from sample_factory.utils.utils import (
     cfg_file,
     debug_log_every_n,
@@ -46,7 +46,7 @@ from sample_factory.utils.utils import (
     summaries_dir,
 )
 from sample_factory.utils.wandb_utils import init_wandb
-
+import torch
 
 class AlgoObserver:
     def on_init(self, runner: Runner) -> None:
@@ -94,14 +94,14 @@ class Runner(EventLoopObject, Configurable):
 
         self.buffer_mgr = None
 
-        self.learners: Dict[PolicyID, LearnerWorker] = dict()
-        self.batchers: Dict[PolicyID, Batcher] = dict()
-        self.sampler: Optional[AbstractSampler] = None
+        self.learners: Dict[PolicyID, Dict[LearnerWorker]] = dict()
+        self.batchers: Dict[PolicyID, Dict[Batcher]] = dict()
+        self.samplers: Optional[AbstractSampler] = None
 
         self.timing = Timing("Runner profile")
 
         # env_steps counts total number of simulation steps per policy (including frameskipped)
-        self.env_steps: Dict[PolicyID, int] = dict()
+        self.env_steps: Dict[PolicyID, list[int]] = {i:[0 for _ in range(self.cfg.gpu_per_policy)] for i in range(self.cfg.num_policies)}
 
         # samples_collected counts the total number of observations processed by the algorithm
         self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
@@ -129,6 +129,7 @@ class Runner(EventLoopObject, Configurable):
 
         self.policy_avg_stats: Dict[str, List[Deque]] = dict()
         self.policy_lag = [dict() for _ in range(self.cfg.num_policies)]
+        assert torch.cuda.device_count() >= self.cfg.gpu_per_policy, "Not enough GPUs. Lower gpu_per_policy."
 
         self._handle_restart()
 
@@ -167,7 +168,8 @@ class Runner(EventLoopObject, Configurable):
         periodic(self.summaries_interval_sec, self._report_experiment_summaries)
 
         periodic(self.cfg.save_every_sec, self._save_policy)
-        periodic(self.cfg.save_best_every_sec, self._save_best_policy)
+        if self.cfg.save_best_every_sec > 0:
+            periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
         periodic(self.update_training_info_every_sec, self._propagate_training_info)
 
@@ -244,13 +246,14 @@ class Runner(EventLoopObject, Configurable):
         for msg in msgs:
             # some messages are policy-specific
             policy_id = msg.get("policy_id", None)
+            gpu_id = msg.get("gpu_id", None)
 
             for key in msg:
                 for handler in self.msg_handlers.get(key, ()):
                     handler(self, msg)
                 if policy_id is not None:
                     for handler in self.policy_msg_handlers.get(key, ()):
-                        handler(self, msg, policy_id)
+                        handler(self, msg, policy_id, gpu_id)
 
     @staticmethod
     def _timing_msg_handler(runner, msg):
@@ -264,18 +267,18 @@ class Runner(EventLoopObject, Configurable):
         runner.stats.update(msg["stats"])
 
     @staticmethod
-    def _learner_steps_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
-        env_steps: int = msg[LEARNER_ENV_STEPS]
-        if policy_id in runner.env_steps:
-            delta = env_steps - runner.env_steps[policy_id]
+    def _learner_steps_handler(runner: Runner, msg: Dict, policy_id: PolicyID, gpu_id: GpuID) -> None:
+        if len(runner.env_steps[policy_id]) > 0:
+            prev_env_steps = sum(runner.env_steps[policy_id])
+            runner.env_steps[policy_id][gpu_id] = msg[LEARNER_ENV_STEPS]
+            new_env_steps = sum(runner.env_steps[policy_id])
+            delta = new_env_steps - prev_env_steps
+            if runner.total_env_steps_since_resume is None:
+                runner.total_env_steps_since_resume = 0
             runner.total_env_steps_since_resume += delta
-        elif runner.total_env_steps_since_resume is None:
-            runner.total_env_steps_since_resume = 0
-
-        runner.env_steps[policy_id] = env_steps
 
     @staticmethod
-    def _episodic_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
+    def _episodic_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID, gpu_id: GpuID) -> None:
         s = msg[EPISODIC]
         for _, key, value in iterate_recursively(s):
             if key not in runner.policy_avg_stats:
@@ -293,18 +296,19 @@ class Runner(EventLoopObject, Configurable):
                 runner.policy_avg_stats[key][policy_id].append(value)
 
     @staticmethod
-    def _train_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
+    def _train_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID, gpu_id: GpuID) -> None:
         """We write the train summaries to disk right away instead of accumulating them."""
         train_stats = msg[TRAIN_STATS]
+        step = sum(runner.env_steps[policy_id])
         for key, scalar in train_stats.items():
-            runner.writers[policy_id].add_scalar(f"train/{key}", scalar, runner.env_steps[policy_id])
+            runner.writers[policy_id].add_scalar(f"train/{key}", scalar, step)
 
         for key in ["version_diff_min", "version_diff_max", "version_diff_avg"]:
             if key in train_stats:
                 runner.policy_lag[policy_id][key] = train_stats[key]
 
     @staticmethod
-    def _samples_stats_handler(runner, msg, policy_id):
+    def _samples_stats_handler(runner, msg, policy_id, gpu_id):
         runner.samples_collected[policy_id] += msg[SAMPLES_COLLECTED]
 
     def _get_perf_stats(self):
@@ -381,7 +385,7 @@ class Runner(EventLoopObject, Configurable):
             self.throughput_stats[policy_id].append((now, self.samples_collected[policy_id]))
 
         fps_stats, sample_throughput = self._get_perf_stats()
-        total_env_steps = sum(self.env_steps.values())
+        total_env_steps = sum([sum(x) for x in self.env_steps.values()])
         self.print_stats(fps_stats, sample_throughput, total_env_steps)
 
     def _report_experiment_summaries(self):
@@ -392,6 +396,7 @@ class Runner(EventLoopObject, Configurable):
 
         default_policy = 0
         for policy_id, env_steps in self.env_steps.items():
+            env_steps = sum(env_steps)
             writer = self.writers[policy_id]
             if policy_id == default_policy:
                 if not math.isnan(fps):
@@ -452,7 +457,7 @@ class Runner(EventLoopObject, Configurable):
             training_info[policy_id] = dict(
                 policy_id=policy_id,
                 # "approx" here because it will lag behind a little bit due to the async nature of the system
-                approx_total_training_steps=self.env_steps.get(policy_id, 0),
+                approx_total_training_steps=sum(self.env_steps.get(policy_id, [0])),
                 reward_shaping=self.reward_shaping[policy_id],
                 # add more stats if needed (commented by default for efficiency)
                 # stats=self.stats,
@@ -484,7 +489,7 @@ class Runner(EventLoopObject, Configurable):
         if metric in self.policy_avg_stats:
             for policy_id in range(self.cfg.num_policies):
                 # check if number of samples collected is greater than cfg.save_best_after
-                env_steps = self.env_steps[policy_id]
+                env_steps = sum(self.env_steps[policy_id])
                 if env_steps < self.cfg.save_best_after:
                     continue
 
@@ -519,23 +524,24 @@ class Runner(EventLoopObject, Configurable):
             log.debug(f"Saving configuration to {fname}...")
             json.dump(cfg_dict(self.cfg), json_file, indent=2)
 
-    def _make_batcher(self, event_loop, policy_id: PolicyID):
-        return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
+    def _make_batcher(self, event_loop, policy_id: PolicyID, gpu_id: GpuID):
+        return Batcher(event_loop, policy_id, self.buffer_mgr[gpu_id], self.cfg, self.env_info, gpu_id)
 
-    def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
+    def _make_learner(self, event_loop, policy_id: PolicyID, gpu_id: GpuID):
         return LearnerWorker(
             event_loop,
             self.cfg,
             self.env_info,
-            self.buffer_mgr,
-            batcher,
+            self.buffer_mgr[gpu_id],
+            self.batchers[policy_id][gpu_id],
             policy_id=policy_id,
+            gpu_id=gpu_id
         )
 
-    def _make_sampler(self, sampler_cls: type, event_loop: EventLoop):
+    def _make_sampler(self, sampler_cls: type, event_loop: EventLoop, gpu_id: GpuID):
         assert len(self.learners) == self.cfg.num_policies, "Learners not created yet"
-        param_servers = {policy: self.learners[policy].param_server for policy in self.learners}
-        return sampler_cls(event_loop, self.buffer_mgr, param_servers, self.cfg, self.env_info)
+        param_servers = {policy: self.learners[policy][gpu_id].param_server for policy in self.learners}
+        return sampler_cls(event_loop, self.buffer_mgr[gpu_id], param_servers, self.cfg, self.env_info, gpu_id)
 
     def init(self) -> StatusCode:
         set_global_cuda_envvars(self.cfg)
@@ -554,7 +560,7 @@ class Runner(EventLoopObject, Configurable):
         self._save_cfg()
         save_git_diff(experiment_dir(self.cfg))
 
-        self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
+        self.buffer_mgr = [BufferMgr(self.cfg, self.env_info) for _ in range(self.cfg.gpu_per_policy)]
 
         self._observers_call(AlgoObserver.on_init, self)
 
@@ -562,7 +568,8 @@ class Runner(EventLoopObject, Configurable):
 
     def _on_start(self):
         """Override this in a subclass to do something right when the experiment is started."""
-        self.sampler.init()
+        for sampler in self.samplers:
+            sampler.init()
         self._propagate_training_info()
         self._observers_call(AlgoObserver.on_start, self)
 
@@ -645,50 +652,52 @@ class Runner(EventLoopObject, Configurable):
     def connect_components(self):
         self.event_loop.start.connect(self._on_start)
 
-        sampler = self.sampler
         for policy_id in range(self.cfg.num_policies):
-            # when runner is ready we initialize the learner first and then all other components in a chain
-            learner_worker = self.learners[policy_id]
-            batcher = self.batchers[policy_id]
-            self.event_loop.start.connect(learner_worker.init)
-            learner_worker.initialized.connect(batcher.init)
-            sampler.connect_model_initialized(policy_id, learner_worker.model_initialized)
+            for gpu_id in range(self.cfg.gpu_per_policy):
+                sampler = self.samplers[gpu_id]
+                # when runner is ready we initialize the learner first and then all other components in a chain
+                learner_worker = self.learners[policy_id][gpu_id]
+                batcher = self.batchers[policy_id][gpu_id]
+                self.event_loop.start.connect(learner_worker.init)
+                learner_worker.initialized.connect(batcher.init)
+                sampler.connect_model_initialized(policy_id, learner_worker.model_initialized)
 
-            # key connections - sampler and batcher exchanging connections back and forth
-            sampler.connect_on_new_trajectories(policy_id, batcher.on_new_trajectories)
-            sampler.connect_trajectory_buffers_available(batcher.trajectory_buffers_available)
+                # key connections - sampler and batcher exchanging connections back and forth
+                sampler.connect_on_new_trajectories(policy_id, batcher.on_new_trajectories)
+                sampler.connect_trajectory_buffers_available(batcher.trajectory_buffers_available)
 
-            # batcher gives learner batches of trajectories ready for learning
-            batcher.training_batches_available.connect(learner_worker.on_new_training_batch)
-            # once learner is done with a training batch, it is given back to the batcher
-            learner_worker.training_batch_released.connect(batcher.on_training_batch_released)
+                # batcher gives learner batches of trajectories ready for learning
+                batcher.training_batches_available.connect(learner_worker.on_new_training_batch)
+                # once learner is done with a training batch, it is given back to the batcher
+                learner_worker.training_batch_released.connect(batcher.on_training_batch_released)
 
-            # signals that allow us to throttle the sampler if the learner can't keep up
-            sampler.connect_stop_experience_collection(batcher.stop_experience_collection)
-            sampler.connect_resume_experience_collection(batcher.resume_experience_collection)
+                # signals that allow us to throttle the sampler if the learner can't keep up
+                sampler.connect_stop_experience_collection(batcher.stop_experience_collection)
+                sampler.connect_resume_experience_collection(batcher.resume_experience_collection)
 
-            # auxiliary connections, such as summary reporting and checkpointing
-            learner_worker.finished_training_iteration.connect(self._after_training_iteration)
-            learner_worker.report_msg.connect(self._process_msg)
-            sampler.connect_report_msg(self._process_msg)
-            sampler.connect_update_training_info(self.update_training_info)
-            self.save_periodic.connect(learner_worker.save)
-            self.save_best.connect(learner_worker.save_best)
-            self.save_milestone.connect(learner_worker.save_milestone)
+                # auxiliary connections, such as summary reporting and checkpointing
+                learner_worker.finished_training_iteration.connect(self._after_training_iteration)
+                learner_worker.report_msg.connect(self._process_msg)
+                sampler.connect_report_msg(self._process_msg)
+                sampler.connect_update_training_info(self.update_training_info)
 
-            # stop components when needed
-            self._setup_component_termination(self.stop, batcher)
-            self._setup_component_termination(batcher.stop, learner_worker)
+                # stop components when needed
+                self._setup_component_termination(self.stop, batcher)
+                self._setup_component_termination(batcher.stop, learner_worker)
 
-            # Heartbeats
-            self._setup_component_heartbeat(batcher)
-            self._setup_component_heartbeat(learner_worker)
+                # Heartbeats
+                self._setup_component_heartbeat(batcher)
+                self._setup_component_heartbeat(learner_worker)
 
-        for sampler_component in sampler.stoppable_components():
-            self._setup_component_termination(self.stop, sampler_component)
+                for sampler_component in sampler.stoppable_components():
+                    self._setup_component_termination(self.stop, sampler_component)
 
-        for sampler_component in sampler.heartbeat_components():
-            self._setup_component_heartbeat(sampler_component)
+                for sampler_component in sampler.heartbeat_components():
+                    self._setup_component_heartbeat(sampler_component)
+
+            self.save_periodic.connect(self.learners[policy_id][0].save)
+            self.save_best.connect(self.learners[policy_id][0].save_best)
+            self.save_milestone.connect(self.learners[policy_id][0].save_milestone)
 
         # final cleanup
         self.all_components_stopped.connect(self._on_everything_stopped)
@@ -697,7 +706,7 @@ class Runner(EventLoopObject, Configurable):
         self._observers_call(AlgoObserver.on_connect_components, self)
 
     def _should_end_training(self):
-        end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
+        end = len(self.env_steps) > 0 and all(sum(s) > self.cfg.train_for_env_steps for s in self.env_steps.values())
         end |= self.total_train_seconds > self.cfg.train_for_seconds
         return end
 

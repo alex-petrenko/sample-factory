@@ -16,7 +16,7 @@ from sample_factory.model.action_parameterization import (
 from sample_factory.model.model_utils import model_device
 from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
-
+from torch.nn.utils.rnn import PackedSequence
 
 class ActorCritic(nn.Module, Configurable):
     def __init__(self, obs_space: ObsSpace, action_space: ActionSpace, cfg: Config):
@@ -175,7 +175,9 @@ class ActorCriticSharedWeights(ActorCritic):
         self._maybe_sample_actions(sample_actions, result)
         return result
 
-    def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
+    def forward(self, normalized_obs_dict, rnn_states, values_only=False, is_seq=False) -> TensorDict:
+        if is_seq:
+            return self.forward_core(PackedSequence(normalized_obs_dict[0], normalized_obs_dict[1].cpu(), normalized_obs_dict[2]), rnn_states)
         x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
         result = self.forward_tail(x, values_only, sample_actions=True)

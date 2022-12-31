@@ -13,6 +13,7 @@ Config = Union[argparse.Namespace, AttrDict]
 StatusCode = int
 
 PolicyID = int
+GpuID = int
 Device = str
 
 # these can be fake wrapper classes if we're in serial mode, so using Any

@@ -139,7 +139,7 @@ def build_rnn_inputs(x, dones_cpu, rnn_states, T: int):
     rollout_starts = device(rollout_starts)
     is_new_episode = device(is_new_episode)
 
-    x_seq = PackedSequence(x.index_select(0, select_inds), batch_sizes, sorted_indices)
+    x_seq = (x.index_select(0, select_inds), batch_sizes, sorted_indices)
 
     # We zero-out rnn states for timesteps at the beginning of the episode.
     # rollout_starts are indices of all starts of sequences

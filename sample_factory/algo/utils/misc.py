@@ -14,6 +14,7 @@ TIMING_STATS = "timing"
 STATS_KEY = "stats"
 SAMPLES_COLLECTED = "samples_collected"
 POLICY_ID_KEY = "policy_id"
+GPU_ID_KEY = "gpu_id"
 
 
 MAGIC_FLOAT = -4242.42

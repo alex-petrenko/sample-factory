@@ -33,7 +33,7 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.dicts import dict_of_lists_append_idx
 from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import Device, InitModelData, MpQueue, PolicyID
+from sample_factory.utils.typing import Device, InitModelData, MpQueue, PolicyID, GpuID
 from sample_factory.utils.utils import debug_log_every_n, init_file_logger, log
 
 AdvanceRolloutSignals = Dict[int, List[Tuple[int, PolicyID]]]
@@ -58,7 +58,7 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     except psutil.AccessDenied:
         log.error("Low niceness requires sudo!")
 
-    if cfg.device == "gpu":
+    if cfg.device == "gpu" and cfg.gpu_per_policy == 1:
         cuda_envvars_for_policy(worker.policy_id, "inference")
     init_torch_runtime(cfg)
 
@@ -69,6 +69,7 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         event_loop,
         policy_id: PolicyID,
         worker_idx: int,
+        gpu_id: GpuID,
         buffer_mgr,
         param_server: ParameterServer,
         inference_queue: MpQueue,
@@ -76,13 +77,14 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         env_info: EnvInfo,
     ):
         Configurable.__init__(self, cfg)
-        unique_name = f"{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}"
+        unique_name = f"{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}-g{gpu_id}"
         HeartbeatStoppableEventLoopObject.__init__(self, event_loop, unique_name, cfg.heartbeat_interval)
 
         self.timing = Timing(name=f"{self.object_id} profile")
 
         self.policy_id: PolicyID = policy_id
         self.worker_idx: int = worker_idx
+        self.gpu_id: GpuID = gpu_id
 
         self.buffer_mgr = buffer_mgr
 
@@ -90,7 +92,7 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.traj_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.traj_tensors_torch)
         self.policy_output_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.policy_output_tensors_torch)
 
-        self.device: torch.device = policy_device(cfg, policy_id)
+        self.device: torch.device = policy_device(self.cfg, self.policy_id if self.cfg.gpu_per_policy == 1 else self.gpu_id)
         self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
         self.inference_queue = inference_queue
 

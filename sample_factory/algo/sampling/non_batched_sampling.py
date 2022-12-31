@@ -18,7 +18,7 @@ from sample_factory.algo.utils.tensor_utils import clone_tensor, ensure_numpy_ar
 from sample_factory.envs.env_utils import find_training_info_interface, set_reward_shaping, set_training_info
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import Config, MpQueue, PolicyID
+from sample_factory.utils.typing import Config, MpQueue, PolicyID, GpuID
 from sample_factory.utils.utils import debug_log_every_n, log, set_attr_if_exists
 
 
@@ -338,6 +338,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
         buffer_mgr,
         sampling_device: str,
         training_info: List[Optional[Dict[str, Any]]],
+        gpu_id: GpuID
     ):
         """
         Ctor.
@@ -356,6 +357,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             self.traj_tensors = to_numpy(self.traj_tensors)
             self.policy_output_tensors = to_numpy(self.policy_output_tensors)
 
+        self.gpu_id = gpu_id
         self.num_envs = num_envs
         self.num_agents = env_info.num_agents
 
@@ -382,7 +384,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             env_config = AttrDict(
                 worker_index=self.worker_idx,
                 vector_index=vector_idx,
-                env_id=global_env_idx,
+                env_id=global_env_idx * self.gpu_id,
             )
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)

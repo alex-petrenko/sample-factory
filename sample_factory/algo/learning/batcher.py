@@ -11,7 +11,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.timing import Timing
-from sample_factory.utils.typing import Device, PolicyID
+from sample_factory.utils.typing import Device, PolicyID, GpuID
 from sample_factory.utils.utils import debug_log_every_n, log
 
 
@@ -88,7 +88,7 @@ class SliceMerger:
 
 class Batcher(HeartbeatStoppableEventLoopObject):
     def __init__(
-        self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr: BufferMgr, cfg: AttrDict, env_info: EnvInfo
+        self, evt_loop: EventLoop, policy_id: PolicyID, buffer_mgr: BufferMgr, cfg: AttrDict, env_info: EnvInfo, gpu_id: GpuID
     ):
         unique_name = f"{Batcher.__name__}_{policy_id}"
         super().__init__(evt_loop, unique_name, cfg.heartbeat_interval)
@@ -98,6 +98,7 @@ class Batcher(HeartbeatStoppableEventLoopObject):
         self.cfg = cfg
         self.env_info: EnvInfo = env_info
         self.policy_id = policy_id
+        self.gpu_id = gpu_id
 
         self.training_iteration: int = 0
 
@@ -146,7 +147,7 @@ class Batcher(HeartbeatStoppableEventLoopObject):
         ...
 
     def init(self):
-        device = policy_device(self.cfg, self.policy_id)
+        device = policy_device(self.cfg, self.policy_id if self.cfg.gpu_per_policy == 1 else self.gpu_id)
         for i in range(self.max_batches_to_accumulate):
             rnn_size = get_rnn_size(self.cfg)
             training_batch = alloc_trajectory_tensors(
