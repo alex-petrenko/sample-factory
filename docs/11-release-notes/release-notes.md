@@ -3,6 +3,7 @@
 ##### v2.0.3
 
 * Automatically set `--recurrence` based on feed-forward vs RNN training
+* Added Brax environment support
 
 ##### v2.0.2
 
