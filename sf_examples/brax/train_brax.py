@@ -42,6 +42,7 @@ class BraxEnv(gym.Env):
         self.env = brax_env
         self.num_agents = num_actors
         self.env.closed = False
+        self.env.viewer = None
 
         self.truncated = None
 
