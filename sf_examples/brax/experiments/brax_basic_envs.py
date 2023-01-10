@@ -19,4 +19,4 @@ RUN_DESCRIPTION = RunDescription(vstr, experiments=_experiments)
 
 
 # Run locally: python -m sample_factory.launcher.run --run=sf_examples.brax.experiments.brax_basic_envs --backend=processes --max_parallel=1 --experiments_per_gpu=1 --num_gpus=1
-# Run on Slurm: python -m sample_factory.launcher.run --run=sf_examples.brax.experiments.brax_basic_envs --backend=slurm --slurm_workdir=./slurm_brax --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sample_factory/launcher/slurm/sbatch_timeout.sh --pause_between=1 --slurm_print_only=False
+# Run on Slurm: python -m sample_factory.launcher.run --run=sf_examples.brax.experiments.brax_basic_envs --backend=slurm --slurm_workdir=./slurm_brax --experiment_suffix=slurm --slurm_gpus_per_job=1 --slurm_cpus_per_gpu=16 --slurm_sbatch_template=./sf_examples/brax/experiments/sbatch_timeout_brax.sh --pause_between=1 --slurm_print_only=False
