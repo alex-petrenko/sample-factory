@@ -66,10 +66,10 @@ class BraxEnv(gym.Env):
 
     def reset(self, *args, **kwargs) -> Tuple[Tensor, Dict]:
         log.debug(f"Resetting env {self.env} with {self.num_agents} parallel agents...")
-        obs, info = self.env.reset()
-        obs = torch.tensor(obs)
+        obs = self.env.reset()
+        obs = jax_to_torch(obs)
         log.debug(f"reset() done, obs.shape={obs.shape}!")
-        return obs, info
+        return obs, {}
 
     def step(self, action):
         action_clipped = torch.clamp(action, -1, 1)
@@ -93,19 +93,6 @@ class BraxEnv(gym.Env):
         return self.renderer.render()
 
 
-# noinspection PyAbstractClass
-class VectorGymWrapperResetNoJit(VectorGymWrapper):
-    """Do not JIT the reset function since we only call it once."""
-
-    def reset(self, *args, **kwargs) -> Tuple[Any, Dict]:
-        from brax import jumpy as jp
-
-        # noinspection PyAttributeOutsideInit
-        self._key, key2 = jp.random_split(self._key)
-        self._state = self._env.reset(key2)
-        return self._state.obs, {}
-
-
 def make_brax_env(full_env_name: str, cfg: Config, _env_config=None, render_mode: Optional[str] = None) -> Env:
     assert (
         full_env_name in env_configs.keys()
@@ -113,11 +100,12 @@ def make_brax_env(full_env_name: str, cfg: Config, _env_config=None, render_mode
 
     # use batch size 2 instead of 1 so we don't have to deal with vector-nonvector env issues
     batch_size = 2 if BRAX_EVALUATION else cfg.env_agents
-    backend = "gpu"
-    env = create(env_name=full_env_name, batch_size=batch_size)
-    gym_env = VectorGymWrapperResetNoJit(env, seed=0, backend=backend)
-    gym_env = BraxEnv(gym_env, cfg.env_agents, render_mode)
-    return gym_env
+
+    from brax import envs
+
+    gym_env = envs.create_gym_env(env_name=full_env_name, batch_size=batch_size, seed=0, backend="gpu")
+    env = BraxEnv(gym_env, cfg.env_agents, render_mode)
+    return env
 
 
 def add_extra_params_func(parser) -> None:

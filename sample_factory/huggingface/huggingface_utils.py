@@ -2,16 +2,19 @@ import os
 
 import cv2
 import numpy as np
-from huggingface_hub import HfApi, Repository, repocard, upload_file, upload_folder
+from huggingface_hub import HfApi, Repository, repocard, upload_folder
 
+from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log, project_tmp_dir
 
 MIN_FRAME_SIZE = 180
 
 
-def generate_replay_video(dir_path: str, frames: list, fps: int):
-    tmp_name = os.path.join(project_tmp_dir(), "replay.mp4")
-    video_name = os.path.join(dir_path, "replay.mp4")
+def generate_replay_video(dir_path: str, frames: list, fps: int, cfg: Config):
+    video_fname = "replay.mp4" if cfg.video_name is None else cfg.video_name
+
+    tmp_name = os.path.join(project_tmp_dir(), video_fname)
+    video_name = os.path.join(dir_path, video_fname)
     if frames[0].shape[0] == 3:
         frame_size = (frames[0].shape[2], frames[0].shape[1])
     else:
@@ -32,6 +35,7 @@ def generate_replay_video(dir_path: str, frames: list, fps: int):
         video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     video.release()
     os.system(f"ffmpeg -y -i {tmp_name} -vcodec libx264 {video_name}")
+    log.debug(f"Replay video saved to {video_name}!")
 
 
 def generate_model_card(

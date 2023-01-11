@@ -141,8 +141,8 @@ class BraxRenderer:
 
         self.instances, self.extra_info, self.scene = None, None, None
 
-        self.ssaa = 1  # supersampling factor
-        self.width = self.height = 256  # anything higher is just too slow because CPU renderer :|
+        self.ssaa = 2  # supersampling factor
+        self.width = self.height = 200  # anything higher is super slow because CPU renderer :|
 
     # noinspection PyProtectedMember
     def render(self):

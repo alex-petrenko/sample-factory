@@ -259,7 +259,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
             fps = cfg.fps
         else:
             fps = 30
-        generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps)
+        generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps, cfg)
 
     if cfg.push_to_hub:
         enjoy_name = get_top_level_script()
