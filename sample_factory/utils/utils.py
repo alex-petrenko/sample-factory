@@ -491,7 +491,3 @@ def log_every_n(n, _level, msg, *args, **kwargs):
 
 def debug_log_every_n(n, msg, *args, **kwargs):
     log_every_n(n, logging.DEBUG, msg, *args, **kwargs)
-
-
-def get_top_level_script():
-    return argv[0].split("sample-factory/")[-1][:-3].replace("/", ".")

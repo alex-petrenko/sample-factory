@@ -675,6 +675,19 @@ def add_eval_args(parser):
         help="False to sample from action distributions at test time. True to just use the argmax.",
     )
 
+    parser.add_argument(
+        "--train_script",
+        default=None,
+        type=str,
+        help="Module name used to run training script. Used to generate HF model card",
+    )
+    parser.add_argument(
+        "--enjoy_script",
+        default=None,
+        type=str,
+        help="Module name used to run training script. Used to generate HF model card",
+    )
+
 
 def add_wandb_args(p: ArgumentParser):
     """Weights and Biases experiment monitoring."""
