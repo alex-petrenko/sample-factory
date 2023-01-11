@@ -2,7 +2,6 @@ from typing import Dict, List, Tuple
 
 import brax
 import numpy as np
-import pygame
 from brax import math
 from brax.io.image import _BASIC, _GROUND, _TARGET, _eye, _up
 from brax.physics.base import vec_to_arr
@@ -169,6 +168,8 @@ class BraxRenderer:
             arr = np.asarray(Image.fromarray(arr).resize((self.width, self.height)))
 
         if self.render_mode == "human":
+            import pygame
+
             if self.screen is None:
                 pygame.init()
                 pygame.display.init()
