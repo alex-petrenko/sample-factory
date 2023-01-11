@@ -19,7 +19,6 @@ from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, Env
 from sample_factory.utils.utils import log
-from sf_examples.brax.brax_render import BraxRenderer
 
 BRAX_EVALUATION = False
 torch.ones(1, device="cuda")  # init torch cuda before jax
@@ -88,6 +87,8 @@ class BraxEnv(gym.Env):
 
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
         if self.renderer is None:
+            from sf_examples.brax.brax_render import BraxRenderer
+
             self.renderer = BraxRenderer(self.env, self.render_mode)
         return self.renderer.render()
 
