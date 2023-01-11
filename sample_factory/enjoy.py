@@ -21,7 +21,7 @@ from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, StatusCode
-from sample_factory.utils.utils import debug_log_every_n, experiment_dir, get_top_level_script, log
+from sample_factory.utils.utils import debug_log_every_n, experiment_dir, log
 
 
 def visualize_policy_inputs(normalized_obs: Dict[str, Tensor]) -> None:
@@ -260,9 +260,14 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
         generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps)
 
     if cfg.push_to_hub:
-        enjoy_name = get_top_level_script()
         generate_model_card(
-            experiment_dir(cfg=cfg), cfg.algo, cfg.env, cfg.hf_repository, reward_list, enjoy_name, cfg.train_script
+            experiment_dir(cfg=cfg),
+            cfg.algo,
+            cfg.env,
+            cfg.hf_repository,
+            reward_list,
+            cfg.enjoy_script,
+            cfg.train_script,
         )
         push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository)
 

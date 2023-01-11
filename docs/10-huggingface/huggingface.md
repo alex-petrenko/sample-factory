@@ -77,10 +77,16 @@ You can also save a video of the model during evaluation to upload to the hub wi
 
 - `--video_name`: The name of the video to save as. If `None`, will save to `replay.mp4` in your experiment directory
 
+Also, you can include information in the Hugging Face Hub model card for how to train and enjoy using this model. These parameters are optional:
+
+- `--train_script`: The module path for training this model
+
+- `--enjoy_script`: The module path for enjoying this model
+
 For example:
 
 ```
-python -m sf_examples.mujoco.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<repo_name> --train_dir=./train_dir --max_num_episodes=10 --push_to_hub --hf_repository=<username>/<hf_repo_name> --save_video --no_render
+python -m sf_examples.mujoco.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<repo_name> --train_dir=./train_dir --max_num_episodes=10 --push_to_hub --hf_repository=<username>/<hf_repo_name> --save_video --no_render --enjoy_script=sf_examples.mujoco.enjoy_mujoco --train_script=sf_examples.mujoco.train_mujoco
 ```
 
 #### Using the push_to_hub Script
@@ -96,3 +102,5 @@ The command line arguments are:
 - `-r`: The repo_id to save on HF Hub. This is the same as `hf_repository` in the enjoy script and must be in the form `<hf_username>/<hf_repo_name>`
 
 - `-d`: The full path to your experiment directory to upload
+
+The optional arguments of `--train_script` and `--enjoy_script` can also be used. See the above section for more details

@@ -16,6 +16,18 @@ def main():
         type=str,
     )
     parser.add_argument("-d", "--experiment_dir", help="Path to your experiment directory", type=str)
+    parser.add_argument(
+        "--train_script",
+        default=None,
+        type=str,
+        help="Module name used to run training script. Used to generate HF model card",
+    )
+    parser.add_argument(
+        "--enjoy_script",
+        default=None,
+        type=str,
+        help="Module name used to run training script. Used to generate HF model card",
+    )
     args = parser.parse_args()
 
     cfg_file = os.path.join(args.experiment_dir, "config.json")
@@ -34,7 +46,14 @@ def main():
         json_params = json.load(json_file)
         cfg = AttrDict(json_params)
 
-    generate_model_card(args.experiment_dir, cfg.algo, cfg.env, args.hf_repository)
+    generate_model_card(
+        args.experiment_dir,
+        cfg.algo,
+        cfg.env,
+        args.hf_repository,
+        enjoy_name=args.enjoy_script,
+        train_name=args.train_script,
+    )
     push_to_hf(args.experiment_dir, args.hf_repository)
 
 
