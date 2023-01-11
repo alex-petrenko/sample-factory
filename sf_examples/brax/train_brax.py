@@ -116,7 +116,7 @@ def override_default_params_func(env, parser):
         adaptive_stddev=False,
         policy_initialization="torch_default",
         env_gpu_actions=True,
-        reward_scale=1.0,
+        reward_scale=0.01,
         max_grad_norm=1.0,
         rollout=16,
         batch_size=32768,
