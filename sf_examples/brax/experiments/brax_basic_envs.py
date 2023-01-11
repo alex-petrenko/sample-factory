@@ -7,12 +7,13 @@ _params = ParamGrid(
         ("seed", seeds(5)),
         ("env", ["ant", "humanoid", "walker2d", "halfcheetah"]),
         ("use_rnn", [False, True]),  # train recurrent and non-recurrent models
+        ("num_epochs", [2]),  # try reduced number of SGD steps to improve stability for RNNs
     ]
 )
 
-vstr = f"v{ALGO_VERSION:03d}_brax_basic"
+vstr = f"v{ALGO_VERSION:03d}_brax_basic_2ep"
 
-cli = "python -m sf_examples.brax.train_brax --actor_worker_gpus 0 --wandb_project=sample_factory --with_wandb=True"
+cli = "python -m sf_examples.brax.train_brax --num_epochs=2 --actor_worker_gpus 0 --wandb_project=sample_factory --with_wandb=True"
 
 _experiments = [Experiment(vstr, cli, _params.generate_params())]
 RUN_DESCRIPTION = RunDescription(vstr, experiments=_experiments)
