@@ -141,7 +141,7 @@ def override_default_params_func(env, parser):
         rollout=16,
         batch_size=32768,
         num_batches_per_epoch=1,
-        num_epochs=4,
+        num_epochs=5,
         ppo_clip_ratio=0.2,
         value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,

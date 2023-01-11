@@ -12,6 +12,8 @@ MIN_FRAME_SIZE = 180
 
 def generate_replay_video(dir_path: str, frames: list, fps: int, cfg: Config):
     video_fname = "replay.mp4" if cfg.video_name is None else cfg.video_name
+    if not video_fname.endswith(".mp4"):
+        video_fname += ".mp4"
 
     tmp_name = os.path.join(project_tmp_dir(), video_fname)
     video_name = os.path.join(dir_path, video_fname)
