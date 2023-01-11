@@ -5,15 +5,15 @@ from sample_factory.utils.algo_version import ALGO_VERSION
 _params = ParamGrid(
     [
         ("seed", seeds(5)),
-        ("env", ["ant", "humanoid", "walker2d", "halfcheetah"]),
+        ("env", ["ant", "humanoid"]),
         ("use_rnn", [False, True]),  # train recurrent and non-recurrent models
         ("num_epochs", [5]),  # try reduced number of SGD steps to improve stability for RNNs
-        ("value_bootstrap", [True]),
-        ("clamp_actions_rew_obs", [False, True]),
+        ("clamp_actions", [False, True]),
+        ("clamp_rew_obs", [False, True]),
     ]
 )
 
-vstr = f"v{ALGO_VERSION:03d}_brax_basic_clamp"
+vstr = f"v{ALGO_VERSION:03d}_brax_basic_clamp_v2"
 
 cli = "python -m sf_examples.brax.train_brax --actor_worker_gpus 0 --wandb_project=sample_factory --with_wandb=True"
 
