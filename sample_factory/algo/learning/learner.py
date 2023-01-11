@@ -44,10 +44,10 @@ class LearningRateScheduler:
 
 
 class KlAdaptiveScheduler(LearningRateScheduler, ABC):
-    def __init__(self, cfg):
+    def __init__(self, cfg: Config):
         self.lr_schedule_kl_threshold = cfg.lr_schedule_kl_threshold
-        self.min_lr = 1e-6
-        self.max_lr = 1e-2
+        self.min_lr = cfg.lr_adaptive_min
+        self.max_lr = cfg.lr_adaptive_max
 
     @abstractmethod
     def num_recent_kls_to_use(self) -> int:

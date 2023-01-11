@@ -178,6 +178,8 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                     episode_reward += rew.float()
 
                 num_frames += 1
+                if num_frames % 100 == 0:
+                    log.debug(f"Num frames {num_frames}...")
 
                 dones = dones.cpu().numpy()
                 for agent_i, done_flag in enumerate(dones):

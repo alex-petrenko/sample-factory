@@ -337,7 +337,6 @@ env_configs = dict(
         num_epochs=2,
         num_batches_per_epoch=4,
         value_loss_coeff=4.0,
-        ppo_clip_ratio=0.2,
         learning_rate=1e-4,
         lr_schedule_kl_threshold=0.016,
         reward_scale=0.01,

@@ -1,15 +1,16 @@
 """
 Brax env integration.
 """
-
+import math
 import sys
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import gym
 import numpy as np
 import torch
 import torch.utils.dlpack as tpack
-from brax.envs import to_torch
+from brax.envs import create
+from brax.envs.wrappers import VectorGymWrapper
 from gym.core import RenderFrame
 from torch import Tensor
 
@@ -18,6 +19,10 @@ from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, Env
 from sample_factory.utils.utils import log
+from sf_examples.brax.brax_render import BraxRenderer
+
+BRAX_EVALUATION = False
+torch.ones(1, device="cuda")  # init torch cuda before jax
 
 
 def jax_to_torch(tensor):
@@ -38,41 +43,66 @@ def torch_to_jax(tensor):
 
 class BraxEnv(gym.Env):
     # noinspection PyProtectedMember
-    def __init__(self, brax_env, num_actors):
+    def __init__(self, brax_env, num_actors, render_mode: Optional[str] = None):
         self.env = brax_env
         self.num_agents = num_actors
         self.env.closed = False
         self.env.viewer = None
 
-        self.truncated = None
+        self.renderer = None
+        self.render_mode = render_mode
 
-        observation_size = self.env.observation_space.shape[1]
-        action_size = self.env.action_space.shape[1]
+        if len(self.env.observation_space.shape) > 1:
+            observation_size = self.env.observation_space.shape[1]
+            action_size = self.env.action_space.shape[1]
 
-        obs_high = np.inf * np.ones(observation_size)
-        self.observation_space = gym.spaces.Box(-obs_high, obs_high, dtype=np.float32)
+            obs_high = np.inf * np.ones(observation_size)
+            self.observation_space = gym.spaces.Box(-obs_high, obs_high, dtype=np.float32)
 
-        action_high = np.ones(action_size)
-        self.action_space = gym.spaces.Box(-action_high, action_high, dtype=np.float32)
-
-    def step(self, action):
-        action = torch_to_jax(action)
-        next_obs, reward, terminated, info = self.env.step(action)
-        next_obs = jax_to_torch(next_obs)
-        reward = jax_to_torch(reward)
-        terminated = jax_to_torch(terminated).to(torch.bool)
-        return next_obs, reward, terminated, self.truncated, info
+            action_high = np.ones(action_size)
+            self.action_space = gym.spaces.Box(-action_high, action_high, dtype=np.float32)
+        else:
+            self.observation_space = self.env.observation_space
+            self.action_space = self.env.action_space
 
     def reset(self, *args, **kwargs) -> Tuple[Tensor, Dict]:
         log.debug(f"Resetting env {self.env} with {self.num_agents} parallel agents...")
-        obs = self.env.reset()
-        obs = jax_to_torch(obs)
-        self.truncated = torch.zeros(obs.shape[0], dtype=torch.bool, device=obs.device)
+        obs, info = self.env.reset()
+        obs = torch.tensor(obs)
         log.debug(f"reset() done, obs.shape={obs.shape}!")
-        return obs, {}
+        return obs, info
+
+    def step(self, action):
+        action_clipped = torch.clamp(action, -1, 1)
+
+        action_clipped = torch_to_jax(action_clipped)
+        next_obs, reward, terminated, info = self.env.step(action_clipped)
+        next_obs = jax_to_torch(next_obs)
+        reward = jax_to_torch(reward)
+        terminated = jax_to_torch(terminated).to(torch.bool)
+        truncated = jax_to_torch(info["truncation"]).to(torch.bool)
+
+        reward = torch.clamp(reward, -100, 100)
+        next_obs = torch.clamp(next_obs, -100, 100)
+        return next_obs, reward, terminated, truncated, info
 
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
-        pass
+        if self.renderer is None:
+            self.renderer = BraxRenderer(self.env, self.render_mode)
+        return self.renderer.render()
+
+
+# noinspection PyAbstractClass
+class VectorGymWrapperResetNoJit(VectorGymWrapper):
+    """Do not JIT the reset function since we only call it once."""
+
+    def reset(self, *args, **kwargs) -> Tuple[Any, Dict]:
+        from brax import jumpy as jp
+
+        # noinspection PyAttributeOutsideInit
+        self._key, key2 = jp.random_split(self._key)
+        self._state = self._env.reset(key2)
+        return self._state.obs, {}
 
 
 def make_brax_env(full_env_name: str, cfg: Config, _env_config=None, render_mode: Optional[str] = None) -> Env:
@@ -80,15 +110,16 @@ def make_brax_env(full_env_name: str, cfg: Config, _env_config=None, render_mode
         full_env_name in env_configs.keys()
     ), f"Env {full_env_name} is not supported. Supported envs: {list(env_configs.keys())}"
 
-    from brax import envs
+    # use batch size 2 instead of 1 so we don't have to deal with vector-nonvector env issues
+    batch_size = 2 if BRAX_EVALUATION else cfg.env_agents
+    backend = "gpu"
+    env = create(env_name=full_env_name, batch_size=batch_size)
+    gym_env = VectorGymWrapperResetNoJit(env, seed=0, backend=backend)
+    gym_env = BraxEnv(gym_env, cfg.env_agents, render_mode)
+    return gym_env
 
-    gym_env = envs.create_gym_env(env_name=full_env_name, batch_size=cfg.env_agents, seed=0, backend="gpu")
-    # gym_env = to_torch.JaxToTorchWrapper(gym_env, device="cuda")
-    env = BraxEnv(gym_env, cfg.env_agents)
-    return env
 
-
-def add_extra_params_func(parser):
+def add_extra_params_func(parser) -> None:
     """
     Specify any additional command line arguments for this family of custom environments.
     """
@@ -130,11 +161,12 @@ def override_default_params_func(env, parser):
         learning_rate=3e-4,
         lr_schedule="kl_adaptive_epoch",
         lr_schedule_kl_threshold=0.008,
+        lr_adaptive_max=2e-3,
         shuffle_minibatches=False,
         gamma=0.99,
         gae_lambda=0.95,
         with_vtrace=False,
-        value_bootstrap=False,  # I think Brax does not return truncation info
+        value_bootstrap=True,
         normalize_input=True,
         normalize_returns=True,
         save_best_after=int(5e6),
@@ -168,7 +200,10 @@ env_configs = dict(
 )
 
 
-def register_brax_custom_components():
+def register_brax_custom_components(evaluation: bool = False) -> None:
+    global BRAX_EVALUATION
+    BRAX_EVALUATION = evaluation
+
     for env_name in env_configs:
         register_env(env_name, make_brax_env)
 

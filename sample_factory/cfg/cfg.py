@@ -308,6 +308,17 @@ def add_rl_args(p: ArgumentParser):
         ),
     )
     p.add_argument("--lr_schedule_kl_threshold", default=0.008, type=float, help="Used with kl_adaptive_* schedulers")
+    p.add_argument("--lr_adaptive_min", default=1e-6, type=float, help="Minimum learning rate")
+    p.add_argument(
+        "--lr_adaptive_max",
+        default=1e-2,
+        type=float,
+        help=(
+            "Maximum learning rate. This is the best value tuned for IsaacGymEnvs environments such as Ant/Humanoid, "
+            "but it can be too high for some other envs. Set this to 1e-3 if you see instabilities with adaptive LR, "
+            "especially if reported LR on Tensorboard reaches this max value before the instability happens."
+        ),
+    )
 
     # observation preprocessing
     p.add_argument(
