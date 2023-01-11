@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
+import random
 import time
 from abc import ABC, abstractmethod
 from os.path import join
@@ -512,7 +513,8 @@ class Learner(Configurable):
             num_minibatches = experience_size // batch_size
             minibatches = np.split(indices, num_minibatches)
         else:
-            minibatches = tuple(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_epoch))
+            minibatches = list(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_epoch))
+            random.shuffle(minibatches)  # same minibatches between epochs, but in random order
 
         return minibatches
 

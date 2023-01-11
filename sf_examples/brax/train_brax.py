@@ -1,16 +1,13 @@
 """
 Brax env integration.
 """
-import math
 import sys
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import gym
 import numpy as np
 import torch
 import torch.utils.dlpack as tpack
-from brax.envs import create
-from brax.envs.wrappers import VectorGymWrapper
 from gym.core import RenderFrame
 from torch import Tensor
 
@@ -25,6 +22,7 @@ torch.ones(1, device="cuda")  # init torch cuda before jax
 
 
 def jax_to_torch(tensor):
+    # noinspection PyProtectedMember
     from jax._src.dlpack import to_dlpack
 
     tensor = to_dlpack(tensor)
@@ -33,6 +31,7 @@ def jax_to_torch(tensor):
 
 
 def torch_to_jax(tensor):
+    # noinspection PyProtectedMember
     from jax._src.dlpack import from_dlpack
 
     tensor = tpack.to_dlpack(tensor)
