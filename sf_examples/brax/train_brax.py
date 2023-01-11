@@ -18,7 +18,7 @@ from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import Config, Env
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import log, str2bool
 
 BRAX_EVALUATION = False
 torch.ones(1, device="cuda")  # init torch cuda before jax
@@ -42,7 +42,7 @@ def torch_to_jax(tensor):
 
 class BraxEnv(gym.Env):
     # noinspection PyProtectedMember
-    def __init__(self, brax_env, num_actors, render_mode: Optional[str] = None):
+    def __init__(self, brax_env, num_actors, render_mode: Optional[str], clamp_actions_rew_obs: bool):
         self.env = brax_env
         self.num_agents = num_actors
         self.env.closed = False
@@ -50,6 +50,8 @@ class BraxEnv(gym.Env):
 
         self.renderer = None
         self.render_mode = render_mode
+
+        self.clamp_actions_rew_obs = clamp_actions_rew_obs
 
         if len(self.env.observation_space.shape) > 1:
             observation_size = self.env.observation_space.shape[1]
@@ -72,7 +74,9 @@ class BraxEnv(gym.Env):
         return obs, {}
 
     def step(self, action):
-        action_clipped = torch.clamp(action, -1, 1)
+        action_clipped = action
+        if self.clamp_actions_rew_obs:
+            action_clipped = torch.clamp(action, -1, 1)
 
         action_clipped = torch_to_jax(action_clipped)
         next_obs, reward, terminated, info = self.env.step(action_clipped)
@@ -81,8 +85,10 @@ class BraxEnv(gym.Env):
         terminated = jax_to_torch(terminated).to(torch.bool)
         truncated = jax_to_torch(info["truncation"]).to(torch.bool)
 
-        reward = torch.clamp(reward, -100, 100)
-        next_obs = torch.clamp(next_obs, -100, 100)
+        if self.clamp_actions_rew_obs:
+            reward = torch.clamp(reward, -100, 100)
+            next_obs = torch.clamp(next_obs, -100, 100)
+
         return next_obs, reward, terminated, truncated, info
 
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
@@ -104,7 +110,7 @@ def make_brax_env(full_env_name: str, cfg: Config, _env_config=None, render_mode
     from brax import envs
 
     gym_env = envs.create_gym_env(env_name=full_env_name, batch_size=batch_size, seed=0, backend="gpu")
-    env = BraxEnv(gym_env, cfg.env_agents, render_mode)
+    env = BraxEnv(gym_env, cfg.env_agents, render_mode, cfg.clamp_actions_rew_obs)
     return env
 
 
@@ -118,6 +124,12 @@ def add_extra_params_func(parser) -> None:
         default=2048,
         type=int,
         help="Num. agents in a vectorized env",
+    )
+    p.add_argument(
+        "--clamp_actions_rew_obs",
+        default=False,
+        type=str2bool,
+        help="Clamp actions to -1,1, rewards and observations to -100,100",
     )
 
 

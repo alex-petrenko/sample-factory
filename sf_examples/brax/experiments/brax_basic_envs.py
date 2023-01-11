@@ -8,11 +8,12 @@ _params = ParamGrid(
         ("env", ["ant", "humanoid", "walker2d", "halfcheetah"]),
         ("use_rnn", [False, True]),  # train recurrent and non-recurrent models
         ("num_epochs", [5]),  # try reduced number of SGD steps to improve stability for RNNs
-        ("value_bootstrap", [False, True]),
+        ("value_bootstrap", [True]),
+        ("clamp_actions_rew_obs", [False, True]),
     ]
 )
 
-vstr = f"v{ALGO_VERSION:03d}_brax_basic_vb"
+vstr = f"v{ALGO_VERSION:03d}_brax_basic_clamp"
 
 cli = "python -m sf_examples.brax.train_brax --actor_worker_gpus 0 --wandb_project=sample_factory --with_wandb=True"
 
