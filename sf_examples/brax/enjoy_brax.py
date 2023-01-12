@@ -14,7 +14,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-# i = Image(image.render(env.unwrapped._env.sys, [s.qp for s in rollout], width=640, height=480))
-# display(i)

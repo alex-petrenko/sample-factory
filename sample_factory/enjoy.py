@@ -59,11 +59,11 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start) -> flo
     render_start = time.time()
 
     if cfg.save_video:
-        frame = env.render()
-        if (
-            (len(video_frames) < cfg.video_frames) or (cfg.video_frames < 0 and num_episodes == 0)
-        ) and frame is not None:
-            video_frames.append(frame.copy())
+        need_video_frame = len(video_frames) < cfg.video_frames or cfg.video_frames < 0 and num_episodes == 0
+        if need_video_frame:
+            frame = env.render()
+            if frame is not None:
+                video_frames.append(frame.copy())
     else:
         if not cfg.no_render:
             target_delay = 1.0 / cfg.fps if cfg.fps > 0 else 0

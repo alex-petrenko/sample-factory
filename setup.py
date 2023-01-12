@@ -15,7 +15,6 @@ with open("README.md", "r") as f:
 _atari_deps = ["gym[atari, accept-rom-license]"]
 _mujoco_deps = ["gym[mujoco]"]
 _envpool_deps = ["envpool"]
-_brax_deps = ["brax", "jax[cuda]"]
 
 _docs_deps = [
     "mkdocs-material",
@@ -67,7 +66,6 @@ setup(
         "atari": _atari_deps,
         "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,
-        "brax": _brax_deps,
         "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },

@@ -503,7 +503,9 @@ def add_model_args(p: ArgumentParser):
         default=[512, 512],
         type=int,
         nargs="*",
-        help="In case of MLP encoder, sizes of layers to use. This is ignored if observations are images.",
+        help="In case of MLP encoder, sizes of layers to use. This is ignored if observations are images. "
+        "To use this parameter from command line, omit the = sign and separate values with spaces, e.g. "
+        "--encoder_mlp_layers 256 128 64",
     )
 
     # policy with image observations - convolutional encoder options
@@ -661,11 +663,11 @@ def add_eval_args(parser):
         "--video_frames",
         default=1e9,
         type=int,
-        help="Number of frames to render for the video. Defaults to 1e9 which will be the same as having video_frames = max_num_frames. You can also set to -1 which only renders an entire episode",
+        help="Number of frames to render for the video. Defaults to 1e9 which will be the same as having video_frames = max_num_frames. You can also set to -1 which only renders one episode",
     )
     parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
-    parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames to render")
-    parser.add_argument("--max_num_episodes", default=1e9, type=int, help="Maximum number of episodes to render")
+    parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames for evaluation")
+    parser.add_argument("--max_num_episodes", default=1e9, type=int, help="Maximum number of episodes for evaluation")
 
     parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
     parser.add_argument(

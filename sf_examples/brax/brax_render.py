@@ -134,7 +134,7 @@ def create_light(target):
 
 
 class BraxRenderer:
-    def __init__(self, env, render_mode: str):
+    def __init__(self, env, render_mode: str, brax_video_res_px: int = 200):
         self.env = env
         self.screen = None
         self.render_mode = render_mode
@@ -142,7 +142,7 @@ class BraxRenderer:
         self.instances, self.extra_info, self.scene = None, None, None
 
         self.ssaa = 2  # supersampling factor
-        self.width = self.height = 200  # anything higher is super slow because CPU renderer :|
+        self.width = self.height = brax_video_res_px  # anything higher is super slow because CPU renderer :|
 
     # noinspection PyProtectedMember
     def render(self):

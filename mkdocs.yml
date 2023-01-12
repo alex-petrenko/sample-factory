@@ -165,6 +165,7 @@ nav:
     - 09-environment-integrations/megaverse.md
     - 09-environment-integrations/envpool.md
     - 09-environment-integrations/isaacgym.md
+    - 09-environment-integrations/brax.md
     - 09-environment-integrations/swarm-rl.md
   - Huggingface Integration:
     - 10-huggingface/huggingface.md

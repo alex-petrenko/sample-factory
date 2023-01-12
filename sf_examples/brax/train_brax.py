@@ -41,7 +41,15 @@ def torch_to_jax(tensor):
 
 class BraxEnv(gym.Env):
     # noinspection PyProtectedMember
-    def __init__(self, brax_env, num_actors, render_mode: Optional[str], clamp_actions: bool, clamp_rew_obs: bool):
+    def __init__(
+        self,
+        brax_env,
+        num_actors,
+        render_mode: Optional[str],
+        render_res: int,
+        clamp_actions: bool,
+        clamp_rew_obs: bool,
+    ):
         self.env = brax_env
         self.num_agents = num_actors
         self.env.closed = False
@@ -49,6 +57,7 @@ class BraxEnv(gym.Env):
 
         self.renderer = None
         self.render_mode = render_mode
+        self.brax_video_res_px = render_res
 
         self.clamp_actions = clamp_actions
         self.clamp_rew_obs = clamp_rew_obs
@@ -95,7 +104,7 @@ class BraxEnv(gym.Env):
         if self.renderer is None:
             from sf_examples.brax.brax_render import BraxRenderer
 
-            self.renderer = BraxRenderer(self.env, self.render_mode)
+            self.renderer = BraxRenderer(self.env, self.render_mode, self.brax_video_res_px)
         return self.renderer.render()
 
 
@@ -105,12 +114,12 @@ def make_brax_env(full_env_name: str, cfg: Config, _env_config=None, render_mode
     ), f"Env {full_env_name} is not supported. Supported envs: {list(env_configs.keys())}"
 
     # use batch size 2 instead of 1 so we don't have to deal with vector-nonvector env issues
-    batch_size = 2 if BRAX_EVALUATION else cfg.env_agents
+    batch_size = 64 if BRAX_EVALUATION else cfg.env_agents
 
     from brax import envs
 
     gym_env = envs.create_gym_env(env_name=full_env_name, batch_size=batch_size, seed=0, backend="gpu")
-    env = BraxEnv(gym_env, cfg.env_agents, render_mode, cfg.clamp_actions, cfg.clamp_rew_obs)
+    env = BraxEnv(gym_env, batch_size, render_mode, cfg.brax_render_res, cfg.clamp_actions, cfg.clamp_rew_obs)
     return env
 
 
@@ -136,6 +145,13 @@ def add_extra_params_func(parser) -> None:
         default=False,
         type=str2bool,
         help="Clamp rewards and observations to -100,100",
+    )
+    p.add_argument(
+        "--brax_render_res",
+        default=200,
+        type=int,
+        help="Brax render resolution. Software renderer is very slow so use larger resolution only for offscreen "
+        "video generation, i.e. with push_to_hub",
     )
 
 
