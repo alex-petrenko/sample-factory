@@ -1,3 +1,12 @@
+"""
+Heavily inspired by original Brax code.
+https://github.com/google/brax/blob/7eaa16b4bf446b117b538dbe9c9401f97cf4afa2/brax/io/image.py
+
+This version is significantly faster to the point where software renderer can actually be used with
+render_mode=human (although still slow and in low resolution).
+"""
+
+
 from typing import Dict, List, Tuple
 
 import brax
