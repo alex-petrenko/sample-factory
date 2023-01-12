@@ -20,13 +20,15 @@ We assume your environment conforms to the [gym](https://github.com/openai/gym) 
 
 ```python3
 from typing import Optional
+import argparse
+import sys
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 
 
-def make_custom_env_func(full_env_name: str, cfg=None, env_config=None, render_mode: Optional[str] = None):
+def make_custom_env(full_env_name: str, cfg=None, env_config=None, render_mode: Optional[str] = None):
     # see the section below explaining arguments
     return CustomEnv(full_env_name, cfg, env_config, render_mode=render_mode)
     
