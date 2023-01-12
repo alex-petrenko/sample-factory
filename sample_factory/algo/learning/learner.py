@@ -514,7 +514,9 @@ class Learner(Configurable):
             minibatches = np.split(indices, num_minibatches)
         else:
             minibatches = list(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_epoch))
-            random.shuffle(minibatches)  # same minibatches between epochs, but in random order
+
+            # this makes sense but I'd like to do some testing before enabling it
+            # random.shuffle(minibatches)  # same minibatches between epochs, but in random order
 
         return minibatches
 
