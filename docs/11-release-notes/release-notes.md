@@ -1,5 +1,9 @@
 # Recent releases
 
+##### v2.0.4
+
+* Added `--enjoy_script` and `--train_script` for generating the model card when uploading to the Hugging Face Hub
+
 ##### v2.0.3
 
 * Automatically set `--recurrence` based on feed-forward vs RNN training

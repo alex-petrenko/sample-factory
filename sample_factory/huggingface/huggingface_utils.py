@@ -63,8 +63,10 @@ python -m sample_factory.huggingface.load_from_hub -r {repo_id}
 ```\n
     """
 
-    if enjoy_name is not None:
-        readme += f"""
+    if enjoy_name is None:
+        enjoy_name = "<path.to.enjoy.module>"
+
+    readme += f"""
 ## Using the model\n
 To run the model after download, use the `enjoy` script corresponding to this environment:
 ```
@@ -73,17 +75,19 @@ python -m {enjoy_name} --algo={algo} --env={env} --train_dir=./train_dir --exper
 \n
 You can also upload models to the Hugging Face Hub using the same script with the `--push_to_hub` flag.
 See https://www.samplefactory.dev/10-huggingface/huggingface/ for more details
-        """
+    """
 
-    if train_name is not None:
-        readme += f"""
+    if train_name is None:
+        train_name = "<path.to.train.module>"
+
+    readme += f"""
 ## Training with this model\n
 To continue training with this model, use the `train` script corresponding to this environment:
 ```
 python -m {train_name} --algo={algo} --env={env} --train_dir=./train_dir --experiment={repo_name} --restart_behavior=resume --train_for_env_steps=10000000000
 ```\n
 Note, you may have to adjust `--train_for_env_steps` to a suitably high number as the experiment will resume at the number of steps it concluded at.
-        """
+    """
 
     with open(readme_path, "w", encoding="utf-8") as f:
         f.write(readme)
