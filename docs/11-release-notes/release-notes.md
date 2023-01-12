@@ -1,12 +1,12 @@
 # Recent releases
 
-##### v2.0.4
-
-* Added `--enjoy_script` and `--train_script` for generating the model card when uploading to the Hugging Face Hub
-
 ##### v2.0.3
 
+* Added cfg parameters `--lr_adaptive_min` and `--lr_adaptive_max` to control the minimum and maximum adaptive learning rate
+* Added Brax environment support + custom brax renderer for enjoy scripts
 * Automatically set `--recurrence` based on feed-forward vs RNN training
+* Added `--enjoy_script` and `--train_script` for generating the model card when uploading to the Hugging Face Hub
+* Fixed video name when generating Hugging Face model card
 
 ##### v2.0.2
 

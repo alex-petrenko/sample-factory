@@ -6,3 +6,5 @@ omit =
     sf_examples/dmlab/*
     sf_examples/isaacgym_examples/*
     sf_examples/vizdoom/*
+    sf_examples/brax/*
+    sf_examples/notebooks/*

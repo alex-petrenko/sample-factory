@@ -59,7 +59,7 @@ class ParamGrid(ParamGenerator):
 
             return result
 
-    def generate_params(self, randomize=True):
+    def generate_params(self, randomize=False):
         if len(self.grid) == 0:
             return dict()
 

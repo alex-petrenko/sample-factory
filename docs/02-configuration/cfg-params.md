@@ -42,6 +42,8 @@ usage: train_gym_env.py [-h] [--algo ALGO] --env ENV [--experiment EXPERIMENT]
                         [--learning_rate LEARNING_RATE]
                         [--lr_schedule {constant,kl_adaptive_minibatch,kl_adaptive_epoch}]
                         [--lr_schedule_kl_threshold LR_SCHEDULE_KL_THRESHOLD]
+                        [--lr_adaptive_min LR_ADAPTIVE_MIN]
+                        [--lr_adaptive_max LR_ADAPTIVE_MAX]
                         [--obs_subtract_mean OBS_SUBTRACT_MEAN]
                         [--obs_scale OBS_SCALE]
                         [--normalize_input NORMALIZE_INPUT]
@@ -114,7 +116,7 @@ optional arguments:
   --env ENV             Name of the environment to use (default: None)
   --experiment EXPERIMENT
                         Unique experiment name. This will also be the name for
-                        the experiment folder in the train dir. If the
+                        the experiment folder in the train dir.If the
                         experiment folder with this name aleady exists the
                         experiment will be RESUMED!Any parameters passed from
                         command line that do not match the parameters stored
@@ -239,11 +241,11 @@ optional arguments:
                         function finalize_trajectory in actor_worker.py)
                         (default: 32)
   --recurrence RECURRENCE
-                        Trajectory length for backpropagation through time. If
-                        recurrence=1 there is no backpropagation through time,
-                        and experience is shuffled completely randomlyFor
-                        V-trace recurrence should be equal to rollout length.
-                        (default: 32)
+                        Trajectory length for backpropagation through time.
+                        Default value (-1) sets recurrence to rollout length
+                        for RNNs and to 1 (no recurrence) for feed-forward
+                        nets. If you train with V-trace recurrence should be
+                        equal to rollout length. (default: -1)
   --shuffle_minibatches SHUFFLE_MINIBATCHES
                         Whether to randomize and shuffle minibatches between
                         iterations (this is a slow operation when batches are
@@ -347,6 +349,16 @@ optional arguments:
                         (default: constant)
   --lr_schedule_kl_threshold LR_SCHEDULE_KL_THRESHOLD
                         Used with kl_adaptive_* schedulers (default: 0.008)
+  --lr_adaptive_min LR_ADAPTIVE_MIN
+                        Minimum learning rate (default: 1e-06)
+  --lr_adaptive_max LR_ADAPTIVE_MAX
+                        Maximum learning rate. This is the best value tuned
+                        for IsaacGymEnvs environments such as Ant/Humanoid,
+                        but it can be too high for some other envs. Set this
+                        to 1e-3 if you see instabilities with adaptive LR,
+                        especially if reported LR on Tensorboard reaches this
+                        max value before the instability happens. (default:
+                        0.01)
   --obs_subtract_mean OBS_SUBTRACT_MEAN
                         Observation preprocessing, mean value to subtract from
                         observation (e.g. 128.0 for 8-bit RGB) (default: 0.0)

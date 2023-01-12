@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
+import random
 import time
 from abc import ABC, abstractmethod
 from os.path import join
@@ -44,10 +45,10 @@ class LearningRateScheduler:
 
 
 class KlAdaptiveScheduler(LearningRateScheduler, ABC):
-    def __init__(self, cfg):
+    def __init__(self, cfg: Config):
         self.lr_schedule_kl_threshold = cfg.lr_schedule_kl_threshold
-        self.min_lr = 1e-6
-        self.max_lr = 1e-2
+        self.min_lr = cfg.lr_adaptive_min
+        self.max_lr = cfg.lr_adaptive_max
 
     @abstractmethod
     def num_recent_kls_to_use(self) -> int:
@@ -512,7 +513,10 @@ class Learner(Configurable):
             num_minibatches = experience_size // batch_size
             minibatches = np.split(indices, num_minibatches)
         else:
-            minibatches = tuple(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_epoch))
+            minibatches = list(slice(i * batch_size, (i + 1) * batch_size) for i in range(0, minibatches_per_epoch))
+
+            # this makes sense but I'd like to do some testing before enabling it
+            # random.shuffle(minibatches)  # same minibatches between epochs, but in random order
 
         return minibatches
 
