@@ -28,6 +28,9 @@ Then follow general instructions to install Sample Factory if you need to.
 ## Running Experiments
 
 ```shell
+# to avoid OOM issues it is advised to disable vram preallocation (might not be necessary)
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
 # train for 100M steps with default hyperparameters
 python -m sf_examples.brax.train_brax --env=ant --experiment=ant_brax
 
