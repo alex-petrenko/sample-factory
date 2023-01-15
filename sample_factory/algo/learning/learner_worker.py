@@ -191,7 +191,8 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
         torch.cuda.empty_cache()
 
     def on_stop(self, *args):
-        self.learner.save()
+        if self.learner.gpu_id == 0:
+            self.learner.save()
         if not self.cfg.serial_mode:
             self.join_batcher_thread()
 
