@@ -24,7 +24,7 @@ def get_available_gpus() -> List[int]:
     Returns indices of GPUs specified by CUDA_VISIBLE_DEVICES.
     """
     orig_visible_devices = os.environ[f"{CUDA_ENVVAR}"]
-    available_gpus = [int(g) for g in orig_visible_devices.split(",") if g]
+    available_gpus = [int(g.strip()) for g in orig_visible_devices.split(",") if g]
     return available_gpus
 
 
