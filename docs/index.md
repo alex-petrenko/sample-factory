@@ -19,6 +19,8 @@ High-throughput reinforcement learning codebase. Resources:
 
 * **Discord:** [https://discord.gg/BCfHWaSMkr](https://discord.gg/BCfHWaSMkr)
 
+* **Twitter (for updates):** [@petrenko_ai](https://twitter.com/petrenko_ai)
+
 [//]: # (* **Talk &#40;circa 2021&#41;:** https://youtu.be/lLG17LKKSZc)
 
 ## What is Sample Factory?

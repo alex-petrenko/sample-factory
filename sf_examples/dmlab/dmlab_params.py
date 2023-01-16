@@ -17,6 +17,8 @@ def dmlab_override_defaults(parser: argparse.ArgumentParser) -> None:
         rnn_type="lstm",
         rnn_size=256,
         num_epochs=1,
+        # if observation normalization is used, it is important that we do not normalize INSTRUCTIONS observation
+        normalize_input_keys=["obs"],
     )
 
 
