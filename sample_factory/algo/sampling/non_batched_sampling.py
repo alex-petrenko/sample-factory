@@ -384,7 +384,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
             env_config = AttrDict(
                 worker_index=self.worker_idx,
                 vector_index=vector_idx,
-                env_id=global_env_idx * self.gpu_id,
+                env_id=global_env_idx * (self.gpu_id + 1),
             )
 
             # log.info('Creating env %r... %d-%d-%d', env_config, self.worker_idx, self.split_idx, env_i)

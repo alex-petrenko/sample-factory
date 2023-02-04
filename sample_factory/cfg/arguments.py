@@ -178,6 +178,8 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
             good_config = False
 
     if cfg.gpu_per_policy > 1:
+        if cfg.with_pbt:
+            cfg_error("PBT is not supported with gpu_per_policy > 1")
         if cfg.normalize_returns:
             cfg_error("normalize_returns is not supported with gpu_per_policy > 1")
         if cfg.num_policies != 1:

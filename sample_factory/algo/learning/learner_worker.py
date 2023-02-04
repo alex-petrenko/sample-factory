@@ -8,6 +8,7 @@ import psutil
 import torch
 from signal_slot.signal_slot import EventLoop, Timer, signal
 from torch import Tensor
+from functools import partial
 
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner

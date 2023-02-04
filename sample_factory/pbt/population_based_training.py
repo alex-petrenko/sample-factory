@@ -184,10 +184,10 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
 
     def on_connect_components(self, runner: Runner) -> None:
         for policy_id, learner_worker in runner.learners.items():
-            self.connect(update_cfg_signal(policy_id), learner_worker.on_update_cfg)
-            self.connect(save_model_signal(policy_id), learner_worker.save)
-            self.connect(load_model_signal(policy_id), learner_worker.load)
-            learner_worker.saved_model.connect(self.on_saved_model)
+            self.connect(update_cfg_signal(policy_id), learner_worker[0].on_update_cfg)
+            self.connect(save_model_signal(policy_id), learner_worker[0].save)
+            self.connect(load_model_signal(policy_id), learner_worker[0].load)
+            learner_worker[0].saved_model.connect(self.on_saved_model)
 
     def on_start(self, runner: Runner) -> None:
         # send initial configuration to the system components
@@ -282,17 +282,17 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
                 value = int(value)
 
             if isinstance(value, (int, float)):
-                writer.add_scalar(f"zz_pbt/{name}_{key}", value, env_steps)
+                writer.add_scalar(f"zz_pbt/{name}_{key}", value, env_steps[0])
             elif isinstance(value, (tuple, list)):
                 for i, tuple_value in enumerate(value):
-                    writer.add_scalar(f"zz_pbt/{name}_{key}_{i}", tuple_value, env_steps)
+                    writer.add_scalar(f"zz_pbt/{name}_{key}_{i}", tuple_value, env_steps[0])
             else:
                 log.error("Unsupported type in pbt summaries %r", type(value))
 
     def _write_pbt_summaries(self, policy_id, env_steps, writer: SummaryWriter):
         self._write_dict_summaries(self.policy_cfg[policy_id], writer, "cfg", env_steps)
         if self.policy_reward_shaping[policy_id] is not None:
-            self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, "rew", env_steps)
+            self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, "rew", env_steps[0])
 
     def _update_policy(self, policy_id, policy_stats):
         if self.cfg.pbt_target_objective not in policy_stats:
@@ -398,14 +398,14 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
             if policy_id not in env_steps:
                 continue
 
-            if env_steps[policy_id] < self.cfg.pbt_start_mutation:
+            if env_steps[policy_id][0] < self.cfg.pbt_start_mutation:
                 continue
 
-            steps_since_last_update = env_steps[policy_id] - self.last_update[policy_id]
+            steps_since_last_update = env_steps[policy_id][0] - self.last_update[policy_id]
             if steps_since_last_update > self.cfg.pbt_period_env_steps:
                 self._update_policy(policy_id, policy_avg_stats)
                 self._write_pbt_summaries(policy_id, env_steps[policy_id], runner.writers[policy_id])
-                self.last_update[policy_id] = env_steps[policy_id]
+                self.last_update[policy_id] = env_steps[policy_id][0]
 
         # also periodically dump a pbt summary even if we didn't change anything
         now = time.time()
