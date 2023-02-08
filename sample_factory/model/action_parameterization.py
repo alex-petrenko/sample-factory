@@ -53,7 +53,6 @@ class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterization)
         # calculate only action means using the policy neural network
         self.distribution_linear = nn.Linear(core_out_size, num_action_outputs // 2)
         self.tanh_scale: float = cfg.continuous_tanh_scale
-
         # stddev is a single learned parameter
         initial_stddev = torch.empty([num_action_outputs // 2])
         initial_stddev.fill_(math.log(self.cfg.initial_stddev))

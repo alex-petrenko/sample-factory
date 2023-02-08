@@ -177,10 +177,12 @@ def override_default_params_func(env, parser):
         num_batches_per_epoch=2,
         num_epochs=5,
         ppo_clip_ratio=0.2,
+        ppo_clip_value=1.0,
         value_loss_coeff=2.0,
         exploration_loss_coeff=0.0,
         nonlinearity="elu",
         encoder_mlp_layers=[256, 128, 64],
+        actor_critic_share_weights=True,
         learning_rate=3e-4,
         lr_schedule="kl_adaptive_epoch",
         lr_schedule_kl_threshold=0.008,
@@ -195,6 +197,7 @@ def override_default_params_func(env, parser):
         save_best_after=int(5e6),
         serial_mode=True,
         async_rl=False,
+        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
         # use_env_info_cache=True,  # speeds up startup
     )
 
@@ -208,7 +211,6 @@ def override_default_params_func(env, parser):
 env_configs = dict(
     ant=dict(
         encoder_mlp_layers=[256, 128, 64],
-        experiment_summaries_interval=3,  # experiments are short so we should save summaries often
         save_every_sec=15,
     ),
     humanoid=dict(

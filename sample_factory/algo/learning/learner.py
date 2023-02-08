@@ -162,7 +162,7 @@ class Learner(Configurable):
         # decay rate at which summaries are collected
         # save summaries every 5 seconds in the beginning, but decay to every 4 minutes in the limit, because we
         # do not need frequent summaries for longer experiments
-        self.summary_rate_decay_seconds = LinearDecay([(0, 5), (100000, 120), (1000000, 240)])
+        self.summary_rate_decay_seconds = LinearDecay([(0, 2), (100000, 60), (1000000, 120)])
         self.last_summary_time = 0
         self.last_milestone_time = 0
 
@@ -658,6 +658,7 @@ class Learner(Configurable):
             values=result["values"],
             adv=adv,
             adv_std=adv_std,
+            adv_mean=adv_mean,
         )
 
         return action_distribution, policy_loss, exploration_loss, kl_old, kl_loss, value_loss, loss_summaries
@@ -860,9 +861,13 @@ class Learner(Configurable):
         stats.value_loss = var.value_loss
         stats.exploration_loss = var.exploration_loss
 
-        stats.adv_min = var.adv.min()
-        stats.adv_max = var.adv.max()
+        stats.act_min = var.mb.actions.min()
+        stats.act_max = var.mb.actions.max()
+
+        stats.adv_min = var.mb.advantages.min()
+        stats.adv_max = var.mb.advantages.max()
         stats.adv_std = var.adv_std
+        stats.adv_mean = var.adv_mean
         stats.max_abs_logprob = torch.abs(var.mb.action_logits).max()
 
         if hasattr(var.action_distribution, "summaries"):

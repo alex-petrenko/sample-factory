@@ -41,8 +41,8 @@ setup(
         "Videos": "https://sites.google.com/view/sample-factory",
     },
     install_requires=[
-        "numpy>=1.18.1<2.0",
-        "torch>=1.9,<2.0",
+        "numpy>=1.18.1,<2.0",
+        "torch>=1.9,<2.0,!=1.13.0",
         "gym>=0.26.1,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
@@ -53,13 +53,13 @@ setup(
         "faster-fifo>=1.4.2,<2.0",
         "signal-slot-mp>=1.0.3,<2.0",
         "filelock",
-        "opencv-python",
+        "opencv-python!=3.4.18.65",
         "wandb>=0.12.9",
         "huggingface-hub>=0.10.0,<1.0",
     ],
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that
-        "dev": ["black", "isort", "pytest<8.0", "flake8", "pre-commit", "twine"]
+        "dev": ["black", "isort>=5.12", "pytest<8.0", "flake8", "pre-commit", "twine"]
         + _docs_deps
         + _atari_deps
         + _mujoco_deps,
