@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from typing import Any, Dict, Optional
 
-import gym
+import gymnasium as gym
 import numpy as np
 from torch import nn
 

@@ -3,7 +3,7 @@ import operator
 from collections import deque
 from typing import Callable
 
-import gym
+import gymnasium as gym
 
 from sample_factory.algo.utils.misc import EPS
 from sample_factory.envs.env_utils import RewardShapingInterface

@@ -4,11 +4,11 @@ Brax env integration.
 import sys
 from typing import Dict, List, Optional, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.utils.dlpack as tpack
-from gym.core import RenderFrame
+from gymnasium.core import RenderFrame
 from torch import Tensor
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args

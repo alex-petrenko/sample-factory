@@ -4,7 +4,7 @@ import random
 from queue import Empty
 from typing import Any, Dict, List, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
 
 from sample_factory.algo.sampling.sampling_utils import VectorEnvRunner, record_episode_statistics_wrapper_stats

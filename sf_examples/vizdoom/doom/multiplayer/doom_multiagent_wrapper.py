@@ -10,7 +10,7 @@ from typing import Union
 import cv2
 import faster_fifo
 import filelock
-import gym
+import gymnasium as gym
 from filelock import FileLock
 
 from sample_factory.algo.utils.rl_utils import make_dones

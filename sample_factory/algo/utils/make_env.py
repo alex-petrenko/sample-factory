@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
-from gym import Wrapper, spaces
-from gym.core import ActType, ObsType
+from gymnasium import Wrapper, spaces
+from gymnasium.core import ActType, ObsType
 from torch import Tensor
 
 from sample_factory.algo.utils.tensor_utils import dict_of_lists_cat

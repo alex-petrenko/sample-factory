@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-import gym
+import gymnasium as gym
 import numpy as np
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args

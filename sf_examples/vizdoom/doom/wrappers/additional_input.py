@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import numpy as np
 
 from sf_examples.vizdoom.doom.wrappers.reward_shaping import NUM_WEAPONS

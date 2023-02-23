@@ -6,7 +6,6 @@ Install IsaacGym from NVIDIA at https://developer.nvidia.com/isaac-gym. Installa
 
 Install IsaacGymEnvs from https://github.com/NVIDIA-Omniverse/IsaacGymEnvs. 
 
-
 ### Running Experiments
 
 Run IsaacGym experiments using scripts from the `sf_examples.isaacgym_examples` folder. Currently, we support the AllegroHand, Ant, Anymal, AnymalTerrain, BallBalance, Cartpole , Humanoid, and ShadowHand  environments out of the box, and more environments can be added in `train_isaacgym.py`.

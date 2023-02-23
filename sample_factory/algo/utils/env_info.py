@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from os.path import join
 from typing import Dict, List, Optional
 
-import gym
+import gymnasium as gym
 
 from sample_factory.algo.utils.action_distributions import calc_num_actions
 from sample_factory.algo.utils.context import set_global_context, sf_global_context

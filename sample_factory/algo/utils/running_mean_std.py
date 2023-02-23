@@ -5,7 +5,7 @@ Thanks a lot, great module!
 """
 from typing import Dict, Final, List, Optional, Union
 
-import gym
+import gymnasium as gym
 import torch
 import torch.nn as nn
 from torch import Tensor

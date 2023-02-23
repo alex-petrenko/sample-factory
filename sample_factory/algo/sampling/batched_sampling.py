@@ -4,7 +4,7 @@ import numbers
 from queue import Empty
 from typing import Dict, List, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 from torch import Tensor

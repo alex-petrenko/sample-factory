@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 
 resolutions = [
     "160x120",

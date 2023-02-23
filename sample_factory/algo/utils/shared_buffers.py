@@ -4,7 +4,7 @@ import math
 from typing import Dict, List, Tuple
 
 import torch
-from gym import spaces
+from gymnasium import spaces
 from signal_slot.queue_utils import get_queue
 from torch import Tensor
 

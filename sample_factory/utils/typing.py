@@ -4,7 +4,7 @@ import argparse
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import torch
-from gym import spaces
+from gymnasium import spaces
 
 from sample_factory.utils.attr_dict import AttrDict
 

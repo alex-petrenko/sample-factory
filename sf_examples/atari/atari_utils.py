@@ -1,6 +1,6 @@
 from typing import Optional
 
-import gym
+import gymnasium as gym
 
 from sample_factory.envs.env_wrappers import (
     ClipRewardEnv,

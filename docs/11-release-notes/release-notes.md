@@ -1,5 +1,12 @@
 # Recent releases
 
+##### v2.1.0
+
+* Use `gymnasium` instead of `gym` dependency. See https://gymnasium.farama.org/content/basic_usage/ New compatibility
+layer added to automatically convert legacy `gym` environments to `gymnasium` environments. Still, it is likely that
+some of the user code will need to be manually updated to use `gymnasium` instead of `gym`.
+Apologies for the inconvenience, but hopefully this is the last major change before Gym API finally stabilizes.
+
 ##### v2.0.3
 
 * Added cfg parameters `--lr_adaptive_min` and `--lr_adaptive_max` to control the minimum and maximum adaptive learning rate

@@ -10,7 +10,7 @@ import sys
 from os.path import join
 from typing import Dict, List, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import torch
 from isaacgymenvs.tasks import isaacgym_task_map
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
