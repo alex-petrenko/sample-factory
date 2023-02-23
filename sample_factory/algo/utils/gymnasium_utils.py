@@ -25,9 +25,9 @@ def patch_non_gymnasium_env(env: Union["gym.Env", gymnasium.Env]) -> gymnasium.E
     try:
         # patching spaces
         if not isinstance(env.observation_space, gymnasium.Space):
-            env.observation_space = _convert_space(env.observation_space)
+            env.observation_space = convert_space(env.observation_space)
         if not isinstance(env.action_space, gymnasium.Space):
-            env.action_space = _convert_space(env.action_space)
+            env.action_space = convert_space(env.action_space)
     except AttributeError:
         # gym.Env does not have observation_space and action_space or they're defined as properties
         # in this case... God bless us all
@@ -93,14 +93,14 @@ def _patch_env(env: Union["gym.Env", gymnasium.Env]) -> gymnasium.Env:
     return gymnasium_env
 
 
-def _convert_space(space: Union["gym.Space", gymnasium.Space]) -> gymnasium.Space:  # pragma: no cover
+def convert_space(space: Union["gym.Space", gymnasium.Space]) -> gymnasium.Space:  # pragma: no cover
     """
     Takes a space and patches it to return Gymnasium Space.
     This function takes the space object and returns a patched
     space, using shimmy wrapper to convert it to Gymnasium,
     if necessary.
 
-    :param env: A gym/gymnasium Space
+    :param space: A gym/gymnasium Space
     :return: Patched space (gymnasium Space)
     """
 
