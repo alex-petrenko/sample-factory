@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 import cv2
 import deepmind_lab
-import gym
+import gymnasium as gym
 import numpy as np
 
 from sample_factory.utils.typing import PolicyID

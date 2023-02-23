@@ -10,12 +10,13 @@ import sys
 from os.path import join
 from typing import Dict, List, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import torch
 from isaacgymenvs.tasks import isaacgym_task_map
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
 from torch import Tensor
 
+from sample_factory.algo.utils.gymnasium_utils import convert_space
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
@@ -28,14 +29,14 @@ class IsaacGymVecEnv(gym.Env):
         self.env = isaacgym_env
         # what about vectorized multi-agent envs? should we take num_agents into account also?
         self.num_agents = self.env.num_envs
-        self.action_space = self.env.action_space
+        self.action_space = convert_space(self.env.action_space)
 
         # isaacgym_examples environments actually return dicts
         if obs_key == "obs":
-            self.observation_space = gym.spaces.Dict(dict(obs=self.env.observation_space))
+            self.observation_space = gym.spaces.Dict(dict(obs=convert_space(self.env.observation_space)))
             self._proc_obs_func = lambda obs_dict: obs_dict
         elif obs_key == "states":
-            self.observation_space = gym.spaces.Dict(dict(obs=self.env.state_space))
+            self.observation_space = gym.spaces.Dict(dict(obs=convert_space(self.env.state_space)))
             self._proc_obs_func = self._use_states_as_obs
         else:
             raise ValueError(f"Unknown observation key: {obs_key}")

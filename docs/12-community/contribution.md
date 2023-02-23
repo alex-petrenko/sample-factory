@@ -66,10 +66,16 @@ If you would like to work on any of the open Issues:
 	pre-commit install
 	```
 
+   (Optional) to update pre-commit hooks, run the following command:
+	```bash
+	pre-commit autoupdate
+	```
+
 7. Run unittests with the following command:
 	```bash
 	make test
 	```
+
 8. Once you're happy with your files, add your changes and make a commit to record your changes locally:
 
 	```bash

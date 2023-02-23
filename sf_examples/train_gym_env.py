@@ -10,7 +10,7 @@ python -m sf_examples.enjoy_gym_env --algo=APPO --experiment=example_gym_cartpol
 import sys
 from typing import Optional
 
-import gym
+import gymnasium as gym
 
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env

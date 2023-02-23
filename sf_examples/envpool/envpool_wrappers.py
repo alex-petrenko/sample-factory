@@ -1,8 +1,8 @@
 from typing import Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
-from gym.core import ObsType
+from gymnasium.core import ObsType
 
 DoneStepType = Tuple[
     Union[ObsType, np.ndarray],
@@ -39,7 +39,8 @@ class EnvPoolResetFixWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         kwargs.pop("seed", None)  # envpool does not support the seed in reset, even with the updated API
-        return super().reset(**kwargs)
+        kwargs.pop("options", None)
+        return self.env.reset(**kwargs)
 
 
 class BatchedRecordEpisodeStatistics(gym.Wrapper):
@@ -50,7 +51,7 @@ class BatchedRecordEpisodeStatistics(gym.Wrapper):
         self.episode_lengths = None
 
     def reset(self, **kwargs):
-        observations, infos = super().reset(**kwargs)
+        observations, infos = self.env.reset(**kwargs)
         self.episode_returns = np.zeros(self.num_envs, dtype=np.float32)
         self.episode_lengths = np.zeros(self.num_envs, dtype=np.int32)
         self.lives = np.zeros(self.num_envs, dtype=np.int32)

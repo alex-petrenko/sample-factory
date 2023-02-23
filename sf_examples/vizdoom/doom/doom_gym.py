@@ -8,10 +8,10 @@ from threading import Thread
 from typing import Dict, Optional, Tuple
 
 import cv2
-import gym
+import gymnasium as gym
 import numpy as np
 from filelock import FileLock, Timeout
-from gym.utils import seeding
+from gymnasium.utils import seeding
 from vizdoom.vizdoom import AutomapMode, DoomGame, Mode, ScreenResolution
 
 from sample_factory.algo.utils.spaces.discretized import Discretized

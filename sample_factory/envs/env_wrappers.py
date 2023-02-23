@@ -8,11 +8,9 @@ from os.path import join
 from typing import Any, Dict, Tuple, Union
 
 import cv2
-import gym
+import gymnasium as gym
 import numpy as np
-
-# noinspection PyProtectedMember
-from gym import ObservationWrapper, RewardWrapper, spaces
+from gymnasium import ObservationWrapper, RewardWrapper, spaces
 
 from sample_factory.envs.env_utils import num_env_steps
 from sample_factory.utils.utils import ensure_dir_exists, log

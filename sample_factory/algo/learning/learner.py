@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import glob
 import os
-import random
 import time
 from abc import ABC, abstractmethod
 from os.path import join
@@ -233,12 +232,15 @@ class Learner(Configurable):
         optimizer_cls = optimizer_cls[self.cfg.optimizer]
         log.debug(f"Using optimizer {optimizer_cls}")
 
-        self.optimizer = optimizer_cls(
-            params,
+        optimizer_kwargs = dict(
             lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
-            eps=self.cfg.adam_eps,
         )
+
+        if self.cfg.optimizer in ["adam", "lamb"]:
+            optimizer_kwargs["eps"] = self.cfg.adam_eps
+
+        self.optimizer = optimizer_cls(params, **optimizer_kwargs)
 
         self.load_from_checkpoint(self.policy_id)
         self.param_server.init(self.actor_critic, self.train_step, self.device)
@@ -900,7 +902,8 @@ class Learner(Configurable):
         # this caused numerical issues on some versions of PyTorch with second moment reaching infinity
         adam_max_second_moment = 0.0
         for key, tensor_state in self.optimizer.state.items():
-            adam_max_second_moment = max(tensor_state["exp_avg_sq"].max().item(), adam_max_second_moment)
+            if "exp_avg_sq" in tensor_state:
+                adam_max_second_moment = max(tensor_state["exp_avg_sq"].max().item(), adam_max_second_moment)
         stats.adam_max_second_moment = adam_max_second_moment
 
         version_diff = (var.curr_policy_version - var.mb.policy_version)[var.mb.policy_id == self.policy_id]

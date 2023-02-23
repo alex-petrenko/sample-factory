@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import torch
-from gym.spaces import Box, Dict
+from gymnasium.spaces import Box, Dict
 
 from sample_factory.cfg.arguments import parse_sf_args
 from sample_factory.model.encoder import default_make_encoder_func

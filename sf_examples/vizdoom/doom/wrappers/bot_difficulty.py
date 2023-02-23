@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 
 from sample_factory.utils.utils import log
 

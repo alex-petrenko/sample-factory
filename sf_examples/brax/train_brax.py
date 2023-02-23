@@ -4,13 +4,14 @@ Brax env integration.
 import sys
 from typing import Dict, List, Optional, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.utils.dlpack as tpack
-from gym.core import RenderFrame
+from gymnasium.core import RenderFrame
 from torch import Tensor
 
+from sample_factory.algo.utils.gymnasium_utils import convert_space
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
@@ -72,8 +73,8 @@ class BraxEnv(gym.Env):
             action_high = np.ones(action_size)
             self.action_space = gym.spaces.Box(-action_high, action_high, dtype=np.float32)
         else:
-            self.observation_space = self.env.observation_space
-            self.action_space = self.env.action_space
+            self.observation_space = convert_space(self.env.observation_space)
+            self.action_space = convert_space(self.env.action_space)
 
     def reset(self, *args, **kwargs) -> Tuple[Tensor, Dict]:
         log.debug(f"Resetting env {self.env} with {self.num_agents} parallel agents...")

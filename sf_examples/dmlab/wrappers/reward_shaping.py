@@ -1,6 +1,6 @@
 from math import tanh
 
-import gym
+import gymnasium as gym
 
 RAW_SCORE_SUMMARY_KEY_SUFFIX = "dmlab_raw_score"
 

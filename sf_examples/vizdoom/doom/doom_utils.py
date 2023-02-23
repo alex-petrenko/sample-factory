@@ -3,7 +3,7 @@ import os
 from os.path import join
 from typing import Optional
 
-from gym.spaces import Discrete
+from gymnasium.spaces import Discrete
 
 from sample_factory.envs.env_wrappers import (
     PixelFormatChwWrapper,

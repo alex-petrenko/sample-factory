@@ -12,8 +12,8 @@ with open("README.md", "r") as f:
     long_description = "\n".join(descr_no_gifs)
 
 
-_atari_deps = ["gym[atari, accept-rom-license]"]
-_mujoco_deps = ["gym[mujoco]"]
+_atari_deps = ["gymnasium[atari, accept-rom-license]"]
+_mujoco_deps = ["gymnasium[mujoco]"]
 _envpool_deps = ["envpool"]
 
 _docs_deps = [
@@ -31,7 +31,7 @@ setup(
     description="High throughput asynchronous reinforcement learning framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="2.0.3",
+    version="2.1.0",
     url="https://github.com/alex-petrenko/sample-factory",
     author="Aleksei Petrenko",
     license="MIT",
@@ -43,7 +43,7 @@ setup(
     install_requires=[
         "numpy>=1.18.1,<2.0",
         "torch>=1.9,<2.0,!=1.13.0",
-        "gym>=0.26.1,<1.0",
+        "gymnasium>=0.27,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
         "tensorboardx>=2.0",
@@ -66,7 +66,7 @@ setup(
         "atari": _atari_deps,
         "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,
-        "vizdoom": ["vizdoom<2.0", "gym[classic_control]"],
+        "vizdoom": ["vizdoom<2.0", "gymnasium[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },
     package_dir={"": "./"},

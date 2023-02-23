@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from sample_factory.algo.utils.context import global_env_registry
+from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import log
@@ -35,4 +36,7 @@ def create_env(
 
     env_factory = env_registry[full_env_name]
     env = env_factory(full_env_name, cfg, env_config, render_mode)
+
+    env = patch_non_gymnasium_env(env)
+
     return env
