@@ -19,24 +19,18 @@ class TestEnvpoolAtariEnv:
 
         register_atari_components()
 
-    # noinspection PyUnusedLocal
-    @staticmethod
-    def make_env(env_config):
-        from sf_examples.envpool.atari.envpool_atari_utils import make_atari_env
-
-        return make_atari_env(
-            "atari_beamrider", cfg=parse_atari_args(argv=["--algo=APPO", "--env=atari_beamrider"]), env_config=None
-        )
-
     @staticmethod
     def _run_test_env(
         env: str = "atari_breakout",
-        num_workers: int = 8,
+        num_workers: int = 1,
         train_steps: int = 2048,
         batched_sampling: bool = True,
         serial_mode: bool = True,
         async_rl: bool = False,
         batch_size: int = 1024,
+        env_agents: int = 32,
+        num_envs_per_worker: int = 1,
+        worker_num_splits: int = 1,
     ):
         log.debug(f"Testing with parameters {locals()}...")
         assert train_steps > batch_size, "We need sufficient number of steps to accumulate at least one batch"
@@ -48,9 +42,9 @@ class TestEnvpoolAtariEnv:
         cfg.async_rl = async_rl
         cfg.batched_sampling = batched_sampling
         cfg.num_workers = num_workers
-        cfg.env_agents = 32
-        cfg.num_envs_per_worker = 1
-        cfg.worker_num_splits = 1
+        cfg.env_agents = env_agents
+        cfg.num_envs_per_worker = num_envs_per_worker
+        cfg.worker_num_splits = worker_num_splits
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
         cfg.seed = 0
@@ -80,3 +74,13 @@ class TestEnvpoolAtariEnv:
     @pytest.mark.parametrize("batched_sampling", [True])
     def test_basic_envs(self, env_name, batched_sampling):
         self._run_test_env(env=env_name, num_workers=1, batched_sampling=batched_sampling)
+
+    def test_batched_double_buffering(self):
+        self._run_test_env(
+            env="atari_pong",
+            num_workers=1,
+            batched_sampling=True,
+            num_envs_per_worker=2,
+            worker_num_splits=2,
+            env_agents=16,
+        )
