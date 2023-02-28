@@ -124,7 +124,7 @@ optional arguments:
                         (default: default_experiment)
   --train_dir TRAIN_DIR
                         Root for all experiments (default:
-                        /home/alex/all/projects/sf2/train_dir)
+                        /home/alex/all/projects/sample-factory/train_dir)
   --restart_behavior {resume,restart,overwrite}
                         How to handle the experiment if the directory with the
                         same name already exists. "resume" (default) will
@@ -487,8 +487,10 @@ optional arguments:
                         Benchmark mode (default: False)
   --encoder_mlp_layers [ENCODER_MLP_LAYERS [ENCODER_MLP_LAYERS ...]]
                         In case of MLP encoder, sizes of layers to use. This
-                        is ignored if observations are images. (default: [512,
-                        512])
+                        is ignored if observations are images. To use this
+                        parameter from command line, omit the = sign and
+                        separate values with spaces, e.g. --encoder_mlp_layers
+                        256 128 64 (default: [512, 512])
   --encoder_conv_architecture {convnet_simple,convnet_impala,convnet_atari,resnet_impala}
                         Architecture of the convolutional encoder. See
                         models.py for details. VizDoom and DMLab examples

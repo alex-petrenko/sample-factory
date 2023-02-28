@@ -4,7 +4,7 @@ from sample_factory.enjoy import enjoy
 from sf_examples.train_gym_env import parse_custom_args, register_custom_components
 
 
-def main():
+def main():  # pragma: no cover
     """Script entry point."""
     register_custom_components()
     cfg = parse_custom_args(evaluation=True)
@@ -12,5 +12,5 @@ def main():
     return status
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())

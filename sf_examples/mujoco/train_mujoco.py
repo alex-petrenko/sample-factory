@@ -20,7 +20,7 @@ def parse_mujoco_cfg(argv=None, evaluation=False):
     return final_cfg
 
 
-def main():
+def main():  # pragma: no cover
     """Script entry point."""
     register_mujoco_components()
     cfg = parse_mujoco_cfg()
@@ -28,5 +28,5 @@ def main():
     return status
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())

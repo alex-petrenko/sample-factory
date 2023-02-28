@@ -36,15 +36,13 @@ def parse_vizdoom_cfg(argv=None, evaluation=False):
     return final_cfg
 
 
-def main():
+def main():  # pragma: no cover
     """Script entry point."""
     register_vizdoom_components()
-
     cfg = parse_vizdoom_cfg()
-
     status = run_rl(cfg)
     return status
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())

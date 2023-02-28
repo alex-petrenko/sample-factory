@@ -138,6 +138,8 @@ nav:
       - 05-monitoring/wandb.md
       - 05-monitoring/custom-metrics.md
       - 05-monitoring/metrics-reference.md
+    - Troubleshooting:
+      - 05-troubleshooting/troubleshooting.md
   - Architecture:
     - 06-architecture/overview.md
     - 06-architecture/message-passing.md
