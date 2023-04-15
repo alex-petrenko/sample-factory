@@ -45,7 +45,7 @@ def register_dmlab_components(level_caches: Optional[DmlabLevelCaches] = None):
 
 
 class DmlabExtraSummariesObserver(AlgoObserver):
-    def extra_summaries(self, runner: Runner, policy_id: PolicyID, env_steps: int, writer: SummaryWriter) -> None:
+    def extra_summaries(self, runner: Runner, policy_id: PolicyID, writer: SummaryWriter, env_steps: int) -> None:
         dmlab_extra_summaries(runner, policy_id, env_steps, writer)
 
 
