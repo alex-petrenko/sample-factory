@@ -45,7 +45,7 @@ def is_multiagent_env(env: Any) -> bool:
     return is_multiagent
 
 
-class _DictObservationsWrapper(Wrapper[ObsType, ActType]):
+class _DictObservationsWrapper(Wrapper):
     def __init__(self, env):
         super().__init__(env)
         is_multiagent, num_agents = get_multiagent_info(env)
@@ -54,7 +54,7 @@ class _DictObservationsWrapper(Wrapper[ObsType, ActType]):
         self.observation_space: gym.spaces.Dict = gym.spaces.Dict(dict(obs=self.observation_space))
 
 
-class BatchedDictObservationsWrapper(_DictObservationsWrapper[DictObservations, Actions]):
+class BatchedDictObservationsWrapper(_DictObservationsWrapper):
     """Guarantees that the environment returns observations as dictionaries of lists (batches)."""
 
     def reset(self, **kwargs):
@@ -66,7 +66,7 @@ class BatchedDictObservationsWrapper(_DictObservationsWrapper[DictObservations, 
         return dict(obs=obs), rew, terminated, truncated, info
 
 
-class BatchedMultiAgentWrapper(Wrapper[DictOfListsObservations, Actions]):
+class BatchedMultiAgentWrapper(Wrapper):
     """Assumes wrapped environment has dictionary obs space."""
 
     def __init__(self, env):
@@ -94,7 +94,7 @@ class BatchedMultiAgentWrapper(Wrapper[DictOfListsObservations, Actions]):
         return self._obs(obs), [rew], [terminated], [truncated], [info]
 
 
-class NonBatchedMultiAgentWrapper(Wrapper[ListObservations, ListActions]):
+class NonBatchedMultiAgentWrapper(Wrapper):
     """
     This wrapper allows us to treat a single-agent environment as multi-agent with 1 agent.
     That is, the data (obs, rewards, etc.) is converted into lists of length 1
@@ -118,7 +118,7 @@ class NonBatchedMultiAgentWrapper(Wrapper[ListObservations, ListActions]):
         return [obs], [rew], [terminated], [truncated], [info]
 
 
-class NonBatchedDictObservationsWrapper(_DictObservationsWrapper[ListOfDictObservations, ListActions]):
+class NonBatchedDictObservationsWrapper(_DictObservationsWrapper):
     """Guarantees that the environment returns observations as lists of dictionaries."""
 
     def reset(self, **kwargs) -> ListOfDictObservations:
@@ -130,7 +130,7 @@ class NonBatchedDictObservationsWrapper(_DictObservationsWrapper[ListOfDictObser
         return [dict(obs=o) for o in obs], rew, terminated, truncated, info
 
 
-class BatchedListToDictWrapper(Wrapper[DictOfListsObservations, Actions]):
+class BatchedListToDictWrapper(Wrapper):
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         if isinstance(obs, list):
@@ -144,7 +144,7 @@ class BatchedListToDictWrapper(Wrapper[DictOfListsObservations, Actions]):
         return obs, rew, terminated, truncated, info
 
 
-class BatchedVecEnv(Wrapper[DictOfTensorObservations, TensorActions]):
+class BatchedVecEnv(Wrapper):
     """Ensures that the env returns a dictionary of tensors for observations, and tensors for rewards and dones."""
 
     ConvertFunc = Callable[[Any], Tensor]
@@ -348,7 +348,7 @@ def make_env_func_batched(cfg, env_config, render_mode: Optional[str] = None) ->
     return env
 
 
-class NonBatchedVecEnv(Wrapper[ListObservations, ListActions]):
+class NonBatchedVecEnv(Wrapper):
     """
     reset() returns a list of dict observations.
     step(action) returns a list of dict observations, list of rewards, list of dones, list of infos.
