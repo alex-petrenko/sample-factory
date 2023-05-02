@@ -14,8 +14,7 @@ pip install sample-factory[atari]
 Run Atari experiments with the scripts in `sf_examples.atari`.
 
 The default parameters have been chosen to match CleanRL's configuration (see reports below) and are not tuned for throughput.
-(TODO: also provide parameters that result in the fastest training).
- 
+(see some better parameters at the end of the document).
 
 To train a model in the `BreakoutNoFrameskip-v4` environment:
 
@@ -105,3 +104,27 @@ Various APPO models trained on Atari environments are uploaded to the HuggingFac
 
 - Sample Factory was benchmarked on Atari against CleanRL and Baselines. Sample Factory was able to achieve similar sample efficiency as CleanRL and Baselines using the same parameters.
     - https://wandb.ai/wmfrank/atari-benchmark/reports/Atari-Sample-Factory2-Baselines-CleanRL--VmlldzoyMzEyNjIw
+
+#### Better parameters (more envs, double buffering, async learning)
+
+```
+--experiment=breakout_faster
+--env=atari_breakout
+--summaries_use_frameskip=False
+--num_workers=16
+--num_envs_per_worker=8
+--worker_num_splits=2
+--train_for_env_steps=100000000
+--rollout=32
+--normalize_input=True
+--normalize_returns=True
+--serial_mode=False
+--async_rl=True
+--batch_size=1024
+--wandb_user=<user>
+--wandb_project=sf2_atari_breakout
+--wandb_group=breakout_w16v8r32
+--with_wandb=True
+```
+
+Report: https://wandb.ai/apetrenko/sf2_atari_breakout/reports/sf2-breakout-w16v8r32--Vmlldzo0MjM1MTQ4
