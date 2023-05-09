@@ -42,7 +42,7 @@ class TestMujoco:
         cfg.async_rl = async_rl
         cfg.batched_sampling = batched_sampling
         cfg.num_workers = num_workers
-        cfg.num_envs_per_worker = 2
+        cfg.num_envs_per_worker = 4
         cfg.train_for_env_steps = train_steps
         cfg.batch_size = batch_size
         cfg.rollout = rollout
