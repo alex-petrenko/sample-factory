@@ -153,7 +153,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
             rnn_states = policy_outputs["new_rnn_states"]
 
             for _ in range(render_action_repeat):
-
                 render_frame(cfg, env, video_frames, num_episodes, last_render_start)
                 last_render_start = time.time()
 
