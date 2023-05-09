@@ -311,6 +311,9 @@ class SequentialVectorizeWrapper(Wrapper, TrainingInfoInterface, RewardShapingIn
         return self.obs, self.rew, self.terminated, self.truncated, infos
 
     def set_training_info(self, training_info: Dict) -> None:
+        if self.training_info_interfaces is None:
+            return
+
         for env_train_info in self.training_info_interfaces:
             env_train_info.set_training_info(training_info)
 
