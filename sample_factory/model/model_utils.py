@@ -5,8 +5,7 @@ from torch import nn
 from torch.nn.utils import spectral_norm
 
 from sample_factory.cfg.configurable import Configurable
-from sample_factory.utils.attr_dict import AttrDict
-from sample_factory.utils.typing import Config, ObsSpace
+from sample_factory.utils.typing import Config
 
 
 def get_rnn_size(cfg):
@@ -25,15 +24,15 @@ def get_rnn_size(cfg):
     return size
 
 
-def nonlinearity(cfg: Config) -> nn.Module:
+def nonlinearity(cfg: Config, inplace: bool = False) -> nn.Module:
     if cfg.nonlinearity == "elu":
-        return nn.ELU(inplace=True)
+        return nn.ELU(inplace=inplace)
     elif cfg.nonlinearity == "relu":
-        return nn.ReLU(inplace=True)
+        return nn.ReLU(inplace=inplace)
     elif cfg.nonlinearity == "tanh":
-        return nn.Tanh()
+        return nn.Tanh(inplace=inplace)
     else:
-        raise Exception("Unknown nonlinearity")
+        raise Exception(f"Unknown {cfg.nonlinearity=}")
 
 
 def fc_layer(in_features: int, out_features: int, bias=True, spec_norm=False) -> nn.Module:

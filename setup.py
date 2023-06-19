@@ -31,7 +31,7 @@ setup(
     description="High throughput asynchronous reinforcement learning framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="2.1.0",
+    version="2.1.1",
     url="https://github.com/alex-petrenko/sample-factory",
     author="Aleksei Petrenko",
     license="MIT",
@@ -42,7 +42,7 @@ setup(
     },
     install_requires=[
         "numpy>=1.18.1,<2.0",
-        "torch>=1.9,<2.0,!=1.13.0",
+        "torch>=1.9,<3.0,!=1.13.0",
         "gymnasium>=0.27,<1.0",
         "pyglet",  # gym dependency
         "tensorboard>=1.15.0",
@@ -50,10 +50,10 @@ setup(
         "psutil>=5.7.0",
         "threadpoolctl>=2.0.0",
         "colorlog",
-        "faster-fifo>=1.4.2,<2.0",
+        # "faster-fifo>=1.4.2,<2.0",  <-- installed by signal-slot-mp
         "signal-slot-mp>=1.0.3,<2.0",
         "filelock",
-        "opencv-python!=3.4.18.65",
+        "opencv-python",
         "wandb>=0.12.9",
         "huggingface-hub>=0.10.0,<1.0",
     ],
