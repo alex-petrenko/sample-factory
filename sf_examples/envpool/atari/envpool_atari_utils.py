@@ -30,7 +30,7 @@ def atari_env_by_name(name):
 
 
 def make_atari_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
-    if cfg.num_envs_per_worker >= 1:
+    if cfg.num_envs_per_worker > 1:
         log.warning(
             "When using envpool, set num_envs_per_worker=1 and use --env_agents={desired number of envs}. "
             f"Setting --num_envs_per_worker={cfg.num_envs_per_worker} will create multiple envpools per worker process "
