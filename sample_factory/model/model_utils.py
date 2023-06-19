@@ -30,7 +30,7 @@ def nonlinearity(cfg: Config, inplace: bool = False) -> nn.Module:
     elif cfg.nonlinearity == "relu":
         return nn.ReLU(inplace=inplace)
     elif cfg.nonlinearity == "tanh":
-        return nn.Tanh(inplace=inplace)
+        return nn.Tanh()
     else:
         raise Exception(f"Unknown {cfg.nonlinearity=}")
 
