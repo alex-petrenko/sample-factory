@@ -1,5 +1,10 @@
 # Recent releases
 
+##### v2.1.1
+
+* Windows support in serial mode (do not require `faster-fifo` on Windows)
+* Allow Torch 2 (versions 2.0.1+ seem to work fine)
+
 ##### v2.1.0
 
 * Use `gymnasium` instead of `gym` dependency. See https://gymnasium.farama.org/content/basic_usage/ New compatibility
