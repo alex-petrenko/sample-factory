@@ -91,7 +91,7 @@ def register_model_components():
 
     # or individual components
     global_model_factory().register_encoder_factory(CustomEncoder)
-    global_model_factory().register_core_factory(CustomCore)
+    global_model_factory().register_model_core_factory(CustomCore)
     global_model_factory().register_decoder_factory(CustomDecoder)
 
 def main():
