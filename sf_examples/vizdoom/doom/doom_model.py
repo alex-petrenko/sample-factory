@@ -17,7 +17,7 @@ class VizdoomEncoder(Encoder):
         self.encoder_out_size = self.basic_encoder.get_out_size()
 
         self.measurements_head = None
-        if "measurements" in obs_space.keys():
+        if "measurements" in list(obs_space.keys()):
             self.measurements_head = nn.Sequential(
                 nn.Linear(obs_space["measurements"].shape[0], 128),
                 nonlinearity(cfg),
