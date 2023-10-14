@@ -866,10 +866,12 @@ class Learner(Configurable):
         stats.act_min = var.mb.actions.min()
         stats.act_max = var.mb.actions.max()
 
-        stats.adv_min = var.mb.advantages.min()
-        stats.adv_max = var.mb.advantages.max()
-        stats.adv_std = var.adv_std
-        stats.adv_mean = var.adv_mean
+        if "adv_mean" in stats:
+            stats.adv_min = var.mb.advantages.min()
+            stats.adv_max = var.mb.advantages.max()
+            stats.adv_std = var.adv_std
+            stats.adv_mean = var.adv_mean
+
         stats.max_abs_logprob = torch.abs(var.mb.action_logits).max()
 
         if hasattr(var.action_distribution, "summaries"):
