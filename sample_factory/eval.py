@@ -1,6 +1,7 @@
 import json
 import time
 from collections import deque
+from os.path import join
 from typing import Deque
 
 import numpy as np
@@ -11,7 +12,7 @@ from sample_factory.algo.sampling.evaluation_sampling_api import EvalSamplingAPI
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.rl_utils import samples_per_trajectory
 from sample_factory.utils.typing import Config
-from sample_factory.utils.utils import log
+from sample_factory.utils.utils import experiment_dir, log
 
 
 def _print_fps_stats(cfg: Config, fps_stats: Deque):
@@ -65,7 +66,7 @@ def _save_eval_results(cfg, eval_stats):
             data[key] = stat[policy_id]
 
         data = pd.DataFrame(data)
-        data.to_csv(f"eval{policy_id}.csv")
+        data.to_csv(join(experiment_dir(cfg=cfg), f"eval_p{policy_id}_e{cfg.sample_env_episodes}.csv"))
 
 
 def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: int = 1024) -> StatusCode:
