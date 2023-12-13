@@ -34,6 +34,11 @@ class SamplingLoop(EventLoopObject, Configurable):
         EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
         # self.event_loop.verbose = True
 
+        # calculate how many episodes for each environment should be taken into account
+        # we only want to use first N episodes (we don't want to bias ourselves with short episodes)
+        total_envs = self.cfg.num_workers * self.cfg.num_envs_per_worker
+        self.max_episode_number = self.cfg.sample_env_episodes / total_envs
+
         self.env_info = env_info
         self.iteration: int = 0
 
@@ -52,7 +57,7 @@ class SamplingLoop(EventLoopObject, Configurable):
         self.stats = dict()  # regular (non-averaged) stats
         self.avg_stats = dict()
 
-        self.policy_avg_stats: Dict[str, List[Deque]] = dict()
+        self.policy_avg_stats: Dict[str, List[List]] = dict()
 
         # global msg handlers for messages from algo components
         self.msg_handlers: Dict[str, List[MsgHandler]] = {
@@ -136,18 +141,22 @@ class SamplingLoop(EventLoopObject, Configurable):
         # the only difference between this function and the one from `Runner`
         # is that we store all stats in a list and not in the deque
         s = msg[EPISODIC]
-        for _, key, value in iterate_recursively(s):
-            if key not in runner.policy_avg_stats:
-                runner.policy_avg_stats[key] = [[] for _ in range(runner.cfg.num_policies)]
 
-            if isinstance(value, np.ndarray) and value.ndim > 0:
-                # if len(value) > runner.policy_avg_stats[key][policy_id].maxlen:
-                #     # increase maxlen to make sure we never ignore any stats from the environments
-                #     runner.policy_avg_stats[key][policy_id] = deque(maxlen=len(value))
+        # skip invalid stats, potentially be not setting episode_number one could always add stats
+        episode_number = s["episode_extra_stats"].get("episode_number", 0)
+        if episode_number < runner.max_episode_number:
+            for _, key, value in iterate_recursively(s):
+                if key not in runner.policy_avg_stats:
+                    runner.policy_avg_stats[key] = [[] for _ in range(runner.cfg.num_policies)]
 
-                runner.policy_avg_stats[key][policy_id].extend(value)
-            else:
-                runner.policy_avg_stats[key][policy_id].append(value)
+                if isinstance(value, np.ndarray) and value.ndim > 0:
+                    # if len(value) > runner.policy_avg_stats[key][policy_id].maxlen:
+                    #     # increase maxlen to make sure we never ignore any stats from the environments
+                    #     runner.policy_avg_stats[key][policy_id] = deque(maxlen=len(value))
+
+                    runner.policy_avg_stats[key][policy_id].extend(value)
+                else:
+                    runner.policy_avg_stats[key][policy_id].append(value)
 
     def wait_until_ready(self):
         while not self.ready:
@@ -266,6 +275,13 @@ class EvalSamplingAPI:
         # it's possible that we would like to return additional stats, like fps or sth
         # those could be added here
         return self.sampling_loop.policy_avg_stats
+
+    @property
+    def eval_episodes_sampled(self):
+        # TODO: for now we only look at the first policy,
+        # maybe even in MARL we will look only at first policy?
+        policy_id = 0
+        return len(self.eval_stats.get("reward", [[] for _ in range(self.cfg.num_policies)])[policy_id])
 
     def start(self, init_model_data: Optional[Dict[PolicyID, InitModelData]] = None):
         if init_model_data is None:

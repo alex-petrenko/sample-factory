@@ -74,10 +74,6 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
     sampler.init()
     sampler.start()
 
-    # we override batch size to be the same as total number of environments
-    total_envs = cfg.num_workers * cfg.num_envs_per_worker
-    max_episode_number = sample_env_episodes / total_envs
-
     print_interval_sec = 1.0
     fps_stats = deque([(time.time(), 0, 0)], maxlen=10)
     episodes_sampled = 0
@@ -90,15 +86,7 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
             if trajectory is None:
                 break
 
-            episode_numbers = sampler.eval_stats.get("episode_number", [[] for _ in range(cfg.num_policies)])
-            # TODO: for now we only look at the first policy,
-            # maybe even in MARL we will look only at first policy?
-            policy_id = 0
-            episode_numbers = np.array(episode_numbers[policy_id])
-            # we ignore some of the episodes because we only want to look at first N episodes
-            # to enforce it we use wrapper with counts number of episodes for each env
-            valid = episode_numbers < max_episode_number
-            episodes_sampled = valid.sum()
+            episodes_sampled = sampler.eval_episodes_sampled
             env_steps_sampled += samples_per_trajectory(trajectory)
 
             if time.time() - last_print > print_interval_sec:
