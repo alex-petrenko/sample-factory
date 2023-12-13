@@ -8,7 +8,9 @@ from typing import Callable, Deque, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, signal
+from torch import Tensor
 
+from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.runners.runner import MsgHandler, PolicyMsgHandler, Runner
 from sample_factory.algo.sampling.sampler import AbstractSampler, ParallelSampler, SerialSampler
 from sample_factory.algo.utils.env_info import EnvInfo
@@ -220,19 +222,54 @@ class EvalSamplingAPI:
         self,
         cfg: Config,
         env_info: EnvInfo,
-        buffer_mgr: Optional[BufferMgr] = None,
-        param_servers: Optional[Dict[PolicyID, ParameterServer]] = None,
     ):
-        self.sampling_loop: SamplingLoop = SamplingLoop(cfg, env_info)
-        self.sampling_loop.init(buffer_mgr, param_servers)
+        self.cfg = cfg
+        self.env_info = env_info
+
+        self.buffer_mgr = None
+        self.policy_versions_tensor = None
+        self.param_servers: Dict[PolicyID, ParameterServer] = None
+        self.init_model_data: Dict[PolicyID, InitModelData] = None
+        self.learners: Dict[PolicyID, Learner] = None
+
+        self.sampling_loop: SamplingLoop = None
+        self.traj_queue: Queue = Queue(maxsize=100)
+
+    def init(self):
+        set_global_cuda_envvars(self.cfg)
+
+        self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
+        self.policy_versions_tensor: Tensor = self.buffer_mgr.policy_versions
+
+        self.param_servers = {}
+        self.init_model_data = {}
+        self.learners = {}
+        for policy_id in range(self.cfg.num_policies):
+            self.param_servers[policy_id] = ParameterServer(
+                policy_id, self.policy_versions_tensor, self.cfg.serial_mode
+            )
+            self.learners[policy_id] = Learner(
+                self.cfg, self.env_info, self.policy_versions_tensor, policy_id, self.param_servers[policy_id]
+            )
+            self.init_model_data[policy_id] = self.learners[policy_id].init()
+
+        self.sampling_loop: SamplingLoop = SamplingLoop(self.cfg, self.env_info)
+        self.sampling_loop.init(self.buffer_mgr, self.param_servers)
         self.sampling_loop.set_new_trajectory_callback(self._on_new_trajectories)
         self.sampling_thread: Thread = Thread(target=self.sampling_loop.run)
         self.sampling_thread.start()
 
         self.sampling_loop.wait_until_ready()
-        self.traj_queue: Queue = Queue(maxsize=100)
+
+    @property
+    def eval_stats(self):
+        # it's possible that we would like to return additional stats, like fps or sth
+        # those could be added here
+        return self.sampling_loop.policy_avg_stats
 
     def start(self, init_model_data: Optional[Dict[PolicyID, InitModelData]] = None):
+        if init_model_data is None:
+            init_model_data = self.init_model_data
         self.sampling_loop.start(init_model_data)
 
     def _on_new_trajectories(self, traj: TensorDict, traj_buffer_indices: Iterable[int | slice], device: str):
