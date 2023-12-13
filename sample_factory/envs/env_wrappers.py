@@ -434,3 +434,23 @@ class NumpyObsWrapper(gym.ObservationWrapper):
 
     def observation(self, observation: Any) -> np.ndarray:
         return np.array(observation)
+
+
+class EpisodeCounterWrapper(gym.Wrapper):
+    def __init__(self, env):
+        gym.Wrapper.__init__(self, env)
+        self.episode_count = 0
+
+    def reset(self, **kwargs) -> Tuple[GymObs, Dict]:
+        return self.env.reset(**kwargs)
+
+    def step(self, action: int) -> GymStepReturn:
+        obs, reward, terminated, truncated, info = self.env.step(action)
+
+        if terminated | truncated:
+            extra_stats = info.get("episode_extra_stats", {})
+            extra_stats["episode_number"] = self.episode_count
+            info["episode_extra_stats"] = extra_stats
+            self.episode_count += 1
+
+        return obs, reward, terminated, truncated, info
