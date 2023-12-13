@@ -32,11 +32,8 @@ def _print_fps_stats(cfg: Config, fps_stats: Deque):
     )
 
 
-def _print_experiment_summaries(cfg, policy_avg_stats):
+def _print_eval_summaries(cfg, policy_avg_stats):
     for policy_id in range(cfg.num_policies):
-        data = pd.DataFrame(policy_avg_stats)
-        data.to_csv(f"eval{policy_id}.csv")
-
         results = {}
         for key, stat in policy_avg_stats.items():
             stat_value = np.mean(stat[policy_id])
@@ -66,6 +63,16 @@ def _print_experiment_summaries(cfg, policy_avg_stats):
         print(json.dumps(results, indent=4))
 
 
+def _save_eval_results(cfg, policy_avg_stats):
+    for policy_id in range(cfg.num_policies):
+        data = {}
+        for key, stat in policy_avg_stats.items():
+            data[key] = stat[policy_id]
+
+        data = pd.DataFrame(data)
+        data.to_csv(f"eval{policy_id}.csv")
+
+
 def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: int = 1024) -> StatusCode:
     set_global_cuda_envvars(cfg)
     buffer_mgr = BufferMgr(cfg, env_info)
@@ -82,8 +89,9 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
     sampler = EvalSamplingAPI(cfg, env_info, buffer_mgr=buffer_mgr, param_servers=param_servers)
     sampler.start(init_model_data=init_model_data)
 
-    batch_size = cfg.batch_size // cfg.rollout
-    max_episode_number = sample_env_episodes // batch_size
+    # we override batch size to be the same as total number of environments
+    total_envs = cfg.num_workers * cfg.num_envs_per_worker
+    max_episode_number = sample_env_episodes / total_envs
 
     print_interval_sec = 1.0
     fps_stats = deque([(time.time(), 0, 0)], maxlen=10)
@@ -102,7 +110,10 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
             )
             # TODO: for now we only look at the first policy,
             # maybe even in MARL we will look only at first policy?
-            episode_numbers = np.array(episode_numbers[0])
+            policy_id = 0
+            episode_numbers = np.array(episode_numbers[policy_id])
+            # we ignore some of the episodes because we only want to look at first N episodes
+            # to enforce it we use wrapper with counts number of episodes for each env
             valid = episode_numbers < max_episode_number
             episodes_sampled = valid.sum()
             env_steps_sampled += samples_per_trajectory(trajectory)
@@ -118,14 +129,14 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
     status = sampler.stop()
 
     # TODO: log results to tensorboard?
-    # print experiment summaries
-    _print_experiment_summaries(cfg, sampler.sampling_loop.policy_avg_stats)
+    _print_eval_summaries(cfg, sampler.sampling_loop.policy_avg_stats)
+    _save_eval_results(cfg, sampler.sampling_loop.policy_avg_stats)
 
     return status
 
 
 def eval(cfg: Config) -> StatusCode:
-    # we override batch size to be exa
-    cfg.batch_size = cfg.num_workers * cfg.num_envs_per_worker * cfg.worker_num_splits
+    # should always be set to True for this script
+    cfg.episode_counter = True
     env_info = obtain_env_info_in_a_separate_process(cfg)
     return generate_trajectories(cfg, env_info, cfg.sample_env_episodes)
