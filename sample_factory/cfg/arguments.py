@@ -273,3 +273,27 @@ def maybe_load_from_checkpoint(cfg: Config) -> AttrDict:
         return AttrDict(vars(cfg))
 
     return load_from_checkpoint(cfg)
+
+
+def checkpoint_override_defaults(cfg: Config, parser) -> AttrDict:
+    cfg_filename = cfg_file(cfg)
+    cfg_filename_old = cfg_file_old(cfg)
+
+    if not os.path.isfile(cfg_filename) and os.path.isfile(cfg_filename_old):
+        # rename old config file
+        log.warning(f"Loading legacy config file {cfg_filename_old} instead of {cfg_filename}")
+        os.rename(cfg_filename_old, cfg_filename)
+
+    if not os.path.isfile(cfg_filename):
+        raise Exception(
+            f"Could not load saved parameters for experiment {cfg.experiment} "
+            f"(file {cfg_filename} not found). Check that you have the correct experiment name "
+            f"and --train_dir is set correctly."
+        )
+
+    with open(cfg_filename, "r") as json_file:
+        json_params = json.load(json_file)
+        log.warning("Loading existing experiment configuration from %s", cfg_filename)
+        loaded_cfg = AttrDict(json_params)
+
+    parser.set_defaults(**loaded_cfg)
