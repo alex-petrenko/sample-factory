@@ -112,5 +112,7 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
 def eval(cfg: Config) -> StatusCode:
     # should always be set to True for this script
     cfg.episode_counter = True
+    # decorrelation isn't needed in eval, it only slows us down
+    cfg.decorrelate_envs_on_one_worker = False
     env_info = obtain_env_info_in_a_separate_process(cfg)
     return generate_trajectories(cfg, env_info, cfg.sample_env_episodes)
