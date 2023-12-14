@@ -16,8 +16,9 @@ from sample_factory.algo.sampling.sampler import AbstractSampler, ParallelSample
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.misc import EPISODIC, SAMPLES_COLLECTED, STATS_KEY, TIMING_STATS, ExperimentStatus
 from sample_factory.algo.utils.model_sharing import ParameterServer
+from sample_factory.algo.utils.rl_utils import samples_per_trajectory
 from sample_factory.algo.utils.shared_buffers import BufferMgr
-from sample_factory.algo.utils.tensor_dict import TensorDict, clone_tensordict
+from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.gpu_utils import set_global_cuda_envvars
@@ -242,7 +243,7 @@ class EvalSamplingAPI:
         self.learners: Dict[PolicyID, Learner] = None
 
         self.sampling_loop: SamplingLoop = None
-        self.traj_queue: Queue = Queue(maxsize=100)
+        self.total_samples = 0
 
     def init(self):
         set_global_cuda_envvars(self.cfg)
@@ -277,11 +278,14 @@ class EvalSamplingAPI:
         return self.sampling_loop.policy_avg_stats
 
     @property
-    def eval_episodes_sampled(self):
-        # TODO: for now we only look at the first policy,
-        # maybe even in MARL we will look only at first policy?
-        policy_id = 0
-        return len(self.eval_stats.get("reward", [[] for _ in range(self.cfg.num_policies)])[policy_id])
+    def eval_episodes(self):
+        return self.eval_stats.get("episode_number", [[] for _ in range(self.cfg.num_policies)])
+
+    @property
+    def eval_env_steps(self):
+        # return number of env steps for each policy
+        episode_lens = self.eval_stats.get("len", [[] for _ in range(self.cfg.num_policies)])
+        return [sum(episode_lens[policy_id]) for policy_id in range(self.cfg.num_policies)]
 
     def start(self, init_model_data: Optional[Dict[PolicyID, InitModelData]] = None):
         if init_model_data is None:
@@ -289,30 +293,11 @@ class EvalSamplingAPI:
         self.sampling_loop.start(init_model_data)
 
     def _on_new_trajectories(self, traj: TensorDict, traj_buffer_indices: Iterable[int | slice], device: str):
-        traj_clone = clone_tensordict(traj)  # we copied the data so we can release the buffer
+        self.total_samples += samples_per_trajectory(traj)
 
         # just release buffers after every trajectory
-        # we could alternatively have more sophisticated logic here, see i.e. batcher.py
+        # we could alternatively have more sophisticated logic here, see i.e. batcher.py or simplified_sampling_api.py
         self.sampling_loop.yield_trajectory_buffers(traj_buffer_indices, device)
-
-        while not self.sampling_loop.stopped:
-            try:
-                self.traj_queue.put(traj_clone, timeout=1.0, block=True)
-                break
-            except Full:
-                log.debug(f"{self._on_new_trajectories.__name__}: trajectory queue full, waiting...")
-                self.sampling_loop.event_loop.process_events()
-
-    def get_trajectories_sync(self) -> Optional[TensorDict]:
-        while not self.sampling_loop.stopped:
-            try:
-                traj = self.traj_queue.get(timeout=5.0)
-                return traj
-            except Empty:
-                log.debug(f"{self.get_trajectories_sync.__name__}(): waiting for trajectories...")
-                continue
-
-        return None
 
     def stop(self) -> StatusCode:
         self.sampling_loop.stop_sampling()

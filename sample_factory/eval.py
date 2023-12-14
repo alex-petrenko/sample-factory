@@ -10,7 +10,6 @@ from signal_slot.signal_slot import StatusCode
 
 from sample_factory.algo.sampling.evaluation_sampling_api import EvalSamplingAPI
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
-from sample_factory.algo.utils.rl_utils import samples_per_trajectory
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import experiment_dir, log
 
@@ -82,14 +81,12 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
 
     while episodes_sampled < sample_env_episodes:
         try:
-            trajectory = sampler.get_trajectories_sync()
-            if trajectory is None:
-                break
-
-            episodes_sampled = sampler.eval_episodes_sampled
-            env_steps_sampled += samples_per_trajectory(trajectory)
-
             if time.time() - last_print > print_interval_sec:
+                # TODO: for now we only look at the first policy,
+                policy_id = 0
+                episodes_sampled = len(sampler.eval_episodes[policy_id])
+                env_steps_sampled = sampler.total_samples
+
                 fps_stats.append((time.time(), episodes_sampled, env_steps_sampled))
                 _print_fps_stats(cfg, fps_stats)
                 last_print = time.time()
