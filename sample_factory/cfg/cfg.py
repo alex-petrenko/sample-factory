@@ -706,6 +706,12 @@ def add_eval_args(parser):
         type=str,
         help="Module name used to run training script. Used to generate HF model card",
     )
+    parser.add_argument(
+        "--csv_folder_name",
+        default=None,
+        type=str,
+        help="Path where the evaluation csv will be stored.",
+    )
 
 
 def add_wandb_args(p: ArgumentParser):

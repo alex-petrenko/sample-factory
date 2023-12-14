@@ -1,7 +1,7 @@
 import json
 import time
 from collections import deque
-from os.path import join
+from pathlib import Path
 from typing import Deque
 
 import numpy as np
@@ -64,8 +64,14 @@ def _save_eval_results(cfg, eval_stats):
         for key, stat in eval_stats.items():
             data[key] = stat[policy_id]
 
+        csv_output_dir = Path(experiment_dir(cfg=cfg))
+        if cfg.csv_folder_name is not None:
+            csv_output_dir = csv_output_dir / cfg.csv_folder_name
+        csv_output_dir.mkdir(exist_ok=True, parents=True)
+        csv_output_path = csv_output_dir / f"eval_p{policy_id}.csv"
+
         data = pd.DataFrame(data)
-        data.to_csv(join(experiment_dir(cfg=cfg), f"eval_p{policy_id}_e{cfg.sample_env_episodes}.csv"))
+        data.to_csv(csv_output_path)
 
 
 def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: int = 1024) -> StatusCode:
