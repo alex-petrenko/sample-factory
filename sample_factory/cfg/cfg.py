@@ -707,6 +707,12 @@ def add_eval_args(parser):
         help="Module name used to run training script. Used to generate HF model card",
     )
     parser.add_argument(
+        "--sample_env_episodes",
+        default=256,
+        type=int,
+        help="Determines how many episodes will be sampled in eval.",
+    )
+    parser.add_argument(
         "--csv_folder_name",
         default=None,
         type=str,
