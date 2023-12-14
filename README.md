@@ -91,6 +91,12 @@ Stop the experiment (Ctrl+C) when the desired performance is reached and then ev
 python -m sf_examples.mujoco.enjoy_mujoco --env=mujoco_ant --experiment=Ant --train_dir=./train_dir
 ```
 
+Or alternativaly use faster evaluation script, which doesn't support rendering, but computes some stats. It's best that `sample_env_episodes` <= `num_workers` * `num_envs_per_worker`.
+
+```bash
+python -m sf_examples.mujoco.eval_mujoco --env=mujoco_ant --experiment=Ant --train_dir=./train_dir --sample_env_episodes=128 --num_workers=16, --num_envs_per_worker=2
+```
+
 Do the same in a pixel-based VizDoom environment (might need to run `pip install sample-factory[vizdoom]`, please also see docs for VizDoom-specific instructions):
 
 ```bash
