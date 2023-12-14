@@ -22,7 +22,7 @@ def _print_fps_stats(cfg: Config, fps_stats: Deque):
     fps = delta_sampled / delta_time
     fps_frameskip = fps * cfg.env_frameskip
     fps_frameskip_str = f" ({fps_frameskip:.1f} FPS with frameskip)" if cfg.env_frameskip > 1 else ""
-    log.debug(
+    log.info(
         f"Episodes collected: {episodes_sampled}, Samples collected: {env_steps_sampled}, throughput: {fps:.1f} FPS{fps_frameskip_str}"
     )
 
@@ -55,7 +55,7 @@ def _print_eval_summaries(cfg, eval_stats):
                 results[min_tag] = float(min(stat[policy_id]))
                 results[max_tag] = float(max(stat[policy_id]))
 
-        print(json.dumps(results, indent=4))
+        log.info(json.dumps(results, indent=4))
 
 
 def _save_eval_results(cfg, eval_stats):

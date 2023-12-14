@@ -138,22 +138,21 @@ class SamplingLoop(EventLoopObject, Configurable):
 
     @staticmethod
     def _episodic_stats_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
-        # the only difference between this function and the one from `Runner`
-        # is that we store all stats in a list and not in the deque
+        # heavily based on the `_episodic_stats_handler` from `Runner`
         s = msg[EPISODIC]
 
         # skip invalid stats, potentially be not setting episode_number one could always add stats
         episode_number = s["episode_extra_stats"].get("episode_number", 0)
         if episode_number < runner.max_episode_number:
+            log.debug(
+                f"Episode ended after {s['len']:.1f} steps. Return: {s['reward']:.1f}. True objective {s['true_objective']:.1f}"
+            )
+
             for _, key, value in iterate_recursively(s):
                 if key not in runner.policy_avg_stats:
                     runner.policy_avg_stats[key] = [[] for _ in range(runner.cfg.num_policies)]
 
                 if isinstance(value, np.ndarray) and value.ndim > 0:
-                    # if len(value) > runner.policy_avg_stats[key][policy_id].maxlen:
-                    #     # increase maxlen to make sure we never ignore any stats from the environments
-                    #     runner.policy_avg_stats[key][policy_id] = deque(maxlen=len(value))
-
                     runner.policy_avg_stats[key][policy_id].extend(value)
                 else:
                     runner.policy_avg_stats[key][policy_id].append(value)
