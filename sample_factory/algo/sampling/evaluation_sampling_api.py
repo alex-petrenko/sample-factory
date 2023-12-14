@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from queue import Empty, Full, Queue
 from threading import Thread
-from typing import Callable, Deque, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from signal_slot.signal_slot import EventLoop, EventLoopObject, EventLoopStatus, signal
