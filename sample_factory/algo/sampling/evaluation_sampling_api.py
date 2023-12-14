@@ -263,7 +263,9 @@ class EvalSamplingAPI:
             self.init_model_data[policy_id] = self.learners[policy_id].init()
 
         self.sampling_loop: SamplingLoop = SamplingLoop(self.cfg, self.env_info)
-        self.sampling_loop.init(self.buffer_mgr, self.param_servers)
+        # don't pass self.param_servers here, learners are normally initialized later
+        # TODO: fix above issue
+        self.sampling_loop.init(self.buffer_mgr)
         self.sampling_loop.set_new_trajectory_callback(self._on_new_trajectories)
         self.sampling_thread: Thread = Thread(target=self.sampling_loop.run)
         self.sampling_thread.start()
