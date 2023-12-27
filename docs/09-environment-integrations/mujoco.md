@@ -17,13 +17,21 @@ that we can achieve even faster training on a multi-core machine with more optim
 To train a model in the `Ant-v4` environment:
 
 ```
-python -m sf_examples.mujoco.train_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
+python -m sf_examples.mujoco.train_mujoco --env=mujoco_ant --experiment=<experiment_name>
 ```
 
 To visualize the training results, use the `enjoy_mujoco` script:
 
 ```
-python -m sf_examples.mujoco.enjoy_mujoco --algo=APPO --env=mujoco_ant --experiment=<experiment_name>
+python -m sf_examples.mujoco.enjoy_mujoco --env=mujoco_ant --experiment=<experiment_name>
+```
+
+If you're having issues with the Mujoco viewer in a Unix/Linux environment with Conda, try running the following
+before executing the `enjoy_mujoco` script:
+
+```
+export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+python -m sf_examples.mujoco.enjoy_mujoco ...
 ```
 
 Multiple experiments can be run in parallel with the launcher module. `mujoco_all_envs` is an example launcher script that runs all mujoco envs with 10 seeds. 
