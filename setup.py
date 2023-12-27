@@ -13,7 +13,7 @@ with open("README.md", "r") as f:
 
 
 _atari_deps = ["gymnasium[atari, accept-rom-license]"]
-_mujoco_deps = ["gymnasium[mujoco]", "mujoco<=2.3.3"]
+_mujoco_deps = ["gymnasium[mujoco]", "mujoco<2.5"]
 _envpool_deps = ["envpool"]
 
 _docs_deps = [
@@ -56,6 +56,7 @@ setup(
         "opencv-python",
         "wandb>=0.12.9",
         "huggingface-hub>=0.10.0,<1.0",
+        "pandas",
     ],
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that
