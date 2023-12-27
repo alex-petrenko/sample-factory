@@ -1,7 +1,7 @@
 import sys
 
 from sample_factory.cfg.arguments import checkpoint_override_defaults, parse_full_cfg, parse_sf_args
-from sample_factory.eval import eval
+from sample_factory.eval import do_eval
 from sf_examples.mujoco.mujoco_params import add_mujoco_env_args, mujoco_override_defaults
 from sf_examples.mujoco.train_mujoco import register_mujoco_components
 
@@ -19,7 +19,7 @@ def main():
 
     cfg = parse_full_cfg(parser)
 
-    status = eval(cfg)
+    status = do_eval(cfg)
     return status
 
 

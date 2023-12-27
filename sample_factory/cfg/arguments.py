@@ -297,3 +297,5 @@ def checkpoint_override_defaults(cfg: Config, parser) -> AttrDict:
         loaded_cfg = AttrDict(json_params)
 
     parser.set_defaults(**loaded_cfg)
+
+    return loaded_cfg

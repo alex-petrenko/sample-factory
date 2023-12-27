@@ -82,7 +82,6 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
     print_interval_sec = 1.0
     fps_stats = deque([(time.time(), 0, 0)], maxlen=10)
     episodes_sampled = 0
-    env_steps_sampled = 0
     last_print = time.time()
 
     while episodes_sampled < sample_env_episodes:
@@ -96,6 +95,8 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
                 fps_stats.append((time.time(), episodes_sampled, env_steps_sampled))
                 _print_fps_stats(cfg, fps_stats)
                 last_print = time.time()
+
+                log.info(f"Progress: {episodes_sampled}/{sample_env_episodes} episodes sampled")
         except KeyboardInterrupt:
             log.info(f"KeyboardInterrupt in {generate_trajectories.__name__}()")
             break
@@ -109,7 +110,7 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
     return status
 
 
-def eval(cfg: Config) -> StatusCode:
+def do_eval(cfg: Config) -> StatusCode:
     # should always be set to True for this script
     cfg.episode_counter = True
     # decorrelation isn't needed in eval, it only slows us down
