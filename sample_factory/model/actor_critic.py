@@ -76,7 +76,7 @@ class ActorCritic(nn.Module, Configurable):
             layer.bias.data.fill_(0)
 
         if self.cfg.policy_initialization == "orthogonal":
-            if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
+            if type(layer) is nn.Conv2d or type(layer) is nn.Linear:
                 nn.init.orthogonal_(layer.weight.data, gain=gain)
             else:
                 # LSTMs and GRUs initialize themselves
@@ -85,7 +85,7 @@ class ActorCritic(nn.Module, Configurable):
                 # go with default initialization,
                 pass
         elif self.cfg.policy_initialization == "xavier_uniform":
-            if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
+            if type(layer) is nn.Conv2d or type(layer) is nn.Linear:
                 nn.init.xavier_uniform_(layer.weight.data, gain=gain)
             else:
                 pass
