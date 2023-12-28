@@ -1,17 +1,16 @@
-from pathlib import Path
 from typing import Optional
 
-from nle.env.tasks import NetHackScore
-from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
-from sf_examples.nethack.utils.tasks import (
+from nle.env.tasks import (
     NetHackChallenge,
     NetHackEat,
     NetHackGold,
     NetHackOracle,
+    NetHackScore,
     NetHackScout,
     NetHackStaircase,
     NetHackStaircasePet,
 )
+from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
     PrevActionWrapper,
