@@ -2,9 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 from nle.env.tasks import NetHackScore
-
 from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
-from sample_factory.utils.utils import videos_dir
 from sf_examples.nethack.utils.tasks import (
     NetHackChallenge,
     NetHackEat,

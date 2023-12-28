@@ -23,7 +23,6 @@ _nethack_deps = [
     "shimmy",
     "tqdm ~= 4.66",
     "debugpy ~= 1.6",
-    "nle == 0.9.0",
 ]
 _envpool_deps = ["envpool"]
 
