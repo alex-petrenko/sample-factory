@@ -7,14 +7,11 @@ from sf_examples.nethack.train_nethack import parse_nethack_args, register_netha
 
 
 def main():
-    env_name = "challenge"
     register_nethack_components()
-    cfg = parse_nethack_args(
-        [
-            f"--env={env_name}",
-        ]
-    )
-    env = create_env(env_name, cfg=cfg, render_mode="human")
+    cfg = parse_nethack_args(evaluation=True)
+
+    render_mode = "human" if not cfg.no_render else None
+    env = create_env(cfg.env, cfg=cfg, render_mode=render_mode)
 
     for i in range(10):
         env.reset()

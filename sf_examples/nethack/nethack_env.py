@@ -39,6 +39,8 @@ def nethack_env_by_name(name):
 
 
 def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
+    assert render_mode in (None, "human", "full", "ansii", "string")
+
     env_class = nethack_env_by_name(env_name)
 
     observation_keys = (
