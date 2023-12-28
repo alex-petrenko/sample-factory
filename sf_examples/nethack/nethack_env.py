@@ -13,7 +13,7 @@ from nle.env.tasks import (
 from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
-    PrevActionWrapper,
+    PrevActionsWrapper,
     RenderCharImagesWithNumpyWrapperV2,
     SeedActionSpaceWrapper,
     TaskRewardsInfoWrapper,
@@ -39,7 +39,7 @@ def nethack_env_by_name(name):
 
 
 def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
-    assert render_mode in (None, "human", "full", "ansii", "string")
+    assert render_mode in (None, "human", "full", "ansi", "string", "rgb_array")
 
     env_class = nethack_env_by_name(env_name)
 
@@ -82,15 +82,6 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
 
     env = env_class(**kwargs)
 
-    env = patch_non_gymnasium_env(env)
-
-    if render_mode:
-        env.render_mode = render_mode
-
-    if cfg.serial_mode and cfg.num_workers == 1:
-        # full reproducability can only be achieved in serial mode and when there is only 1 worker
-        env = SeedActionSpaceWrapper(env)
-
     if cfg.add_image_observation:
         env = RenderCharImagesWithNumpyWrapperV2(
             env,
@@ -99,10 +90,19 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
         )
 
     if cfg.use_prev_action:
-        env = PrevActionWrapper(env)
+        env = PrevActionsWrapper(env)
 
     if cfg.add_stats_to_info:
         env = BlstatsInfoWrapper(env)
         env = TaskRewardsInfoWrapper(env)
+
+    env = patch_non_gymnasium_env(env)
+
+    if render_mode:
+        env.render_mode = render_mode
+
+    if cfg.serial_mode and cfg.num_workers == 1:
+        # full reproducability can only be achieved in serial mode and when there is only 1 worker
+        env = SeedActionSpaceWrapper(env)
 
     return env

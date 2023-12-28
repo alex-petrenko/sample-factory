@@ -20,28 +20,19 @@ SOFTWARE.
 """
 
 import os
-from collections import namedtuple
 from typing import Any, SupportsFloat
 
 import cv2
-import gymnasium as gym
+import gym
 import numpy as np
 import render_utils
-from nle import nethack
 from numba import njit
 from PIL import Image, ImageDraw, ImageFont
 
-from sf_examples.nethack.utils.task_rewards import (
-    EatingScore,
-    GoldScore,
-    ScoutScore,
-    SokobanfillpitScore,
-    SokobansolvedlevelsScore,
-    StaircasePetScore,
-    StaircaseScore,
-)
+from nle import nethack
 
 SMALL_FONT_PATH = os.path.abspath("sf_examples/nethack/render_utils/Hack-Regular.ttf")
+
 
 # Mapping of 0-15 colors used.
 # Taken from bottom image here. It seems about right
@@ -64,12 +55,6 @@ COLORS = [
     "#00FFFF",
     "#FFFFFF",
 ]
-
-
-BLStats = namedtuple(
-    "BLStats",
-    "x y strength_percentage strength dexterity constitution intelligence wisdom charisma score hitpoints max_hitpoints depth gold energy max_energy armor_class monster_level experience_level experience_points time hunger_state carrying_capacity dungeon_number level_number prop_mask align_bits",
-)
 
 
 @njit
@@ -211,14 +196,14 @@ class RenderCharImagesWithNumpyWrapper(gym.Wrapper):
         return obs
 
     def step(self, action):
-        obs, reward, terminated, truncated, info = super().step(action)
+        obs, reward, done, info = self.env.step(action)
         obs = self._render_text_to_image(obs)
-        return obs, reward, terminated, truncated, info
+        return obs, reward, done, info
 
     def reset(self, **kwargs):
-        obs, info = super().reset(**kwargs)
+        obs = self.env.reset(**kwargs)
         obs = self._render_text_to_image(obs)
-        return obs, info
+        return obs
 
 
 class RenderCharImagesWithNumpyWrapperV2(gym.Wrapper):
@@ -274,116 +259,36 @@ class RenderCharImagesWithNumpyWrapperV2(gym.Wrapper):
         obs["screen_image"] = screen
 
     def step(self, action: Any) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
-        obs, reward, terminated, truncated, info = super().step(action)
+        obs, reward, done, info = self.env.step(action)
         self._populate_obs(obs)
-        return obs, reward, terminated, truncated, info
+        return obs, reward, done, info
 
     def reset(self, **kwargs):
-        obs, info = super().reset(**kwargs)
+        obs = self.env.reset(**kwargs)
         self._populate_obs(obs)
-        return obs, info
+        return obs
 
+    def render(self, mode="human"):
+        if mode == "rgb_array":
+            if not self.unwrapped.last_observation:
+                return
 
-class SeedActionSpaceWrapper(gym.Wrapper):
-    """
-    To have reproducible decorrelate experience we need to seed action space
-    """
+            screen = np.zeros(self.chw_image_shape, order="C", dtype=np.uint8)
 
-    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
-        obs, info = super().reset(seed=seed, options=options)
-        self.action_space.seed(seed=seed)
-        return obs, info
+            obs = self.unwrapped.last_observation
+            tty_chars = obs[self.unwrapped._observation_keys.index("tty_chars")]
+            tty_colors = obs[self.unwrapped._observation_keys.index("tty_colors")]
+            tty_cursor = obs[self.unwrapped._observation_keys.index("tty_cursor")]
 
+            render_utils.render_crop(
+                tty_chars,
+                tty_colors,
+                tty_cursor,
+                self.char_array,
+                screen,
+                crop_size=self.crop_size,
+            )
 
-class PrevActionWrapper(gym.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        self.prev_action = 0
-
-        obs_spaces = {"prev_actions": self.env.action_space}
-        obs_spaces.update([(k, self.env.observation_space[k]) for k in self.env.observation_space])
-        self.observation_space = gym.spaces.Dict(obs_spaces)
-
-    def reset(self, **kwargs):
-        self.prev_action = 0
-        obs, info = super().reset(**kwargs)
-        obs["prev_actions"] = np.array([self.prev_action])
-        return obs, info
-
-    def step(self, action):
-        obs, reward, terminated, truncated, info = super().step(action)
-        self.prev_action = action
-        obs["prev_actions"] = np.array([self.prev_action])
-        return obs, reward, terminated, truncated, info
-
-
-class BlstatsInfoWrapper(gym.Wrapper):
-    def step(self, action):
-        # because we will see done=True at the first timestep of the new episode
-        # to properly calculate blstats at the end of the episode we need to keep the last_observation around
-        last_observation = tuple(a.copy() for a in self.env.unwrapped.last_observation)
-        obs, reward, terminated, truncated, info = super().step(action)
-
-        if terminated | truncated:
-            info["episode_extra_stats"] = self.add_more_stats(info, last_observation)
-
-        return obs, reward, terminated, truncated, info
-
-    def add_more_stats(self, info, last_observation):
-        extra_stats = info.get("episode_extra_stats", {})
-        blstats = BLStats(*last_observation[self.env.unwrapped._blstats_index])
-        new_extra_stats = {
-            "score": blstats.score,
-            "turns": blstats.time,
-            "dlvl": blstats.depth,
-            "max_hitpoints": blstats.max_hitpoints,
-            "max_energy": blstats.max_energy,
-            "armor_class": blstats.armor_class,
-            "experience_level": blstats.experience_level,
-            "experience_points": blstats.experience_points,
-        }
-        return {**extra_stats, **new_extra_stats}
-
-
-class TaskRewardsInfoWrapper(gym.Wrapper):
-    def __init__(self, env: gym.Env):
-        super().__init__(env)
-
-        self.tasks = [
-            EatingScore(),
-            GoldScore(),
-            ScoutScore(),
-            SokobanfillpitScore(),
-            # SokobansolvedlevelsScore(), # TODO: it could have bugs, for now turn off
-            StaircasePetScore(),
-            StaircaseScore(),
-        ]
-
-    def reset(self, **kwargs):
-        obs, info = super().reset(**kwargs)
-
-        for task in self.tasks:
-            task.reset_score()
-
-        return obs, info
-
-    def step(self, action):
-        # use tuple and copy to avoid shallow copy (`last_observation` would be the same as `observation`)
-        last_observation = tuple(a.copy() for a in self.env.unwrapped.last_observation)
-        obs, reward, terminated, truncated, info = super().step(action)
-        observation = tuple(a.copy() for a in self.env.unwrapped.last_observation)
-        end_status = info["end_status"]
-
-        if terminated | truncated:
-            info["episode_extra_stats"] = self.add_more_stats(info)
-
-        # we will accumulate rewards for each step and log them when done signal appears
-        for task in self.tasks:
-            task.reward(self.env.unwrapped, last_observation, observation, end_status)
-
-        return obs, reward, terminated, truncated, info
-
-    def add_more_stats(self, info):
-        extra_stats = info.get("episode_extra_stats", {})
-        new_extra_stats = {task.name: task.score for task in self.tasks}
-        return {**extra_stats, **new_extra_stats}
+            return screen
+        else:
+            return self.env.render()
