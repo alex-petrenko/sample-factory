@@ -15,6 +15,7 @@ from tensorboardX import SummaryWriter
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner_worker import LearnerWorker
 from sample_factory.algo.sampling.sampler import AbstractSampler
+from sample_factory.algo.sampling.stats import samples_stats_handler, stats_msg_handler, timing_msg_handler
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import (
@@ -72,8 +73,8 @@ class AlgoObserver:
         pass
 
 
-MsgHandler = Callable[["Runner", dict], None]
-PolicyMsgHandler = Callable[["Runner", dict, PolicyID], None]
+MsgHandler = Callable[[Any, dict], None]
+PolicyMsgHandler = Callable[[Any, dict, PolicyID], None]
 
 
 class Runner(EventLoopObject, Configurable):
@@ -142,8 +143,8 @@ class Runner(EventLoopObject, Configurable):
 
         # global msg handlers for messages from algo components
         self.msg_handlers: Dict[str, List[MsgHandler]] = {
-            TIMING_STATS: [self._timing_msg_handler],
-            STATS_KEY: [self._stats_msg_handler],
+            TIMING_STATS: [timing_msg_handler],
+            STATS_KEY: [stats_msg_handler],
         }
 
         # handlers for policy-specific messages
@@ -151,7 +152,7 @@ class Runner(EventLoopObject, Configurable):
             LEARNER_ENV_STEPS: [self._learner_steps_handler],
             EPISODIC: [self._episodic_stats_handler],
             TRAIN_STATS: [self._train_stats_handler],
-            SAMPLES_COLLECTED: [self._samples_stats_handler],
+            SAMPLES_COLLECTED: [samples_stats_handler],
         }
 
         self.observers: List[AlgoObserver] = []
@@ -253,17 +254,6 @@ class Runner(EventLoopObject, Configurable):
                         handler(self, msg, policy_id)
 
     @staticmethod
-    def _timing_msg_handler(runner, msg):
-        for k, v in msg["timing"].items():
-            if k not in runner.avg_stats:
-                runner.avg_stats[k] = deque([], maxlen=50)
-            runner.avg_stats[k].append(v)
-
-    @staticmethod
-    def _stats_msg_handler(runner, msg):
-        runner.stats.update(msg["stats"])
-
-    @staticmethod
     def _learner_steps_handler(runner: Runner, msg: Dict, policy_id: PolicyID) -> None:
         env_steps: int = msg[LEARNER_ENV_STEPS]
         if policy_id in runner.env_steps:
@@ -302,10 +292,6 @@ class Runner(EventLoopObject, Configurable):
         for key in ["version_diff_min", "version_diff_max", "version_diff_avg"]:
             if key in train_stats:
                 runner.policy_lag[policy_id][key] = train_stats[key]
-
-    @staticmethod
-    def _samples_stats_handler(runner, msg, policy_id):
-        runner.samples_collected[policy_id] += msg[SAMPLES_COLLECTED]
 
     def _get_perf_stats(self):
         # total env steps simulated across all policies

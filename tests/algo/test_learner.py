@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.sampling.simplified_sampling_api import SyncSamplingAPI
+from sample_factory.algo.sampling.sync_sampling_api import SyncSamplingAPI
 from sample_factory.algo.utils.env_info import extract_env_info
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.model_sharing import ParameterServer

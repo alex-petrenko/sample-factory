@@ -87,7 +87,7 @@ def generate_trajectories(cfg: Config, env_info: EnvInfo, sample_env_episodes: i
     while episodes_sampled < sample_env_episodes:
         try:
             if time.time() - last_print > print_interval_sec:
-                # TODO: for now we only look at the first policy,
+                # for now we only look at the first policy
                 policy_id = 0
                 episodes_sampled = len(sampler.eval_episodes[policy_id])
                 env_steps_sampled = sampler.total_samples

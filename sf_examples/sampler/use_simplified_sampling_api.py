@@ -5,7 +5,7 @@ from typing import Deque
 
 from signal_slot.signal_slot import StatusCode
 
-from sample_factory.algo.sampling.simplified_sampling_api import SyncSamplingAPI
+from sample_factory.algo.sampling.sync_sampling_api import SyncSamplingAPI
 from sample_factory.algo.utils.env_info import EnvInfo, obtain_env_info_in_a_separate_process
 from sample_factory.algo.utils.rl_utils import samples_per_trajectory
 from sample_factory.utils.typing import Config
