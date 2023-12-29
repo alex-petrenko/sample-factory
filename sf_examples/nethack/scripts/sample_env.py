@@ -10,8 +10,16 @@ def main():
     register_nethack_components()
     cfg = parse_nethack_args(evaluation=True)
 
-    render_mode = "human" if not cfg.no_render else None
+    render_mode = "human"
+    if cfg.save_video:
+        render_mode = "rgb_array"
+    elif cfg.no_render:
+        render_mode = None
+
     env = create_env(cfg.env, cfg=cfg, render_mode=render_mode)
+
+    env.seed(0)
+    env.action_space.seed(0)
 
     for i in range(10):
         env.reset()
