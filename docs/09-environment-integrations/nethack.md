@@ -1,7 +1,6 @@
 # NetHack
-<video width="800" controls autoplay><source src="../../final.mp4" type="video/mp4"></video>
+<video width="800" controls autoplay><source src="https://github.com/BartekCupial/sample-factory/assets/92169405/47884b73-beeb-4303-a72f-75d202aa87a8" type="video/mp4"></video>
 ## Installation
-
 To install NetHack, you need nle and its dependencies.
 
 ```bash
