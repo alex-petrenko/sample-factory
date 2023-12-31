@@ -63,10 +63,10 @@ python -m sf_examples.nethack.fast_eval_nethack --env=nethack_challenge --sample
 - nethack_challenge
 
 ## Results
-TODO:
 
 ### Reports
-TODO:
+Example training on human-monk for 2B env steps.
+- https://api.wandb.ai/links/bartekcupial/w69fid1w
 
 ### Models
 TODO:
