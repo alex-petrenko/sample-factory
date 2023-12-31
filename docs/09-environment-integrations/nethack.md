@@ -22,6 +22,7 @@ git clone https://github.com/facebookresearch/nle.git nle && cd nle \
 
 # install sample factory with nethack extras
 pip install -e .[nethack]
+conda install -c conda-forge pybind11
 pip install -e sf_examples/nethack/render_utils
 ```
 
