@@ -1,7 +1,6 @@
 import re
 
 import numpy as np
-
 from nle import nethack
 
 

@@ -26,10 +26,9 @@ import cv2
 import gym
 import numpy as np
 import render_utils
+from nle import nethack
 from numba import njit
 from PIL import Image, ImageDraw, ImageFont
-
-from nle import nethack
 
 SMALL_FONT_PATH = os.path.abspath("sf_examples/nethack/render_utils/Hack-Regular.ttf")
 

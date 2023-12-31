@@ -1,11 +1,11 @@
 import math
 
 import torch
+from nle import nethack  # noqa: E402
+from nle.nethack.nethack import TERMINAL_SHAPE
 from torch import nn
 from torch.nn import functional as F
 
-from nle import nethack  # noqa: E402
-from nle.nethack.nethack import TERMINAL_SHAPE
 from sample_factory.model.encoder import Encoder
 from sample_factory.utils.typing import Config, ObsSpace
 from sf_examples.nethack.models.crop import Crop
