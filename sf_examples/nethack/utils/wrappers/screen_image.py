@@ -24,13 +24,14 @@ from typing import Any, SupportsFloat
 
 import cv2
 import gym
+import nethack_render_utils
 import numpy as np
-import render_utils
-from nle import nethack
 from numba import njit
 from PIL import Image, ImageDraw, ImageFont
 
-SMALL_FONT_PATH = os.path.abspath("sf_examples/nethack/render_utils/Hack-Regular.ttf")
+from nle import nethack
+
+SMALL_FONT_PATH = os.path.abspath("sf_examples/nethack/nethack_render_utils/Hack-Regular.ttf")
 
 
 # Mapping of 0-15 colors used.
@@ -257,7 +258,7 @@ class RenderCharImagesWithNumpyWrapperV2(gym.Wrapper):
 
     def _populate_obs(self, obs):
         screen = np.zeros(self.chw_image_shape, order="C", dtype=np.uint8)
-        render_utils.render_crop(
+        nethack_render_utils.render_crop(
             obs["tty_chars"],
             obs["tty_colors"],
             obs["tty_cursor"],

@@ -195,7 +195,7 @@ void render_crop(py::object tty_chars, py::object tty_colors,
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(render_utils, m) {
+PYBIND11_MODULE(nethack_render_utils, m) {
   m.doc() = R"pbdoc(
         A module to turn glyphs into the screen in pixels
         -----------------------

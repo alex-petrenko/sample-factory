@@ -113,13 +113,13 @@ class CMakeBuild(build_ext):
 # The information here can also be placed in setup.cfg - better separation of
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
-    name="render_utils",
+    name="nethack_render_utils",
     version="0.0.1",
     author="Eric Hambro",
     author_email="ehambro@fb.com",
     description="Render NetHack glyphs as a screen",
     long_description="",
-    ext_modules=[CMakeExtension("render_utils")],
+    ext_modules=[CMakeExtension("nethack_render_utils")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
     extras_require={"test": ["pytest>=6.0"]},

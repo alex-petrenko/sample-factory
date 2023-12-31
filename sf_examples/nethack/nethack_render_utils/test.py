@@ -3,11 +3,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import gym
-import nle  # NOQA: F401
+import nethack_render_utils as m
 import numpy as np
-import render_utils as m
 import tqdm
 from PIL import Image as im
+
+import nle  # NOQA: F401
 
 sys.path.append("/private/home/ehambro/fair/workspaces/wrapper-hackrl/hackrl")
 import wrappers  # NOQA: E402
