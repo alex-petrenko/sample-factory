@@ -10,7 +10,6 @@ from nle.env.tasks import (
     NetHackStaircase,
     NetHackStaircasePet,
 )
-
 from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
@@ -78,8 +77,6 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
         kwargs.update(reward_win=cfg.reward_win, reward_lose=cfg.reward_lose)
     # else:  # print warning once
     # warnings.warn("Ignoring cfg.reward_win and cfg.reward_lose")
-    if cfg.state_counter is not None:
-        kwargs.update(state_counter=cfg.state_counter)
 
     env = env_class(**kwargs)
 
