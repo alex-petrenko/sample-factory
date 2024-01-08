@@ -10,6 +10,7 @@ from nle.env.tasks import (
     NetHackStaircase,
     NetHackStaircasePet,
 )
+
 from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,

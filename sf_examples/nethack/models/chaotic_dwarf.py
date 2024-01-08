@@ -24,10 +24,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import torch
+from nle import nethack
 from torch import nn
 from torch.nn import functional as F
 
-from nle import nethack
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.model.encoder import Encoder
 from sample_factory.utils.typing import Config, ObsSpace
