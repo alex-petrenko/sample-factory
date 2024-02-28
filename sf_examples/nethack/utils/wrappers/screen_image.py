@@ -19,9 +19,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import importlib.resources
 import os
 from typing import Any, SupportsFloat
-import importlib.resources
 
 import cv2
 import gym
