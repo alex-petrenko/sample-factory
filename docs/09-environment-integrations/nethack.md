@@ -19,7 +19,6 @@ git clone https://github.com/facebookresearch/nle.git nle && cd nle \
 && sed '/self\.nethack\.get_current_seeds = f/d' nle/env/tasks.py -i \
 && sed '/def seed(self, core=None, disp=None, reseed=True):/d' nle/env/tasks.py -i \
 && sed '/raise RuntimeError("NetHackChallenge doesn.t allow seed changes")/d' nle/env/tasks.py -i \
-&& sed -i '/def render(self, mode="human"):/a\        if not self.last_observation:\n            return' nle/env/base.py \
 && python setup.py install && cd .. 
 
 # install sample factory with nethack extras

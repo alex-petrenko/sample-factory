@@ -10,10 +10,11 @@ from nle.env.tasks import (
     NetHackStaircase,
     NetHackStaircasePet,
 )
-
 from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
+    GymV21CompatibilityV0,
+    NLETimeLimit,
     PrevActionsWrapper,
     RenderCharImagesWithNumpyWrapperV2,
     SeedActionSpaceWrapper,
@@ -94,6 +95,19 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     if cfg.add_stats_to_info:
         env = BlstatsInfoWrapper(env)
         env = TaskRewardsInfoWrapper(env)
+
+    # add TimeLimit.truncated to info
+    env = NLETimeLimit(env)
+
+    # convert gym env to gymnasium one, due to issues with render NLE in reset
+    gymnasium_env = GymV21CompatibilityV0(env=env)
+
+    # preserving potential multi-agent env attributes
+    if hasattr(env, "num_agents"):
+        gymnasium_env.num_agents = env.num_agents
+    if hasattr(env, "is_multiagent"):
+        gymnasium_env.is_multiagent = env.is_multiagent
+    env = gymnasium_env
 
     env = patch_non_gymnasium_env(env)
 
