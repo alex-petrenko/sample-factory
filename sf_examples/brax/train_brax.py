@@ -1,6 +1,7 @@
 """
 Brax env integration.
 """
+
 import sys
 from typing import Dict, List, Optional, Tuple, Union
 

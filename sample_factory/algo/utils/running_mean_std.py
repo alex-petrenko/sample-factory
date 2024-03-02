@@ -3,6 +3,7 @@ PyTorch module that keeps track of tensor statistics and uses it to normalize da
 All credit goes to https://github.com/Denys88/rl_games (only slightly changed here, mostly with in-place operations)
 Thanks a lot, great module!
 """
+
 from typing import Dict, Final, List, Optional, Union
 
 import gymnasium as gym

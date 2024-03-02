@@ -10,6 +10,7 @@ before each learning iteration (not before each epoch or minibatch), since this 
 If no data normalization is needed we just keep the original data.
 Otherwise, we create a copy of data and do all of the operations operations in-place.
 """
+
 from typing import Dict
 
 import torch
