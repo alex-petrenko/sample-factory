@@ -4,7 +4,6 @@ This isn't production code, but feel free to use as an example for your SLURM se
 
 """
 
-
 import os
 import time
 from os.path import join

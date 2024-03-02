@@ -6,7 +6,6 @@ This version is significantly faster to the point where software renderer can ac
 render_mode=human (although still slow and in low resolution).
 """
 
-
 from typing import Dict, List, Tuple
 
 import brax

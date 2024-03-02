@@ -1,6 +1,5 @@
 """Population-Based Training implementation, inspired by https://arxiv.org/abs/1807.01281."""
 
-
 import copy
 import json
 import math

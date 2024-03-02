@@ -16,6 +16,7 @@ include = '\.pyi?$'
 py_version = 38
 line_length = 120
 profile = 'black'
+known_third_party = ["nle"]
 
 [tool.pytest.ini_options]
 addopts = "-s"
