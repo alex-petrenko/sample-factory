@@ -72,6 +72,43 @@ def add_extra_params_model(parser):
         default=True,
         help="If True, the model will use tty_chars for the topline and bottomline. Defaults to `True`",
     )
+    # parameters specific to ScaledNet
+    p.add_argument("--h_dim", type=int, default=1738, help="Hidden dim for encoders. Defaults to `1738`")
+    p.add_argument("--msg_hdim", type=int, default=64, help="Hidden dim for message encoder. Defaults to `64`")
+    p.add_argument("--color_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
+    p.add_argument("--char_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument(
+        "--use_crop",
+        type=str2bool,
+        default=True,
+        help="Do we want to add additional embedding with cropped screen. Defaults to `True`",
+    )
+    p.add_argument(
+        "--use_crop_norm",
+        type=str2bool,
+        default=True,
+        help="Do we want to use BatchNorm2d when processing cropped screen. Defaults to `True`",
+    )
+    p.add_argument(
+        "--screen_kernel_size",
+        type=int,
+        default=3,
+        help="Kernel size for screen convolutional encoder. Defaults to `3`",
+    )
+    p.add_argument(
+        "--no_max_pool", type=str2bool, default=False, help="Do we want to use max pool in ResNet. Defaults to `False`"
+    )
+    p.add_argument("--screen_conv_blocks", type=int, default=2, help="Number of blocks in ResNet. Defaults to `2`")
+    p.add_argument("--blstats_hdim", type=int, default=512, help="Hidden dim for blstats encoder. Defaults to `512`")
+    p.add_argument(
+        "--fc_after_cnn_hdim", type=int, default=512, help="Hidden dim for screen encoder. Defaults to `512`"
+    )
+    p.add_argument(
+        "--use_resnet",
+        type=str2bool,
+        default=False,
+        help="Do we want to use ResNet in screen encoder. Defaults to `False`",
+    )
 
 
 def add_extra_params_general(parser):
