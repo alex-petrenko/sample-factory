@@ -19,6 +19,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import importlib.resources
 import os
 from typing import Any, SupportsFloat
 
@@ -30,8 +31,7 @@ from nle import nethack
 from numba import njit
 from PIL import Image, ImageDraw, ImageFont
 
-SMALL_FONT_PATH = os.path.abspath("sf_examples/nethack/nethack_render_utils/Hack-Regular.ttf")
-
+SMALL_FONT_PATH = importlib.resources.files("sf_examples") / "nethack/nethack_render_utils/Hack-Regular.ttf"
 
 # Mapping of 0-15 colors used.
 # Taken from bottom image here. It seems about right
