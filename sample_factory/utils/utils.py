@@ -5,7 +5,7 @@ import importlib
 import logging
 import operator
 import os
-import pwd
+import getpass
 import tempfile
 import time
 from os.path import join
@@ -385,9 +385,8 @@ def remove_if_exists(file):
 
 
 def get_username():
-    uid = os.getuid()
     try:
-        return pwd.getpwuid(uid).pw_name
+        return getpass.getuser()
     except KeyError:
         # worst case scenario - let's just use uid
         return str(uid)
