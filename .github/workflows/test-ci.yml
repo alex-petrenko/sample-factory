@@ -62,6 +62,8 @@ jobs:
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
         activate-environment: myenv
+        auto-activate-base: true
+        miniconda-version: "latest"  # Ensure Miniconda is downloaded and installed
     - name: Set up Python
       uses: actions/setup-python@v3
       with:
