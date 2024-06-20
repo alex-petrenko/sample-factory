@@ -129,8 +129,7 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.is_initialized: bool = False
 
     @signal
-    def report_msg(self):
-        ...
+    def report_msg(self): ...
 
     def init(self):
         for split_idx in range(self.num_splits):

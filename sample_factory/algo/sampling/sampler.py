@@ -36,12 +36,10 @@ class AbstractSampler(EventLoopObject, Configurable):
         self.env_info: EnvInfo = env_info
 
     @signal
-    def started(self):
-        ...
+    def started(self): ...
 
     @signal
-    def initialized(self):
-        ...
+    def initialized(self): ...
 
     def init(self) -> None:
         raise NotImplementedError()
@@ -98,12 +96,10 @@ class Sampler(AbstractSampler, ABC):
 
     # internal signals used for communication with the workers, these are not a part of the interface
     @signal
-    def _init_inference_workers(self):
-        ...
+    def _init_inference_workers(self): ...
 
     @signal
-    def _inference_workers_initialized(self):
-        ...
+    def _inference_workers_initialized(self): ...
 
     def _make_inference_worker(self, event_loop, policy_id: PolicyID, worker_idx: int, param_server: ParameterServer):
         return InferenceWorker(

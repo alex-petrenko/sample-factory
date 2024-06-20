@@ -10,12 +10,10 @@ class HeartbeatStoppableEventLoopObject(EventLoopObject):
         self.heartbeat_timer.timeout.connect(self._report_heartbeat)
 
     @signal
-    def heartbeat(self):
-        ...
+    def heartbeat(self): ...
 
     @signal
-    def stop(self):
-        ...
+    def stop(self): ...
 
     def _report_heartbeat(self):
         p_name = process_name(self.event_loop.process)
