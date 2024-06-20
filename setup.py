@@ -1,3 +1,4 @@
+import platform
 import setuptools
 from setuptools import setup
 
@@ -35,6 +36,13 @@ _docs_deps = [
     "mkdocs-git-authors-plugin",
 ]
 
+def is_macos():
+    return platform.system() == 'Darwin'
+
+platform_specific = []
+if not is_macos():
+    platform_specific += ["opencv-python"]  # on arm64 the CI build takes forever otherwise
+
 setup(
     # Information
     name="sample-factory",
@@ -63,11 +71,10 @@ setup(
         # "faster-fifo>=1.4.2,<2.0",  <-- installed by signal-slot-mp
         "signal-slot-mp>=1.0.3,<2.0",
         "filelock",
-        "opencv-python",
         "wandb>=0.12.9",
         "huggingface-hub>=0.10.0,<1.0",
         "pandas",
-    ],
+    ] + platform_specific,
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that
         "dev": ["black", "isort>=5.12", "pytest<8.0", "flake8", "pre-commit", "twine"]

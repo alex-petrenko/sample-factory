@@ -1,5 +1,13 @@
 # Recent releases
 
+##### v2.1.3
+
+* Minor compatibility fixes
+
+##### v2.1.2
+
+* Minor compatibility fixes
+
 ##### v2.1.1
 
 * Windows support in serial mode (do not require `faster-fifo` on Windows)
