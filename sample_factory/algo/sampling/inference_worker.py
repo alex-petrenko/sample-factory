@@ -134,12 +134,10 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.is_initialized = False
 
     @signal
-    def initialized(self):
-        ...
+    def initialized(self): ...
 
     @signal
-    def report_msg(self):
-        ...
+    def report_msg(self): ...
 
     def init(self, init_model_data: Optional[InitModelData]):
         if self.is_initialized:

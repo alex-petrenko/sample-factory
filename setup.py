@@ -1,3 +1,5 @@
+import platform
+
 import setuptools
 from setuptools import setup
 
@@ -35,13 +37,18 @@ _docs_deps = [
     "mkdocs-git-authors-plugin",
 ]
 
+
+def is_macos():
+    return platform.system() == "Darwin"
+
+
 setup(
     # Information
     name="sample-factory",
     description="High throughput asynchronous reinforcement learning framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="2.1.2",
+    version="2.1.3",
     url="https://github.com/alex-petrenko/sample-factory",
     author="Aleksei Petrenko",
     license="MIT",
@@ -63,10 +70,10 @@ setup(
         # "faster-fifo>=1.4.2,<2.0",  <-- installed by signal-slot-mp
         "signal-slot-mp>=1.0.3,<2.0",
         "filelock",
-        "opencv-python",
         "wandb>=0.12.9",
         "huggingface-hub>=0.10.0,<1.0",
         "pandas",
+        "opencv-python",
     ],
     extras_require={
         # some tests require Atari and Mujoco so let's make sure dev environment has that

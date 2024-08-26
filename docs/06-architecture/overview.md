@@ -13,7 +13,7 @@ At the core of Sample Factory structure is the idea that RL training can be spli
 each one of them focusing on a specific task. This enables a modular design where these components can be
 accelerated/parallelized independently, allowing us to achieve the maximum performance on any RL task.
 
-Components interact asynchronously by sending and receving messages (aka signals, see a [dedicated section on message passing](message-passing.md)).
+Components interact asynchronously by sending and receving messages (aka signals, see a [dedicated section on message passing](../06-architecture/message-passing.md)).
 Typically separate components live on different event loops in different processes, although the system is agnostic of
 whether this is true and it is thus possible to run multiple (or even all components) on a single event loop in a single process. 
 
