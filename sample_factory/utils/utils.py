@@ -1,17 +1,17 @@
 """Utilities."""
 
 import argparse
+import getpass
 import importlib
 import logging
 import operator
 import os
-import getpass
 import tempfile
 import time
 from os.path import join
 from queue import Full
 from subprocess import SubprocessError, check_output, run
-from sys import argv, platform
+from sys import platform
 
 import numpy as np
 import psutil
@@ -389,6 +389,7 @@ def get_username():
         return getpass.getuser()
     except KeyError:
         # worst case scenario - let's just use uid
+        uid = os.getuid()
         return str(uid)
 
 
