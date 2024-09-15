@@ -136,6 +136,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     reward_list = []
 
     obs, infos = env.reset()
+    action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
     rnn_states = torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False for _ in range(env.num_agents)]
@@ -149,14 +150,14 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
             if not cfg.no_render:
                 visualize_policy_inputs(normalized_obs)
-            policy_outputs = actor_critic(normalized_obs, rnn_states)
+            policy_outputs = actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
 
             # sample actions from the distribution by default
             actions = policy_outputs["actions"]
 
             if cfg.eval_deterministic:
                 action_distribution = actor_critic.action_distribution()
-                actions = argmax_actions(action_distribution)
+                actions = argmax_actions(action_distribution, action_mask)
 
             # actions shape should be [num_agents, num_actions] even if it's [1, 1]
             if actions.ndim == 1:
@@ -169,6 +170,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                 last_render_start = render_frame(cfg, env, video_frames, num_episodes, last_render_start)
 
                 obs, rew, terminated, truncated, infos = env.step(actions)
+                action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
                 dones = make_dones(terminated, truncated)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
 
