@@ -65,10 +65,7 @@ def sample_actions_log_probs(distribution, action_mask=None):
     if isinstance(distribution, TupleActionDistribution):
         return distribution.sample_actions_log_probs(action_mask)
     else:
-        if isinstance(distribution, ContinuousActionDistribution):
-            actions = distribution.sample()
-        else:
-            actions = distribution.sample(action_mask)
+        actions = distribution.sample(action_mask)
         log_prob_actions = distribution.log_prob(actions)
         return actions, log_prob_actions
 
@@ -227,20 +224,14 @@ class TupleActionDistribution:
 
     def sample_actions_log_probs(self, action_mask=None):
         action_mask = [action_mask[i] if action_mask is not None else None for i in range(len(self.distributions))]
-        list_of_action_batches = [
-            d.sample() if isinstance(d, ContinuousActionDistribution) else d.sample(action_mask[i])
-            for i, d in enumerate(self.distributions)
-        ]
+        list_of_action_batches = [d.sample(action_mask[i]) for i, d in enumerate(self.distributions)]
         batch_of_action_tuples = self._flatten_actions(list_of_action_batches)
         log_probs = self._calc_log_probs(list_of_action_batches)
         return batch_of_action_tuples, log_probs
 
     def sample(self, action_mask=None):
         action_mask = [action_mask[i] if action_mask is not None else None for i in range(len(self.distributions))]
-        list_of_action_batches = [
-            d.sample() if isinstance(d, ContinuousActionDistribution) else d.sample(action_mask[i])
-            for i, d in enumerate(self.distributions)
-        ]
+        list_of_action_batches = [d.sample(action_mask[i]) for i, d in enumerate(self.distributions)]
         return self._flatten_actions(list_of_action_batches)
 
     def argmax(self, action_mask=None):
@@ -297,6 +288,9 @@ class ContinuousActionDistribution(Independent):
         stddevs = log_std.exp()
         stddevs = torch.clamp(stddevs, stddev_min, stddev_max)
         return means, log_std, stddevs
+
+    def sample(self, action_mask=None):
+        return super().sample()
 
     def kl_divergence(self, other):
         kl = torch.distributions.kl.kl_divergence(self, other)
