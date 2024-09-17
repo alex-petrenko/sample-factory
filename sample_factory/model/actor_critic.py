@@ -324,6 +324,7 @@ def default_make_actor_critic_func(cfg: Config, obs_space: ObsSpace, action_spac
     from sample_factory.algo.utils.context import global_model_factory
 
     model_factory = global_model_factory()
+    obs_space = obs_space_without_action_mask(obs_space)
 
     if cfg.actor_critic_share_weights:
         return ActorCriticSharedWeights(model_factory, obs_space, action_space, cfg)
@@ -336,7 +337,7 @@ def create_actor_critic(cfg: Config, obs_space: ObsSpace, action_space: ActionSp
     from sample_factory.algo.utils.context import global_model_factory
 
     make_actor_critic_func = global_model_factory().make_actor_critic_func
-    return make_actor_critic_func(cfg, obs_space_without_action_mask(obs_space), action_space)
+    return make_actor_critic_func(cfg, obs_space, action_space)
 
 
 def obs_space_without_action_mask(obs_space: ObsSpace) -> ObsSpace:
