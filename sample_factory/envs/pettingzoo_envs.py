@@ -48,8 +48,8 @@ class PettingZooParallelEnv(gym.Env):
         self.env.close()
 
 
-def all_equal(l):
-    return all(v == l[0] for v in l)
+def all_equal(l_) -> bool:
+    return all(v == l_[0] for v in l_)
 
 
 def normalize_observation_space(obs_space):
