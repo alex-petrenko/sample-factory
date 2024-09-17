@@ -3,6 +3,7 @@ from os.path import isdir
 
 import pytest
 
+from sample_factory.algo.utils.context import reset_global_context
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
@@ -15,6 +16,8 @@ class TestPettingZooEnv:
     @pytest.fixture(scope="class", autouse=True)
     def register_pettingzoo_fixture(self):
         register_custom_components()
+        yield  # this is where the actual test happens
+        reset_global_context()
 
     # noinspection PyUnusedLocal
     @staticmethod
