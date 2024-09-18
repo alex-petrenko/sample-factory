@@ -27,12 +27,12 @@ class CustomEnv(gym.Env):
     def reset(self, **kwargs):
         ...
         # Initial action mask that allows all actions
-        action_mask = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        action_mask = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1])
         return {"obs": obs, "action_mask": action_mask}, info
 
     def step(self, action):
         ...
         # Generate new action mask based on the current state
-        action_mask = [1, 0, 0, 1, 1, 1, 0, 1, 1]
+        action_mask = np.array([1, 0, 0, 1, 1, 1, 0, 1, 1])
         return {"obs": obs, "action_mask": action_mask}, reward, terminated, truncated, info
 ```
