@@ -116,11 +116,13 @@ class CategoricalActionDistribution:
 
     def sample(self, action_mask=None):
         probs = self.probs
-        if action_mask is not None and torch.any(action_mask != 0):
+        if action_mask is not None:
             probs = probs * action_mask
             all_zero = (probs.sum(dim=-1) == 0).unsqueeze(-1)
             epsilons = torch.full_like(probs, 1e-6) * action_mask
             probs = torch.where(all_zero, epsilons, probs)  # ensure sum of probabilities is non-zero
+            mask_all_zero = (action_mask.sum(dim=-1) == 0).unsqueeze(-1)
+            probs = torch.where(mask_all_zero, self.probs, probs)  # use original probs if all actions are masked
 
         samples = torch.multinomial(probs, 1, True)
         return samples
