@@ -84,6 +84,15 @@ def argmax_actions(distribution, action_mask=None):
         raise NotImplementedError(f"Action distribution type {type(distribution)} does not support argmax!")
 
 
+def masked_softmax(logits, mask):
+    mask = mask.float()
+    probs = logits * mask + (1 - mask) * -1e9
+    probs = functional.softmax(probs, dim=-1)
+    probs = probs * mask
+    probs = probs / (probs.sum(dim=-1, keepdim=True) + 1e-9)
+    return probs
+
+
 # noinspection PyAbstractClass
 class CategoricalActionDistribution:
     def __init__(self, raw_logits):
@@ -117,7 +126,7 @@ class CategoricalActionDistribution:
     def sample(self, action_mask=None):
         probs = self.probs
         if action_mask is not None:
-            probs = probs * action_mask
+            probs = masked_softmax(self.raw_logits, action_mask)
             all_zero = (probs.sum(dim=-1) == 0).unsqueeze(-1)
             epsilons = torch.full_like(probs, 1e-6) * action_mask
             probs = torch.where(all_zero, epsilons, probs)  # ensure sum of probabilities is non-zero
