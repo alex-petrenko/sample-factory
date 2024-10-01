@@ -128,10 +128,7 @@ class CategoricalActionDistribution:
         if action_mask is not None:
             probs = masked_softmax(self.raw_logits, action_mask)
             all_zero = (probs.sum(dim=-1) == 0).unsqueeze(-1)
-            epsilons = torch.full_like(probs, 1e-6) * action_mask
-            probs = torch.where(all_zero, epsilons, probs)  # ensure sum of probabilities is non-zero
-            mask_all_zero = (action_mask.sum(dim=-1) == 0).unsqueeze(-1)
-            probs = torch.where(mask_all_zero, self.probs, probs)  # use original probs if all actions are masked
+            probs = torch.where(all_zero, self.probs, probs)  # ensure sum of probabilities is non-zero
 
         samples = torch.multinomial(probs, 1, True)
         return samples
