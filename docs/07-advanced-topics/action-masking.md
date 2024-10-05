@@ -1,6 +1,6 @@
 # Action Masking
 
-Action masking is a technique used to restrict the set of actions available to an agent in certain states. This can be particularly useful in environments where some actions are invalid or undesirable in specific situations. Sample Factory supports action masking, allowing you to implement this feature in your custom environments.
+Action masking is a technique used to restrict the set of actions available to an agent in certain states. This can be particularly useful in environments where some actions are invalid or undesirable in specific situations. See [paper](https://arxiv.org/abs/2006.14171) for more details.
 
 ## Implementing Action Masking
 

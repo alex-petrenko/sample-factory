@@ -25,11 +25,11 @@ class TestActionDistributions:
         simple_num_logits = calc_num_action_parameters(simple_action_space)
         assert simple_num_logits == simple_action_space.n
 
-        simple_logits = torch.rand(batch_size, simple_num_logits)
-        simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
-
         expected_actions, action_mask = generate_expected_actions(simple_action_space.n, batch_size, has_action_mask)
-        simple_actions = simple_action_distribution.sample(action_mask)
+        simple_logits = torch.rand(batch_size, simple_num_logits)
+        simple_action_distribution = get_action_distribution(simple_action_space, simple_logits, action_mask)
+
+        simple_actions = simple_action_distribution.sample()
         assert list(simple_actions.shape) == [batch_size, 1]
         assert all(torch.isin(a, expected_actions) for a in simple_actions)
 
@@ -103,12 +103,11 @@ class TestActionDistributions:
 
         assert num_logits == sum(s.n for s in action_space.spaces)
 
-        action_distribution = get_action_distribution(action_space, logits)
-
         expected_actions, action_mask = generate_expected_actions(gym_space.n, batch_size, has_action_mask)
         action_mask = action_mask.repeat(num_spaces, 1) if action_mask is not None else None
+        action_distribution = get_action_distribution(action_space, logits, action_mask)
 
-        tuple_actions = action_distribution.sample(action_mask)
+        tuple_actions = action_distribution.sample()
         assert list(tuple_actions.shape) == [batch_size, num_spaces]
         assert all(torch.isin(a, expected_actions) for actions in tuple_actions for a in actions)
 

@@ -157,7 +157,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
             if cfg.eval_deterministic:
                 action_distribution = actor_critic.action_distribution()
-                actions = argmax_actions(action_distribution, action_mask)
+                actions = argmax_actions(action_distribution)
 
             # actions shape should be [num_agents, num_actions] even if it's [1, 1]
             if actions.ndim == 1:

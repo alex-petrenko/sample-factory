@@ -42,7 +42,7 @@ def is_continuous_action_space(action_space: ActionSpace) -> bool:
     return isinstance(action_space, gym.spaces.Box)
 
 
-def get_action_distribution(action_space, raw_logits):
+def get_action_distribution(action_space, raw_logits, action_mask=None):
     """
     Create the distribution object based on provided action space and unprocessed logits.
     :param action_space: Gym action space object
@@ -52,83 +52,98 @@ def get_action_distribution(action_space, raw_logits):
     assert calc_num_action_parameters(action_space) == raw_logits.shape[-1]
 
     if isinstance(action_space, gym.spaces.Discrete):
-        return CategoricalActionDistribution(raw_logits)
+        return CategoricalActionDistribution(raw_logits, action_mask)
     elif isinstance(action_space, gym.spaces.Tuple):
-        return TupleActionDistribution(action_space, logits_flat=raw_logits)
+        return TupleActionDistribution(action_space, logits_flat=raw_logits, action_mask=action_mask)
     elif isinstance(action_space, gym.spaces.Box):
         return ContinuousActionDistribution(params=raw_logits)
     else:
         raise NotImplementedError(f"Action space type {type(action_space)} not supported!")
 
 
-def sample_actions_log_probs(distribution, action_mask=None):
+def sample_actions_log_probs(distribution):
     if isinstance(distribution, TupleActionDistribution):
-        return distribution.sample_actions_log_probs(action_mask)
+        return distribution.sample_actions_log_probs()
     else:
-        actions = distribution.sample(action_mask)
+        actions = distribution.sample()
         log_prob_actions = distribution.log_prob(actions)
         return actions, log_prob_actions
 
 
-def argmax_actions(distribution, action_mask=None):
+def argmax_actions(distribution):
     if isinstance(distribution, TupleActionDistribution):
-        return distribution.argmax(action_mask)
+        return distribution.argmax()
     elif hasattr(distribution, "probs"):
-        probs = distribution.probs
-        if action_mask is not None:
-            probs = probs * action_mask
-        return torch.argmax(probs, dim=-1)
+        return torch.argmax(distribution.probs, dim=-1)
     elif hasattr(distribution, "means"):
         return distribution.means
     else:
         raise NotImplementedError(f"Action distribution type {type(distribution)} does not support argmax!")
 
 
+# Retrieved from AllenNLP:
+# https://github.com/allenai/allennlp/blob/80fb6061e568cb9d6ab5d45b661e86eb61b92c82/allennlp/nn/util.py#L243
 def masked_softmax(logits, mask):
-    mask = mask.float()
-    probs = logits * mask + (1 - mask) * -1e9
-    probs = functional.softmax(probs, dim=-1)
-    probs = probs * mask
-    probs = probs / (probs.sum(dim=-1, keepdim=True) + 1e-9)
-    return probs
+    # To limit numerical errors from large vector elements outside the mask, we zero these out.
+    result = functional.softmax(logits * mask, dim=-1)
+    result = result * mask
+    result = result / (result.sum(dim=-1, keepdim=True) + 1e-13)
+    return result
+
+
+# Retrieved from AllenNLP:
+# https://github.com/allenai/allennlp/blob/80fb6061e568cb9d6ab5d45b661e86eb61b92c82/allennlp/nn/util.py#L286
+def masked_log_softmax(logits, mask):
+    # vector + mask.log() is an easy way to zero out masked elements in logspace, but it
+    # results in nans when the whole vector is masked.  We need a very small value instead of a
+    # zero in the mask for these cases.
+    logits = logits + (mask + 1e-13).log()
+    return functional.log_softmax(logits, dim=-1)
 
 
 # noinspection PyAbstractClass
 class CategoricalActionDistribution:
-    def __init__(self, raw_logits):
+    def __init__(self, raw_logits, action_mask=None):
         """
         Ctor.
         :param raw_logits: unprocessed logits, typically an output of a fully-connected layer
         """
 
         self.raw_logits = raw_logits
+        self.action_mask = action_mask
         self.log_p = self.p = None
 
     @property
     def probs(self):
         if self.p is None:
-            self.p = functional.softmax(self.raw_logits, dim=-1)
+            if self.action_mask is not None:
+                self.p = masked_softmax(self.raw_logits, self.action_mask)
+            else:
+                self.p = functional.softmax(self.raw_logits, dim=-1)
         return self.p
 
     @property
     def log_probs(self):
         if self.log_p is None:
-            self.log_p = functional.log_softmax(self.raw_logits, dim=-1)
+            if self.action_mask is not None:
+                self.log_p = masked_log_softmax(self.raw_logits, self.action_mask)
+            else:
+                self.log_p = functional.log_softmax(self.raw_logits, dim=-1)
         return self.log_p
 
-    def sample_gumbel(self, action_mask=None):
+    def sample_gumbel(self):
         probs = self.raw_logits - torch.empty_like(self.raw_logits).exponential_().log_()
-        if action_mask is not None:
-            probs = probs * action_mask
+        if self.action_mask is not None:
+            probs = probs * self.action_mask
         sample = torch.argmax(probs, -1)
         return sample
 
-    def sample(self, action_mask=None):
+    def sample(self):
         probs = self.probs
-        if action_mask is not None:
-            probs = masked_softmax(self.raw_logits, action_mask)
+        if self.action_mask is not None:
             all_zero = (probs.sum(dim=-1) == 0).unsqueeze(-1)
-            probs = torch.where(all_zero, self.probs, probs)  # ensure sum of probabilities is non-zero
+            epsilons = torch.full_like(probs, 1e-6)
+            probs = torch.where(all_zero, epsilons, probs)  # ensure sum of probabilities is non-zero
 
         samples = torch.multinomial(probs, 1, True)
         return samples
@@ -202,16 +217,18 @@ class TupleActionDistribution:
 
     """
 
-    def __init__(self, action_space, logits_flat):
+    def __init__(self, action_space, logits_flat, action_mask=None):
         self.logit_lengths = [calc_num_action_parameters(s) for s in action_space.spaces]
         self.split_logits = torch.split(logits_flat, self.logit_lengths, dim=1)
         self.action_lengths = [calc_num_actions(s) for s in action_space.spaces]
+        self.action_mask = action_mask
 
         assert len(self.split_logits) == len(action_space.spaces)
 
         self.distributions = []
         for i, space in enumerate(action_space.spaces):
-            self.distributions.append(get_action_distribution(space, self.split_logits[i]))
+            action_mask = self.action_mask[i] if self.action_mask is not None else None
+            self.distributions.append(get_action_distribution(space, self.split_logits[i], action_mask))
 
     @staticmethod
     def _flatten_actions(list_of_action_batches):
@@ -230,21 +247,18 @@ class TupleActionDistribution:
 
         return log_probs
 
-    def sample_actions_log_probs(self, action_mask=None):
-        action_mask = [action_mask[i] if action_mask is not None else None for i in range(len(self.distributions))]
-        list_of_action_batches = [d.sample(action_mask[i]) for i, d in enumerate(self.distributions)]
+    def sample_actions_log_probs(self):
+        list_of_action_batches = [d.sample() for d in self.distributions]
         batch_of_action_tuples = self._flatten_actions(list_of_action_batches)
         log_probs = self._calc_log_probs(list_of_action_batches)
         return batch_of_action_tuples, log_probs
 
-    def sample(self, action_mask=None):
-        action_mask = [action_mask[i] if action_mask is not None else None for i in range(len(self.distributions))]
-        list_of_action_batches = [d.sample(action_mask[i]) for i, d in enumerate(self.distributions)]
+    def sample(self):
+        list_of_action_batches = [d.sample() for d in self.distributions]
         return self._flatten_actions(list_of_action_batches)
 
-    def argmax(self, action_mask=None):
-        action_mask = [action_mask[i] if action_mask is not None else None for i in range(len(self.distributions))]
-        list_of_action_batches = [argmax_actions(d, action_mask[i]) for i, d in enumerate(self.distributions)]
+    def argmax(self):
+        list_of_action_batches = [argmax_actions(d) for d in self.distributions]
         return torch.cat(list_of_action_batches).unsqueeze(0)
 
     def log_prob(self, actions):
@@ -296,9 +310,6 @@ class ContinuousActionDistribution(Independent):
         stddevs = log_std.exp()
         stddevs = torch.clamp(stddevs, stddev_min, stddev_max)
         return means, log_std, stddevs
-
-    def sample(self, action_mask=None):
-        return super().sample()
 
     def kl_divergence(self, other):
         kl = torch.distributions.kl.kl_divergence(self, other)

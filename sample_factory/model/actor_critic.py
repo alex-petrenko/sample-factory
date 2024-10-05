@@ -109,12 +109,10 @@ class ActorCritic(nn.Module, Configurable):
     def action_distribution(self):
         return self.last_action_distribution
 
-    def _maybe_sample_actions(
-        self, sample_actions: bool, result: TensorDict, action_mask: Optional[Tensor] = None
-    ) -> None:
+    def _maybe_sample_actions(self, sample_actions: bool, result: TensorDict) -> None:
         if sample_actions:
             # for non-trivial action spaces it is faster to do these together
-            actions, result["log_prob_actions"] = sample_actions_log_probs(self.last_action_distribution, action_mask)
+            actions, result["log_prob_actions"] = sample_actions_log_probs(self.last_action_distribution)
             assert actions.dim() == 2  # TODO: remove this once we test everything
             result["actions"] = actions.squeeze(dim=1)
 
@@ -177,12 +175,14 @@ class ActorCriticSharedWeights(ActorCritic):
         if values_only:
             return result
 
-        action_distribution_params, self.last_action_distribution = self.action_parameterization(decoder_output)
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(
+            decoder_output, action_mask
+        )
 
         # `action_logits` is not the best name here, better would be "action distribution parameters"
         result["action_logits"] = action_distribution_params
 
-        self._maybe_sample_actions(sample_actions, result, action_mask)
+        self._maybe_sample_actions(sample_actions, result)
         return result
 
     def forward(
@@ -303,11 +303,13 @@ class ActorCriticSeparateWeights(ActorCritic):
 
         # first core output corresponds to the actor
         actor_decoder_output = self.actor_decoder(core_outputs[0])
-        action_distribution_params, self.last_action_distribution = self.action_parameterization(actor_decoder_output)
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(
+            actor_decoder_output, action_mask
+        )
 
         result["action_logits"] = action_distribution_params
 
-        self._maybe_sample_actions(sample_actions, result, action_mask)
+        self._maybe_sample_actions(sample_actions, result)
         return result
 
     def forward(
