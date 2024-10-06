@@ -30,10 +30,12 @@ class ActionParameterizationDefault(ActionsParameterization):
         num_action_outputs = calc_num_action_parameters(action_space)
         self.distribution_linear = nn.Linear(core_out_size, num_action_outputs)
 
-    def forward(self, actor_core_output):
+    def forward(self, actor_core_output, action_mask=None):
         """Just forward the FC layer and generate the distribution object."""
         action_distribution_params = self.distribution_linear(actor_core_output)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        action_distribution = get_action_distribution(
+            self.action_space, raw_logits=action_distribution_params, action_mask=action_mask
+        )
         return action_distribution_params, action_distribution
 
 
@@ -58,7 +60,7 @@ class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterization)
         initial_stddev.fill_(math.log(self.cfg.initial_stddev))
         self.learned_stddev = nn.Parameter(initial_stddev, requires_grad=True)
 
-    def forward(self, actor_core_output: Tensor):
+    def forward(self, actor_core_output: Tensor, action_mask=None):
         action_means = self.distribution_linear(actor_core_output)
         if self.tanh_scale > 0:
             # scale the action means to be in the range [-tanh_scale, tanh_scale]
@@ -68,5 +70,7 @@ class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterization)
         batch_size = action_means.shape[0]
         action_stddevs = self.learned_stddev.repeat(batch_size, 1)
         action_distribution_params = torch.cat((action_means, action_stddevs), dim=1)
-        action_distribution = get_action_distribution(self.action_space, raw_logits=action_distribution_params)
+        action_distribution = get_action_distribution(
+            self.action_space, raw_logits=action_distribution_params, action_mask=action_mask
+        )
         return action_distribution_params, action_distribution

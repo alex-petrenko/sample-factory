@@ -11,6 +11,8 @@ def eval_env_performance(make_env, env_type, verbose=False, eval_frames=10_000):
     with t.timeit("init"):
         env = make_env(AttrDict({"worker_index": 0, "vector_index": 0}))
         total_num_frames, frames = eval_frames, 0
+        num_agents = env.num_agents if hasattr(env, "num_agents") else 1
+        is_multiagent = env.is_multiagent if hasattr(env, "is_multiagent") else num_agents > 1
 
     with t.timeit("first_reset"):
         env.reset()
@@ -22,7 +24,7 @@ def eval_env_performance(make_env, env_type, verbose=False, eval_frames=10_000):
             done = False
 
             start_reset = time.time()
-            env.reset()
+            obs, info = env.reset()
 
             t.reset += time.time() - start_reset
             num_resets += 1
@@ -33,13 +35,25 @@ def eval_env_performance(make_env, env_type, verbose=False, eval_frames=10_000):
                     env.render()
                     time.sleep(1.0 / 40)
 
-                obs, rew, terminated, truncated, info = env.step(env.action_space.sample())
-                done = terminated | truncated
-                if verbose:
-                    log.info("Received reward %.3f", rew)
+                if is_multiagent:
+                    action_mask = [o.get("action_mask") if isinstance(o, dict) else None for o in obs]
+                    action = [env.action_space.sample(m) for m in action_mask]
+                else:
+                    action_mask = obs.get("action_mask") if isinstance(obs, dict) else None
+                    action = env.action_space.sample(action_mask)
+
+                obs, rew, terminated, truncated, info = env.step(action)
+
+                if is_multiagent:
+                    done = all(a | b for a, b in zip(terminated, truncated))
+                else:
+                    done = terminated | truncated
+                    info = [info]
+                    if verbose:
+                        log.info("Received reward %.3f", rew)
 
                 t.step += time.time() - start_step
-                frames += num_env_steps([info])
+                frames += num_env_steps(info)
 
     fps = total_num_frames / t.experience
     log.debug("%s performance:", env_type)

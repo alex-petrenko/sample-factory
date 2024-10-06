@@ -27,6 +27,7 @@ _nethack_deps = [
     "debugpy ~= 1.6",
 ]
 _envpool_deps = ["envpool"]
+_pettingzoo_deps = ["pettingzoo[classic]"]
 
 _docs_deps = [
     "mkdocs-material",
@@ -80,11 +81,13 @@ setup(
         "dev": ["black", "isort>=5.12", "pytest<8.0", "flake8", "pre-commit", "twine"]
         + _docs_deps
         + _atari_deps
-        + _mujoco_deps,
+        + _mujoco_deps
+        + _pettingzoo_deps,
         "atari": _atari_deps,
         "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,
         "nethack": _nethack_deps,
+        "pettingzoo": _pettingzoo_deps,
         "vizdoom": ["vizdoom<2.0", "gymnasium[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources
     },
