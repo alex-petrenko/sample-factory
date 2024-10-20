@@ -30,7 +30,7 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install conda env & dependencies
       run: |
-       pip install -e '.[atari, mujoco, envpool]'
+       pip install -e '.[atari, mujoco, envpool, onnx]'
        conda list
     - name: Install codecov dependencies
       run: |

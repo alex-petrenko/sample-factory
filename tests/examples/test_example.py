@@ -21,6 +21,7 @@ from sample_factory.train import make_runner
 from sample_factory.utils.typing import Config
 from sample_factory.utils.utils import experiment_dir, log
 from sf_examples.train_custom_env_custom_model import parse_custom_args, register_custom_components
+from tests.export_onnx_utils import check_export_onnx
 
 
 def default_test_cfg(
@@ -57,6 +58,7 @@ def run_test_env(
     expected_reward_at_least: float = -EPS,
     expected_reward_at_most: float = 100,
     check_envs: bool = False,
+    check_export: bool = False,
     register_custom_components_func: Callable = register_custom_components,
     env_name: str = "my_custom_env_v1",
 ):
@@ -81,12 +83,16 @@ def run_test_env(
     status, avg_reward = enjoy(eval_cfg)
     log.debug(f"Test reward: {avg_reward:.4f}")
 
-    assert isdir(directory)
-    shutil.rmtree(directory, ignore_errors=True)
+    try:
+        assert status == ExperimentStatus.SUCCESS
+        assert avg_reward >= expected_reward_at_least
+        assert avg_reward <= expected_reward_at_most
 
-    assert status == ExperimentStatus.SUCCESS
-    assert avg_reward >= expected_reward_at_least
-    assert avg_reward <= expected_reward_at_most
+        if check_export:
+            check_export_onnx(eval_cfg)
+    finally:
+        assert isdir(directory)
+        shutil.rmtree(directory, ignore_errors=True)
 
     if cfg.serial_mode and check_envs:
         # we can directly access the envs and check things in serial mode
@@ -164,4 +170,5 @@ class TestExample:
             eval_cfg,
             expected_reward_at_least=80,
             expected_reward_at_most=100,
+            check_export=True,
         )

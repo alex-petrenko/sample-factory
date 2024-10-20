@@ -9,6 +9,7 @@ from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 from tests.envs.tuple_action_envs.test_two_discrete_action_dist_env_non_batched import DiscreteActions, get_reward
+from tests.export_onnx_utils import check_export_onnx
 
 
 class IdentityEnvTwoDiscreteActions(gym.Env):
@@ -118,6 +119,13 @@ def register_test_components():
     )
 
 
+def parse_args(argv=None, evaluation=False):
+    parser, cfg = parse_sf_args(argv=argv, evaluation=evaluation)
+    override_defaults(parser)
+    cfg = parse_full_cfg(parser, argv=argv)
+    return cfg
+
+
 def test_batched_two_discrete_action_dists():
     """Script entry point."""
     register_test_components()
@@ -128,10 +136,9 @@ def test_batched_two_discrete_action_dists():
         "--restart_behavior=overwrite",
         "--device=cpu",
     ]
-    parser, cfg = parse_sf_args(argv=argv)
-
-    override_defaults(parser)
-    cfg = parse_full_cfg(parser, argv=argv)
-
+    cfg = parse_args(argv=argv)
     status = run_rl(cfg)
+
+    cfg = parse_args(argv=argv, evaluation=True)
+    check_export_onnx(cfg)
     return status
