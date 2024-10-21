@@ -157,6 +157,7 @@ nav:
     - 07-advanced-topics/observer.md
     - 07-advanced-topics/profiling.md
     - 07-advanced-topics/action-masking.md
+    - 07-advanced-topics/exporting-to-onnx.md
   - Miscellaneous:
     - 08-miscellaneous/tests.md
     - 08-miscellaneous/v1-to-v2.md
