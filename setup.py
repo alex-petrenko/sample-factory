@@ -83,8 +83,8 @@ setup(
         + _docs_deps
         + _atari_deps
         + _mujoco_deps
-        + _onnx_deps,
-        + _pettingzoo_deps
+        + _onnx_deps
+        + _pettingzoo_deps,
         "atari": _atari_deps,
         "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,

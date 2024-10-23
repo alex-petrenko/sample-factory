@@ -40,8 +40,9 @@ class OnnxExporter(nn.Module):
         else:
             rnn_states = generate_rnn_states(self.cfg)
 
+        action_mask = obs.pop("action_mask", None)
         normalized_obs = prepare_and_normalize_obs(self.actor_critic, obs)
-        policy_outputs = self.actor_critic(normalized_obs, rnn_states)
+        policy_outputs = self.actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
         actions = policy_outputs["actions"]
         rnn_states = policy_outputs["new_rnn_states"]
 
