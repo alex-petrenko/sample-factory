@@ -435,7 +435,7 @@ class NonBatchedVectorEnvRunner(VectorEnvRunner):
 
                 log.info("Decorrelating experience for %d frames...", decorrelate_steps)
                 for decorrelate_step in range(decorrelate_steps):
-                    actions = [e.action_space.sample() for _ in range(self.num_agents)]
+                    actions = [e.action_space.sample(obs.get("action_mask")) for obs in observations]
                     observations, rew, terminated, truncated, info = e.step(actions)
 
             for agent_i, obs in enumerate(observations):

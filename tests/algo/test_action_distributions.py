@@ -19,17 +19,19 @@ from sample_factory.utils.utils import log
 class TestActionDistributions:
     @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
     @pytest.mark.parametrize("batch_size", [128])
-    def test_simple_distribution(self, gym_space, batch_size):
+    @pytest.mark.parametrize("has_action_mask", [False, True])
+    def test_simple_distribution(self, gym_space, batch_size, has_action_mask):
         simple_action_space = gym_space
         simple_num_logits = calc_num_action_parameters(simple_action_space)
         assert simple_num_logits == simple_action_space.n
 
+        expected_actions, action_mask = generate_expected_actions(simple_action_space.n, batch_size, has_action_mask)
         simple_logits = torch.rand(batch_size, simple_num_logits)
-        simple_action_distribution = get_action_distribution(simple_action_space, simple_logits)
+        simple_action_distribution = get_action_distribution(simple_action_space, simple_logits, action_mask)
 
         simple_actions = simple_action_distribution.sample()
         assert list(simple_actions.shape) == [batch_size, 1]
-        assert all(0 <= a < simple_action_space.n for a in simple_actions)
+        assert all(torch.isin(a, expected_actions) for a in simple_actions)
 
     @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(3)])
     @pytest.mark.parametrize("batch_size", [128])
@@ -91,7 +93,8 @@ class TestActionDistributions:
     @pytest.mark.parametrize("num_spaces", [1, 4])
     @pytest.mark.parametrize("gym_space", [gym.spaces.Discrete(1), gym.spaces.Discrete(3)])
     @pytest.mark.parametrize("batch_size", [128])
-    def test_tuple_distribution(self, num_spaces, gym_space, batch_size):
+    @pytest.mark.parametrize("has_action_mask", [False, True])
+    def test_tuple_distribution(self, num_spaces, gym_space, batch_size, has_action_mask):
         spaces = [gym_space for _ in range(num_spaces)]
         action_space = gym.spaces.Tuple(spaces)
 
@@ -100,10 +103,13 @@ class TestActionDistributions:
 
         assert num_logits == sum(s.n for s in action_space.spaces)
 
-        action_distribution = get_action_distribution(action_space, logits)
+        expected_actions, action_mask = generate_expected_actions(gym_space.n, batch_size, has_action_mask)
+        action_mask = action_mask.repeat(num_spaces, 1) if action_mask is not None else None
+        action_distribution = get_action_distribution(action_space, logits, action_mask)
 
         tuple_actions = action_distribution.sample()
         assert list(tuple_actions.shape) == [batch_size, num_spaces]
+        assert all(torch.isin(a, expected_actions) for actions in tuple_actions for a in actions)
 
         log_probs = action_distribution.log_prob(tuple_actions)
         assert list(log_probs.shape) == [batch_size]
@@ -218,3 +224,14 @@ def test_tuple_action_distribution(spaces, sizes):
 
     assert actions.size() == (BATCH_SIZE, num_actions)
     assert action_log_probs.size() == (BATCH_SIZE,)
+
+
+def generate_expected_actions(action_space_size, batch_size, has_action_mask):
+    if has_action_mask:
+        expected_actions = torch.tensor([i for i in range(action_space_size) if i % 2 == 0])
+        action_mask = torch.tensor([[1 if i in expected_actions else 0 for i in range(action_space_size)]] * batch_size)
+    else:
+        expected_actions = torch.tensor(range(action_space_size))
+        action_mask = None
+
+    return expected_actions, action_mask
