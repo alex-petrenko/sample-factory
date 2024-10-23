@@ -1,4 +1,5 @@
 import types
+from typing import List
 
 import gymnasium as gym
 import torch
@@ -124,7 +125,7 @@ def unsqueeze_args(args):
         raise NotImplementedError(f"Unsupported args type: {type(args)}")
 
 
-def create_forward(original_forward, arg_names: list[str]):
+def create_forward(original_forward, arg_names: List[str]):
     args_str = ", ".join(arg_names)
 
     func_code = f"""
@@ -140,7 +141,7 @@ def forward(self, {args_str}):
     return local_vars["forward"]
 
 
-def patch_forward(model: OnnxExporter, input_names: list[str]):
+def patch_forward(model: OnnxExporter, input_names: List[str]):
     """
     Patch the forward method of the model to dynamically define the input arguments
     since *args and **kwargs are not supported in `torch.onnx.export`
