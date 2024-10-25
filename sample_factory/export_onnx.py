@@ -9,7 +9,7 @@ from torch import Tensor
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
-from sample_factory.algo.utils.action_distributions import action_probs, argmax_actions
+from sample_factory.algo.utils.action_distributions import argmax_actions
 from sample_factory.algo.utils.env_info import EnvInfo, extract_env_info
 from sample_factory.algo.utils.make_env import BatchedVecEnv
 from sample_factory.algo.utils.misc import ExperimentStatus
@@ -50,9 +50,6 @@ class OnnxExporter(nn.Module):
         if self.cfg.eval_deterministic:
             action_distribution = self.actor_critic.action_distribution()
             actions = argmax_actions(action_distribution)
-            probs = action_probs(action_distribution)
-        else:
-            probs = torch.zeros(0)
 
         if actions.ndim == 1:
             actions = unsqueeze_tensor(actions, dim=-1)
@@ -60,9 +57,9 @@ class OnnxExporter(nn.Module):
         actions = preprocess_actions(self.env_info, actions, to_numpy=False)
 
         if self.cfg.use_rnn:
-            return actions, rnn_states, probs
+            return actions, rnn_states
         else:
-            return actions, probs
+            return actions
 
 
 def create_onnx_exporter(cfg: Config, env: BatchedVecEnv, enable_jit=False) -> OnnxExporter:

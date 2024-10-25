@@ -1,4 +1,3 @@
-import numpy as np
 import onnx
 import onnxruntime
 import torch
@@ -28,34 +27,26 @@ def check_rnn_inference_result(
 
     for _ in range(3):
         args = generate_args(env.observation_space)
-        actions, rnn_states, probs = model(**args, rnn_states=rnn_states)
+        torch_out, rnn_states = model(**args, rnn_states=rnn_states)
 
         ort_inputs = {k: to_numpy(v) for k, v in args.items()}
         ort_inputs["rnn_states"] = ort_rnn_states
         ort_out = ort_session.run(None, ort_inputs)
         ort_rnn_states = ort_out[1]
 
-        max_prob_diff = np.abs(to_numpy(probs) - ort_out[2]).max()
-        print(f"max_prob_diff={max_prob_diff:.10f}")
-        print(f"torch probs={to_numpy(probs)}")
-        print(f"ort probs={ort_out[2]}")
-        assert (to_numpy(actions) == ort_out[0]).all()
+        assert (to_numpy(torch_out[0]) == ort_out[0]).all()
 
 
 def check_inference_result(env: BatchedVecEnv, model: OnnxExporter, ort_session: onnxruntime.InferenceSession) -> None:
     for batch_size in [1, 3]:
         args = generate_args(env.observation_space, batch_size)
-        actions, probs = model(**args)
+        torch_out = model(**args)
 
         ort_inputs = {k: to_numpy(v) for k, v in args.items()}
         ort_out = ort_session.run(None, ort_inputs)
 
-        max_prob_diff = np.abs(to_numpy(probs) - ort_out[1]).max()
-        print(f"max_prob_diff={max_prob_diff:.10f}")
-        print(f"torch probs={to_numpy(probs)}")
-        print(f"ort probs={ort_out[1]}")
         assert len(ort_out[0]) == batch_size
-        assert (to_numpy(actions) == ort_out[0]).all()
+        assert (to_numpy(torch_out[0]) == ort_out[0]).all()
 
 
 def check_export_onnx(cfg: Config) -> None:
