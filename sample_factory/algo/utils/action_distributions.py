@@ -81,6 +81,18 @@ def argmax_actions(distribution):
         raise NotImplementedError(f"Action distribution type {type(distribution)} does not support argmax!")
 
 
+def action_probs(distribution):
+    if isinstance(distribution, TupleActionDistribution):
+        list_of_action_batches = [action_probs(d).squeeze(0) for d in distribution.distributions]
+        return torch.cat(list_of_action_batches)
+    elif hasattr(distribution, "probs"):
+        return distribution.probs
+    elif hasattr(distribution, "means"):
+        return distribution.means
+    else:
+        raise NotImplementedError(f"Action distribution type {type(distribution)} does not support argmax!")
+
+
 def masked_softmax(logits, mask):
     # Mask out the invalid logits by adding a large negative number (-1e9)
     logits = logits + (mask == 0) * -1e9
