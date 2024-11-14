@@ -744,6 +744,13 @@ def add_wandb_args(p: ArgumentParser):
         nargs="*",
         help="Tags can help with finding experiments in WandB web console",
     )
+    p.add_argument(
+        "--wandb_dir",
+        default="wandb",
+        type=str,
+        nargs="*",
+        help="Logging Directory for WandB",
+    )
 
 
 def add_pbt_args(p: ArgumentParser):
