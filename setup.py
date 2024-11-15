@@ -28,6 +28,7 @@ _nethack_deps = [
 ]
 _envpool_deps = ["envpool"]
 _pettingzoo_deps = ["pettingzoo[classic]"]
+_onnx_deps = ["onnx", "onnxruntime"]
 
 _docs_deps = [
     "mkdocs-material",
@@ -82,11 +83,13 @@ setup(
         + _docs_deps
         + _atari_deps
         + _mujoco_deps
+        + _onnx_deps
         + _pettingzoo_deps,
         "atari": _atari_deps,
         "envpool": _envpool_deps,
         "mujoco": _mujoco_deps,
         "nethack": _nethack_deps,
+        "onnx": _onnx_deps,
         "pettingzoo": _pettingzoo_deps,
         "vizdoom": ["vizdoom<2.0", "gymnasium[classic_control]"],
         # "dmlab": ["dm_env"],  <-- these are just auxiliary packages, the main package has to be built from sources

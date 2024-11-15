@@ -1,6 +1,6 @@
 import time
 from collections import deque
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -11,13 +11,13 @@ from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
 from sample_factory.algo.utils.action_distributions import argmax_actions
 from sample_factory.algo.utils.env_info import extract_env_info
-from sample_factory.algo.utils.make_env import make_env_func_batched
+from sample_factory.algo.utils.make_env import BatchedVecEnv, make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.rl_utils import make_dones, prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
-from sample_factory.model.actor_critic import create_actor_critic
+from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, StatusCode
@@ -82,6 +82,24 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start) -> flo
     return render_start
 
 
+def make_env(cfg: Config, render_mode: Optional[str] = None) -> BatchedVecEnv:
+    env = make_env_func_batched(
+        cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0), render_mode=render_mode
+    )
+    return env
+
+
+def load_state_dict(cfg: Config, actor_critic: ActorCritic, device: torch.device) -> None:
+    policy_id = cfg.policy_index
+    name_prefix = dict(latest="checkpoint", best="best")[cfg.load_checkpoint_kind]
+    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
+    checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
+    if checkpoint_dict:
+        actor_critic.load_state_dict(checkpoint_dict["model"])
+    else:
+        raise RuntimeError("Could not load checkpoint")
+
+
 def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     verbose = False
 
@@ -103,9 +121,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     elif cfg.no_render:
         render_mode = None
 
-    env = make_env_func_batched(
-        cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0), render_mode=render_mode
-    )
+    env = make_env(cfg, render_mode=render_mode)
     env_info = extract_env_info(env, cfg)
 
     if hasattr(env.unwrapped, "reset_on_init"):
@@ -118,11 +134,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     device = torch.device("cpu" if cfg.device == "cpu" else "cuda")
     actor_critic.model_to_device(device)
 
-    policy_id = cfg.policy_index
-    name_prefix = dict(latest="checkpoint", best="best")[cfg.load_checkpoint_kind]
-    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
-    checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
-    actor_critic.load_state_dict(checkpoint_dict["model"])
+    load_state_dict(cfg, actor_critic, device)
 
     episode_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
     true_objectives = [deque([], maxlen=100) for _ in range(env.num_agents)]

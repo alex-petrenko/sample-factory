@@ -121,6 +121,35 @@ if __name__ == "__main__":
 You can now run evaluation with `python enjoy_custom_env.py --env=custom_env_name --experiment=CustomEnv` to
 measure the performance of the trained model, visualize agent's performance, or record a video file.
 
+## ONNX export script template
+
+The exporting script is similar to the evaluation script, with a few key differences.
+It uses the `export_onnx` function to convert your model to ONNX format.
+
+```python3
+import sys
+
+from sample_factory.export_onnx import export_onnx
+from train_custom_env import parse_args, register_custom_env_envs
+
+
+def main():
+    """Script entry point."""
+    register_custom_env_envs()
+    cfg = parse_args(evaluation=True)
+
+    # The export_onnx function takes the configuration and the output file path
+    status = export_onnx(cfg, "my_model.onnx")
+
+    return status
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+For information on how to use the exported ONNX models, please refer to the [Exporting a Model to ONNX](../07-advanced-topics/exporting-to-onnx.md) section.
+
 ## Examples
 
 * `sf_examples/train_custom_env_custom_model.py` - integrates an entirely custom toy environment.

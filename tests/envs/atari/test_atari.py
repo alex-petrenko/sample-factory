@@ -8,6 +8,7 @@ from sample_factory.train import run_rl
 from sample_factory.utils.utils import log
 from sf_examples.atari.train_atari import parse_atari_args
 from tests.envs.utils import eval_env_performance
+from tests.export_onnx_utils import check_export_onnx
 from tests.utils import clean_test_dir
 
 
@@ -45,23 +46,34 @@ class TestAtariEnv:
 
         experiment_name = "test_" + env
 
-        cfg = parse_atari_args(argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"])
-        cfg.serial_mode = serial_mode
-        cfg.async_rl = async_rl
-        cfg.batched_sampling = batched_sampling
-        cfg.num_workers = num_workers
-        cfg.num_envs_per_worker = 1
-        cfg.train_for_env_steps = train_steps
-        cfg.batch_size = batch_size
-        cfg.decorrelate_envs_on_one_worker = False
-        cfg.seed = 0
-        cfg.device = "cpu"
+        def parse_args(evaluation: bool = False):
+            cfg = parse_atari_args(
+                argv=["--algo=APPO", f"--env={env}", f"--experiment={experiment_name}"], evaluation=evaluation
+            )
+            cfg.serial_mode = serial_mode
+            cfg.async_rl = async_rl
+            cfg.batched_sampling = batched_sampling
+            cfg.num_workers = num_workers
+            cfg.num_envs_per_worker = 1
+            cfg.train_for_env_steps = train_steps
+            cfg.batch_size = batch_size
+            cfg.decorrelate_envs_on_one_worker = False
+            cfg.seed = 0
+            cfg.device = "cpu"
+            cfg.eval_deterministic = True
+            return cfg
 
+        cfg = parse_args(env)
         directory = clean_test_dir(cfg)
         status = run_rl(cfg)
         assert status == ExperimentStatus.SUCCESS
         assert isdir(directory)
-        shutil.rmtree(directory, ignore_errors=True)
+
+        try:
+            cfg = parse_args(evaluation=True)
+            check_export_onnx(cfg)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
 
     @pytest.mark.parametrize(
         "env_name",

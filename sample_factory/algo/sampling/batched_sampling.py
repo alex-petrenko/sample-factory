@@ -27,7 +27,9 @@ from sample_factory.utils.typing import PolicyID
 from sample_factory.utils.utils import log
 
 
-def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tensor | np.ndarray | List:
+def preprocess_actions(
+    env_info: EnvInfo, actions: Tensor | np.ndarray, to_numpy: bool = True
+) -> Tensor | np.ndarray | List:
     """
     We expect actions to have shape [num_envs, num_actions].
     For environments that require only one action per step we just squeeze the second dimension,
@@ -38,15 +40,17 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     """
 
     if env_info.all_discrete or isinstance(env_info.action_space, gym.spaces.Discrete):
-        return process_action_space(actions, env_info.gpu_actions, is_discrete=True)
+        return process_action_space(actions, env_info.gpu_actions, is_discrete=True, to_numpy=to_numpy)
     elif isinstance(env_info.action_space, gym.spaces.Box):
-        return process_action_space(actions, env_info.gpu_actions, is_discrete=False)
+        return process_action_space(actions, env_info.gpu_actions, is_discrete=False, to_numpy=to_numpy)
     elif isinstance(env_info.action_space, gym.spaces.Tuple):
         # input is (num_envs, num_actions)
         out_actions = []
         for split, space in zip(torch.split(actions, env_info.action_splits, 1), env_info.action_space):
             out_actions.append(
-                process_action_space(split, env_info.gpu_actions, isinstance(space, gym.spaces.Discrete))
+                process_action_space(
+                    split, env_info.gpu_actions, isinstance(space, gym.spaces.Discrete), to_numpy=to_numpy
+                )
             )
         # this line can be used to transpose the actions, perhaps add as an option ?
         # out_actions = list(zip(*out_actions)) # transpose
@@ -55,11 +59,15 @@ def preprocess_actions(env_info: EnvInfo, actions: Tensor | np.ndarray) -> Tenso
     raise NotImplementedError(f"Unknown action space type: {env_info.action_space}")
 
 
-def process_action_space(actions: torch.Tensor, gpu_actions: bool, is_discrete: bool):
+def process_action_space(
+    actions: torch.Tensor, gpu_actions: bool, is_discrete: bool, to_numpy: bool = True
+) -> torch.Tensor | np.ndarray:
     if is_discrete:
         actions = actions.to(torch.int32)
     if not gpu_actions:
-        actions = actions.cpu().numpy()
+        actions = actions.cpu()
+        if to_numpy:
+            actions = actions.numpy()
 
     # action tensor/array should have two dimensions (num_agents, num_actions) where num_agents is a number of
     # individual actors in a vectorized environment (whether actually different agents or separate envs - does not

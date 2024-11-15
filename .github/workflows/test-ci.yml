@@ -31,7 +31,7 @@ jobs:
     - name: Install conda env & dependencies
       run: |
        conda install python=${{ matrix.python-version }}
-       pip install -e '.[atari, mujoco, envpool, pettingzoo]'
+       pip install -e '.[atari, mujoco, envpool, pettingzoo, onnx]'
        conda list
     - name: Install test dependencies
       run: |
@@ -75,7 +75,7 @@ jobs:
     - name: Install conda env & dependencies
       run: |
        conda install python=${{ matrix.python-version }}
-       pip install -e '.[atari, mujoco, pettingzoo]'
+       pip install -e '.[atari, mujoco, pettingzoo, onnx]'
        conda list
     - name: Install test dependencies
       run: |
