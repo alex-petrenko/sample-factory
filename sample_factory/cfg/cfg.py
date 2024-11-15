@@ -746,9 +746,8 @@ def add_wandb_args(p: ArgumentParser):
     )
     p.add_argument(
         "--wandb_dir",
-        default="wandb",
+        default=join(os.getcwd(), "wandb"),
         type=str,
-        nargs="*",
         help="Logging Directory for WandB",
     )
 

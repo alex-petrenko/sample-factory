@@ -402,6 +402,10 @@ def experiments_dir(cfg, mkdir=True) -> str:
     return maybe_ensure_dir_exists(cfg.train_dir, mkdir)
 
 
+def wandb_dir(cfg, mkdir=True) -> str:
+    return maybe_ensure_dir_exists(cfg.wandb_dir, mkdir)
+
+
 def experiment_dir(cfg, mkdir=True) -> str:
     experiment = cfg.experiment
     experiments_root = experiments_dir(cfg, mkdir)

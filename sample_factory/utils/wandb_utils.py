@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sample_factory.utils.utils import log, retry
+from sample_factory.utils.utils import log, retry, wandb_dir
 
 
 def init_wandb(cfg):
@@ -44,7 +44,7 @@ def init_wandb(cfg):
             tags=cfg.wandb_tags,
             resume="allow",
             settings=wandb.Settings(start_method="fork"),
-            dir=cfg.wandb_dir,
+            dir=wandb_dir(cfg, True),
         )
 
     log.debug("Initializing WandB...")
