@@ -843,6 +843,7 @@ class Learner(Configurable):
         self.last_summary_time = time.time()
         stats = AttrDict()
 
+        stats.env_steps = self.env_steps
         stats.lr = self.curr_lr
         stats.actual_lr = train_loop_vars.actual_lr  # potentially scaled because of masked data
 
