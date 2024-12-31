@@ -1,3 +1,5 @@
+import platform
+import sys
 from typing import Optional
 
 import gymnasium as gym
@@ -6,6 +8,10 @@ from sample_factory.utils.utils import is_module_available
 
 
 def mujoco_available():
+    # Disable on macOS Apple Silicon for now. TODO: fix the following:
+    # gymnasium.error.DependencyNotInstalled: You are running an x86_64 build of Python on an Apple Silicon machine. This is not supported by MuJoCo. Please install and run a native, arm64 build of Python.. (HINT: you need to install mujoco, run `pip install gymnasium[mujoco]`.)
+    if sys.platform == "darwin" and platform.machine() == "arm64":
+        return False
     return is_module_available("mujoco")
 
 

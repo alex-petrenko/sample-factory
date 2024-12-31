@@ -13,7 +13,7 @@ from sf_examples.mujoco.train_mujoco import parse_mujoco_cfg, register_mujoco_co
 from tests.utils import clean_test_dir
 
 
-@pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed")
+@pytest.mark.skipif(not mujoco_available(), reason="mujoco not installed or not available on this machine")
 class TestMujoco:
     @pytest.fixture(scope="class", autouse=True)
     def register_mujoco_fixture(self):
