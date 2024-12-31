@@ -2,7 +2,7 @@
 
 ### Installation
 
-Install IsaacGym from NVIDIA at https://developer.nvidia.com/isaac-gym. Installation instructions can be found in the package's docs folder. Python 3.8 is compatable with both IsaacGym and Sample-Factory
+Install IsaacGym from NVIDIA at https://developer.nvidia.com/isaac-gym. Installation instructions can be found in the package's docs folder. Python 3.8 is compatible with both IsaacGym and Sample-Factory
 
 Install IsaacGymEnvs from https://github.com/NVIDIA-Omniverse/IsaacGymEnvs. 
 
