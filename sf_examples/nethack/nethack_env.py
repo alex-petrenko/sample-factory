@@ -1,5 +1,6 @@
 from typing import Optional
 
+from nle import nethack
 from nle.env.tasks import (
     NetHackChallenge,
     NetHackEat,
@@ -11,11 +12,11 @@ from nle.env.tasks import (
     NetHackStaircasePet,
 )
 
-from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
     GymV21CompatibilityV0,
     NLETimeLimit,
+    NoProgressTimeout,
     PrevActionsWrapper,
     TaskRewardsInfoWrapper,
 )
@@ -68,9 +69,10 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
         penalty_mode=cfg.fn_penalty_step,
         savedir=cfg.savedir,
         save_ttyrec_every=cfg.save_ttyrec_every,
+        allow_all_yn_questions=True,
+        allow_all_modes=True,
+        actions=nethack.ACTIONS,
     )
-    if env_name == "challenge":
-        kwargs["no_progress_timeout"] = 150
 
     if env_name in ("staircase", "pet", "oracle"):
         kwargs.update(reward_win=cfg.reward_win, reward_lose=cfg.reward_lose)
@@ -78,6 +80,7 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     # warnings.warn("Ignoring cfg.reward_win and cfg.reward_lose")
 
     env = env_class(**kwargs)
+    env = NoProgressTimeout(env, no_progress_timeout=150)
 
     if cfg.use_prev_action:
         env = PrevActionsWrapper(env)
@@ -89,16 +92,7 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     # add TimeLimit.truncated to info
     env = NLETimeLimit(env)
 
-    # convert gym env to gymnasium one, due to issues with render NLE in reset
-    gymnasium_env = GymV21CompatibilityV0(env=env, render_mode=render_mode)
-
-    # preserving potential multi-agent env attributes
-    if hasattr(env, "num_agents"):
-        gymnasium_env.num_agents = env.num_agents
-    if hasattr(env, "is_multiagent"):
-        gymnasium_env.is_multiagent = env.is_multiagent
-    env = gymnasium_env
-
-    env = patch_non_gymnasium_env(env)
+    # convert gym env to gymnasium one
+    env = GymV21CompatibilityV0(env=env, render_mode=render_mode)
 
     return env
