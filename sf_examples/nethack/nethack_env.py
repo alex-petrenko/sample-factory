@@ -11,6 +11,7 @@ from nle.env.tasks import (
     NetHackStaircase,
     NetHackStaircasePet,
 )
+from nle_progress.task import NetHackProgress
 
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
@@ -22,6 +23,7 @@ from sf_examples.nethack.utils.wrappers import (
 )
 
 NETHACK_ENVS = dict(
+    nethack_progress=NetHackProgress,
     nethack_staircase=NetHackStaircase,
     nethack_score=NetHackScore,
     nethack_pet=NetHackStaircasePet,
