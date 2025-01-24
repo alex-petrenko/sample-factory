@@ -48,17 +48,21 @@ def add_extra_params_nethack_env(parser):
     )
 
 
-def add_extra_params_simba_model(parser):
+def add_extra_params_vit_model(parser):
     p = parser
-    p.add_argument("--actor_char_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
-    p.add_argument("--actor_color_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--actor_char_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--actor_color_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
     p.add_argument("--actor_hidden_dim", type=int, default=128)
-    p.add_argument("--actor_num_blocks", type=int, default=1)
+    p.add_argument("--actor_depth", type=int, default=1)
+    p.add_argument("--actor_heads", type=int, default=4)
+    p.add_argument("--actor_mlp_dim", type=int, default=128)
 
-    p.add_argument("--critic_char_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
-    p.add_argument("--critic_color_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--critic_char_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--critic_color_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
     p.add_argument("--critic_hidden_dim", type=int, default=512)
-    p.add_argument("--critic_num_blocks", type=int, default=2)
+    p.add_argument("--critic_depth", type=int, default=2)
+    p.add_argument("--critic_heads", type=int, default=4)
+    p.add_argument("--critic_mlp_dim", type=int, default=512)
 
 
 def add_extra_params_model(parser):
