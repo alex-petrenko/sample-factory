@@ -134,6 +134,18 @@ def add_rl_args(p: ArgumentParser):
         "Example: if batch_size=128 and num_batches_per_epoch=2, then learner will process 2*128=256 environment transitions in one training iteration.",
     )
     p.add_argument(
+        "--gradient_accumulation_steps",
+        default=1,
+        type=int,
+        help="Perform optimizer step only after accumulating gradients for the specified number of steps",
+    )
+    p.add_argument(
+        "--target_batch_size",
+        default=1,
+        type=int,
+        help="Placeholder for number of batches",
+    )
+    p.add_argument(
         "--num_epochs",
         default=1,
         type=int,
@@ -169,6 +181,7 @@ def add_rl_args(p: ArgumentParser):
         type=str2bool,
         help="Whether to randomize and shuffle minibatches between iterations (this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)",
     )
+    p.add_argument("--exp_tag", default="", type=str, help="Discount factor")
 
     # basic RL parameters
     p.add_argument("--gamma", default=0.99, type=float, help="Discount factor")
