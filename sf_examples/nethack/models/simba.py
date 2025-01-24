@@ -7,12 +7,12 @@ from sample_factory.utils.typing import Config, ObsSpace
 
 
 class ResBlock(nn.Module):
-    def __init__(self, hidden_dim, kernel_size=3, padding=1):
+    def __init__(self, hidden_dim, kernel_size=3, padding=1, stride=1):
         super().__init__()
         self.norm1 = nn.BatchNorm2d(hidden_dim)
-        self.linear1 = nn.Conv2d(hidden_dim, hidden_dim, kernel_size=kernel_size, padding=padding)
+        self.linear1 = nn.Conv2d(hidden_dim, hidden_dim, kernel_size=kernel_size, padding=padding, stride=stride)
         self.relu = nn.ReLU()
-        self.linear2 = nn.Conv2d(hidden_dim, hidden_dim, kernel_size=kernel_size, padding=padding)
+        self.linear2 = nn.Conv2d(hidden_dim, hidden_dim, kernel_size=kernel_size, padding=padding, stride=stride)
 
     def forward(self, x):
         residual = x
@@ -31,11 +31,12 @@ class ResNet(nn.Module):
         num_blocks,
         kernel_size: int = 3,
         padding: int = 1,
+        stride: int = 1,
     ):
         super().__init__()
-        self.input_layer = nn.Conv2d(input_dim, hidden_dim, kernel_size=kernel_size, padding=padding)
+        self.input_layer = nn.Conv2d(input_dim, hidden_dim, kernel_size=kernel_size, padding=padding, stride=stride)
         self.res_blocks = nn.ModuleList(
-            [ResBlock(hidden_dim, kernel_size=kernel_size, padding=padding) for _ in range(num_blocks)]
+            [ResBlock(hidden_dim, kernel_size=kernel_size, padding=padding, stride=stride) for _ in range(num_blocks)]
         )
         self.final_norm = nn.BatchNorm2d(hidden_dim)
 
@@ -76,12 +77,18 @@ class SimbaEncoder(nn.Module):
         screen_shape = obs_space["tty_chars"].shape
         self.out_size = calc_num_elements(self.resnet, (char_edim + color_edim,) + screen_shape)
 
+        self.fc_head = nn.Sequential(
+            nn.Linear(self.out_size, hidden_dim), nn.ReLU(inplace=True), nn.LayerNorm(hidden_dim)
+        )
+
     def forward(self, obs):
         chars = obs["tty_chars"]
         colors = obs["tty_colors"]
         chars, colors = self._embed(chars, colors)
         x = self._stack(chars, colors)
         x = self.resnet(x)
+        x = x.view(-1, self.out_size)
+        x = self.fc_head(x)
         return x
 
     def _embed(self, chars, colors):
@@ -120,7 +127,7 @@ class SimbaActorEncoder(Encoder):
         return self.model(x)
 
     def get_out_size(self):
-        return self.model.out_size
+        return self.cfg.actor_hidden_dim
 
 
 class SimbaCriticEncoder(Encoder):
@@ -139,7 +146,7 @@ class SimbaCriticEncoder(Encoder):
         return self.model(x)
 
     def get_out_size(self):
-        return self.model.out_size
+        return self.cfg.critic_hidden_dim
 
 
 if __name__ == "__main__":
