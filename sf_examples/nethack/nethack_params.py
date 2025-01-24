@@ -40,6 +40,25 @@ def add_extra_params_nethack_env(parser):
         default=0,
         help="Integer, if 0, no ttyrecs (game recordings) will be saved. Otherwise, save a ttyrec every Nth episode.",
     )
+    p.add_argument(
+        "--use_prev_action",
+        type=str2bool,
+        default=True,
+        help="If True, the model will use previous action. Defaults to `True`",
+    )
+
+
+def add_extra_params_simba_model(parser):
+    p = parser
+    p.add_argument("--actor_char_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
+    p.add_argument("--actor_color_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--actor_hidden_dim", type=int, default=128)
+    p.add_argument("--actor_num_blocks", type=int, default=1)
+
+    p.add_argument("--critic_char_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
+    p.add_argument("--critic_color_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--critic_hidden_dim", type=int, default=512)
+    p.add_argument("--critic_num_blocks", type=int, default=2)
 
 
 def add_extra_params_model(parser):
@@ -47,12 +66,6 @@ def add_extra_params_model(parser):
     Specify any additional command line arguments for NetHack models.
     """
     p = parser
-    p.add_argument(
-        "--use_prev_action",
-        type=str2bool,
-        default=True,
-        help="If True, the model will use previous action. Defaults to `True`",
-    )
     p.add_argument(
         "--use_tty_only",
         type=str2bool,
