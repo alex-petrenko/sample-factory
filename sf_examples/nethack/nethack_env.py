@@ -17,8 +17,6 @@ from sf_examples.nethack.utils.wrappers import (
     GymV21CompatibilityV0,
     NLETimeLimit,
     PrevActionsWrapper,
-    RenderCharImagesWithNumpyWrapperV2,
-    SeedActionSpaceWrapper,
     TaskRewardsInfoWrapper,
 )
 
@@ -42,8 +40,6 @@ def nethack_env_by_name(name):
 
 
 def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
-    assert render_mode in (None, "human", "full", "ansi", "string", "rgb_array")
-
     env_class = nethack_env_by_name(env_name)
 
     observation_keys = (
@@ -83,13 +79,6 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
 
     env = env_class(**kwargs)
 
-    if cfg.add_image_observation:
-        env = RenderCharImagesWithNumpyWrapperV2(
-            env,
-            crop_size=cfg.crop_dim,
-            rescale_font_size=(cfg.pixel_size, cfg.pixel_size),
-        )
-
     if cfg.use_prev_action:
         env = PrevActionsWrapper(env)
 
@@ -101,7 +90,7 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     env = NLETimeLimit(env)
 
     # convert gym env to gymnasium one, due to issues with render NLE in reset
-    gymnasium_env = GymV21CompatibilityV0(env=env)
+    gymnasium_env = GymV21CompatibilityV0(env=env, render_mode=render_mode)
 
     # preserving potential multi-agent env attributes
     if hasattr(env, "num_agents"):
@@ -111,12 +100,5 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     env = gymnasium_env
 
     env = patch_non_gymnasium_env(env)
-
-    if render_mode:
-        env.render_mode = render_mode
-
-    if cfg.serial_mode and cfg.num_workers == 1:
-        # full reproducability can only be achieved in serial mode and when there is only 1 worker
-        env = SeedActionSpaceWrapper(env)
 
     return env

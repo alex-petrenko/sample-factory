@@ -185,18 +185,25 @@ class InverseModel(nn.Module):
         return torch.cat([pred_a, off_by_one], dim=0)
 
 
-class ScreenEncoder(nn.Module):
-    def __init__(self, screen_shape):
-        super(ScreenEncoder, self).__init__()
+class CharColorEncoder(nn.Module):
+    def __init__(
+        self,
+        screen_shape,
+        char_edim: int = 16,
+        color_edim: int = 16,
+    ):
+        super().__init__()
         conv_layers = []
 
         self.h, self.w = screen_shape
+        self.char_edim = char_edim
+        self.color_edim = color_edim
         self.hidden_dim = 512
 
         self.conv_filters = [
-            [3, 32, 8, 6, 1],
-            [32, 64, 4, 2, 1],
-            [64, 128, 3, 2, 1],
+            [char_edim + color_edim, 32, (3, 5), (1, 2), (1, 2)],
+            [32, 64, (3, 5), (1, 2), (1, 2)],
+            [64, 128, 3, 1, 1],
             [128, 128, 3, 1, 1],
         ]
 
@@ -218,19 +225,30 @@ class ScreenEncoder(nn.Module):
             )
             conv_layers.append(nn.ELU(inplace=True))
 
-            self.h = conv_outdim(self.h, filter_size, padding=0, stride=stride, dilation=dilation)
-            self.w = conv_outdim(self.w, filter_size, padding=0, stride=stride, dilation=dilation)
-
         self.conv_head = nn.Sequential(*conv_layers)
-        self.out_size = self.h * self.w * out_channels
+        self.out_size = calc_num_elements(self.conv_head, (char_edim + color_edim,) + screen_shape)
 
         self.fc_head = nn.Sequential(nn.Linear(self.out_size, self.hidden_dim), nn.ELU(inplace=True))
 
-    def forward(self, screen_image):
-        x = self.conv_head(screen_image / 255.0)
+        self.char_embeddings = nn.Embedding(256, self.char_edim)
+        self.color_embeddings = nn.Embedding(128, self.color_edim)
+
+    def forward(self, chars, colors):
+        chars, colors = self._embed(chars, colors)  # 21 x 80
+        x = self._stack(chars, colors)
+        x = self.conv_head(x)
         x = x.view(-1, self.out_size)
         x = self.fc_head(x)
         return x
+
+    def _embed(self, chars, colors):
+        chars = selectt(self.char_embeddings, chars.long(), True)
+        colors = selectt(self.color_embeddings, colors.long(), True)
+        return chars, colors
+
+    def _stack(self, chars, colors):
+        obs = torch.cat([chars, colors], dim=-1)
+        return obs.permute(0, 1, 4, 2, 3).flatten(1, 2).contiguous()
 
 
 class ChaoticDwarvenGPT5(Encoder):
@@ -242,26 +260,16 @@ class ChaoticDwarvenGPT5(Encoder):
         self.use_tty_only = cfg.use_tty_only
         self.use_prev_action = cfg.use_prev_action
 
-        # screen encoder (TODO: could also use only tty_chars)
-        pixel_size = cfg.pixel_size
-        if cfg.crop_dim == 0:
-            screen_shape = (24 * pixel_size, 80 * pixel_size)
-        else:
-            screen_shape = (cfg.crop_dim * pixel_size, cfg.crop_dim * pixel_size)
-        self.screen_encoder = torch.jit.script(ScreenEncoder(screen_shape))
-        screen_shape = obs_space["screen_image"].shape
+        screen_shape = obs_space["tty_chars"].shape
+        self.screen_encoder = CharColorEncoder(
+            (screen_shape[0] - 3, screen_shape[1]),
+            char_edim=cfg.char_edim,
+            color_edim=cfg.color_edim,
+        )
 
         # top and bottom encoders
-        if self.use_tty_only:
-            self.topline_encoder = TopLineEncoder()
-            self.bottomline_encoder = torch.jit.script(BottomLinesEncoder())
-            topline_shape = (obs_space["tty_chars"].shape[1],)
-            bottomline_shape = (2 * obs_space["tty_chars"].shape[1],)
-        else:
-            self.topline_encoder = torch.jit.script(MessageEncoder())
-            self.bottomline_encoder = torch.jit.script(BLStatsEncoder())
-            topline_shape = obs_space["message"].shape
-            bottomline_shape = obs_space["blstats"].shape
+        self.topline_encoder = TopLineEncoder()
+        self.bottomline_encoder = torch.jit.script(BottomLinesEncoder())
 
         if self.use_prev_action:
             self.num_actions = obs_space["prev_actions"].n
@@ -272,28 +280,42 @@ class ChaoticDwarvenGPT5(Encoder):
 
         self.encoder_out_size = sum(
             [
-                calc_num_elements(self.screen_encoder, screen_shape),
-                calc_num_elements(self.topline_encoder, topline_shape),
-                calc_num_elements(self.bottomline_encoder, bottomline_shape),
+                self.topline_encoder.hidden_dim,
+                self.bottomline_encoder.hidden_dim,
+                self.screen_encoder.hidden_dim,
                 self.prev_actions_dim,
             ]
         )
 
-    def forward(self, obs_dict):
-        B, C, H, W = obs_dict["screen_image"].shape
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
 
-        if self.use_tty_only:
-            topline = obs_dict["tty_chars"][..., 0, :]
-            bottom_line = obs_dict["tty_chars"][..., -2:, :]
-        else:
-            topline = obs_dict["message"]
-            bottom_line = obs_dict["blstats"]
+    def forward(self, obs_dict):
+        B, H, W = obs_dict["tty_chars"].shape
+        # to process images with CNNs we need channels dim
+        C = 1
+
+        # Take last channel for now
+        topline = obs_dict["tty_chars"][:, 0].contiguous()
+        bottom_line = obs_dict["tty_chars"][:, -2:].contiguous()
+
+        # Blstats
+        blstats_rep = self.bottomline_encoder(bottom_line.float(memory_format=torch.contiguous_format).view(B, -1))
 
         encodings = [
             self.topline_encoder(topline.float(memory_format=torch.contiguous_format).view(B, -1)),
-            self.bottomline_encoder(bottom_line.float(memory_format=torch.contiguous_format).view(B, -1)),
-            self.screen_encoder(obs_dict["screen_image"].float(memory_format=torch.contiguous_format).view(B, C, H, W)),
+            blstats_rep,
         ]
+
+        # Main obs encoding
+        tty_chars = (
+            obs_dict["tty_chars"][:, 1:-2]
+            .contiguous()
+            .float(memory_format=torch.contiguous_format)
+            .view(B, C, H - 3, W)
+        )
+        tty_colors = obs_dict["tty_colors"][:, 1:-2].contiguous().view(B, C, H - 3, W)
+        encodings.append(self.screen_encoder(tty_chars, tty_colors))
 
         if self.use_prev_action:
             prev_actions = obs_dict["prev_actions"].long().view(B)
@@ -301,5 +323,24 @@ class ChaoticDwarvenGPT5(Encoder):
 
         return torch.cat(encodings, dim=1)
 
-    def get_out_size(self) -> int:
-        return self.encoder_out_size
+
+def selectt(embedding_layer, x, use_index_select):
+    """Use index select instead of default forward to possible speed up embedding."""
+    if use_index_select:
+        # Access weight through the embedding layer
+        return nn.functional.embedding(x, embedding_layer.weight)
+    else:
+        # Use standard embedding forward
+        return embedding_layer(x)
+
+
+if __name__ == "__main__":
+    # Test the screen encoder
+    encoder = CharColorEncoder(
+        (21 - 3, 80),
+        char_edim=16,
+        color_edim=16,
+    )
+    tty_chars = torch.zeros(160, 1, 21, 80)
+    tty_colors = torch.zeros(160, 1, 21, 80)
+    print(encoder(tty_chars, tty_colors).shape)
