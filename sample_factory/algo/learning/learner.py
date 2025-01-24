@@ -225,7 +225,7 @@ class Learner(Configurable):
 
         params = list(self.actor_critic.parameters())
 
-        optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+        optimizer_cls = dict(adam=torch.optim.AdamW, lamb=Lamb)
         if self.cfg.optimizer not in optimizer_cls:
             raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
 
@@ -235,6 +235,7 @@ class Learner(Configurable):
         optimizer_kwargs = dict(
             lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+            weight_decay=self.cfg.weight_decay,
         )
 
         if self.cfg.optimizer in ["adam", "lamb"]:

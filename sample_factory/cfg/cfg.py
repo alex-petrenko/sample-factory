@@ -286,6 +286,7 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument("--adam_beta1", default=0.9, type=float, help="Adam momentum decay coefficient")
     p.add_argument("--adam_beta2", default=0.999, type=float, help="Adam second momentum decay coefficient")
+    p.add_argument("--weight_decay", default=0.01, type=float, help="Weight decay")
     p.add_argument(
         "--max_grad_norm",
         default=4.0,

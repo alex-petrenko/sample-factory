@@ -169,7 +169,8 @@ def nethack_override_defaults(_env, parser):
         experiment_summaries_interval=50,
         adam_beta1=0.9,
         adam_beta2=0.999,
-        adam_eps=1e-7,
+        adam_eps=1e-8,
+        weight_decay=1e-2,
         seed=22,
         save_every_sec=120,
     )
