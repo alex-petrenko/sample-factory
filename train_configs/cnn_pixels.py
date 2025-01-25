@@ -6,7 +6,8 @@ name = globals()["script"][:-3]
 
 num_minibatches = 1
 num_epochs = 1
-num_envs = 128
+num_envs = 1024
+batch_size = 4096
 num_steps = 32
 num_workers = 32
 
@@ -20,7 +21,7 @@ config = {
     "num_envs_per_worker": num_envs // num_workers,
     "worker_num_splits": 2,
     "rollout": num_steps,
-    "batch_size": num_envs * num_steps // num_minibatches,
+    "batch_size": batch_size,
     "num_batches_per_epoch": num_minibatches,
     "num_epochs": num_epochs,
     "penalty_step": 0.0,
