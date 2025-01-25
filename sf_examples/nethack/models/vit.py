@@ -5,6 +5,7 @@ from torch import nn
 
 from sample_factory.model.encoder import Encoder
 from sample_factory.utils.typing import Config, ObsSpace
+from sf_examples.nethack.models.scaled import BottomLinesEncoder, TopLineEncoder
 
 # helpers
 
@@ -88,8 +89,26 @@ class Transformer(nn.Module):
 
 
 class SimpleViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, dim, depth, heads, mlp_dim, channels=3, dim_head=64):
+    def __init__(
+        self,
+        *,
+        char_edim,
+        color_edim,
+        image_size,
+        patch_size,
+        dim,
+        depth,
+        heads,
+        mlp_dim,
+        channels=3,
+        dim_head=64,
+    ):
         super().__init__()
+
+        self.dim = dim
+        self.char_embeddings = nn.Embedding(256, char_edim)
+        self.color_embeddings = nn.Embedding(128, color_edim)
+
         image_height, image_width = pair(image_size)
         patch_height, patch_width = pair(patch_size)
 
@@ -120,11 +139,15 @@ class SimpleViT(nn.Module):
         # we want the embeddings, not classification
         # self.linear_head = nn.Linear(dim, num_classes)
 
-    def forward(self, img):
-        device = img.device
+    def get_out_size(self):
+        return self.dim
 
-        x = self.to_patch_embedding(img)
-        x += self.pos_embedding.to(device, dtype=x.dtype)
+    def forward(self, chars, colors):
+        chars, colors = self._embed(chars, colors)
+        x = self._stack(chars, colors)
+
+        x = self.to_patch_embedding(x)
+        x += self.pos_embedding.to(x.device, dtype=x.dtype)
 
         x = self.transformer(x)
 
@@ -133,6 +156,15 @@ class SimpleViT(nn.Module):
         x = self.to_latent(x)
         # return self.linear_head(x)
         return x
+
+    def _embed(self, chars, colors):
+        chars = selectt(self.char_embeddings, chars.long(), True)
+        colors = selectt(self.color_embeddings, colors.long(), True)
+        return chars, colors
+
+    def _stack(self, chars, colors):
+        obs = torch.cat([chars, colors], dim=-1)
+        return obs.permute(0, 1, 4, 2, 3).flatten(1, 2).contiguous()
 
 
 class ViTEncoder(nn.Module):
@@ -149,11 +181,10 @@ class ViTEncoder(nn.Module):
     ):
         super().__init__()
 
-        self.char_embeddings = nn.Embedding(256, char_edim)
-        self.color_embeddings = nn.Embedding(128, color_edim)
-
         screen_shape = obs_space["tty_chars"].shape
-        self.vit = SimpleViT(
+        self.screen_encoder = SimpleViT(
+            char_edim=char_edim,
+            color_edim=color_edim,
             image_size=screen_shape,
             patch_size=(3, 10),  # GCD(24, 80) = 8; 24 // 8 = 3, 80 // 8 = 10
             dim=hidden_dim,
@@ -162,23 +193,45 @@ class ViTEncoder(nn.Module):
             mlp_dim=mlp_dim,
             channels=char_edim + color_edim,
         )
+        self.topline_encoder = TopLineEncoder(msg_hdim=hidden_dim)
+        self.bottomline_encoder = BottomLinesEncoder(h_dim=hidden_dim)
 
-    def forward(self, obs):
-        chars = obs["tty_chars"]
-        colors = obs["tty_colors"]
-        chars, colors = self._embed(chars, colors)
-        x = self._stack(chars, colors)
-        x = self.vit(x)
-        return x
+        self.out_dim = sum(
+            [
+                self.topline_encoder.msg_hdim,
+                self.bottomline_encoder.h_dim,
+                self.screen_encoder.dim,
+            ]
+        )
 
-    def _embed(self, chars, colors):
-        chars = selectt(self.char_embeddings, chars.long(), True)
-        colors = selectt(self.color_embeddings, colors.long(), True)
-        return chars, colors
+        self.fc = nn.Sequential(
+            nn.Linear(self.out_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+        )
 
-    def _stack(self, chars, colors):
-        obs = torch.cat([chars, colors], dim=-1)
-        return obs.permute(0, 3, 1, 2).contiguous()
+    def forward(self, obs_dict):
+        B, H, W = obs_dict["tty_chars"].shape
+        # to process images with CNNs we need channels dim
+        C = 1
+
+        topline = obs_dict["tty_chars"][:, 0].contiguous()
+        bottom_line = obs_dict["tty_chars"][:, -2:].contiguous()
+        encodings = [
+            self.topline_encoder(topline.float(memory_format=torch.contiguous_format).view(B, -1)),
+            self.bottomline_encoder(bottom_line.float(memory_format=torch.contiguous_format).view(B, -1)),
+        ]
+
+        # Main obs encoding
+        # put whole screen, because we need GCD(24,80)=8
+        tty_chars = obs_dict["tty_chars"].contiguous().view(B, C, H, W)
+        tty_colors = obs_dict["tty_colors"].contiguous().view(B, C, H, W)
+        encodings.append(self.screen_encoder(tty_chars, tty_colors))
+
+        encodings = self.fc(torch.cat(encodings, dim=1))
+
+        return encodings
 
 
 def selectt(embedding_layer, x, use_index_select):
