@@ -7,11 +7,16 @@ To install NetHack, you need nle and its dependencies.
 
 ```bash
 # nle dependencies
+apt-get install build-essential python3-dev python3-pip python3-numpy autoconf libtool pkg-config libbz2-dev
+conda install cmake flex bison lit
+
 MINOR=$(python3 -c 'import sys; print(f"cp{sys.version_info.major}{sys.version_info.minor}")')
 pip install "https://github.com/BartekCupial/nle/releases/download/fair/nle-0.9.0-${MINOR}-${MINOR}-manylinux_2_17_$(uname -m).manylinux2014_$(uname -m).whl"
 
 # install sample factory with nethack extras
 pip install -e .[nethack]
+conda install -c conda-forge pybind11
+pip install -e sf_examples/nethack/nethack_render_utils
 ```
 
 ## Running Experiments

@@ -19,6 +19,7 @@ from sf_examples.nethack.utils.wrappers import (
     NLETimeLimit,
     NoProgressTimeout,
     PrevActionsWrapper,
+    RenderCharImagesWithNumpyWrapperV2,
     TaskRewardsInfoWrapper,
 )
 
@@ -83,6 +84,13 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
 
     env = env_class(**kwargs)
     env = NoProgressTimeout(env, no_progress_timeout=150)
+
+    if cfg.add_image_observation:
+        env = RenderCharImagesWithNumpyWrapperV2(
+            env,
+            crop_size=cfg.crop_dim,
+            rescale_font_size=(cfg.pixel_size, cfg.pixel_size),
+        )
 
     if cfg.use_prev_action:
         env = PrevActionsWrapper(env)

@@ -46,6 +46,19 @@ def add_extra_params_nethack_env(parser):
         default=True,
         help="If True, the model will use previous action. Defaults to `True`",
     )
+    p.add_argument(
+        "--add_image_observation",
+        type=str2bool,
+        default=True,
+        help="If True, the model will use previous action. Defaults to `True`",
+    )
+    p.add_argument("--crop_dim", type=int, default=18, help="Crop image around the player. Defaults to `18`.")
+    p.add_argument(
+        "--pixel_size",
+        type=int,
+        default=6,
+        help="Rescales each character to size of `(pixel_size, pixel_size). Defaults to `6`.",
+    )
 
 
 def add_extra_params_vit_model(parser):
