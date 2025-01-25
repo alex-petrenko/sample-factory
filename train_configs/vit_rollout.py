@@ -47,6 +47,7 @@ config = {
     "actor_mlp_dim": 64,
     "actor_depth": 1,
     "actor_heads": 8,
+    "model": "vit",
 }
 
 # params different between exps

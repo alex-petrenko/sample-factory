@@ -47,21 +47,14 @@ config = {
     "actor_mlp_dim": 64,
     "actor_depth": 1,
     "actor_heads": 8,
+    "model": "vit",
 }
 
 # params different between exps
 params_grid = [
     {
         "seed": list(range(1)),
-        "actor_hidden_dim": [actor_scale],
-        "actor_mlp_dim": [actor_scale * 2],
-        "actor_depth": [1, 2, 3],
-        "critic_hidden_dim": [critic_scale],
-        "critic_mlp_dim": [critic_scale * 2],
-        "critic_depth": [1, 2, 3],
-    }
-    for actor_scale in [32, 64, 128]
-    for critic_scale in [64, 128, 256]
+    },
 ]
 
 experiments_list = create_experiments_helper(
