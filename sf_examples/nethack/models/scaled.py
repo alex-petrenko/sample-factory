@@ -34,6 +34,7 @@ class ScaledNet(Encoder):
         self.num_screen_fc_layers = 1
         self.color_edim = cfg.color_edim
         self.char_edim = cfg.char_edim
+        self.joint_edim = 64
         self.crop_dim = 9
         self.crop_out_filters = 8
         self.crop_num_layers = 5
@@ -45,7 +46,6 @@ class ScaledNet(Encoder):
         self.use_resnet = cfg.use_resnet
         self.use_crop_norm = cfg.use_crop_norm
         self.action_embedding_dim = 32
-        self.obs_frame_stack = 1
         self.num_res_blocks = 2
         self.num_res_layers = 2
         self.screen_shape = TERMINAL_SHAPE
@@ -58,9 +58,7 @@ class ScaledNet(Encoder):
         # NOTE: -3 because we cut the topline and bottom two lines
         if self.use_crop:
             self.crop = Crop(self.screen_shape[0] - 3, self.screen_shape[1], self.crop_dim, self.crop_dim)
-            crop_in_channels = [self.char_edim + self.color_edim] + [self.crop_inter_filters] * (
-                self.crop_num_layers - 1
-            )
+            crop_in_channels = [self.joint_edim] + [self.crop_inter_filters] * (self.crop_num_layers - 1)
             crop_out_channels = [self.crop_inter_filters] * (self.crop_num_layers - 1) + [self.crop_out_filters]
             conv_extract_crop = []
             norm_extract_crop = []
@@ -98,7 +96,7 @@ class ScaledNet(Encoder):
             scale_cnn_channels=self.scale_cnn_channels,
             color_edim=self.color_edim,
             char_edim=self.char_edim,
-            obs_frame_stack=self.obs_frame_stack,
+            joint_edim=self.joint_edim,
             num_res_blocks=self.num_res_blocks,
             num_res_layers=self.num_res_layers,
             kernel_size=self.screen_kernel_size,
@@ -143,7 +141,6 @@ class ScaledNet(Encoder):
     def forward(self, obs_dict):
         B, H, W = obs_dict["tty_chars"].shape
         # to process images with CNNs we need channels dim
-        C = 1
 
         # Take last channel for now
         topline = obs_dict["tty_chars"][:, 0].contiguous()
@@ -159,12 +156,9 @@ class ScaledNet(Encoder):
 
         # Main obs encoding
         tty_chars = (
-            obs_dict["tty_chars"][:, 1:-2]
-            .contiguous()
-            .float(memory_format=torch.contiguous_format)
-            .view(B, C, H - 3, W)
+            obs_dict["tty_chars"][:, 1:-2].contiguous().float(memory_format=torch.contiguous_format).view(B, H - 3, W)
         )
-        tty_colors = obs_dict["tty_colors"][:, 1:-2].contiguous().view(B, C, H - 3, W)
+        tty_colors = obs_dict["tty_colors"][:, 1:-2].contiguous().view(B, H - 3, W)
         tty_cursor = obs_dict["tty_cursor"].contiguous().view(B, -1)
         encodings.append(self.screen_encoder(tty_chars, tty_colors))
 
@@ -179,12 +173,16 @@ class ScaledNet(Encoder):
             tty_cursor = tty_cursor.clone().to(torch.uint8)
             tty_cursor[:, 0] -= 1  # adjust y position for cropping below
             tty_cursor = tty_cursor.flip(-1)  # flip (y, x) to be (x, y)
-            crop_tty_chars = self.crop(tty_chars[..., -1, :, :], tty_cursor)
-            crop_tty_colors = self.crop(tty_colors[..., -1, :, :], tty_cursor)
-            crop_chars = selectt(self.screen_encoder.char_embeddings, crop_tty_chars.long(), True)
-            crop_colors = selectt(self.screen_encoder.color_embeddings, crop_tty_colors.long(), True)
-            crop_obs = torch.cat([crop_chars, crop_colors], dim=-1)
-            encodings.append(self.extract_crop_representation(crop_obs.permute(0, 3, 1, 2).contiguous()).view(B, -1))
+            crop_tty_chars = self.crop(tty_chars, tty_cursor)
+            crop_tty_colors = self.crop(tty_colors, tty_cursor)
+
+            crop_char_emb = self.screen_encoder.char_embeddings(crop_tty_chars.long())
+            crop_color_emb = self.screen_encoder.color_embeddings(crop_tty_colors.long())
+            crop_joint = torch.cat([crop_char_emb, crop_color_emb], dim=-1)
+            crop_joint = self.screen_encoder.joint_embedding(crop_joint)
+            crop_x = crop_joint.permute(0, 3, 1, 2)
+
+            encodings.append(self.extract_crop_representation(crop_x.contiguous()).view(B, -1))
 
         encodings = self.fc(torch.cat(encodings, dim=1))
 
@@ -204,7 +202,7 @@ class CharColorEncoderResnet(nn.Module):
         num_fc_layers: int = 1,
         char_edim: int = 16,
         color_edim: int = 16,
-        obs_frame_stack: int = 1,
+        joint_edim: int = 64,
         num_res_blocks: int = 2,
         num_res_layers: int = 2,
         kernel_size: int = 3,
@@ -218,6 +216,7 @@ class CharColorEncoderResnet(nn.Module):
         self.num_fc_layers = num_fc_layers
         self.char_edim = char_edim
         self.color_edim = color_edim
+        self.joint_edim = joint_edim
         self.no_max_pool = no_max_pool
         self.screen_conv_blocks = screen_conv_blocks
 
@@ -225,7 +224,7 @@ class CharColorEncoderResnet(nn.Module):
 
         self.conv_params = [
             [
-                char_edim * obs_frame_stack + color_edim * obs_frame_stack,
+                self.joint_edim,
                 int(16 * scale_cnn_channels),
                 kernel_size,
                 num_res_blocks,
@@ -259,14 +258,22 @@ class CharColorEncoderResnet(nn.Module):
             fc_layers.append(nn.ELU(inplace=True))
         self.fc_head = nn.Sequential(*fc_layers)
 
+        # Combine char and color per position
+        self.joint_embedding = nn.Linear(self.char_edim + self.color_edim, self.joint_edim)
         self.char_embeddings = nn.Embedding(256, self.char_edim)
         self.color_embeddings = nn.Embedding(128, self.color_edim)
 
     def forward(self, chars, colors):
-        chars, colors = self._embed(chars, colors)  # 21 x 80
-        x = self._stack(chars, colors)
+        # Embed and combine at each position
+        char_emb = self.char_embeddings(chars.long())
+        color_emb = self.color_embeddings(colors.long())
+        joint = torch.cat([char_emb, color_emb], dim=-1)
+        joint = self.joint_embedding(joint)
+
+        # Process as images
+        x = joint.permute(0, 3, 1, 2)
         x = self.conv_net(x)
-        x = x.view(-1, self.out_size)
+        x = x.reshape(-1, self.out_size)
         x = self.fc_head(x)
         return x
 
