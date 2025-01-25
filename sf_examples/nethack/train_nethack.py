@@ -5,14 +5,21 @@ import torch.nn as nn
 from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
-from sample_factory.model.actor_critic import ActorCritic, ActorCriticSeparateWeights, obs_space_without_action_mask
+from sample_factory.model.actor_critic import (
+    ActorCritic,
+    ActorCriticSeparateWeights,
+    ActorCriticSharedWeights,
+    obs_space_without_action_mask,
+)
 from sample_factory.model.encoder import Encoder
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
+from sf_examples.nethack.models.scaled import ScaledNet
 from sf_examples.nethack.models.vit import ViTActorEncoder, ViTCriticEncoder
 from sf_examples.nethack.nethack_env import NETHACK_ENVS, make_nethack_env
 from sf_examples.nethack.nethack_params import (
     add_extra_params_general,
+    add_extra_params_model,
     add_extra_params_nethack_env,
     add_extra_params_vit_model,
     nethack_override_defaults,
@@ -59,14 +66,23 @@ def make_nethack_actor_critic(cfg: Config, obs_space: ObsSpace, action_space: Ac
     model_factory = global_model_factory()
     obs_space = obs_space_without_action_mask(obs_space)
 
-    if cfg.actor_critic_share_weights:
-        raise NotImplementedError
-    else:
-        return ActorCriticDifferentEncoders(model_factory, obs_space, action_space, cfg)
+    if cfg.model == "vit":
+        if cfg.actor_critic_share_weights:
+            raise NotImplementedError
+        else:
+            return ActorCriticDifferentEncoders(model_factory, obs_space, action_space, cfg)
+    elif cfg.model == "cnn":
+        if cfg.actor_critic_share_weights:
+            return ActorCriticSharedWeights(model_factory, obs_space, action_space, cfg)
+        else:
+            return ActorCriticSeparateWeights(model_factory, obs_space, action_space, cfg)
 
 
 def make_nethack_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
-    return ViTActorEncoder(cfg, obs_space)
+    if cfg.model == "vit":
+        return ViTActorEncoder(cfg, obs_space)
+    elif cfg.model == "cnn":
+        return ScaledNet(cfg, obs_space)
 
 
 def register_nethack_components():
@@ -78,6 +94,7 @@ def register_nethack_components():
 def parse_nethack_args(argv=None, evaluation=False):
     parser, partial_cfg = parse_sf_args(argv=argv, evaluation=evaluation)
     add_extra_params_nethack_env(parser)
+    add_extra_params_model(parser)
     add_extra_params_vit_model(parser)
     add_extra_params_general(parser)
     nethack_override_defaults(partial_cfg.env, parser)
