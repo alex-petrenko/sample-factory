@@ -14,8 +14,7 @@ from sample_factory.model.actor_critic import (
 from sample_factory.model.encoder import Encoder
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
-from sf_examples.nethack.models.scaled import ScaledNet
-from sf_examples.nethack.models.vit import ViTActorEncoder, ViTCriticEncoder
+from sf_examples.nethack.models import ChaoticDwarvenGPT5, ViTActorEncoder, ViTCriticEncoder
 from sf_examples.nethack.nethack_env import NETHACK_ENVS, make_nethack_env
 from sf_examples.nethack.nethack_params import (
     add_extra_params_general,
@@ -82,7 +81,7 @@ def make_nethack_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
     if cfg.model == "vit":
         return ViTActorEncoder(cfg, obs_space)
     elif cfg.model == "cnn":
-        return ScaledNet(cfg, obs_space)
+        return ChaoticDwarvenGPT5(cfg, obs_space)
 
 
 def register_nethack_components():
