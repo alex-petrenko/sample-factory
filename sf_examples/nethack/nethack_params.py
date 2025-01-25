@@ -49,7 +49,7 @@ def add_extra_params_nethack_env(parser):
     p.add_argument(
         "--add_image_observation",
         type=str2bool,
-        default=True,
+        default=False,
         help="If True, the model will use previous action. Defaults to `True`",
     )
     p.add_argument("--crop_dim", type=int, default=18, help="Crop image around the player. Defaults to `18`.")

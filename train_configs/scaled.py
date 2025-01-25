@@ -38,7 +38,7 @@ config = {
     "gamma": 0.999,
     "gae_lambda": 0.95,
     "value_loss_coeff": 0.5,
-    "model": "cnn",
+    "model": "cnn_embeddings",
 }
 
 # params different between exps
