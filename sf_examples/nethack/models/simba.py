@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 import torch.nn as nn
 
@@ -28,9 +30,17 @@ class SimBaConvBlock(nn.Module):
 
 
 class SimBaCNN(nn.Module):
-    def __init__(self, in_channels, hidden_dim=64, num_blocks=2):
+    def __init__(
+        self,
+        screen_shape,
+        in_channels,
+        hidden_dim=64,
+        num_blocks=2,
+        pooling_method: Literal["mean", "projection"] = "mean",
+    ):
         super().__init__()
         self.hidden_dim = hidden_dim
+        self.pooling_method = pooling_method
 
         # Initial convolution to project to hidden dimension
         self.initial_conv = nn.Conv2d(in_channels, hidden_dim, kernel_size=7, stride=2, padding=3, bias=False)
@@ -42,9 +52,12 @@ class SimBaCNN(nn.Module):
         # GroupNorm with num_groups=1 is equivalent to LayerNorm
         self.post_norm = nn.GroupNorm(1, hidden_dim)
 
-        # Global average pooling and final classification
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        # self.fc = nn.Linear(hidden_dim, num_classes)
+        if self.pooling_method == "mean":
+            # Global average pooling
+            self.pooling = nn.AdaptiveAvgPool2d(1)
+        elif self.pooling_method == "projection":
+            self.out_size = calc_num_elements(nn.Sequential(self.initial_conv, *self.blocks), screen_shape)
+            self.fc_head = nn.Linear(self.out_size, hidden_dim)
 
     def forward(self, x):
         # Initial projection
@@ -57,10 +70,13 @@ class SimBaCNN(nn.Module):
         # Post normalization
         x = self.post_norm(x)
 
-        # Global pooling and classification
-        x = self.pool(x)
-        x = x.view(x.size(0), -1)
-        # x = self.fc(x)
+        if self.pooling_method == "mean":
+            # Global pooling
+            x = self.pooling(x)
+            x = x.view(x.size(0), -1)
+        elif self.pooling_method == "projection":
+            x = x.view(-1, self.out_size)
+            x = self.fc_head(x)
 
         return x
 
@@ -80,6 +96,7 @@ class SimBaEncoder(nn.Module):
         use_learned_embeddings: bool = False,
         char_edim: int = 16,
         color_edim: int = 16,
+        pooling_method: Literal["mean", "projection"] = "mean",
     ):
         super().__init__()
         self.use_prev_action = use_prev_action
@@ -96,9 +113,11 @@ class SimBaEncoder(nn.Module):
             in_channels = C
 
         self.screen_encoder = SimBaCNN(
+            screen_shape=(in_channels, W, H),
             in_channels=in_channels,
             hidden_dim=hidden_dim,
             num_blocks=depth,
+            pooling_method=pooling_method,
         )
         self.topline_encoder = TopLineEncoder(hidden_dim)
         self.bottomline_encoder = BottomLinesEncoder(hidden_dim)
@@ -188,6 +207,7 @@ class SimBaActorEncoder(Encoder):
             depth=self.cfg.actor_depth,
             use_prev_action=self.cfg.use_prev_action,
             use_learned_embeddings=self.cfg.use_learned_embeddings,
+            pooling_method=self.cfg.pooling_method,
         )
 
     def forward(self, x):
@@ -207,6 +227,7 @@ class SimBaCriticEncoder(Encoder):
             depth=self.cfg.critic_depth,
             use_prev_action=self.cfg.use_prev_action,
             use_learned_embeddings=self.cfg.use_learned_embeddings,
+            pooling_method=self.cfg.pooling_method,
         )
 
     def forward(self, x):
@@ -229,6 +250,7 @@ if __name__ == "__main__":
             "--add_image_observation=True",
             "--pixel_size=1",
             "--use_learned_embeddings=True",
+            "--pooling_method=projection",
         ]
     )
 

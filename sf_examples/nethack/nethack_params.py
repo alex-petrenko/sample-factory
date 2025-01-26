@@ -59,12 +59,6 @@ def add_extra_params_nethack_env(parser):
         default=6,
         help="Rescales each character to size of `(pixel_size, pixel_size). Defaults to `6`.",
     )
-    p.add_argument(
-        "--use_learned_embeddings",
-        type=str2bool,
-        default=False,
-        help="Do we want to learn the embeddings for chars and colors",
-    )
 
 
 def add_extra_params_vit_model(parser):
@@ -82,6 +76,20 @@ def add_extra_params_vit_model(parser):
     p.add_argument("--critic_depth", type=int, default=2)
     p.add_argument("--critic_heads", type=int, default=4)
     p.add_argument("--critic_mlp_dim", type=int, default=512)
+
+    p.add_argument(
+        "--use_learned_embeddings",
+        type=str2bool,
+        default=False,
+        help="Do we want to learn the embeddings for chars and colors",
+    )
+    p.add_argument(
+        "--pooling_method",
+        default="mean",
+        type=str,
+        choices=["mean", "projection"],
+        help="Do we want to use mean pooling or project features in screen encoder",
+    )
 
 
 def add_extra_params_model(parser):
