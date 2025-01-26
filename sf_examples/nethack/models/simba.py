@@ -1,10 +1,9 @@
-from typing import Literal
-
 import torch
 import torch.nn as nn
 
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.model.encoder import Encoder
+from sample_factory.model.utils import he_normal_init, orthogonal_init
 from sample_factory.utils.typing import Config, ObsSpace
 from sf_examples.nethack.models.scaled import BottomLinesEncoder, TopLineEncoder
 
@@ -17,9 +16,9 @@ class SimBaConvBlock(nn.Module):
         self.layer_norm = nn.GroupNorm(1, in_channels)
 
         self.conv_block = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, padding=1, bias=False),
+            he_normal_init(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)),
             nn.ELU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, 3, padding=1),
+            he_normal_init(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)),
         )
 
         # Add projection layer if channels change
@@ -57,7 +56,10 @@ class SimBaCNN(nn.Module):
         self.blocks = []
 
         # Initial convolution to project to hidden dimension
-        self.initial_conv = nn.Conv2d(in_channels, current_channels * 2, kernel_size=7, stride=2, padding=3, bias=False)
+        self.initial_conv = orthogonal_init(
+            nn.Conv2d(in_channels, current_channels * 2, kernel_size=7, stride=2, padding=3, bias=False),
+            gain=1.0,
+        )
         current_channels *= 2
 
         # SimBa residual blocks
@@ -93,11 +95,6 @@ class SimBaCNN(nn.Module):
         return x
 
 
-def conv_outdim(i_dim, k, padding=0, stride=1, dilation=1):
-    """Return the dimension after applying a convolution along one axis"""
-    return int(1 + (i_dim + 2 * padding - dilation * (k - 1) - 1) / stride)
-
-
 class SimBaEncoder(nn.Module):
     def __init__(
         self,
@@ -123,13 +120,15 @@ class SimBaEncoder(nn.Module):
         else:
             in_channels = C
 
-        self.screen_encoder = SimBaCNN(
-            in_channels=in_channels,
-            hidden_dim=hidden_dim,
-            num_blocks=depth,
+        self.screen_encoder = torch.jit.script(
+            SimBaCNN(
+                in_channels=in_channels,
+                hidden_dim=hidden_dim,
+                num_blocks=depth,
+            )
         )
-        self.topline_encoder = TopLineEncoder(hidden_dim)
-        self.bottomline_encoder = BottomLinesEncoder(hidden_dim)
+        self.topline_encoder = torch.jit.script(TopLineEncoder(hidden_dim))
+        self.bottomline_encoder = torch.jit.script(BottomLinesEncoder(hidden_dim))
 
         if self.use_prev_action:
             self.num_actions = obs_space["prev_actions"].n
@@ -151,9 +150,9 @@ class SimBaEncoder(nn.Module):
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(self.out_dim, hidden_dim),
+            orthogonal_init(nn.Linear(self.out_dim, hidden_dim), gain=1.0),
             nn.ELU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
+            orthogonal_init(nn.Linear(hidden_dim, hidden_dim), gain=1.0),
             nn.LayerNorm(hidden_dim),
         )
 

@@ -1,5 +1,6 @@
 import sys
 
+import torch
 import torch.nn as nn
 
 from sample_factory.algo.utils.context import global_model_factory
@@ -12,6 +13,7 @@ from sample_factory.model.actor_critic import (
     obs_space_without_action_mask,
 )
 from sample_factory.model.encoder import Encoder
+from sample_factory.model.utils import orthogonal_init
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
 from sf_examples.nethack.models import (
@@ -56,14 +58,15 @@ class ActorCriticDifferentEncoders(ActorCriticSeparateWeights):
         self.critic_decoder = model_factory.make_model_decoder_func(cfg, self.critic_core.get_out_size())
         self.decoders = [self.actor_decoder, self.critic_decoder]
 
-        self.critic_linear = nn.Linear(self.critic_decoder.get_out_size(), 1)
-        self.action_parameterization = self.get_action_parameterization(self.critic_decoder.get_out_size())
+        self.critic_linear = orthogonal_init(nn.Linear(self.critic_decoder.get_out_size(), 1), gain=1.0)
+        self.action_parameterization = self.get_action_parameterization(self.actor_decoder.get_out_size())
 
         self.encoder_outputs_sizes = [encoder.get_out_size() for encoder in self.encoders]
         self.rnn_hidden_sizes = [core.core.hidden_size * 2 for core in self.cores]
         self.core_outputs_sizes = [decoder.get_out_size() for decoder in self.decoders]
 
-        self.apply(self.initialize_weights)
+        # initalize manually
+        # self.apply(self.initialize_weights)
 
 
 def make_nethack_actor_critic(cfg: Config, obs_space: ObsSpace, action_space: ActionSpace) -> ActorCritic:

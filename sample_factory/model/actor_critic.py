@@ -16,6 +16,7 @@ from sample_factory.model.action_parameterization import (
     ActionParameterizationDefault,
 )
 from sample_factory.model.model_utils import model_device
+from sample_factory.model.utils import orthogonal_init
 from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
 
@@ -152,10 +153,11 @@ class ActorCriticSharedWeights(ActorCritic):
         self.decoder = model_factory.make_model_decoder_func(cfg, self.core.get_out_size())
         decoder_out_size: int = self.decoder.get_out_size()
 
-        self.critic_linear = nn.Linear(decoder_out_size, 1)
+        self.critic_linear = orthogonal_init(nn.Linear(decoder_out_size, 1), gain=1.0)
         self.action_parameterization = self.get_action_parameterization(decoder_out_size)
 
-        self.apply(self.initialize_weights)
+        # initalize manually
+        # self.apply(self.initialize_weights)
 
     def forward_head(self, normalized_obs_dict: Dict[str, Tensor]) -> Tensor:
         x = self.encoder(normalized_obs_dict)
@@ -220,14 +222,15 @@ class ActorCriticSeparateWeights(ActorCritic):
         self.critic_decoder = model_factory.make_model_decoder_func(cfg, self.critic_core.get_out_size())
         self.decoders = [self.actor_decoder, self.critic_decoder]
 
-        self.critic_linear = nn.Linear(self.critic_decoder.get_out_size(), 1)
-        self.action_parameterization = self.get_action_parameterization(self.critic_decoder.get_out_size())
+        self.critic_linear = orthogonal_init(nn.Linear(self.critic_decoder.get_out_size(), 1), gain=1.0)
+        self.action_parameterization = self.get_action_parameterization(self.actor_decoder.get_out_size())
 
         self.encoder_outputs_sizes = [encoder.get_out_size() for encoder in self.encoders]
         self.rnn_hidden_sizes = [core.core.hidden_size * 2 for core in self.cores]
         self.core_outputs_sizes = [decoder.get_out_size() for decoder in self.decoders]
 
-        self.apply(self.initialize_weights)
+        # initalize manually
+        # self.apply(self.initialize_weights)
 
     def _core_rnn(self, head_output, rnn_states):
         """
