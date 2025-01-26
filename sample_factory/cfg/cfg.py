@@ -21,7 +21,7 @@ def add_basic_cli_args(p: ArgumentParser):
     p.add_argument("--train_dir", default=join(os.getcwd(), "train_dir"), type=str, help="Root for all experiments")
     p.add_argument(
         "--restart_behavior",
-        default="resume",
+        default="overwrite",
         choices=["resume", "restart", "overwrite"],
         type=str,
         help='How to handle the experiment if the directory with the same name already exists. "resume" (default) will resume the experiment, '
