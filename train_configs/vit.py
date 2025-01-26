@@ -14,7 +14,7 @@ num_workers = 16
 # params for all exps
 config = {
     "exp_tag": name,
-    "env": "nethack_challenge",
+    "env": "nethack_score",
     "run_script": "sf_examples.nethack.train_nethack",
     "train_for_env_steps": 100_000_000,
     "num_workers": num_workers,
