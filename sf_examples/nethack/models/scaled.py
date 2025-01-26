@@ -382,3 +382,21 @@ def selectt(embedding_layer, x, use_index_select):
         return out.view(x.shape + (-1,))
     else:
         return embedding_layer(x)
+
+
+if __name__ == "__main__":
+    from sample_factory.algo.utils.env_info import extract_env_info
+    from sample_factory.algo.utils.make_env import make_env_func_batched
+    from sample_factory.utils.attr_dict import AttrDict
+    from sf_examples.nethack.train_nethack import parse_nethack_args, register_nethack_components
+
+    register_nethack_components()
+    cfg = parse_nethack_args(argv=["--env=nethack_score"])
+
+    env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+    env_info = extract_env_info(env, cfg)
+
+    obs, info = env.reset()
+    encoder = ScaledNet(cfg, env_info.obs_space)
+    x = encoder(obs)
+    print(x.shape)

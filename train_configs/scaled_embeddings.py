@@ -6,21 +6,22 @@ name = globals()["script"][:-3]
 
 num_minibatches = 1
 num_epochs = 1
-num_envs = 128
+num_envs = 512
+batch_size = 4096
 num_steps = 32
-num_workers = 32
+num_workers = 16
 
 # params for all exps
 config = {
     "exp_tag": name,
-    "env": "nethack_score",
+    "env": "nethack_challenge",
     "run_script": "sf_examples.nethack.train_nethack",
     "train_for_env_steps": 100_000_000,
     "num_workers": num_workers,
     "num_envs_per_worker": num_envs // num_workers,
     "worker_num_splits": 2,
     "rollout": num_steps,
-    "batch_size": num_envs * num_steps // num_minibatches,
+    "batch_size": batch_size,
     "num_batches_per_epoch": num_minibatches,
     "num_epochs": num_epochs,
     "penalty_step": 0.0,
@@ -32,13 +33,15 @@ config = {
     "wandb_group": "ideas-ncbr",
     "with_wandb": True,
     "decorrelate_envs_on_one_worker": True,
+    "character": "mon-hum-neu-mal",
     "max_grad_norm": 40.0,
     "learning_rate": 1e-4,
     "exploration_loss_coeff": 0.001,
     "gamma": 0.999,
-    "gae_lambda": 0.95,
-    "value_loss_coeff": 0.5,
+    "gae_lambda": 1.0,
+    "value_loss_coeff": 1.0,
     "model": "cnn_embeddings",
+    "add_image_observation": False,
 }
 
 # params different between exps

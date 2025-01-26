@@ -3,6 +3,7 @@ from einops import rearrange
 from einops.layers.torch import Rearrange
 from torch import nn
 
+from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.model.encoder import Encoder
 from sample_factory.utils.typing import Config, ObsSpace
 from sf_examples.nethack.models.scaled import BottomLinesEncoder, TopLineEncoder
@@ -92,8 +93,6 @@ class SimpleViT(nn.Module):
     def __init__(
         self,
         *,
-        char_edim,
-        color_edim,
         image_size,
         patch_size,
         dim,
@@ -106,8 +105,6 @@ class SimpleViT(nn.Module):
         super().__init__()
 
         self.dim = dim
-        self.char_embeddings = nn.Embedding(256, char_edim)
-        self.color_embeddings = nn.Embedding(128, color_edim)
 
         image_height, image_width = pair(image_size)
         patch_height, patch_width = pair(patch_size)
@@ -142,11 +139,8 @@ class SimpleViT(nn.Module):
     def get_out_size(self):
         return self.dim
 
-    def forward(self, chars, colors):
-        chars, colors = self._embed(chars, colors)
-        x = self._stack(chars, colors)
-
-        x = self.to_patch_embedding(x)
+    def forward(self, img):
+        x = self.to_patch_embedding(img)
         x += self.pos_embedding.to(x.device, dtype=x.dtype)
 
         x = self.transformer(x)
@@ -157,50 +151,50 @@ class SimpleViT(nn.Module):
         # return self.linear_head(x)
         return x
 
-    def _embed(self, chars, colors):
-        chars = selectt(self.char_embeddings, chars.long(), True)
-        colors = selectt(self.color_embeddings, colors.long(), True)
-        return chars, colors
-
-    def _stack(self, chars, colors):
-        obs = torch.cat([chars, colors], dim=-1)
-        return obs.permute(0, 1, 4, 2, 3).flatten(1, 2).contiguous()
-
 
 class ViTEncoder(nn.Module):
     def __init__(
         self,
-        obs_space,
         *,
-        char_edim,
-        color_edim,
+        obs_space,
         hidden_dim,
         depth,
         heads,
         mlp_dim,
+        use_prev_action,
     ):
         super().__init__()
+        self.use_prev_action = use_prev_action
 
-        screen_shape = obs_space["tty_chars"].shape
+        C, W, H = obs_space["screen_image"].shape
         self.screen_encoder = SimpleViT(
-            char_edim=char_edim,
-            color_edim=color_edim,
-            image_size=screen_shape,
-            patch_size=(3, 10),  # GCD(24, 80) = 8; 24 // 8 = 3, 80 // 8 = 10
+            image_size=(W, H),
+            patch_size=(4, 4),
             dim=hidden_dim,
             depth=depth,
             heads=heads,
             mlp_dim=mlp_dim,
-            channels=char_edim + color_edim,
+            channels=C,
         )
-        self.topline_encoder = TopLineEncoder(msg_hdim=hidden_dim)
-        self.bottomline_encoder = BottomLinesEncoder(h_dim=hidden_dim)
+        self.topline_encoder = TopLineEncoder(hidden_dim)
+        self.bottomline_encoder = BottomLinesEncoder(hidden_dim)
 
+        if self.use_prev_action:
+            self.num_actions = obs_space["prev_actions"].n
+            self.prev_actions_dim = self.num_actions
+        else:
+            self.num_actions = None
+            self.prev_actions_dim = 0
+
+        screen_shape = obs_space["screen_image"].shape
+        topline_shape = (obs_space["tty_chars"].shape[1],)
+        bottomline_shape = (2 * obs_space["tty_chars"].shape[1],)
         self.out_dim = sum(
             [
-                self.topline_encoder.msg_hdim,
-                self.bottomline_encoder.h_dim,
-                self.screen_encoder.dim,
+                calc_num_elements(self.screen_encoder, screen_shape),
+                calc_num_elements(self.topline_encoder, topline_shape),
+                calc_num_elements(self.bottomline_encoder, bottomline_shape),
+                self.prev_actions_dim,
             ]
         )
 
@@ -212,36 +206,24 @@ class ViTEncoder(nn.Module):
         )
 
     def forward(self, obs_dict):
-        B, H, W = obs_dict["tty_chars"].shape
-        # to process images with CNNs we need channels dim
-        C = 1
+        B, C, H, W = obs_dict["screen_image"].shape
 
-        topline = obs_dict["tty_chars"][:, 0].contiguous()
-        bottom_line = obs_dict["tty_chars"][:, -2:].contiguous()
+        topline = obs_dict["tty_chars"][..., 0, :]
+        bottom_line = obs_dict["tty_chars"][..., -2:, :]
+
         encodings = [
             self.topline_encoder(topline.float(memory_format=torch.contiguous_format).view(B, -1)),
             self.bottomline_encoder(bottom_line.float(memory_format=torch.contiguous_format).view(B, -1)),
+            self.screen_encoder(obs_dict["screen_image"].float(memory_format=torch.contiguous_format).view(B, C, H, W)),
         ]
 
-        # Main obs encoding
-        # put whole screen, because we need GCD(24,80)=8
-        tty_chars = obs_dict["tty_chars"].contiguous().view(B, C, H, W)
-        tty_colors = obs_dict["tty_colors"].contiguous().view(B, C, H, W)
-        encodings.append(self.screen_encoder(tty_chars, tty_colors))
+        if self.use_prev_action:
+            prev_actions = obs_dict["prev_actions"].long().view(B)
+            encodings.append(torch.nn.functional.one_hot(prev_actions, self.num_actions))
 
         encodings = self.fc(torch.cat(encodings, dim=1))
 
         return encodings
-
-
-def selectt(embedding_layer, x, use_index_select):
-    """Use index select instead of default forward to possible speed up embedding."""
-    if use_index_select:
-        # Access weight through the embedding layer
-        return nn.functional.embedding(x, embedding_layer.weight)
-    else:
-        # Use standard embedding forward
-        return embedding_layer(x)
 
 
 class ViTActorEncoder(Encoder):
@@ -250,12 +232,11 @@ class ViTActorEncoder(Encoder):
 
         self.model = ViTEncoder(
             obs_space=obs_space,
-            char_edim=self.cfg.actor_char_edim,
-            color_edim=self.cfg.actor_color_edim,
             hidden_dim=self.cfg.actor_hidden_dim,
             depth=self.cfg.actor_depth,
             heads=self.cfg.actor_heads,
             mlp_dim=self.cfg.actor_mlp_dim,
+            use_prev_action=self.cfg.use_prev_action,
         )
 
     def forward(self, x):
@@ -271,12 +252,11 @@ class ViTCriticEncoder(Encoder):
 
         self.model = ViTEncoder(
             obs_space=obs_space,
-            char_edim=self.cfg.critic_char_edim,
-            color_edim=self.cfg.critic_color_edim,
             hidden_dim=self.cfg.critic_hidden_dim,
             depth=self.cfg.critic_depth,
             heads=self.cfg.critic_heads,
             mlp_dim=self.cfg.critic_mlp_dim,
+            use_prev_action=self.cfg.use_prev_action,
         )
 
     def forward(self, x):
@@ -293,7 +273,7 @@ if __name__ == "__main__":
     from sf_examples.nethack.train_nethack import parse_nethack_args, register_nethack_components
 
     register_nethack_components()
-    cfg = parse_nethack_args(argv=["--env=nethack_score"])
+    cfg = parse_nethack_args(argv=["--env=nethack_score", "--add_image_observation=True"])
 
     env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
     env_info = extract_env_info(env, cfg)

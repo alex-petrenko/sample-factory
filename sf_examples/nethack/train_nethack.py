@@ -14,7 +14,14 @@ from sample_factory.model.actor_critic import (
 from sample_factory.model.encoder import Encoder
 from sample_factory.train import run_rl
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
-from sf_examples.nethack.models import ChaoticDwarvenGPT5, ScaledNet, ViTActorEncoder, ViTCriticEncoder
+from sf_examples.nethack.models import (
+    ChaoticDwarvenGPT5,
+    ScaledNet,
+    SimBaActorEncoder,
+    SimBaCriticEncoder,
+    ViTActorEncoder,
+    ViTCriticEncoder,
+)
 from sf_examples.nethack.nethack_env import NETHACK_ENVS, make_nethack_env
 from sf_examples.nethack.nethack_params import (
     add_extra_params_general,
@@ -70,16 +77,20 @@ def make_nethack_actor_critic(cfg: Config, obs_space: ObsSpace, action_space: Ac
             raise NotImplementedError
         else:
             return ActorCriticDifferentEncoders(model_factory, obs_space, action_space, cfg)
-    elif cfg.model in ["cnn_pixels", "cnn_embeddings"]:
+    elif cfg.model in ["cnn_pixels", "cnn_embeddings", "simba"]:
         if cfg.actor_critic_share_weights:
             return ActorCriticSharedWeights(model_factory, obs_space, action_space, cfg)
         else:
             return ActorCriticSeparateWeights(model_factory, obs_space, action_space, cfg)
+    else:
+        raise NotImplementedError
 
 
 def make_nethack_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
     if cfg.model == "vit":
         return ViTActorEncoder(cfg, obs_space)
+    if cfg.model == "simba":
+        return SimBaActorEncoder(cfg, obs_space)
     elif cfg.model == "cnn_pixels":
         return ChaoticDwarvenGPT5(cfg, obs_space)
     elif cfg.model == "cnn_embeddings":
