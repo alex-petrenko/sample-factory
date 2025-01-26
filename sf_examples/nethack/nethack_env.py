@@ -19,8 +19,8 @@ from sf_examples.nethack.utils.wrappers import (
     NLETimeLimit,
     NoProgressTimeout,
     PrevActionsWrapper,
-    RenderCharImagesWithNumpyWrapperV2,
     TaskRewardsInfoWrapper,
+    TileTTY,
 )
 
 NETHACK_ENVS = dict(
@@ -86,7 +86,7 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     env = NoProgressTimeout(env, no_progress_timeout=150)
 
     if cfg.add_image_observation:
-        env = RenderCharImagesWithNumpyWrapperV2(
+        env = TileTTY(
             env,
             crop_size=cfg.crop_dim,
             rescale_font_size=(cfg.pixel_size, cfg.pixel_size),
