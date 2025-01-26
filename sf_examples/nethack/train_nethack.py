@@ -41,10 +41,10 @@ class ActorCriticDifferentEncoders(ActorCriticSeparateWeights):
     def __init__(self, model_factory, obs_space, action_space, cfg):
         super().__init__(model_factory, obs_space, action_space, cfg)
 
-        self.actor_encoder = ViTActorEncoder(cfg, obs_space)
+        self.actor_encoder = SimBaActorEncoder(cfg, obs_space)
         self.actor_core = model_factory.make_model_core_func(cfg, self.actor_encoder.get_out_size())
 
-        self.critic_encoder = ViTCriticEncoder(cfg, obs_space)
+        self.critic_encoder = SimBaCriticEncoder(cfg, obs_space)
         self.critic_core = model_factory.make_model_core_func(cfg, self.critic_encoder.get_out_size())
 
         self.encoders = [self.actor_encoder, self.critic_encoder]
@@ -72,12 +72,12 @@ def make_nethack_actor_critic(cfg: Config, obs_space: ObsSpace, action_space: Ac
     model_factory = global_model_factory()
     obs_space = obs_space_without_action_mask(obs_space)
 
-    if cfg.model == "vit":
+    if cfg.model == "simba":
         if cfg.actor_critic_share_weights:
-            raise NotImplementedError
+            return ActorCriticSharedWeights(model_factory, obs_space, action_space, cfg)
         else:
             return ActorCriticDifferentEncoders(model_factory, obs_space, action_space, cfg)
-    elif cfg.model in ["cnn_pixels", "cnn_embeddings", "simba"]:
+    elif cfg.model in ["cnn_pixels", "cnn_embeddings", "vit"]:
         if cfg.actor_critic_share_weights:
             return ActorCriticSharedWeights(model_factory, obs_space, action_space, cfg)
         else:
