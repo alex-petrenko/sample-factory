@@ -59,6 +59,12 @@ def add_extra_params_nethack_env(parser):
         default=6,
         help="Rescales each character to size of `(pixel_size, pixel_size). Defaults to `6`.",
     )
+    p.add_argument(
+        "--use_learned_embeddings",
+        type=str2bool,
+        default=False,
+        help="Do we want to learn the embeddings for chars and colors",
+    )
 
 
 def add_extra_params_vit_model(parser):

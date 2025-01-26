@@ -77,11 +77,23 @@ class SimBaEncoder(nn.Module):
         hidden_dim,
         depth,
         use_prev_action: bool = True,
+        use_learned_embeddings: bool = False,
+        char_edim: int = 16,
+        color_edim: int = 16,
     ):
         super().__init__()
         self.use_prev_action = use_prev_action
+        self.use_learned_embeddings = use_learned_embeddings
+        self.char_edim = char_edim
+        self.color_edim = color_edim
 
-        in_channels = 2
+        self.char_embeddings = nn.Embedding(256, self.char_edim)
+        self.color_embeddings = nn.Embedding(128, self.color_edim)
+        C, W, H = obs_space["screen_image"].shape
+        if self.use_learned_embeddings:
+            in_channels = self.char_edim + self.color_edim
+        else:
+            in_channels = C
 
         self.screen_encoder = SimBaCNN(
             in_channels=in_channels,
@@ -98,7 +110,7 @@ class SimBaEncoder(nn.Module):
             self.num_actions = None
             self.prev_actions_dim = 0
 
-        screen_shape = obs_space["screen_image"].shape
+        screen_shape = (in_channels, W, H)
         topline_shape = (obs_space["tty_chars"].shape[1],)
         bottomline_shape = (2 * obs_space["tty_chars"].shape[1],)
         self.out_dim = sum(
@@ -123,10 +135,19 @@ class SimBaEncoder(nn.Module):
         topline = obs_dict["tty_chars"][..., 0, :]
         bottom_line = obs_dict["tty_chars"][..., -2:, :]
 
+        if self.use_learned_embeddings:
+            screen_image = obs_dict["screen_image"]
+            chars = screen_image[:, 0]
+            colors = screen_image[:, 1]
+            chars, colors = self._embed(chars, colors)
+            screen_image = self._stack(chars, colors)
+        else:
+            screen_image = obs_dict["screen_image"]
+
         encodings = [
             self.topline_encoder(topline.float(memory_format=torch.contiguous_format).view(B, -1)),
             self.bottomline_encoder(bottom_line.float(memory_format=torch.contiguous_format).view(B, -1)),
-            self.screen_encoder(obs_dict["screen_image"].float(memory_format=torch.contiguous_format).view(B, C, H, W)),
+            self.screen_encoder(screen_image.float(memory_format=torch.contiguous_format).view(B, -1, H, W)),
         ]
 
         if self.use_prev_action:
@@ -136,6 +157,25 @@ class SimBaEncoder(nn.Module):
         encodings = self.fc(torch.cat(encodings, dim=1))
 
         return encodings
+
+    def _embed(self, chars, colors):
+        chars = selectt(self.char_embeddings, chars.long(), True)
+        colors = selectt(self.color_embeddings, colors.long(), True)
+        return chars, colors
+
+    def _stack(self, chars, colors):
+        obs = torch.cat([chars, colors], dim=-1)
+        return obs.permute(0, 3, 1, 2).contiguous()
+
+
+def selectt(embedding_layer, x, use_index_select):
+    """Use index select instead of default forward to possible speed up embedding."""
+    if use_index_select:
+        out = embedding_layer.weight.index_select(0, x.view(-1))
+        # handle reshaping x to 1-d and output back to N-d
+        return out.view(x.shape + (-1,))
+    else:
+        return embedding_layer(x)
 
 
 class SimBaActorEncoder(Encoder):
@@ -147,6 +187,7 @@ class SimBaActorEncoder(Encoder):
             hidden_dim=self.cfg.actor_hidden_dim,
             depth=self.cfg.actor_depth,
             use_prev_action=self.cfg.use_prev_action,
+            use_learned_embeddings=self.cfg.use_learned_embeddings,
         )
 
     def forward(self, x):
@@ -165,6 +206,7 @@ class SimBaCriticEncoder(Encoder):
             hidden_dim=self.cfg.critic_hidden_dim,
             depth=self.cfg.critic_depth,
             use_prev_action=self.cfg.use_prev_action,
+            use_learned_embeddings=self.cfg.use_learned_embeddings,
         )
 
     def forward(self, x):
@@ -181,7 +223,14 @@ if __name__ == "__main__":
     from sf_examples.nethack.train_nethack import parse_nethack_args, register_nethack_components
 
     register_nethack_components()
-    cfg = parse_nethack_args(argv=["--env=nethack_score", "--add_image_observation=True"])
+    cfg = parse_nethack_args(
+        argv=[
+            "--env=nethack_score",
+            "--add_image_observation=True",
+            "--pixel_size=1",
+            "--use_learned_embeddings=True",
+        ]
+    )
 
     env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
     env_info = extract_env_info(env, cfg)
