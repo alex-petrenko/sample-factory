@@ -9,16 +9,16 @@ from sf_examples.nethack.models.scaled import BottomLinesEncoder, TopLineEncoder
 
 
 class SimBaConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, hidden_channels, out_channels):
         super().__init__()
 
         # GroupNorm with num_groups=1 is equivalent to LayerNorm
         self.layer_norm = nn.GroupNorm(1, in_channels)
 
         self.conv_block = nn.Sequential(
-            he_normal_init(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)),
+            he_normal_init(nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1, bias=False)),
             nn.ELU(inplace=True),
-            he_normal_init(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)),
+            he_normal_init(nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1)),
         )
 
         # Add projection layer if channels change
@@ -43,13 +43,17 @@ class SimBaCNN(nn.Module):
         in_channels,
         hidden_dim=64,
         num_blocks=2,
+        use_max_pool=False,
+        expansion=2,
     ):
         super().__init__()
         self.hidden_dim = hidden_dim
+        self.use_max_pool = use_max_pool
 
         assert in_channels & (in_channels - 1) == 0, "in_channels must be power of 2"
         assert hidden_dim & (hidden_dim - 1) == 0, "hidden_dim must be power of 2"
         assert hidden_dim >= in_channels, "hidden_dim must be >= in_channels"
+        assert not use_max_pool or (use_max_pool and num_blocks <= 4)
 
         # Calculate number of doublings needed
         current_channels = in_channels
@@ -57,7 +61,7 @@ class SimBaCNN(nn.Module):
 
         # Initial convolution to project to hidden dimension
         self.initial_conv = orthogonal_init(
-            nn.Conv2d(in_channels, current_channels * 2, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.Conv2d(in_channels, current_channels * 2, kernel_size=3, padding=0, bias=False),
             gain=1.0,
         )
         current_channels *= 2
@@ -66,7 +70,9 @@ class SimBaCNN(nn.Module):
         self.blocks = []
         for i in range(num_blocks):
             next_channels = min(current_channels * 2, hidden_dim)
-            self.blocks.append(SimBaConvBlock(current_channels, next_channels))
+            self.blocks.append(SimBaConvBlock(current_channels, next_channels * expansion, next_channels))
+            if self.use_max_pool:
+                self.blocks.append(nn.MaxPool2d(kernel_size=2, stride=2))
             current_channels = next_channels
         self.blocks = nn.ModuleList(self.blocks)
 
@@ -105,6 +111,8 @@ class SimBaEncoder(nn.Module):
         use_learned_embeddings: bool = False,
         char_edim: int = 16,
         color_edim: int = 16,
+        use_max_pool: bool = False,
+        expansion: int = 2,
     ):
         super().__init__()
         self.use_prev_action = use_prev_action
@@ -125,6 +133,8 @@ class SimBaEncoder(nn.Module):
                 in_channels=in_channels,
                 hidden_dim=hidden_dim,
                 num_blocks=depth,
+                use_max_pool=use_max_pool,
+                expansion=expansion,
             )
         )
         self.topline_encoder = torch.jit.script(TopLineEncoder(hidden_dim))
@@ -215,6 +225,8 @@ class SimBaActorEncoder(Encoder):
             depth=self.cfg.actor_depth,
             use_prev_action=self.cfg.use_prev_action,
             use_learned_embeddings=self.cfg.use_learned_embeddings,
+            use_max_pool=self.cfg.use_max_pool,
+            expansion=self.cfg.expansion,
         )
 
     def forward(self, x):
@@ -234,6 +246,8 @@ class SimBaCriticEncoder(Encoder):
             depth=self.cfg.critic_depth,
             use_prev_action=self.cfg.use_prev_action,
             use_learned_embeddings=self.cfg.use_learned_embeddings,
+            use_max_pool=self.cfg.use_max_pool,
+            expansion=self.cfg.expansion,
         )
 
     def forward(self, x):
@@ -256,8 +270,9 @@ if __name__ == "__main__":
             "--add_image_observation=True",
             "--pixel_size=1",
             "--use_learned_embeddings=True",
-            "--critic_hidden_dim=128",
+            "--critic_hidden_dim=512",
             "--critic_depth=3",
+            "--use_max_pool=True",
         ]
     )
 

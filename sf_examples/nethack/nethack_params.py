@@ -84,6 +84,18 @@ def add_extra_params_vit_model(parser):
         help="Do we want to learn the embeddings for chars and colors",
     )
     p.add_argument(
+        "--use_max_pool",
+        type=str2bool,
+        default=True,
+        help="Do we want to use max pool in conv net",
+    )
+    p.add_argument(
+        "--expansion",
+        type=int,
+        default=2,
+        help="how much bigger hidden dimention in conv block",
+    )
+    p.add_argument(
         "--pooling_method",
         default="mean",
         type=str,
