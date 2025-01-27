@@ -5,6 +5,7 @@ from torch import nn
 
 from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.model.encoder import Encoder
+from sample_factory.model.utils import he_normal_init, orthogonal_init
 from sample_factory.utils.typing import Config, ObsSpace
 from sf_examples.nethack.models.scaled import BottomLinesEncoder, TopLineEncoder
 
@@ -155,29 +156,42 @@ class SimpleViT(nn.Module):
 class ViTEncoder(nn.Module):
     def __init__(
         self,
-        *,
         obs_space,
         hidden_dim,
         depth,
         heads,
         mlp_dim,
-        use_prev_action,
+        use_prev_action: bool = True,
+        use_learned_embeddings: bool = False,
+        char_edim: int = 16,
+        color_edim: int = 16,
     ):
         super().__init__()
         self.use_prev_action = use_prev_action
+        self.use_learned_embeddings = use_learned_embeddings
+        self.char_edim = char_edim
+        self.color_edim = color_edim
+
+        self.char_embeddings = nn.Embedding(256, self.char_edim)
+        self.color_embeddings = nn.Embedding(128, self.color_edim)
+        C, W, H = obs_space["screen_image"].shape
+        if self.use_learned_embeddings:
+            in_channels = self.char_edim + self.color_edim
+        else:
+            in_channels = C
 
         C, W, H = obs_space["screen_image"].shape
         self.screen_encoder = SimpleViT(
             image_size=(W, H),
-            patch_size=(4, 4),
+            patch_size=(3, 3),
             dim=hidden_dim,
             depth=depth,
             heads=heads,
             mlp_dim=mlp_dim,
             channels=C,
         )
-        self.topline_encoder = TopLineEncoder(hidden_dim)
-        self.bottomline_encoder = BottomLinesEncoder(hidden_dim)
+        self.topline_encoder = torch.jit.script(TopLineEncoder(hidden_dim))
+        self.bottomline_encoder = torch.jit.script(BottomLinesEncoder(hidden_dim))
 
         if self.use_prev_action:
             self.num_actions = obs_space["prev_actions"].n
@@ -186,7 +200,7 @@ class ViTEncoder(nn.Module):
             self.num_actions = None
             self.prev_actions_dim = 0
 
-        screen_shape = obs_space["screen_image"].shape
+        screen_shape = (in_channels, W, H)
         topline_shape = (obs_space["tty_chars"].shape[1],)
         bottomline_shape = (2 * obs_space["tty_chars"].shape[1],)
         self.out_dim = sum(
@@ -199,9 +213,9 @@ class ViTEncoder(nn.Module):
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(self.out_dim, hidden_dim),
-            nn.GELU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            orthogonal_init(nn.Linear(self.out_dim, hidden_dim), gain=1.0),
+            nn.ELU(inplace=True),
+            orthogonal_init(nn.Linear(hidden_dim, hidden_dim), gain=1.0),
             nn.LayerNorm(hidden_dim),
         )
 
@@ -211,10 +225,19 @@ class ViTEncoder(nn.Module):
         topline = obs_dict["tty_chars"][..., 0, :]
         bottom_line = obs_dict["tty_chars"][..., -2:, :]
 
+        if self.use_learned_embeddings:
+            screen_image = obs_dict["screen_image"]
+            chars = screen_image[:, 0]
+            colors = screen_image[:, 1]
+            chars, colors = self._embed(chars, colors)
+            screen_image = self._stack(chars, colors)
+        else:
+            screen_image = obs_dict["screen_image"]
+
         encodings = [
             self.topline_encoder(topline.float(memory_format=torch.contiguous_format).view(B, -1)),
             self.bottomline_encoder(bottom_line.float(memory_format=torch.contiguous_format).view(B, -1)),
-            self.screen_encoder(obs_dict["screen_image"].float(memory_format=torch.contiguous_format).view(B, C, H, W)),
+            self.screen_encoder(screen_image.float(memory_format=torch.contiguous_format).view(B, -1, H, W)),
         ]
 
         if self.use_prev_action:
@@ -224,6 +247,25 @@ class ViTEncoder(nn.Module):
         encodings = self.fc(torch.cat(encodings, dim=1))
 
         return encodings
+
+    def _embed(self, chars, colors):
+        chars = selectt(self.char_embeddings, chars.long(), True)
+        colors = selectt(self.color_embeddings, colors.long(), True)
+        return chars, colors
+
+    def _stack(self, chars, colors):
+        obs = torch.cat([chars, colors], dim=-1)
+        return obs.permute(0, 3, 1, 2).contiguous()
+
+
+def selectt(embedding_layer, x, use_index_select):
+    """Use index select instead of default forward to possible speed up embedding."""
+    if use_index_select:
+        out = embedding_layer.weight.index_select(0, x.view(-1))
+        # handle reshaping x to 1-d and output back to N-d
+        return out.view(x.shape + (-1,))
+    else:
+        return embedding_layer(x)
 
 
 class ViTActorEncoder(Encoder):
@@ -273,12 +315,21 @@ if __name__ == "__main__":
     from sf_examples.nethack.train_nethack import parse_nethack_args, register_nethack_components
 
     register_nethack_components()
-    cfg = parse_nethack_args(argv=["--env=nethack_score", "--add_image_observation=True"])
-
+    cfg = parse_nethack_args(
+        argv=[
+            "--env=nethack_score",
+            "--add_image_observation=True",
+            "--pixel_size=1",
+            "--use_learned_embeddings=True",
+            "--critic_hidden_dim=512",
+            "--critic_depth=3",
+        ]
+    )
     env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
     env_info = extract_env_info(env, cfg)
 
     obs, info = env.reset()
-    encoder = ViTActorEncoder(cfg, env_info.obs_space)
+    encoder = ViTCriticEncoder(cfg, env_info.obs_space)
+    print(encoder)
     x = encoder(obs)
     print(x.shape)
