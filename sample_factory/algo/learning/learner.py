@@ -272,13 +272,16 @@ class Learner(Configurable):
         else:
             latest_checkpoint = checkpoints[-1]
 
+            # this flag was introduced with torch 2.0, and since torch 2.6 its default value is True, which breaks loads
+            extra_load_kwargs = {"weights_only": False} if torch.__version__.split(".")[0] >= "2" else {}
+
             # extra safety mechanism to recover from spurious filesystem errors
             num_attempts = 3
             for attempt in range(num_attempts):
                 # noinspection PyBroadException
                 try:
                     log.warning("Loading state from checkpoint %s...", latest_checkpoint)
-                    checkpoint_dict = torch.load(latest_checkpoint, map_location=device)
+                    checkpoint_dict = torch.load(latest_checkpoint, map_location=device, **extra_load_kwargs)
                     return checkpoint_dict
                 except Exception:
                     log.exception(f"Could not load from checkpoint, attempt {attempt}")
