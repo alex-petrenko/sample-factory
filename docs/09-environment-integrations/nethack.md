@@ -6,25 +6,11 @@ Works in `Python 3.10`. Higher versions have problems with building NLE.
 To install NetHack, you need nle and its dependencies.
 
 ```bash
-# nle dependencies
-apt-get install build-essential python3-dev python3-pip python3-numpy autoconf libtool pkg-config libbz2-dev
-conda install cmake flex bison lit
-
-# install nle locally and modify it to enable seeding and handle rendering with gymnasium
-git clone https://github.com/facebookresearch/nle.git nle && cd nle \
-&& git checkout v0.9.0 && git submodule init && git submodule update --recursive \
-&& sed '/#define NLE_ALLOW_SEEDING 1/i#define NLE_ALLOW_SEEDING 1' include/nleobs.h -i \
-&& sed '/self\.nethack\.set_initial_seeds = f/d' nle/env/tasks.py -i \
-&& sed '/self\.nethack\.set_current_seeds = f/d' nle/env/tasks.py -i \
-&& sed '/self\.nethack\.get_current_seeds = f/d' nle/env/tasks.py -i \
-&& sed '/def seed(self, core=None, disp=None, reseed=True):/d' nle/env/tasks.py -i \
-&& sed '/raise RuntimeError("NetHackChallenge doesn.t allow seed changes")/d' nle/env/tasks.py -i \
-&& python setup.py install && cd .. 
+MINOR=$(python3 -c 'import sys; print(f"cp{sys.version_info.major}{sys.version_info.minor}")')
+pip install "https://github.com/BartekCupial/nle/releases/download/fair/nle-0.9.0-${MINOR}-${MINOR}-manylinux_2_17_$(uname -m).manylinux2014_$(uname -m).whl"
 
 # install sample factory with nethack extras
 pip install -e .[nethack]
-conda install -c conda-forge pybind11
-pip install -e sf_examples/nethack/nethack_render_utils
 ```
 
 ## Running Experiments

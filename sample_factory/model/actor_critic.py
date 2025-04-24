@@ -16,6 +16,7 @@ from sample_factory.model.action_parameterization import (
     ActionParameterizationDefault,
 )
 from sample_factory.model.model_utils import model_device
+from sample_factory.model.utils import orthogonal_init
 from sample_factory.utils.normalize import ObservationNormalizer
 from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
 
@@ -152,10 +153,11 @@ class ActorCriticSharedWeights(ActorCritic):
         self.decoder = model_factory.make_model_decoder_func(cfg, self.core.get_out_size())
         decoder_out_size: int = self.decoder.get_out_size()
 
-        self.critic_linear = nn.Linear(decoder_out_size, 1)
+        self.critic_linear = orthogonal_init(nn.Linear(decoder_out_size, 1), gain=1.0)
         self.action_parameterization = self.get_action_parameterization(decoder_out_size)
 
-        self.apply(self.initialize_weights)
+        # initalize manually
+        # self.apply(self.initialize_weights)
 
     def forward_head(self, normalized_obs_dict: Dict[str, Tensor]) -> Tensor:
         x = self.encoder(normalized_obs_dict)
@@ -220,10 +222,15 @@ class ActorCriticSeparateWeights(ActorCritic):
         self.critic_decoder = model_factory.make_model_decoder_func(cfg, self.critic_core.get_out_size())
         self.decoders = [self.actor_decoder, self.critic_decoder]
 
-        self.critic_linear = nn.Linear(self.critic_decoder.get_out_size(), 1)
-        self.action_parameterization = self.get_action_parameterization(self.critic_decoder.get_out_size())
+        self.critic_linear = orthogonal_init(nn.Linear(self.critic_decoder.get_out_size(), 1), gain=1.0)
+        self.action_parameterization = self.get_action_parameterization(self.actor_decoder.get_out_size())
 
-        self.apply(self.initialize_weights)
+        self.encoder_outputs_sizes = [encoder.get_out_size() for encoder in self.encoders]
+        self.rnn_hidden_sizes = [core.core.hidden_size * 2 for core in self.cores]
+        self.core_outputs_sizes = [decoder.get_out_size() for decoder in self.decoders]
+
+        # initalize manually
+        # self.apply(self.initialize_weights)
 
     def _core_rnn(self, head_output, rnn_states):
         """
@@ -232,7 +239,7 @@ class ActorCriticSeparateWeights(ActorCritic):
         """
         num_cores = len(self.cores)
 
-        rnn_states_split = rnn_states.chunk(num_cores, dim=1)
+        rnn_states_split = rnn_states.split(self.rnn_hidden_sizes, dim=1)
 
         if isinstance(head_output, PackedSequence):
             # We cannot chunk PackedSequence directly, we first have to to unpack it,
@@ -241,7 +248,7 @@ class ActorCriticSeparateWeights(ActorCritic):
             # but this time using concatenation - unpack, cat and pack.
 
             unpacked_head_output, lengths = pad_packed_sequence(head_output)
-            unpacked_head_output_split = unpacked_head_output.chunk(num_cores, dim=2)
+            unpacked_head_output_split = unpacked_head_output.split(self.encoder_outputs_sizes, dim=2)
             head_outputs_split = [
                 pack_padded_sequence(unpacked_head_output_split[i], lengths, enforce_sorted=False)
                 for i in range(num_cores)
@@ -257,8 +264,7 @@ class ActorCriticSeparateWeights(ActorCritic):
             unpacked_outputs = torch.cat(unpacked_outputs, dim=2)
             outputs = pack_padded_sequence(unpacked_outputs, lengths, enforce_sorted=False)
         else:
-            head_outputs_split = head_output.chunk(num_cores, dim=1)
-            rnn_states_split = rnn_states.chunk(num_cores, dim=1)
+            head_outputs_split = head_output.split(self.encoder_outputs_sizes, dim=1)
 
             outputs, new_rnn_states = [], []
             for i, c in enumerate(self.cores):
@@ -290,7 +296,7 @@ class ActorCriticSeparateWeights(ActorCritic):
     def forward_tail(
         self, core_output, values_only: bool, sample_actions: bool, action_mask: Optional[Tensor] = None
     ) -> TensorDict:
-        core_outputs = core_output.chunk(len(self.cores), dim=1)
+        core_outputs = core_output.split(self.core_outputs_sizes, dim=1)
 
         # second core output corresponds to the critic
         critic_decoder_output = self.critic_decoder(core_outputs[1])

@@ -1,0 +1,46 @@
+contexts:
+  pc_gpu:
+    # account: compute-account
+    backend_type: slurm
+    cmd_type: sbatch
+    cpu: 16
+    mem: 20G
+    gpu: 1
+    nodes: 1
+    ntasks: 1
+    partition: debug
+    nodelist: login01
+    singularity_container: --nv -H $PWD:/homeplaceholder --env WANDBPWD=$PWD --env PYTHONPATH=/homeplaceholder/external/nle_utils:/homeplaceholder/external/sample_factory:${PYTHONPATH} -B $TMPDIR:/tmp /home/bartlomiej.cupial/ncw.sif
+    slurm_url: bartlomiej.cupial@10.200.100.207
+    storage_dir: /home/bartlomiej.cupial/storage
+    time: 2880
+
+  lumi_gpu:
+    account: project_465001230
+    backend_type: slurm
+    cmd_type: sbatch
+    cpu: 16
+    mem: 32G
+    gpu: 1
+    nodes: 1
+    ntasks: 1
+    partition: standard-g
+    singularity_container: -H $PWD:/homeplaceholder --env WANDBPWD=$PWD --env PYTHONPATH=/homeplaceholder/external/nle_utils:/homeplaceholder/external/sample_factory:${PYTHONPATH} -B /scratch/project_465001230/bcupial/tmpdir:/tmp -B /scratch:/scratch /pfs/lustrep3/projappl/project_465001230/bcupial/ncw_rocm.sif
+    slurm_url: bartomie@lumi.csc.fi
+    storage_dir: /scratch/project_465001230/bcupial
+    time: 2400
+
+  athena_gpu:
+    account: plgdebates-gpu-a100
+    backend_type: slurm
+    cmd_type: sbatch
+    cpu: 16
+    mem: 128G
+    gpu: 1
+    nodes: 1
+    ntasks: 1
+    partition: plgrid-gpu-a100
+    singularity_container: --nv -H $PWD:/homeplaceholder --env WANDBPWD=$PWD -B /net:/net -B $TMPDIR:/tmp /net/pr2/projects/plgrid/plgggmum_crl/bcupial/ncw.sif
+    slurm_url: plgbartekcupial@athena.cyfronet.pl
+    storage_dir: /net/tscratch/people/plgbartekcupial/
+    time: 1000

@@ -8,6 +8,7 @@ from sample_factory.algo.utils.action_distributions import (
     get_action_distribution,
     is_continuous_action_space,
 )
+from sample_factory.model.utils import orthogonal_init
 
 
 class ActionsParameterization(nn.Module):
@@ -28,7 +29,7 @@ class ActionParameterizationDefault(ActionsParameterization):
         super().__init__(cfg, action_space)
 
         num_action_outputs = calc_num_action_parameters(action_space)
-        self.distribution_linear = nn.Linear(core_out_size, num_action_outputs)
+        self.distribution_linear = orthogonal_init(nn.Linear(core_out_size, num_action_outputs), gain=1.0)
 
     def forward(self, actor_core_output, action_mask=None):
         """Just forward the FC layer and generate the distribution object."""
@@ -53,7 +54,7 @@ class ActionParameterizationContinuousNonAdaptiveStddev(ActionsParameterization)
         num_action_outputs = calc_num_action_parameters(action_space)
 
         # calculate only action means using the policy neural network
-        self.distribution_linear = nn.Linear(core_out_size, num_action_outputs // 2)
+        self.distribution_linear = orthogonal_init(nn.Linear(core_out_size, num_action_outputs // 2), gain=1.0)
         self.tanh_scale: float = cfg.continuous_tanh_scale
         # stddev is a single learned parameter
         initial_stddev = torch.empty([num_action_outputs // 2])

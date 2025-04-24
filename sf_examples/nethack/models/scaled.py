@@ -14,6 +14,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from sample_factory.model.encoder import Encoder
+from sample_factory.model.utils import he_normal_init, orthogonal_init
 from sample_factory.utils.typing import Config, ObsSpace
 from sf_examples.nethack.models.crop import Crop
 from sf_examples.nethack.models.utils import interleave
@@ -313,7 +314,7 @@ class BottomLinesEncoder(nn.Module):
             [2, int(32 * scale_cnn_channels), 8, 4],
             [int(32 * scale_cnn_channels), int(64 * scale_cnn_channels), 4, 1],
         ]:
-            self.conv_layers.append(nn.Conv1d(in_ch, out_ch, filter, stride=stride))
+            self.conv_layers.append(orthogonal_init(nn.Conv1d(in_ch, out_ch, filter, stride=stride), gain=1.0))
             self.conv_layers.append(nn.ELU(inplace=True))
             w = conv_outdim(w, filter, padding=0, stride=stride)
 
@@ -322,10 +323,10 @@ class BottomLinesEncoder(nn.Module):
         self.out_dim = w * out_ch
         self.conv_net = nn.Sequential(*self.conv_layers)
         self.fwd_net = nn.Sequential(
-            nn.Linear(self.out_dim, self.h_dim),
-            nn.ELU(),
-            nn.Linear(self.h_dim, self.h_dim),
-            nn.ELU(),
+            orthogonal_init(nn.Linear(self.out_dim, self.h_dim), gain=1.0),
+            nn.ELU(inplace=True),
+            orthogonal_init(nn.Linear(self.h_dim, self.h_dim), gain=1.0),
+            nn.ELU(inplace=True),
         )
 
     def forward(self, bottom_lines):
@@ -355,10 +356,10 @@ class TopLineEncoder(nn.Module):
         self.i_dim = nethack.NLE_TERM_CO * 256
 
         self.msg_fwd = nn.Sequential(
-            nn.Linear(self.i_dim, self.msg_hdim),
-            nn.ELU(inplace=True),
-            nn.Linear(self.msg_hdim, self.msg_hdim),
-            nn.ELU(inplace=True),
+            orthogonal_init(nn.Linear(self.i_dim, self.msg_hdim), gain=1.0),
+            nn.ReLU(inplace=True),
+            orthogonal_init(nn.Linear(self.msg_hdim, self.msg_hdim), gain=1.0),
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, message):

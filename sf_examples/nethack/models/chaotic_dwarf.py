@@ -190,11 +190,11 @@ class ScreenEncoder(nn.Module):
         super(ScreenEncoder, self).__init__()
         conv_layers = []
 
-        self.h, self.w = screen_shape
+        self.c, self.h, self.w = screen_shape
         self.hidden_dim = 512
 
         self.conv_filters = [
-            [3, 32, 8, 6, 1],
+            [self.c, 32, 8, 6, 1],
             [32, 64, 4, 2, 1],
             [64, 128, 3, 2, 1],
             [128, 128, 3, 1, 1],
@@ -242,14 +242,8 @@ class ChaoticDwarvenGPT5(Encoder):
         self.use_tty_only = cfg.use_tty_only
         self.use_prev_action = cfg.use_prev_action
 
-        # screen encoder (TODO: could also use only tty_chars)
-        pixel_size = cfg.pixel_size
-        if cfg.crop_dim == 0:
-            screen_shape = (24 * pixel_size, 80 * pixel_size)
-        else:
-            screen_shape = (cfg.crop_dim * pixel_size, cfg.crop_dim * pixel_size)
-        self.screen_encoder = torch.jit.script(ScreenEncoder(screen_shape))
         screen_shape = obs_space["screen_image"].shape
+        self.screen_encoder = torch.jit.script(ScreenEncoder(screen_shape))
 
         # top and bottom encoders
         if self.use_tty_only:
@@ -303,3 +297,23 @@ class ChaoticDwarvenGPT5(Encoder):
 
     def get_out_size(self) -> int:
         return self.encoder_out_size
+
+
+if __name__ == "__main__":
+    from sample_factory.algo.utils.env_info import extract_env_info
+    from sample_factory.algo.utils.make_env import make_env_func_batched
+    from sample_factory.utils.attr_dict import AttrDict
+    from sf_examples.nethack.train_nethack import parse_nethack_args, register_nethack_components
+
+    register_nethack_components()
+    cfg = parse_nethack_args(argv=["--env=nethack_score", "--add_image_observation=True"])
+
+    env = make_env_func_batched(cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+    env_info = extract_env_info(env, cfg)
+
+    obs, info = env.reset()
+    print(obs["screen_image"].shape)
+    encoder = ChaoticDwarvenGPT5(cfg, env_info.obs_space)
+    print(encoder)
+    x = encoder(obs)
+    print(x.shape)

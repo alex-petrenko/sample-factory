@@ -41,10 +41,16 @@ def add_extra_params_nethack_env(parser):
         help="Integer, if 0, no ttyrecs (game recordings) will be saved. Otherwise, save a ttyrec every Nth episode.",
     )
     p.add_argument(
-        "--add_image_observation",
+        "--use_prev_action",
         type=str2bool,
         default=True,
-        help="If True, additional wrapper will render screen image. Defaults to `True`.",
+        help="If True, the model will use previous action. Defaults to `True`",
+    )
+    p.add_argument(
+        "--add_image_observation",
+        type=str2bool,
+        default=False,
+        help="If True, the model will use previous action. Defaults to `True`",
     )
     p.add_argument("--crop_dim", type=int, default=18, help="Crop image around the player. Defaults to `18`.")
     p.add_argument(
@@ -55,17 +61,54 @@ def add_extra_params_nethack_env(parser):
     )
 
 
+def add_extra_params_vit_model(parser):
+    p = parser
+    p.add_argument("--actor_char_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--actor_color_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
+    p.add_argument("--actor_hidden_dim", type=int, default=128)
+    p.add_argument("--actor_depth", type=int, default=1)
+    p.add_argument("--actor_heads", type=int, default=4)
+    p.add_argument("--actor_mlp_dim", type=int, default=128)
+
+    p.add_argument("--critic_char_edim", type=int, default=16, help="Char Embedding Dim. Defaults to `16`")
+    p.add_argument("--critic_color_edim", type=int, default=16, help="Color Embedding Dim. Defaults to `16`")
+    p.add_argument("--critic_hidden_dim", type=int, default=512)
+    p.add_argument("--critic_depth", type=int, default=2)
+    p.add_argument("--critic_heads", type=int, default=4)
+    p.add_argument("--critic_mlp_dim", type=int, default=512)
+
+    p.add_argument(
+        "--use_learned_embeddings",
+        type=str2bool,
+        default=False,
+        help="Do we want to learn the embeddings for chars and colors",
+    )
+    p.add_argument(
+        "--use_max_pool",
+        type=str2bool,
+        default=True,
+        help="Do we want to use max pool in conv net",
+    )
+    p.add_argument(
+        "--expansion",
+        type=int,
+        default=2,
+        help="how much bigger hidden dimention in conv block",
+    )
+    p.add_argument(
+        "--pooling_method",
+        default="mean",
+        type=str,
+        choices=["mean", "projection"],
+        help="Do we want to use mean pooling or project features in screen encoder",
+    )
+
+
 def add_extra_params_model(parser):
     """
     Specify any additional command line arguments for NetHack models.
     """
     p = parser
-    p.add_argument(
-        "--use_prev_action",
-        type=str2bool,
-        default=True,
-        help="If True, the model will use previous action. Defaults to `True`",
-    )
     p.add_argument(
         "--use_tty_only",
         type=str2bool,
@@ -165,7 +208,8 @@ def nethack_override_defaults(_env, parser):
         experiment_summaries_interval=50,
         adam_beta1=0.9,
         adam_beta2=0.999,
-        adam_eps=1e-7,
+        adam_eps=1e-8,
+        weight_decay=1e-2,
         seed=22,
         save_every_sec=120,
     )

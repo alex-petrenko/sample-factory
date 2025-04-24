@@ -225,7 +225,7 @@ class Learner(Configurable):
 
         params = list(self.actor_critic.parameters())
 
-        optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+        optimizer_cls = dict(adam=torch.optim.AdamW, lamb=Lamb)
         if self.cfg.optimizer not in optimizer_cls:
             raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
 
@@ -235,6 +235,7 @@ class Learner(Configurable):
         optimizer_kwargs = dict(
             lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+            weight_decay=self.cfg.weight_decay,
         )
 
         if self.cfg.optimizer in ["adam", "lamb"]:
@@ -773,52 +774,60 @@ class Learner(Configurable):
 
                 # update the weights
                 with timing.add_time("update"):
+                    # set gradient to None only at the start of accumulation
                     # following advice from https://youtu.be/9mS1fIYj1So set grad to None instead of optimizer.zero_grad()
-                    for p in self.actor_critic.parameters():
-                        p.grad = None
+                    if (self.train_step % self.cfg.gradient_accumulation_steps) == 0:
+                        for p in self.actor_critic.parameters():
+                            p.grad = None
 
+                    # normalize loss by accumulation steps to maintain same effective learning rate
+                    loss = loss / self.cfg.gradient_accumulation_steps
                     loss.backward()
 
-                    if self.cfg.max_grad_norm > 0.0:
-                        with timing.add_time("clip"):
-                            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
+                    # only update weights after accumulating gradients for specified steps
+                    if (self.train_step + 1) % self.cfg.gradient_accumulation_steps == 0:
+                        if self.cfg.max_grad_norm > 0.0:
+                            with timing.add_time("clip"):
+                                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
 
-                    curr_policy_version = self.train_step  # policy version before the weight update
+                        curr_policy_version = self.train_step  # policy version before the weight update
 
-                    actual_lr = self.curr_lr
-                    if num_invalids > 0:
-                        # if we have masked (invalid) data we should reduce the learning rate accordingly
-                        # this prevents a situation where most of the data in the minibatch is invalid
-                        # and we end up doing SGD with super noisy gradients
-                        actual_lr = self.curr_lr * (experience_size - num_invalids) / experience_size
-                    self._apply_lr(actual_lr)
+                        actual_lr = self.curr_lr
+                        if num_invalids > 0:
+                            # if we have masked (invalid) data we should reduce the learning rate accordingly
+                            # this prevents a situation where most of the data in the minibatch is invalid
+                            # and we end up doing SGD with super noisy gradients
+                            actual_lr = self.curr_lr * (experience_size - num_invalids) / experience_size
+                        self._apply_lr(actual_lr)
 
-                    with self.param_server.policy_lock:
-                        self.optimizer.step()
+                        with self.param_server.policy_lock:
+                            self.optimizer.step()
 
-                    num_sgd_steps += 1
+                        num_sgd_steps += 1
 
-                with torch.no_grad(), timing.add_time("after_optimizer"):
-                    self._after_optimizer_step()
+                # only update weights after accumulating gradients for specified steps
+                if (self.train_step + 1) % self.cfg.gradient_accumulation_steps == 0:
+                    with torch.no_grad(), timing.add_time("after_optimizer"):
+                        self._after_optimizer_step()
 
-                    if self.lr_scheduler.invoke_after_each_minibatch():
-                        self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
+                        if self.lr_scheduler.invoke_after_each_minibatch():
+                            self.curr_lr = self.lr_scheduler.update(self.curr_lr, recent_kls)
 
-                    # collect and report summaries
-                    should_record_summaries = with_summaries
-                    should_record_summaries &= epoch == summaries_epoch and batch_num == summaries_batch
-                    should_record_summaries |= force_summaries
-                    if should_record_summaries:
-                        # hacky way to collect all of the intermediate variables for summaries
-                        summary_vars = {**locals(), **loss_summaries}
-                        stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
-                        del summary_vars
-                        force_summaries = False
+                        # collect and report summaries
+                        should_record_summaries = with_summaries
+                        should_record_summaries &= epoch == summaries_epoch and batch_num == summaries_batch
+                        should_record_summaries |= force_summaries
+                        if should_record_summaries:
+                            # hacky way to collect all of the intermediate variables for summaries
+                            summary_vars = {**locals(), **loss_summaries}
+                            stats_and_summaries = self._record_summaries(AttrDict(summary_vars))
+                            del summary_vars
+                            force_summaries = False
 
-                    # make sure everything (such as policy weights) is committed to shared device memory
-                    synchronize(self.cfg, self.device)
-                    # this will force policy update on the inference worker (policy worker)
-                    self.policy_versions_tensor[self.policy_id] = self.train_step
+                        # make sure everything (such as policy weights) is committed to shared device memory
+                        synchronize(self.cfg, self.device)
+                        # this will force policy update on the inference worker (policy worker)
+                        self.policy_versions_tensor[self.policy_id] = self.train_step
 
             # end of an epoch
             if self.lr_scheduler.invoke_after_each_epoch():
