@@ -134,10 +134,12 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.is_initialized = False
 
     @signal
-    def initialized(self): ...
+    def initialized(self):
+        ...
 
     @signal
-    def report_msg(self): ...
+    def report_msg(self):
+        ...
 
     def init(self, init_model_data: Optional[InitModelData]):
         if self.is_initialized:
@@ -321,14 +323,11 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
                 if actor_critic.training:
                     actor_critic.eval()  # need to call this because we can be in serial mode
 
-                action_mask = (
-                    ensure_torch_tensor(obs.pop("action_mask")).to(self.device) if "action_mask" in obs else None
-                )
                 normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
                 rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
 
             with timing.add_time("forward"):
-                policy_outputs = actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
+                policy_outputs = actor_critic(normalized_obs, rnn_states)
                 policy_outputs["policy_version"] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
 
             with timing.add_time("prepare_outputs"):

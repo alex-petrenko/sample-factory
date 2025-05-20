@@ -1,7 +1,6 @@
 """
 Utilities for sharing model parameters between components.
 """
-
 import sys
 from typing import Optional
 

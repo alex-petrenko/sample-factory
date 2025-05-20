@@ -10,6 +10,8 @@ from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, ObsSpace
 from sample_factory.utils.utils import log
 
+import torchvision.models as models
+
 
 # noinspection PyMethodMayBeStatic,PyUnusedLocal
 class Encoder(ModelModule):
@@ -177,11 +179,11 @@ class ResnetEncoder(Encoder):
         input_ch = obs_space.shape[0]
         log.debug("Num input channels: %d", input_ch)
 
-        if cfg.encoder_conv_architecture == "resnet_impala":
+        if cfg.encoder_conv_architecture == "resnet_impala" or cfg.encoder_conv_architecture == "pretrained_resnet":
             # configuration from the IMPALA paper
             resnet_conf = [[16, 2], [32, 2], [32, 2]]
         else:
-            raise NotImplementedError(f"Unknown resnet architecture {cfg.encode_conv_architecture}")
+            raise NotImplementedError(f"Unknown resnet architecture {cfg.encoder_conv_architecture}")
 
         curr_input_channels = input_ch
         layers = []
@@ -219,6 +221,76 @@ class ResnetEncoder(Encoder):
 
     def get_out_size(self) -> int:
         return self.encoder_out_size
+    
+class DepthEncoder(Encoder):
+    def __init__(self, cfg,size=10):
+        super().__init__(cfg)
+
+        input_ch = 1
+        log.debug("Num input channels for depth encoder: %d", input_ch)
+
+        if cfg.encoder_conv_architecture == "resnet_impala" or cfg.encoder_conv_architecture == "pretrained_resnet":
+            # configuration from the IMPALA paper
+            resnet_conf = [[16, 2], [32, 2], [32, 2]]
+        else:
+            raise NotImplementedError(f"Unknown resnet architecture {cfg.encoder_conv_architecture}")
+
+        curr_input_channels = input_ch
+        self.downsample=nn.Upsample(size=(1,10))
+
+        self.encoder_out_size = size
+
+    def forward(self, obs: Tensor):
+        x = self.downsample(obs)
+        return x
+
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
+
+
+class FixedMobileNetSmallEncoder(Encoder):
+    def __init__(self, cfg, obs_space, pretrained=True, fixed=True):
+        super().__init__(cfg)
+
+        input_ch = obs_space.shape[0]
+        # Load the pretrained MobileNetV3 Small weights from torchvision.
+        weights = models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None
+        mobilenet = models.mobilenet_v3_small(weights=weights)
+        
+        # Freeze all parameters of MobileNet.
+        if fixed:
+            for param in mobilenet.parameters():
+                param.requires_grad = False
+        
+        # Set the model to evaluation mode.
+            mobilenet.eval()
+        
+        # Use the feature extractor (all layers up to the classifier)
+        # Option 1: If you need a single feature vector, you can use the features and avgpool.
+        self.features = mobilenet.features  # Feature extraction layers.
+        self.avgpool = mobilenet.avgpool    # Global average pooling.
+        
+
+        self.encoder_out_size=576
+        # Optionally, if you need to add an extra projection layer,
+        # uncomment the following line and adjust dimensions as needed.
+        # self.projection = nn.Linear(576, desired_dim)
+
+        self.model_to_device('cuda')
+
+    def forward(self, x):
+        # x should be a tensor of shape [N, 3, H, W] where H,W >= 224 (or resized accordingly).
+        x = self.features(x)        # Pass through MobileNet features.
+        x = self.avgpool(x)         # Global average pooling; output shape [N, 576, 1, 1].
+        x = torch.flatten(x, 1)     # Flatten to shape [N, 576].
+        
+        # If using an extra projection layer, uncomment:
+        # x = self.projection(x)
+        
+        return x
+    
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
 
 
 def make_img_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
@@ -227,6 +299,44 @@ def make_img_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
         return ConvEncoder(cfg, obs_space)
     elif cfg.encoder_conv_architecture.startswith("resnet"):
         return ResnetEncoder(cfg, obs_space)
+    elif cfg.encoder_conv_architecture.startswith("pretrained_resnet"):
+        # Load the checkpoint.
+        if cfg.encoder_load_path:
+            encoder_load_path = cfg.encoder_load_path
+        else:
+            # this loads the SS RNN trained encoder
+            encoder_load_path = "/home/xiaoxiong/try0120/train_dir/Random3_resnet_DG_relu_SS_RNN/checkpoint_p2/best_000020923_170811392_reward_87.534.pth"
+        devicename = cfg.device
+        if devicename=='gpu': devicename='cuda'
+        checkpoint = torch.load(encoder_load_path, map_location=devicename)
+
+        full_state_dict = checkpoint["model"]
+
+        # Filter out only the keys for the encoder.
+        encoder_state_dict = {k.replace("encoder.basic_encoder.", ""): v for k, v in full_state_dict.items() if k.startswith("encoder.basic_encoder.")}
+
+        # Now create a new encoder instance. Note that pretrained is set to False because you'll load your custom weights,
+        # and fixed is True to freeze the encoder.
+        encoder = ResnetEncoder(cfg, obs_space)
+
+        # Load the encoder state dict into the new encoder instance.
+        encoder.load_state_dict(encoder_state_dict)
+
+        if cfg.fix_encoder_when_load:
+            log.info('fix encoder weights')
+            # Double-check that the encoder parameters are frozen.
+            for param in encoder.parameters():
+                param.requires_grad = False
+
+            encoder.eval()  # Make sure the encoder is in evaluation mode.
+        else:
+            log.info('trainable loaded encoder')
+
+        return encoder
+    
+    
+    elif cfg.encoder_conv_architecture.startswith("mobilenet"):
+        return FixedMobileNetSmallEncoder(cfg, obs_space)
     else:
         raise NotImplementedError(f"Unknown convolutional architecture {cfg.encoder_conv_architecture}")
 

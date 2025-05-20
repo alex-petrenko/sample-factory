@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-import gymnasium as gym
 import torch
 from torch import Tensor, nn
-from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_sequence
 
 from sample_factory.algo.utils.action_distributions import is_continuous_action_space, sample_actions_log_probs
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace, running_mean_std_summaries
@@ -78,7 +76,7 @@ class ActorCritic(nn.Module, Configurable):
             layer.bias.data.fill_(0)
 
         if self.cfg.policy_initialization == "orthogonal":
-            if type(layer) is nn.Conv2d or type(layer) is nn.Linear:
+            if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.orthogonal_(layer.weight.data, gain=gain)
             else:
                 # LSTMs and GRUs initialize themselves
@@ -87,7 +85,7 @@ class ActorCritic(nn.Module, Configurable):
                 # go with default initialization,
                 pass
         elif self.cfg.policy_initialization == "xavier_uniform":
-            if type(layer) is nn.Conv2d or type(layer) is nn.Linear:
+            if type(layer) == nn.Conv2d or type(layer) == nn.Linear:
                 nn.init.xavier_uniform_(layer.weight.data, gain=gain)
             else:
                 pass
@@ -122,14 +120,10 @@ class ActorCritic(nn.Module, Configurable):
     def forward_core(self, head_output, rnn_states):
         raise NotImplementedError()
 
-    def forward_tail(
-        self, core_output, values_only: bool, sample_actions: bool, action_mask: Optional[Tensor] = None
-    ) -> TensorDict:
+    def forward_tail(self, core_output, values_only: bool, sample_actions: bool) -> TensorDict:
         raise NotImplementedError()
 
-    def forward(
-        self, normalized_obs_dict, rnn_states, values_only: bool = False, action_mask: Optional[Tensor] = None
-    ) -> TensorDict:
+    def forward(self, normalized_obs_dict, rnn_states, values_only: bool = False) -> TensorDict:
         raise NotImplementedError()
 
 
@@ -165,9 +159,7 @@ class ActorCriticSharedWeights(ActorCritic):
         x, new_rnn_states = self.core(head_output, rnn_states)
         return x, new_rnn_states
 
-    def forward_tail(
-        self, core_output, values_only: bool, sample_actions: bool, action_mask: Optional[Tensor] = None
-    ) -> TensorDict:
+    def forward_tail(self, core_output, values_only: bool, sample_actions: bool) -> TensorDict:
         decoder_output = self.decoder(core_output)
         values = self.critic_linear(decoder_output).squeeze()
 
@@ -175,9 +167,7 @@ class ActorCriticSharedWeights(ActorCritic):
         if values_only:
             return result
 
-        action_distribution_params, self.last_action_distribution = self.action_parameterization(
-            decoder_output, action_mask
-        )
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(decoder_output)
 
         # `action_logits` is not the best name here, better would be "action distribution parameters"
         result["action_logits"] = action_distribution_params
@@ -185,12 +175,10 @@ class ActorCriticSharedWeights(ActorCritic):
         self._maybe_sample_actions(sample_actions, result)
         return result
 
-    def forward(
-        self, normalized_obs_dict, rnn_states, values_only=False, action_mask: Optional[Tensor] = None
-    ) -> TensorDict:
+    def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
         x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x, values_only, sample_actions=True, action_mask=action_mask)
+        result = self.forward_tail(x, values_only, sample_actions=True)
         result["new_rnn_states"] = new_rnn_states
         return result
 
@@ -230,46 +218,19 @@ class ActorCriticSeparateWeights(ActorCritic):
         This is actually pretty slow due to all these split and cat operations.
         Consider using shared weights when training RNN policies.
         """
-        num_cores = len(self.cores)
 
+        num_cores = len(self.cores)
+        head_outputs_split = head_output.chunk(num_cores, dim=1)
         rnn_states_split = rnn_states.chunk(num_cores, dim=1)
 
-        if isinstance(head_output, PackedSequence):
-            # We cannot chunk PackedSequence directly, we first have to to unpack it,
-            # chunk, then pack chunks again to be able to process then through the cores.
-            # Finally we have to return concatenated outputs so we repeat the proces,
-            # but this time using concatenation - unpack, cat and pack.
+        outputs, new_rnn_states = [], []
+        for i, c in enumerate(self.cores):
+            output, new_rnn_state = c(head_outputs_split[i], rnn_states_split[i])
+            outputs.append(output)
+            new_rnn_states.append(new_rnn_state)
 
-            unpacked_head_output, lengths = pad_packed_sequence(head_output)
-            unpacked_head_output_split = unpacked_head_output.chunk(num_cores, dim=2)
-            head_outputs_split = [
-                pack_padded_sequence(unpacked_head_output_split[i], lengths, enforce_sorted=False)
-                for i in range(num_cores)
-            ]
-
-            unpacked_outputs, new_rnn_states = [], []
-            for i, c in enumerate(self.cores):
-                output, new_rnn_state = c(head_outputs_split[i], rnn_states_split[i])
-                unpacked_output, lengths = pad_packed_sequence(output)
-                unpacked_outputs.append(unpacked_output)
-                new_rnn_states.append(new_rnn_state)
-
-            unpacked_outputs = torch.cat(unpacked_outputs, dim=2)
-            outputs = pack_padded_sequence(unpacked_outputs, lengths, enforce_sorted=False)
-        else:
-            head_outputs_split = head_output.chunk(num_cores, dim=1)
-            rnn_states_split = rnn_states.chunk(num_cores, dim=1)
-
-            outputs, new_rnn_states = [], []
-            for i, c in enumerate(self.cores):
-                output, new_rnn_state = c(head_outputs_split[i], rnn_states_split[i])
-                outputs.append(output)
-                new_rnn_states.append(new_rnn_state)
-
-            outputs = torch.cat(outputs, dim=1)
-
+        outputs = torch.cat(outputs, dim=1)
         new_rnn_states = torch.cat(new_rnn_states, dim=1)
-
         return outputs, new_rnn_states
 
     @staticmethod
@@ -287,9 +248,7 @@ class ActorCriticSeparateWeights(ActorCritic):
     def forward_core(self, head_output, rnn_states):
         return self.core_func(head_output, rnn_states)
 
-    def forward_tail(
-        self, core_output, values_only: bool, sample_actions: bool, action_mask: Optional[Tensor] = None
-    ) -> TensorDict:
+    def forward_tail(self, core_output, values_only: bool, sample_actions: bool) -> TensorDict:
         core_outputs = core_output.chunk(len(self.cores), dim=1)
 
         # second core output corresponds to the critic
@@ -303,21 +262,17 @@ class ActorCriticSeparateWeights(ActorCritic):
 
         # first core output corresponds to the actor
         actor_decoder_output = self.actor_decoder(core_outputs[0])
-        action_distribution_params, self.last_action_distribution = self.action_parameterization(
-            actor_decoder_output, action_mask
-        )
+        action_distribution_params, self.last_action_distribution = self.action_parameterization(actor_decoder_output)
 
         result["action_logits"] = action_distribution_params
 
         self._maybe_sample_actions(sample_actions, result)
         return result
 
-    def forward(
-        self, normalized_obs_dict, rnn_states, values_only=False, action_mask: Optional[Tensor] = None
-    ) -> TensorDict:
+    def forward(self, normalized_obs_dict, rnn_states, values_only=False) -> TensorDict:
         x = self.forward_head(normalized_obs_dict)
         x, new_rnn_states = self.forward_core(x, rnn_states)
-        result = self.forward_tail(x, values_only, sample_actions=True, action_mask=action_mask)
+        result = self.forward_tail(x, values_only, sample_actions=True)
         result["new_rnn_states"] = new_rnn_states
         return result
 
@@ -326,7 +281,6 @@ def default_make_actor_critic_func(cfg: Config, obs_space: ObsSpace, action_spac
     from sample_factory.algo.utils.context import global_model_factory
 
     model_factory = global_model_factory()
-    obs_space = obs_space_without_action_mask(obs_space)
 
     if cfg.actor_critic_share_weights:
         return ActorCriticSharedWeights(model_factory, obs_space, action_space, cfg)
@@ -340,12 +294,3 @@ def create_actor_critic(cfg: Config, obs_space: ObsSpace, action_space: ActionSp
 
     make_actor_critic_func = global_model_factory().make_actor_critic_func
     return make_actor_critic_func(cfg, obs_space, action_space)
-
-
-def obs_space_without_action_mask(obs_space: ObsSpace) -> ObsSpace:
-    if isinstance(obs_space, gym.spaces.Dict) and "action_mask" in obs_space.spaces:
-        spaces = obs_space.spaces.copy()
-        del spaces["action_mask"]
-        obs_space = gym.spaces.Dict(spaces)
-
-    return obs_space

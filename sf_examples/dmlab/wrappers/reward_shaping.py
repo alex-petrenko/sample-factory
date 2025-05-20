@@ -36,5 +36,6 @@ class DmlabRewardShapingWrapper(gym.Wrapper):
             level_name_key = f"z_{self.unwrapped.task_id:02d}_{level_name}"
             info["episode_extra_stats"][f"{level_name_key}_{RAW_SCORE_SUMMARY_KEY_SUFFIX}"] = score
             info["episode_extra_stats"][f"{level_name_key}_len"] = self.episode_length
+            info["episode_extra_stats"][f"{level_name_key}_lenweighted_score"] = (10000-self.episode_length)/10000*score
 
         return obs, rew, terminated, truncated, info

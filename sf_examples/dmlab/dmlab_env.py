@@ -18,7 +18,7 @@ from sf_examples.dmlab.dmlab30 import (
     RANDOM_SCORES,
     dmlab30_level_name_to_level,
 )
-from sf_examples.dmlab.dmlab_gym import DmlabGymEnv, dmlab_level_to_level_name
+from sf_examples.dmlab.dmlab_gym import DmlabGymEnv, DmlabGymEnv_custom, dmlab_level_to_level_name
 from sf_examples.dmlab.dmlab_level_cache import DmlabLevelCache, DmlabLevelCaches
 from sf_examples.dmlab.wrappers.reward_shaping import RAW_SCORE_SUMMARY_KEY_SUFFIX, DmlabRewardShapingWrapper
 
@@ -36,6 +36,15 @@ class DmLabSpec:
 
 
 DMLAB_ENVS = [
+    DmLabSpec("test", "nav_maze_static_02"),
+    DmLabSpec("openfield_map", "openfield_map"),
+    DmLabSpec("openfield_map2", "openfield_map2"),
+    DmLabSpec("openfield_map2_fixed_loc3", "openfield_map2_fixed_loc3"),
+    DmLabSpec("openfield_map2_fixed_loc2", "openfield_map2_fixed_loc2"),
+    DmLabSpec("openfield_map2_fixed_loc1", "openfield_map2_fixed_loc1"),
+    DmLabSpec("openfield_map_episode", "openfield_map_episode"),
+    DmLabSpec("openfield_map_transparent", "openfield_map_transparent"),
+    DmLabSpec("random_maze", "demos/random_maze"),
     DmLabSpec("dmlab_benchmark", "contributed/dmlab30/rooms_collect_good_objects_train"),
     # train a single agent for all 30 DMLab tasks
     DmLabSpec("dmlab_30", [dmlab30_level_name_to_level(lvl) for lvl in DMLAB30_LEVELS]),
@@ -125,7 +134,12 @@ def make_dmlab_env_impl(
     level = task_id_to_level(task_id, spec)
     log.debug("%r level %s task id %d", env_config, level, task_id)
 
-    env = DmlabGymEnv(
+    depth_sensor=getattr(cfg,"depth_sensor")
+    log.info(depth_sensor)
+    log.info(cfg.depth_sensor)
+    # depth_sensor=False
+    log.info(f'depth_sensor  dmlab env {depth_sensor}')
+    env = DmlabGymEnv_custom(
         task_id,
         level,
         skip_frames,
@@ -141,6 +155,10 @@ def make_dmlab_env_impl(
         dmlab_level_caches_per_policy,
         spec.extra_cfg,
         render_mode,
+        depth_sensor = depth_sensor,
+        reduced_action_set = cfg.dmlab_reduced_action_set,
+        with_number_instruction = cfg.with_number_instruction,
+        with_pos_obs = cfg.with_pos_obs
     )
 
     if env_config and "env_id" in env_config:
@@ -212,6 +230,10 @@ def dmlab_extra_summaries(runner: Runner, policy_id: PolicyID, env_steps: int, s
     if policy_id not in new_level_returns:
         return
 
+    #debug
+    print(f"Extra summaries called at step {env_steps} for policy {policy_id}")
+
+
     # exit if we don't have at least one episode for all levels
     if dmlab_extra_summaries.all_levels is None:
         dmlab_levels = list_all_levels_for_experiment(cfg.env)
@@ -219,9 +241,17 @@ def dmlab_extra_summaries(runner: Runner, policy_id: PolicyID, env_steps: int, s
         dmlab_extra_summaries.all_levels = level_names
 
     all_levels = dmlab_extra_summaries.all_levels
+    flag=False
     for level in all_levels:
+
+        print(level,len(new_level_returns[policy_id].get(level, [])) )
         if len(new_level_returns[policy_id].get(level, [])) < 1:
-            return
+            flag=True
+            #return
+    if flag:
+        return
+    #debug
+    print(f"Having at least one episode for each level! \n Extra summaries called at step {env_steps} for policy {policy_id}")
 
     level_mean_scores_normalized = []
     level_mean_scores_normalized_capped = []
@@ -254,6 +284,9 @@ def dmlab_extra_summaries(runner: Runner, policy_id: PolicyID, env_steps: int, s
     # use 000 here to put these summaries on top in tensorboard (it sorts by ASCII)
     summary_writer.add_scalar("_dmlab/000_mean_human_norm_score", mean_normalized_score, env_steps)
     summary_writer.add_scalar("_dmlab/000_capped_mean_human_norm_score", capped_mean_normalized_score, env_steps)
+    #debug
+    print(f"Human norm score logged! \n Extra summaries called at step {env_steps} for policy {policy_id}")
+
 
     # clear the scores and start anew (this is exactly what IMPALA does)
     dmlab_extra_episodic_stats_processing.new_level_returns[policy_id] = dict()
@@ -265,3 +298,96 @@ def dmlab_extra_summaries(runner: Runner, policy_id: PolicyID, env_steps: int, s
         policy_avg_stats[target_objective_stat] = [deque(maxlen=1) for _ in range(cfg.num_policies)]
 
     policy_avg_stats[target_objective_stat][policy_id].append(capped_mean_normalized_score)
+
+
+def hipposlam_extra_summaries(runner: Runner, policy_id: PolicyID, env_steps: int, summary_writer: SummaryWriter) -> None:
+    """
+    We precisely follow IMPALA repo (scalable_agent) here for the reward calculation.
+
+    The procedure is:
+    1. Calculate mean raw episode score for the last few episodes for each level
+    2. Calculate human-normalized score using this mean value
+    3. Calculate capped score
+
+    The key point is that human-normalization and capping is done AFTER mean, which can lead to slighly higher capped
+    scores for levels that exceed the human baseline.
+
+    Another important point: we write the avg score summary only when we have at least one episode result for every
+    level. Again, we try to precisely follow IMPALA implementation here.
+
+    """
+
+    cfg = runner.cfg
+    new_level_returns = dmlab_extra_episodic_stats_processing.new_level_returns
+    if policy_id not in new_level_returns:
+        return
+
+    #debug
+    print(f"Extra summaries called at step {env_steps} for policy {policy_id}")
+
+
+    # exit if we don't have at least one episode for all levels
+    if dmlab_extra_summaries.all_levels is None:
+        dmlab_levels = list_all_levels_for_experiment(cfg.env)
+        level_names = [dmlab_level_to_level_name(lvl) for lvl in dmlab_levels]
+        dmlab_extra_summaries.all_levels = level_names
+
+    all_levels = dmlab_extra_summaries.all_levels
+    flag=False
+    for level in all_levels:
+
+        print(level,len(new_level_returns[policy_id].get(level, [])) )
+        if len(new_level_returns[policy_id].get(level, [])) < 1:
+            flag=True
+            #return
+    if flag:
+        return
+    #debug
+    print(f"Having at least one episode for each level! \n Extra summaries called at step {env_steps} for policy {policy_id}")
+
+    level_mean_scores_normalized = []
+    level_mean_scores_normalized_capped = []
+    for level_idx, level in enumerate(all_levels):
+        level_score = new_level_returns[policy_id][level]
+        assert len(level_score) > 0
+
+        score = np.mean(level_score)
+        test_level_name = LEVEL_MAPPING[level]
+        human = HUMAN_SCORES[test_level_name]
+        random = RANDOM_SCORES[test_level_name]
+
+        human_normalized_score = (score - random) / (human - random) * 100
+        capped_human_normalized_score = min(100.0, human_normalized_score)
+
+        level_mean_scores_normalized.append(human_normalized_score)
+        level_mean_scores_normalized_capped.append(capped_human_normalized_score)
+
+        level_key = f"{level_idx:02d}_{level}"
+        summary_writer.add_scalar(f"_dmlab/{level_key}_human_norm_score", human_normalized_score, env_steps)
+        summary_writer.add_scalar(
+            f"_dmlab/capped_{level_key}_human_norm_score", capped_human_normalized_score, env_steps
+        )
+
+    assert len(level_mean_scores_normalized) == len(level_mean_scores_normalized_capped) == len(all_levels)
+
+    mean_normalized_score = np.mean(level_mean_scores_normalized)
+    capped_mean_normalized_score = np.mean(level_mean_scores_normalized_capped)
+
+    # use 000 here to put these summaries on top in tensorboard (it sorts by ASCII)
+    summary_writer.add_scalar("_dmlab/000_mean_human_norm_score", mean_normalized_score, env_steps)
+    summary_writer.add_scalar("_dmlab/000_capped_mean_human_norm_score", capped_mean_normalized_score, env_steps)
+    #debug
+    print(f"Human norm score logged! \n Extra summaries called at step {env_steps} for policy {policy_id}")
+
+
+    # clear the scores and start anew (this is exactly what IMPALA does)
+    dmlab_extra_episodic_stats_processing.new_level_returns[policy_id] = dict()
+
+    # add a new stat that PBT can track
+    target_objective_stat = "dmlab_target_objective"
+    policy_avg_stats = runner.policy_avg_stats
+    if target_objective_stat not in policy_avg_stats:
+        policy_avg_stats[target_objective_stat] = [deque(maxlen=1) for _ in range(cfg.num_policies)]
+
+    policy_avg_stats[target_objective_stat][policy_id].append(capped_mean_normalized_score)
+

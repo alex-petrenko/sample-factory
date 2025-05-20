@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../sample_factory"
+		},
+		{
+			"path": "../../../../../../../try0120/train_dir"
+		},
+		{
+			"path": "../../../../../../../try0120"
+		}
+	],
+	"settings": {}
+}

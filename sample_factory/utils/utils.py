@@ -1,17 +1,17 @@
 """Utilities."""
 
 import argparse
-import getpass
 import importlib
 import logging
 import operator
 import os
+import pwd
 import tempfile
 import time
 from os.path import join
 from queue import Full
 from subprocess import SubprocessError, check_output, run
-from sys import platform
+from sys import argv, platform
 
 import numpy as np
 import psutil
@@ -385,11 +385,11 @@ def remove_if_exists(file):
 
 
 def get_username():
+    uid = os.getuid()
     try:
-        return getpass.getuser()
+        return pwd.getpwuid(uid).pw_name
     except KeyError:
         # worst case scenario - let's just use uid
-        uid = os.getuid()
         return str(uid)
 
 
@@ -400,10 +400,6 @@ def project_tmp_dir(mkdir: bool = True) -> str:
 
 def experiments_dir(cfg, mkdir=True) -> str:
     return maybe_ensure_dir_exists(cfg.train_dir, mkdir)
-
-
-def wandb_dir(cfg, mkdir=True) -> str:
-    return maybe_ensure_dir_exists(cfg.wandb_dir, mkdir)
 
 
 def experiment_dir(cfg, mkdir=True) -> str:

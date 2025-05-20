@@ -5,6 +5,7 @@ from torch import nn
 
 from sample_factory.model.model_utils import ModelModule
 from sample_factory.utils.typing import Config
+from sample_factory.utils.utils import log
 
 
 class ModelCore(ModelModule, ABC):
@@ -13,6 +14,7 @@ class ModelCore(ModelModule, ABC):
         self.core_output_size = -1  # to be overridden in derived classes
 
     def get_out_size(self) -> int:
+        log.debug("get out size called: {self.core_output_size}")
         return self.core_output_size
 
 

@@ -26,10 +26,6 @@ def set_global_context(ctx: SampleFactoryContext):
 
 
 def reset_global_context():
-    """
-    Most useful in tests, call this after any part of the global context has been modified
-    by a test in any way.
-    """
     global GLOBAL_CONTEXT
     GLOBAL_CONTEXT = SampleFactoryContext()
 

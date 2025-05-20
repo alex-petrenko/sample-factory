@@ -1,6 +1,6 @@
 import time
 from collections import deque
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -11,13 +11,13 @@ from sample_factory.algo.learning.learner import Learner
 from sample_factory.algo.sampling.batched_sampling import preprocess_actions
 from sample_factory.algo.utils.action_distributions import argmax_actions
 from sample_factory.algo.utils.env_info import extract_env_info
-from sample_factory.algo.utils.make_env import BatchedVecEnv, make_env_func_batched
+from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.rl_utils import make_dones, prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
-from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
+from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, StatusCode
@@ -82,24 +82,6 @@ def render_frame(cfg, env, video_frames, num_episodes, last_render_start) -> flo
     return render_start
 
 
-def make_env(cfg: Config, render_mode: Optional[str] = None) -> BatchedVecEnv:
-    env = make_env_func_batched(
-        cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0), render_mode=render_mode
-    )
-    return env
-
-
-def load_state_dict(cfg: Config, actor_critic: ActorCritic, device: torch.device) -> None:
-    policy_id = cfg.policy_index
-    name_prefix = dict(latest="checkpoint", best="best")[cfg.load_checkpoint_kind]
-    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
-    checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
-    if checkpoint_dict:
-        actor_critic.load_state_dict(checkpoint_dict["model"])
-    else:
-        raise RuntimeError("Could not load checkpoint")
-
-
 def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     verbose = False
 
@@ -121,20 +103,26 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     elif cfg.no_render:
         render_mode = None
 
-    env = make_env(cfg, render_mode=render_mode)
+    env = make_env_func_batched(
+        cfg, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0), render_mode=render_mode
+    )
     env_info = extract_env_info(env, cfg)
 
     if hasattr(env.unwrapped, "reset_on_init"):
         # reset call ruins the demo recording for VizDoom
         env.unwrapped.reset_on_init = False
-
+    log.info(env.action_space)
     actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
     actor_critic.eval()
 
     device = torch.device("cpu" if cfg.device == "cpu" else "cuda")
     actor_critic.model_to_device(device)
 
-    load_state_dict(cfg, actor_critic, device)
+    policy_id = cfg.policy_index
+    name_prefix = dict(latest="checkpoint", best="best")[cfg.load_checkpoint_kind]
+    checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
+    checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
+    actor_critic.load_state_dict(checkpoint_dict["model"])
 
     episode_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
     true_objectives = [deque([], maxlen=100) for _ in range(env.num_agents)]
@@ -148,7 +136,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     reward_list = []
 
     obs, infos = env.reset()
-    action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
     rnn_states = torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device)
     episode_reward = None
     finished_episode = [False for _ in range(env.num_agents)]
@@ -162,7 +149,7 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
 
             if not cfg.no_render:
                 visualize_policy_inputs(normalized_obs)
-            policy_outputs = actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
+            policy_outputs = actor_critic(normalized_obs, rnn_states)
 
             # sample actions from the distribution by default
             actions = policy_outputs["actions"]
@@ -182,7 +169,6 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                 last_render_start = render_frame(cfg, env, video_frames, num_episodes, last_render_start)
 
                 obs, rew, terminated, truncated, infos = env.step(actions)
-                action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
                 dones = make_dones(terminated, truncated)
                 infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
 

@@ -9,6 +9,11 @@ from sample_factory.utils.typing import Config
 
 
 def get_rnn_size(cfg):
+
+    # if cfg.simple_sequence:
+    #     size = cfg.Hippo_n_feature*(cfg.Hippo_R+cfg.Hippo_L-1)
+    #     return size
+
     if cfg.use_rnn:
         size = cfg.rnn_size * cfg.rnn_num_layers
     else:

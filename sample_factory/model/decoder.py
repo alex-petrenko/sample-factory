@@ -19,8 +19,10 @@ class MlpDecoder(Decoder):
         decoder_layers: List[int] = cfg.decoder_mlp_layers
         activation = nonlinearity(cfg)
         self.mlp = create_mlp(decoder_layers, decoder_input_size, activation)
-        if len(decoder_layers) > 0:
-            self.mlp = torch.jit.script(self.mlp)
+        use_jit=getattr(cfg,"use_jit",True)
+        if use_jit:
+            if len(decoder_layers) > 0:
+                self.mlp = torch.jit.script(self.mlp)
 
         self.decoder_out_size = calc_num_elements(self.mlp, (decoder_input_size,))
 

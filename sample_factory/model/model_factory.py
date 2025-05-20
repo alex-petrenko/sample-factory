@@ -19,6 +19,7 @@ class ModelFactory:
         Optional custom functions for creating parts of the model (encoders, decoders, etc.), or
         even overriding the entire actor-critic with a custom model.
         """
+
         self.make_actor_critic_func: MakeActorCriticFunc = default_make_actor_critic_func
 
         # callables user can specify to generate parts of the policy
