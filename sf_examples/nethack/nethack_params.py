@@ -41,6 +41,12 @@ def add_extra_params_nethack_env(parser):
         help="Integer, if 0, no ttyrecs (game recordings) will be saved. Otherwise, save a ttyrec every Nth episode.",
     )
     p.add_argument(
+        "--use_prev_action",
+        type=str2bool,
+        default=True,
+        help="If True, the model will use previous action. Defaults to `True`",
+    )
+    p.add_argument(
         "--add_image_observation",
         type=str2bool,
         default=True,
@@ -60,12 +66,6 @@ def add_extra_params_model(parser):
     Specify any additional command line arguments for NetHack models.
     """
     p = parser
-    p.add_argument(
-        "--use_prev_action",
-        type=str2bool,
-        default=True,
-        help="If True, the model will use previous action. Defaults to `True`",
-    )
     p.add_argument(
         "--use_tty_only",
         type=str2bool,

@@ -17,14 +17,8 @@ with open("README.md", "r") as f:
 _atari_deps = ["gymnasium[atari, accept-rom-license]"]
 _mujoco_deps = ["gymnasium[mujoco]", "mujoco<2.5"]
 _nethack_deps = [
-    "numba ~= 0.58",
-    "pandas ~= 2.1",
-    "matplotlib ~= 3.8",
-    "seaborn ~= 0.12",
-    "scipy ~= 1.11",
-    "shimmy",
-    "tqdm ~= 4.66",
-    "debugpy ~= 1.6",
+    "nle ~= 1.0",
+    "gymnasium < 1.0",
 ]
 _envpool_deps = ["envpool"]
 _pettingzoo_deps = ["pettingzoo[classic]"]

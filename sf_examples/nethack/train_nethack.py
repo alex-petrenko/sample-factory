@@ -17,8 +17,8 @@ from sf_examples.nethack.nethack_params import (
 
 
 def register_nethack_envs():
-    for env_name in NETHACK_ENVS.keys():
-        register_env(env_name, make_nethack_env)
+    for env in NETHACK_ENVS:
+        register_env(env.name, make_nethack_env)
 
 
 def make_nethack_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
