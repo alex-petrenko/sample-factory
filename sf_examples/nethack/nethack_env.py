@@ -1,50 +1,50 @@
 from typing import Optional
 
-from nle.env.tasks import (
-    NetHackChallenge,
-    NetHackEat,
-    NetHackGold,
-    NetHackOracle,
-    NetHackScore,
-    NetHackScout,
-    NetHackStaircase,
-    NetHackStaircasePet,
-)
+import gymnasium as gym
+import nle  # noqa: F401
+from nle import nethack
 
-from sample_factory.algo.utils.gymnasium_utils import patch_non_gymnasium_env
+from sample_factory.utils.utils import is_module_available
 from sf_examples.nethack.utils.wrappers import (
     BlstatsInfoWrapper,
-    GymV21CompatibilityV0,
-    NLETimeLimit,
+    NoProgressTimeout,
     PrevActionsWrapper,
-    RenderCharImagesWithNumpyWrapperV2,
-    SeedActionSpaceWrapper,
     TaskRewardsInfoWrapper,
+    TileTTY,
 )
 
-NETHACK_ENVS = dict(
-    nethack_staircase=NetHackStaircase,
-    nethack_score=NetHackScore,
-    nethack_pet=NetHackStaircasePet,
-    nethack_oracle=NetHackOracle,
-    nethack_gold=NetHackGold,
-    nethack_eat=NetHackEat,
-    nethack_scout=NetHackScout,
-    nethack_challenge=NetHackChallenge,
-)
+
+def nethack_available():
+    return is_module_available("nle")
+
+
+class NetHackSpec:
+    def __init__(self, name, env_id):
+        self.name = name
+        self.env_id = env_id
+
+
+NETHACK_ENVS = [
+    NetHackSpec("nethack_staircase", "NetHackStaircase-v0"),
+    NetHackSpec("nethack_score", "NetHackScore-v0"),
+    NetHackSpec("nethack_pet", "NetHackStaircasePet-v0"),
+    NetHackSpec("nethack_oracle", "NetHackOracle-v0"),
+    NetHackSpec("nethack_gold", "NetHackGold-v0"),
+    NetHackSpec("nethack_eat", "NetHackEat-v0"),
+    NetHackSpec("nethack_scout", "NetHackScout-v0"),
+    NetHackSpec("nethack_challenge", "NetHackChallenge-v0"),
+]
 
 
 def nethack_env_by_name(name):
-    if name in NETHACK_ENVS.keys():
-        return NETHACK_ENVS[name]
-    else:
-        raise Exception("Unknown NetHack env")
+    for cfg in NETHACK_ENVS:
+        if cfg.name == name:
+            return cfg
+    raise Exception("Unknown NetHack env")
 
 
-def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = None):
-    assert render_mode in (None, "human", "full", "ansi", "string", "rgb_array")
-
-    env_class = nethack_env_by_name(env_name)
+def make_nethack_env(env_name, cfg, _env_config, render_mode: Optional[str] = None, **kwargs):
+    nethack_spec = nethack_env_by_name(env_name)
 
     observation_keys = (
         "message",
@@ -72,19 +72,23 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
         penalty_mode=cfg.fn_penalty_step,
         savedir=cfg.savedir,
         save_ttyrec_every=cfg.save_ttyrec_every,
+        allow_all_yn_questions=True,
+        allow_all_modes=True,
     )
-    if env_name == "challenge":
-        kwargs["no_progress_timeout"] = 150
 
-    if env_name in ("staircase", "pet", "oracle"):
+    if env_name in ("nethack_staircase", "nethack_pet", "nethack_oracle"):
         kwargs.update(reward_win=cfg.reward_win, reward_lose=cfg.reward_lose)
+    if env_name != "nethack_challenge":
+        kwargs.update(actions=nethack.ACTIONS)
     # else:  # print warning once
     # warnings.warn("Ignoring cfg.reward_win and cfg.reward_lose")
 
-    env = env_class(**kwargs)
+    env = gym.make(nethack_spec.env_id, render_mode=render_mode, **kwargs)
+
+    env = NoProgressTimeout(env, no_progress_timeout=150)
 
     if cfg.add_image_observation:
-        env = RenderCharImagesWithNumpyWrapperV2(
+        env = TileTTY(
             env,
             crop_size=cfg.crop_dim,
             rescale_font_size=(cfg.pixel_size, cfg.pixel_size),
@@ -96,27 +100,5 @@ def make_nethack_env(env_name, cfg, env_config, render_mode: Optional[str] = Non
     if cfg.add_stats_to_info:
         env = BlstatsInfoWrapper(env)
         env = TaskRewardsInfoWrapper(env)
-
-    # add TimeLimit.truncated to info
-    env = NLETimeLimit(env)
-
-    # convert gym env to gymnasium one, due to issues with render NLE in reset
-    gymnasium_env = GymV21CompatibilityV0(env=env)
-
-    # preserving potential multi-agent env attributes
-    if hasattr(env, "num_agents"):
-        gymnasium_env.num_agents = env.num_agents
-    if hasattr(env, "is_multiagent"):
-        gymnasium_env.is_multiagent = env.is_multiagent
-    env = gymnasium_env
-
-    env = patch_non_gymnasium_env(env)
-
-    if render_mode:
-        env.render_mode = render_mode
-
-    if cfg.serial_mode and cfg.num_workers == 1:
-        # full reproducability can only be achieved in serial mode and when there is only 1 worker
-        env = SeedActionSpaceWrapper(env)
 
     return env

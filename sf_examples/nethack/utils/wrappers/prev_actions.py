@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import numpy as np
 
 
@@ -13,12 +13,12 @@ class PrevActionsWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         self.prev_action = 0
-        obs = self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         obs["prev_actions"] = np.array([self.prev_action])
-        return obs
+        return obs, info
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, term, trun, info = self.env.step(action)
         self.prev_action = action
         obs["prev_actions"] = np.array([self.prev_action])
-        return obs, reward, done, info
+        return obs, reward, term, trun, info
