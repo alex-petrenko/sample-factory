@@ -383,7 +383,7 @@ def make_doom_env_from_spec(spec, _env_name, cfg, env_config, render_mode: Optio
         tstamp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         cfg.record_to = join(cfg.record_to, f"{cfg.experiment}", tstamp)
         if not os.path.isdir(cfg.record_to):
-            os.makedirs(cfg.record_to)
+            os.makedirs(cfg.record_to, exist_ok=True)
     else:
         cfg.record_to = None
 
