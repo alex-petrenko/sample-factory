@@ -47,6 +47,7 @@ from sample_factory.utils.utils import (
     summaries_dir,
 )
 from sample_factory.utils.wandb_utils import init_wandb
+from sample_factory.utils.state_proxy import StateProxy
 
 
 class AlgoObserver:
@@ -77,111 +78,113 @@ MsgHandler = Callable[[Any, dict], None]
 PolicyMsgHandler = Callable[[Any, dict, PolicyID], None]
 
 
-class Runner(EventLoopObject, Configurable):
+class Runner(StateProxy, EventLoopObject, Configurable):
+    _STATE_ATTRS = frozenset(('avg_stats', 'avg_stats_intervals', 'batchers', 'buffer_mgr', 'component_profiles', 'components_to_stop', 'env_info', 'env_steps', 'event_loop', 'fps_stats', 'heartbeat_dict', 'heartbeat_report_sec', 'last_report', 'learners', 'msg_handlers', 'observers', 'policy_avg_stats', 'policy_lag', 'policy_msg_handlers', 'queue_size_dict', 'report_interval_sec', 'reward_shaping', 'sampler', 'samples_collected', 'start_time', 'stats', 'status', 'stopped', 'summaries_interval_sec', 'throughput_stats', 'timers', 'timing', 'total_env_steps_since_resume', 'total_train_seconds', 'update_training_info_every_sec', 'writers'))
+
     def __init__(self, cfg, unique_name=None):
+        self._init_state_proxy()
         Configurable.__init__(self, cfg)
 
         unique_name = Runner.__name__ if unique_name is None else unique_name
-        self.event_loop: EventLoop = EventLoop(unique_loop_name=f"{unique_name}_EvtLoop", serial_mode=cfg.serial_mode)
-        self.event_loop.owner = self
-        EventLoopObject.__init__(self, self.event_loop, object_id=unique_name)
-
-        self.status: StatusCode = ExperimentStatus.SUCCESS
-        self.stopped: bool = False
-
-        self.env_info: Optional[EnvInfo] = None
-
-        self.reward_shaping: List[Optional[Dict]] = [None for _ in range(self.cfg.num_policies)]
-
-        self.buffer_mgr = None
-
-        self.learners: Dict[PolicyID, LearnerWorker] = dict()
-        self.batchers: Dict[PolicyID, Batcher] = dict()
-        self.sampler: Optional[AbstractSampler] = None
-
-        self.timing = Timing("Runner profile")
-
-        # env_steps counts total number of simulation steps per policy (including frameskipped)
-        self.env_steps: Dict[PolicyID, int] = dict()
-
-        # samples_collected counts the total number of observations processed by the algorithm
-        self.samples_collected = [0 for _ in range(self.cfg.num_policies)]
-
-        self.total_env_steps_since_resume: Optional[int] = None
-        self.start_time: float = time.time()
-
-        # currently, this applies only to the current run, not experiment as a whole
-        # to change this behavior we'd need to save the state of the main loop to a filesystem
-        self.total_train_seconds = 0
-
-        self.last_report = time.time()
-
-        self.report_interval_sec = 5.0
-        self.avg_stats_intervals = (2, 12, 60)  # by default: 10 seconds, 60 seconds, 5 minutes
-        self.summaries_interval_sec = self.cfg.experiment_summaries_interval  # sec
-        self.heartbeat_report_sec = self.cfg.heartbeat_reporting_interval
-        self.update_training_info_every_sec = 5.0
-
-        self.fps_stats = deque([], maxlen=max(self.avg_stats_intervals))
-        self.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
-
-        self.stats = dict()  # regular (non-averaged) stats
-        self.avg_stats = dict()
-
-        self.policy_avg_stats: Dict[str, List[Deque]] = dict()
-        self.policy_lag = [dict() for _ in range(self.cfg.num_policies)]
+        self._init_event_loop(cfg, unique_name)
+        self._init_state()
+        self._init_stats()
 
         self._handle_restart()
 
         init_wandb(self.cfg)  # should be done before writers are initialized
 
-        self.writers: Dict[int, SummaryWriter] = dict()
+        self._init_writers(cfg)
+        self._init_msg_handlers()
+        self._state.observers: List[AlgoObserver] = []
+        self._init_timers()
+
+        self._state.heartbeat_dict = {}
+
+    def _init_event_loop(self, cfg, unique_name: str) -> None:
+        self._state.event_loop: EventLoop = EventLoop(unique_loop_name=f"{unique_name}_EvtLoop", serial_mode=cfg.serial_mode)
+        self._state.event_loop.owner = self
+        EventLoopObject.__init__(self, self._state.event_loop, object_id=unique_name)
+
+    def _init_state(self) -> None:
+        self._state.status: StatusCode = ExperimentStatus.SUCCESS
+        self._state.stopped: bool = False
+        self._state.env_info: Optional[EnvInfo] = None
+        self._state.reward_shaping: List[Optional[Dict]] = [None for _ in range(self.cfg.num_policies)]
+        self._state.buffer_mgr = None
+
+        self._state.learners: Dict[PolicyID, LearnerWorker] = dict()
+        self._state.batchers: Dict[PolicyID, Batcher] = dict()
+        self._state.sampler: Optional[AbstractSampler] = None
+
+        self._state.timing = Timing("Runner profile")
+        self._state.env_steps: Dict[PolicyID, int] = dict()
+        self._state.samples_collected = [0 for _ in range(self.cfg.num_policies)]
+        self._state.total_env_steps_since_resume: Optional[int] = None
+        self._state.start_time: float = time.time()
+        self._state.total_train_seconds = 0
+        self._state.last_report = time.time()
+
+        self._state.report_interval_sec = 5.0
+        self._state.avg_stats_intervals = (2, 12, 60)  # by default: 10 seconds, 60 seconds, 5 minutes
+        self._state.summaries_interval_sec = self.cfg.experiment_summaries_interval  # sec
+        self._state.heartbeat_report_sec = self.cfg.heartbeat_reporting_interval
+        self._state.update_training_info_every_sec = 5.0
+
+    def _init_stats(self) -> None:
+        self._state.fps_stats = deque([], maxlen=max(self._state.avg_stats_intervals))
+        self._state.throughput_stats = [deque([], maxlen=10) for _ in range(self.cfg.num_policies)]
+
+        self._state.stats = dict()  # regular (non-averaged) stats
+        self._state.avg_stats = dict()
+
+        self._state.policy_avg_stats: Dict[str, List[Deque]] = dict()
+        self._state.policy_lag = [dict() for _ in range(self.cfg.num_policies)]
+
+    def _init_writers(self, cfg) -> None:
+        self._state.writers: Dict[int, SummaryWriter] = dict()
         for policy_id in range(self.cfg.num_policies):
             summary_dir = join(summaries_dir(experiment_dir(cfg=self.cfg)), str(policy_id))
             summary_dir = ensure_dir_exists(summary_dir)
-            self.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=cfg.flush_summaries_interval)
+            self._state.writers[policy_id] = SummaryWriter(summary_dir, flush_secs=cfg.flush_summaries_interval)
 
-        # global msg handlers for messages from algo components
-        self.msg_handlers: Dict[str, List[MsgHandler]] = {
+    def _init_msg_handlers(self) -> None:
+        self._state.msg_handlers: Dict[str, List[MsgHandler]] = {
             TIMING_STATS: [timing_msg_handler],
             STATS_KEY: [stats_msg_handler],
         }
 
-        # handlers for policy-specific messages
-        self.policy_msg_handlers: Dict[str, List[PolicyMsgHandler]] = {
+        self._state.policy_msg_handlers: Dict[str, List[PolicyMsgHandler]] = {
             LEARNER_ENV_STEPS: [self._learner_steps_handler],
             EPISODIC: [self._episodic_stats_handler],
             TRAIN_STATS: [self._train_stats_handler],
             SAMPLES_COLLECTED: [samples_stats_handler],
         }
 
-        self.observers: List[AlgoObserver] = []
-
-        self.timers: List[Timer] = []
+    def _init_timers(self) -> None:
+        self._state.timers: List[Timer] = []
 
         def periodic(period, cb):
-            t = Timer(self.event_loop, period)
+            t = Timer(self._state.event_loop, period)
             t.timeout.connect(cb)
-            self.timers.append(t)
+            self._state.timers.append(t)
 
-        periodic(self.report_interval_sec, self._update_stats_and_print_report)
-        periodic(self.summaries_interval_sec, self._report_experiment_summaries)
+        periodic(self._state.report_interval_sec, self._update_stats_and_print_report)
+        periodic(self._state.summaries_interval_sec, self._report_experiment_summaries)
 
         periodic(self.cfg.save_every_sec, self._save_policy)
         periodic(self.cfg.save_best_every_sec, self._save_best_policy)
 
-        periodic(self.update_training_info_every_sec, self._propagate_training_info)
+        periodic(self._state.update_training_info_every_sec, self._propagate_training_info)
 
         if self.cfg.save_milestones_sec > 0:
             periodic(self.cfg.save_milestones_sec, self._save_milestone_policy)
 
-        periodic(self.heartbeat_report_sec, self._check_heartbeat)
+        periodic(self._state.heartbeat_report_sec, self._check_heartbeat)
+        self._state.queue_size_dict = {}
 
-        self.heartbeat_dict = {}
-        self.queue_size_dict = {}
-
-        self.components_to_stop: List[EventLoopObject] = []
-        self.component_profiles: Dict[str, Timing] = dict()
+        self._state.components_to_stop: List[EventLoopObject] = []
+        self._state.component_profiles: Dict[str, Timing] = dict()
 
     # signals emitted by the runner
     @signal
@@ -242,10 +245,10 @@ class Runner(EventLoopObject, Configurable):
             policy_id = msg.get("policy_id", None)
 
             for key in msg:
-                for handler in self.msg_handlers.get(key, ()):
+                for handler in self._state.msg_handlers.get(key, ()):
                     handler(self, msg)
                 if policy_id is not None:
-                    for handler in self.policy_msg_handlers.get(key, ()):
+                    for handler in self._state.policy_msg_handlers.get(key, ()):
                         handler(self, msg, policy_id)
 
     @staticmethod
@@ -291,11 +294,11 @@ class Runner(EventLoopObject, Configurable):
     def _get_perf_stats(self):
         # total env steps simulated across all policies
         fps_stats = []
-        for avg_interval in self.avg_stats_intervals:
+        for avg_interval in self._state.avg_stats_intervals:
             fps_for_interval = math.nan
-            if len(self.fps_stats) > 1:
-                t1, x1 = self.fps_stats[max(0, len(self.fps_stats) - 1 - avg_interval)]
-                t2, x2 = self.fps_stats[-1]
+            if len(self._state.fps_stats) > 1:
+                t1, x1 = self._state.fps_stats[max(0, len(self._state.fps_stats) - 1 - avg_interval)]
+                t2, x2 = self._state.fps_stats[-1]
                 fps_for_interval = (x2 - x1) / (t2 - t1)
 
             fps_stats.append(fps_for_interval)
@@ -304,22 +307,22 @@ class Runner(EventLoopObject, Configurable):
         sample_throughput = dict()
         for policy_id in range(self.cfg.num_policies):
             sample_throughput[policy_id] = math.nan
-            if len(self.throughput_stats[policy_id]) > 1:
-                t1, x1 = self.throughput_stats[policy_id][0]
-                t2, x2 = self.throughput_stats[policy_id][-1]
+            if len(self._state.throughput_stats[policy_id]) > 1:
+                t1, x1 = self._state.throughput_stats[policy_id][0]
+                t2, x2 = self._state.throughput_stats[policy_id][-1]
                 sample_throughput[policy_id] = (x2 - x1) / (t2 - t1)
 
         return fps_stats, sample_throughput
 
     def print_stats(self, fps, sample_throughput, total_env_steps):
         fps_str = []
-        for interval, fps_value in zip(self.avg_stats_intervals, fps):
-            fps_str.append(f"{int(interval * self.report_interval_sec)} sec: {fps_value:.1f}")
+        for interval, fps_value in zip(self._state.avg_stats_intervals, fps):
+            fps_str.append(f"{int(interval * self._state.report_interval_sec)} sec: {fps_value:.1f}")
         fps_str = f'({", ".join(fps_str)})'
 
         samples_per_policy = ", ".join([f"{p}: {s:.1f}" for p, s in sample_throughput.items()])
 
-        lag_stats = self.policy_lag[0]
+        lag_stats = self._state.policy_lag[0]
         lag = AttrDict()
         for key in ["min", "avg", "max"]:
             lag[key] = lag_stats.get(f"version_diff_{key}", -1)
@@ -330,39 +333,39 @@ class Runner(EventLoopObject, Configurable):
             fps_str,
             total_env_steps,
             samples_per_policy,
-            sum(self.samples_collected),
+            sum(self._state.samples_collected),
             policy_lag_str,
         )
 
-        if "reward" in self.policy_avg_stats:
+        if "reward" in self._state.policy_avg_stats:
             policy_reward_stats = []
             for policy_id in range(self.cfg.num_policies):
-                reward_stats = self.policy_avg_stats["reward"][policy_id]
+                reward_stats = self._state.policy_avg_stats["reward"][policy_id]
                 if len(reward_stats) > 0:
                     policy_reward_stats.append((policy_id, f"{np.mean(reward_stats):.3f}"))
             log.debug("Avg episode reward: %r", policy_reward_stats)
 
     def _update_stats_and_print_report(self):
         """
-        Called periodically (every self.report_interval_sec seconds).
+        Called periodically (every self._state.report_interval_sec seconds).
         Print experiment stats (FPS, avg rewards) to console and dump TF summaries collected from workers to disk.
         """
 
         # don't have enough statistic from the learners yet
-        if len(self.env_steps) < self.cfg.num_policies:
+        if len(self._state.env_steps) < self.cfg.num_policies:
             return
 
-        if self.total_env_steps_since_resume is None:
+        if self._state.total_env_steps_since_resume is None:
             return
 
         now = time.time()
-        self.fps_stats.append((now, self.total_env_steps_since_resume))
+        self._state.fps_stats.append((now, self._state.total_env_steps_since_resume))
 
         for policy_id in range(self.cfg.num_policies):
-            self.throughput_stats[policy_id].append((now, self.samples_collected[policy_id]))
+            self._state.throughput_stats[policy_id].append((now, self._state.samples_collected[policy_id]))
 
         fps_stats, sample_throughput = self._get_perf_stats()
-        total_env_steps = sum(self.env_steps.values())
+        total_env_steps = sum(self._state.env_steps.values())
         self.print_stats(fps_stats, sample_throughput, total_env_steps)
 
     def _report_experiment_summaries(self):
@@ -372,26 +375,26 @@ class Runner(EventLoopObject, Configurable):
         fps = fps_stats[0]
 
         default_policy = 0
-        for policy_id, env_steps in self.env_steps.items():
-            writer = self.writers[policy_id]
+        for policy_id, env_steps in self._state.env_steps.items():
+            writer = self._state.writers[policy_id]
             if policy_id == default_policy:
                 if not math.isnan(fps):
                     writer.add_scalar("perf/_fps", fps, env_steps)
 
                 writer.add_scalar("stats/master_process_memory_mb", float(memory_mb), env_steps)
-                for key, value in self.avg_stats.items():
-                    if len(value) >= value.maxlen or (len(value) > 10 and self.total_train_seconds > 300):
+                for key, value in self._state.avg_stats.items():
+                    if len(value) >= value.maxlen or (len(value) > 10 and self._state.total_train_seconds > 300):
                         writer.add_scalar(f"stats/{key}", np.mean(value), env_steps)
 
-                for key, value in self.stats.items():
+                for key, value in self._state.stats.items():
                     writer.add_scalar(f"stats/{key}", value, env_steps)
 
             if not math.isnan(sample_throughput[policy_id]):
                 writer.add_scalar("perf/_sample_throughput", sample_throughput[policy_id], env_steps)
 
-            for key, stat in self.policy_avg_stats.items():
+            for key, stat in self._state.policy_avg_stats.items():
                 if len(stat[policy_id]) >= stat[policy_id].maxlen or (
-                    len(stat[policy_id]) > 10 and self.total_train_seconds > 300
+                    len(stat[policy_id]) > 10 and self._state.total_train_seconds > 300
                 ):
                     stat_value = np.mean(stat[policy_id])
 
@@ -419,7 +422,7 @@ class Runner(EventLoopObject, Configurable):
 
             self._observers_call(AlgoObserver.extra_summaries, self, policy_id, writer, env_steps)
 
-        for w in self.writers.values():
+        for w in self._state.writers.values():
             w.flush()
 
     def _propagate_training_info(self):
@@ -433,18 +436,18 @@ class Runner(EventLoopObject, Configurable):
             training_info[policy_id] = dict(
                 policy_id=policy_id,
                 # "approx" here because it will lag behind a little bit due to the async nature of the system
-                approx_total_training_steps=self.env_steps.get(policy_id, 0),
-                reward_shaping=self.reward_shaping[policy_id],
+                approx_total_training_steps=self._state.env_steps.get(policy_id, 0),
+                reward_shaping=self._state.reward_shaping[policy_id],
                 # add more stats if needed (commented by default for efficiency)
-                # stats=self.stats,
-                # avg_stats=self.avg_stats,
-                # policy_avg_stats=self.policy_avg_stats,
+                # stats=self._state.stats,
+                # avg_stats=self._state.avg_stats,
+                # policy_avg_stats=self._state.policy_avg_stats,
             )
 
         self.update_training_info.emit(training_info)
 
     def update_reward_shaping(self, policy_id: PolicyID, reward_shaping: Dict[str, Any]) -> None:
-        self.reward_shaping[policy_id] = reward_shaping
+        self._state.reward_shaping[policy_id] = reward_shaping
 
         # send the updated data to other components (e.g. the sampler)
         # this allows us to change reward shaping on the fly, PBT can take advantage of this
@@ -458,18 +461,18 @@ class Runner(EventLoopObject, Configurable):
 
     def _save_best_policy(self):
         # don't have enough statistic from the learners yet
-        if len(self.env_steps) < self.cfg.num_policies:
+        if len(self._state.env_steps) < self.cfg.num_policies:
             return
 
         metric = self.cfg.save_best_metric
-        if metric in self.policy_avg_stats:
+        if metric in self._state.policy_avg_stats:
             for policy_id in range(self.cfg.num_policies):
                 # check if number of samples collected is greater than cfg.save_best_after
-                env_steps = self.env_steps[policy_id]
+                env_steps = self._state.env_steps[policy_id]
                 if env_steps < self.cfg.save_best_after:
                     continue
 
-                stats = self.policy_avg_stats[metric][policy_id]
+                stats = self._state.policy_avg_stats[metric][policy_id]
                 if len(stats) > 0:
                     avg_metric = np.mean(stats)
                     self.save_best.emit(policy_id, metric, avg_metric)
@@ -479,19 +482,19 @@ class Runner(EventLoopObject, Configurable):
         handlers_dict[key] = func
 
     def register_msg_handler(self, key, func):
-        self._register_msg_handler(self.msg_handlers, key, func)
+        self._register_msg_handler(self._state.msg_handlers, key, func)
 
     def register_policy_msg_handler(self, key, func):
-        self._register_msg_handler(self.policy_msg_handlers, key, func)
+        self._register_msg_handler(self._state.policy_msg_handlers, key, func)
 
     def register_episodic_stats_handler(self, func: PolicyMsgHandler):
-        self.policy_msg_handlers[EPISODIC].append(func)
+        self._state.policy_msg_handlers[EPISODIC].append(func)
 
     def register_observer(self, observer: AlgoObserver) -> None:
-        self.observers.append(observer)
+        self._state.observers.append(observer)
 
     def _observers_call(self, func, *args, **kwargs) -> None:
-        for observer in self.observers:
+        for observer in self._state.observers:
             getattr(observer, func.__name__)(*args, **kwargs)
 
     def _save_cfg(self):
@@ -501,32 +504,32 @@ class Runner(EventLoopObject, Configurable):
             json.dump(cfg_dict(self.cfg), json_file, indent=2)
 
     def _make_batcher(self, event_loop, policy_id: PolicyID):
-        return Batcher(event_loop, policy_id, self.buffer_mgr, self.cfg, self.env_info)
+        return Batcher(event_loop, policy_id, self._state.buffer_mgr, self.cfg, self._state.env_info)
 
     def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):
         return LearnerWorker(
             event_loop,
             self.cfg,
-            self.env_info,
-            self.buffer_mgr,
+            self._state.env_info,
+            self._state.buffer_mgr,
             batcher,
             policy_id=policy_id,
         )
 
     def _make_sampler(self, sampler_cls: type, event_loop: EventLoop):
-        assert len(self.learners) == self.cfg.num_policies, "Learners not created yet"
-        param_servers = {policy: self.learners[policy].param_server for policy in self.learners}
-        return sampler_cls(event_loop, self.buffer_mgr, param_servers, self.cfg, self.env_info)
+        assert len(self._state.learners) == self.cfg.num_policies, "Learners not created yet"
+        param_servers = {policy: self._state.learners[policy].param_server for policy in self._state.learners}
+        return sampler_cls(event_loop, self._state.buffer_mgr, param_servers, self.cfg, self._state.env_info)
 
     def init(self) -> StatusCode:
         set_global_cuda_envvars(self.cfg)
-        self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
+        self._state.env_info = obtain_env_info_in_a_separate_process(self.cfg)
 
         for policy_id in range(self.cfg.num_policies):
-            self.reward_shaping[policy_id] = self.env_info.reward_shaping_scheme
+            self._state.reward_shaping[policy_id] = self._state.env_info.reward_shaping_scheme
 
         # check for any incompatible arguments
-        if not preprocess_cfg(self.cfg, self.env_info):
+        if not preprocess_cfg(self.cfg, self._state.env_info):
             return ExperimentStatus.FAILURE
 
         log.debug(f"Starting experiment with the following configuration:\n{cfg_str(self.cfg)}")
@@ -535,7 +538,7 @@ class Runner(EventLoopObject, Configurable):
         self._save_cfg()
         save_git_diff(experiment_dir(self.cfg))
 
-        self.buffer_mgr = BufferMgr(self.cfg, self.env_info)
+        self._state.buffer_mgr = BufferMgr(self.cfg, self._state.env_info)
 
         self._observers_call(AlgoObserver.on_init, self)
 
@@ -543,7 +546,7 @@ class Runner(EventLoopObject, Configurable):
 
     def _on_start(self):
         """Override this in a subclass to do something right when the experiment is started."""
-        self.sampler.init()
+        self._state.sampler.init()
         self._propagate_training_info()
         self._observers_call(AlgoObserver.on_start, self)
 
@@ -553,15 +556,15 @@ class Runner(EventLoopObject, Configurable):
         When all components of the same type do not respond in the reporting timeframe, stops the run
         """
         component_type = type(component)
-        if component_type not in self.heartbeat_dict:
-            self.heartbeat_dict[component_type] = {}
-        type_dict = self.heartbeat_dict[component_type]
+        if component_type not in self._state.heartbeat_dict:
+            self._state.heartbeat_dict[component_type] = {}
+        type_dict = self._state.heartbeat_dict[component_type]
         type_dict[component.object_id] = None
 
         # setup up queue_size report with heartbeat, grouped by event_loop_process_name
         p_name = process_name(component.event_loop.process)
-        if p_name not in self.queue_size_dict:
-            self.queue_size_dict[p_name] = 0
+        if p_name not in self._state.queue_size_dict:
+            self._state.queue_size_dict[p_name] = 0
 
         component.heartbeat.connect(self._receive_heartbeat)
 
@@ -570,40 +573,40 @@ class Runner(EventLoopObject, Configurable):
         Record the time the most recent heartbeat was received
         """
         curr_time = time.time()
-        heartbeat_time = self.heartbeat_dict[component_type][component_id]
+        heartbeat_time = self._state.heartbeat_dict[component_type][component_id]
         if heartbeat_time is None:
             log.info(f"Heartbeat connected on {component_id}")
-        elif curr_time - heartbeat_time > self.heartbeat_report_sec:
+        elif curr_time - heartbeat_time > self._state.heartbeat_report_sec:
             log.info(f"Heartbeat reconnected after {int(curr_time - heartbeat_time)} seconds from {component_id}")
-        self.heartbeat_dict[component_type][component_id] = curr_time
-        self.queue_size_dict[p_name] = qsize
+        self._state.heartbeat_dict[component_type][component_id] = curr_time
+        self._state.queue_size_dict[p_name] = qsize
 
     def _check_heartbeat(self):
         """
-        Reports components whose last heartbeat signal is longer than self.heartbeat_report_sec.
+        Reports components whose last heartbeat signal is longer than self._state.heartbeat_report_sec.
         If all components of the same type fail, stop the run
         """
         curr_time = time.time()
         comp_list = []
         type_list = []
         none_list = []
-        for component_type, heartbeat_dict in self.heartbeat_dict.items():
+        for component_type, heartbeat_dict in self._state.heartbeat_dict.items():
             num_components = len(heartbeat_dict)
             num_stopped = 0
             for component_id, heartbeat_time in heartbeat_dict.items():
                 if heartbeat_time is None:
                     none_list.append(component_id)
                     continue
-                if curr_time - heartbeat_time > self.heartbeat_report_sec:
+                if curr_time - heartbeat_time > self._state.heartbeat_report_sec:
                     comp_list.append(f"{component_id} ({(int(curr_time - heartbeat_time))} seconds)")
                     num_stopped += 1
             if num_stopped == num_components:
                 type_list.append(str(component_type))
 
         if len(none_list) > 0:
-            wait_time = time.time() - self.start_time
+            wait_time = time.time() - self._state.start_time
             log.debug(f"Components not started: {', '.join(none_list)}, {wait_time=:.1f} seconds")
-            if wait_time > 3 * self.heartbeat_report_sec:
+            if wait_time > 3 * self._state.heartbeat_report_sec:
                 log.error(f"Components take too long to start: {', '.join(none_list)}. Aborting the experiment!\n\n\n")
                 self._stop_training(failed=True)
 
@@ -614,24 +617,24 @@ class Runner(EventLoopObject, Configurable):
             log.error(f"Stopping training due to lack of heartbeats from {', '.join(type_list)}")
             self._stop_training(failed=True)
 
-        for p_name, qsize in self.queue_size_dict.items():
+        for p_name, qsize in self._state.queue_size_dict.items():
             if qsize > 5:
                 debug_log_every_n(1000, f"Process: {p_name} has queue size: {qsize}")
 
     def _setup_component_termination(self, stop_signal: signal, component_to_stop: HeartbeatStoppableEventLoopObject):
         stop_signal.connect(component_to_stop.on_stop)
-        self.components_to_stop.append(component_to_stop)
+        self._state.components_to_stop.append(component_to_stop)
         component_to_stop.stop.connect(self._component_stopped)
 
     def connect_components(self):
-        self.event_loop.start.connect(self._on_start)
+        self._state.event_loop.start.connect(self._on_start)
 
-        sampler = self.sampler
+        sampler = self._state.sampler
         for policy_id in range(self.cfg.num_policies):
             # when runner is ready we initialize the learner first and then all other components in a chain
-            learner_worker = self.learners[policy_id]
-            batcher = self.batchers[policy_id]
-            self.event_loop.start.connect(learner_worker.init)
+            learner_worker = self._state.learners[policy_id]
+            batcher = self._state.batchers[policy_id]
+            self._state.event_loop.start.connect(learner_worker.init)
             learner_worker.initialized.connect(batcher.init)
             sampler.connect_model_initialized(policy_id, learner_worker.model_initialized)
 
@@ -678,9 +681,9 @@ class Runner(EventLoopObject, Configurable):
         self._observers_call(AlgoObserver.on_connect_components, self)
 
     def _should_end_training(self):
-        self.total_train_seconds = time.time() - self.start_time
-        end = len(self.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self.env_steps.values())
-        end |= self.total_train_seconds > self.cfg.train_for_seconds
+        self._state.total_train_seconds = time.time() - self._state.start_time
+        end = len(self._state.env_steps) > 0 and all(s > self.cfg.train_for_env_steps for s in self._state.env_steps.values())
+        end |= self._state.total_train_seconds > self.cfg.train_for_seconds
         return end
 
     def _after_training_iteration(self, training_iteration_since_resume: int):
@@ -690,7 +693,7 @@ class Runner(EventLoopObject, Configurable):
             self._stop_training()
 
     def _stop_training(self, failed: bool = False) -> None:
-        if not self.stopped:
+        if not self._state.stopped:
             self._propagate_training_info()
 
             self._observers_call(AlgoObserver.on_stop, self)
@@ -698,18 +701,18 @@ class Runner(EventLoopObject, Configurable):
             self._save_policy()
             self._save_best_policy()
 
-            for timer in self.timers:
+            for timer in self._state.timers:
                 timer.stop()
             self.stop.emit(self.object_id)
 
             if failed:
-                self.status = ExperimentStatus.FAILURE
+                self._state.status = ExperimentStatus.FAILURE
 
-            self.stopped = True
+            self._state.stopped = True
 
     def _component_stopped(self, component_obj_id, component_profiles: Dict[str, Timing]):
         remaining = []
-        for i, component in enumerate(self.components_to_stop):
+        for i, component in enumerate(self._state.components_to_stop):
             if component.object_id == component_obj_id:
                 log.debug(f"Component {component_obj_id} stopped!")
                 continue
@@ -724,43 +727,43 @@ class Runner(EventLoopObject, Configurable):
 
             remaining.append(component)
 
-        self.components_to_stop = remaining
-        if self.components_to_stop and self.status == ExperimentStatus.FAILURE:
-            log.debug(f"Waiting for {[c.object_id for c in self.components_to_stop]} to stop...")
+        self._state.components_to_stop = remaining
+        if self._state.components_to_stop and self._state.status == ExperimentStatus.FAILURE:
+            log.debug(f"Waiting for {[c.object_id for c in self._state.components_to_stop]} to stop...")
 
-        self.component_profiles.update(component_profiles)
+        self._state.component_profiles.update(component_profiles)
 
-        if not self.components_to_stop:
+        if not self._state.components_to_stop:
             self.all_components_stopped.emit()
 
     def _on_everything_stopped(self):
         # sort profiles by name
-        self.component_profiles = sorted(list(self.component_profiles.items()), key=lambda x: x[0])
-        for component, profile in self.component_profiles:
+        self._state.component_profiles = sorted(list(self._state.component_profiles.items()), key=lambda x: x[0])
+        for component, profile in self._state.component_profiles:
             log.info(profile)
 
-        for w in self.writers.values():
+        for w in self._state.writers.values():
             w.flush()
 
-        assert self.event_loop.owner is self
-        self.event_loop.stop()
+        assert self._state.event_loop.owner is self
+        self._state.event_loop.stop()
 
     # noinspection PyBroadException
     def run(self) -> StatusCode:
-        with self.timing.timeit("main_loop"):
+        with self._state.timing.timeit("main_loop"):
             try:
-                evt_loop_status = self.event_loop.exec()
-                self.status = (
-                    ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else self.status
+                evt_loop_status = self._state.event_loop.exec()
+                self._state.status = (
+                    ExperimentStatus.INTERRUPTED if evt_loop_status == EventLoopStatus.INTERRUPTED else self._state.status
                 )
                 self.stop.emit(self.object_id)
             except Exception:
                 log.exception(f"Uncaught exception in {self.object_id} evt loop")
-                self.status = ExperimentStatus.FAILURE
+                self._state.status = ExperimentStatus.FAILURE
 
-        log.info(self.timing)
-        if self.total_env_steps_since_resume is None:
-            self.total_env_steps_since_resume = 0
-        fps = self.total_env_steps_since_resume / self.timing.main_loop
-        log.info("Collected %r, FPS: %.1f", self.env_steps, fps)
-        return self.status
+        log.info(self._state.timing)
+        if self._state.total_env_steps_since_resume is None:
+            self._state.total_env_steps_since_resume = 0
+        fps = self._state.total_env_steps_since_resume / self._state.timing.main_loop
+        log.info("Collected %r, FPS: %.1f", self._state.env_steps, fps)
+        return self._state.status
