@@ -5,7 +5,7 @@ import os
 import pickle
 from dataclasses import dataclass
 from os.path import join
-from typing import Dict, List, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 import gymnasium as gym
 
@@ -19,23 +19,78 @@ from sample_factory.utils.utils import log, project_tmp_dir
 ENV_INFO_PROTOCOL_VERSION = 1
 
 
-@dataclass
-class EnvInfo:
+class EnvSpaces(NamedTuple):
     obs_space: gym.Space
     action_space: gym.Space
     num_agents: int
-    gpu_actions: bool  # whether actions provided by the agent should be on GPU or not
-    gpu_observations: bool  # whether environment provides data (obs, etc.) on GPU or not
-    action_splits: List[int]  # in the case of tuple actions, the splits for the actions
-    all_discrete: bool  # in the case of tuple actions, whether the actions are all discrete
-    frameskip: int
-    # potentially customizable reward shaping, a map of reward component names to their respective weights
-    # this can be used by PBT to optimize the reward shaping towards a sparse final objective
-    reward_shaping_scheme: Optional[Dict[str, float]] = None
 
-    # version of the protocol, used to detect changes in the EnvInfo class and invalidate the cache if needed
-    # bump this version if you make any changes to the EnvInfo class
+
+class EnvExecutionInfo(NamedTuple):
+    gpu_actions: bool
+    gpu_observations: bool
+
+
+class EnvActionInfo(NamedTuple):
+    action_splits: Optional[List[int]]
+    all_discrete: Optional[bool]
+
+
+@dataclass(init=False)
+class EnvInfo:
+    spaces: EnvSpaces
+    execution: EnvExecutionInfo
+    action_info: EnvActionInfo
+    frameskip: int
+    reward_shaping_scheme: Optional[Dict[str, float]] = None
     env_info_protocol_version: Optional[int] = None
+
+    def __init__(
+        self,
+        obs_space: gym.Space,
+        action_space: gym.Space,
+        num_agents: int,
+        gpu_actions: bool,
+        gpu_observations: bool,
+        action_splits: Optional[List[int]],
+        all_discrete: Optional[bool],
+        frameskip: int,
+        reward_shaping_scheme: Optional[Dict[str, float]] = None,
+        env_info_protocol_version: Optional[int] = None,
+    ):
+        self.spaces = EnvSpaces(obs_space, action_space, num_agents)
+        self.execution = EnvExecutionInfo(gpu_actions, gpu_observations)
+        self.action_info = EnvActionInfo(action_splits, all_discrete)
+        self.frameskip = frameskip
+        self.reward_shaping_scheme = reward_shaping_scheme
+        self.env_info_protocol_version = env_info_protocol_version
+
+    @property
+    def obs_space(self) -> gym.Space:
+        return self.spaces.obs_space
+
+    @property
+    def action_space(self) -> gym.Space:
+        return self.spaces.action_space
+
+    @property
+    def num_agents(self) -> int:
+        return self.spaces.num_agents
+
+    @property
+    def gpu_actions(self) -> bool:
+        return self.execution.gpu_actions
+
+    @property
+    def gpu_observations(self) -> bool:
+        return self.execution.gpu_observations
+
+    @property
+    def action_splits(self) -> Optional[List[int]]:
+        return self.action_info.action_splits
+
+    @property
+    def all_discrete(self) -> Optional[bool]:
+        return self.action_info.all_discrete
 
 
 def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvInfo:

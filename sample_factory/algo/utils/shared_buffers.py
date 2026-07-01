@@ -21,6 +21,7 @@ from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.gpu_utils import gpus_for_process
 from sample_factory.utils.typing import Device, MpQueue, PolicyID
 from sample_factory.utils.utils import log
+from sample_factory.utils.state_proxy import StateProxy
 
 
 def policy_device(cfg: AttrDict, policy_id: PolicyID) -> torch.device:
@@ -149,35 +150,38 @@ def alloc_policy_output_tensors(cfg, env_info: EnvInfo, rnn_size, device, share)
     return policy_output_tensors, output_names, output_sizes
 
 
-class BufferMgr(Configurable):
-    def __init__(self, cfg, env_info: EnvInfo):
-        super().__init__(cfg)
-        self.env_info = env_info
+class BufferMgr(StateProxy, Configurable):
+    _STATE_ATTRS = frozenset(('buffers_per_device', 'env_info', 'max_batches_to_accumulate', 'output_names', 'output_sizes', 'policy_output_tensors_torch', 'policy_versions', 'sampling_trajectories_per_iteration', 'traj_buffer_queues', 'traj_tensors_torch', 'trajectories_per_training_iteration'))
 
-        self.buffers_per_device: Dict[Device, int] = dict()
+    def __init__(self, cfg, env_info: EnvInfo):
+        self._init_state_proxy()
+        super().__init__(cfg)
+        self._state.env_info = env_info
+
+        self._state.buffers_per_device: Dict[Device, int] = dict()
 
         for i in range(cfg.num_workers):
             # TODO: this should take into account whether we just need a GPU for sampling, or we actually receive observations on the GPU
             # otherwise it will not work for things like Megaverse or GPU-rendered DMLab
-            sampling_device = str(rollout_worker_device(i, cfg, self.env_info))
+            sampling_device = str(rollout_worker_device(i, cfg, self._state.env_info))
             log.debug(f"Rollout worker {i} uses device {sampling_device}")
 
             num_buffers = env_info.num_agents * cfg.num_envs_per_worker
-            buffers_for_device = self.buffers_per_device.get(sampling_device, 0) + num_buffers
-            self.buffers_per_device[sampling_device] = buffers_for_device
+            buffers_for_device = self._state.buffers_per_device.get(sampling_device, 0) + num_buffers
+            self._state.buffers_per_device[sampling_device] = buffers_for_device
 
         rnn_size = get_rnn_size(cfg)  # in case we have RNNs
 
-        self.trajectories_per_training_iteration = trajectories_per_training_iteration(cfg)
+        self._state.trajectories_per_training_iteration = trajectories_per_training_iteration(cfg)
 
         if cfg.batched_sampling:
             worker_traj_per_iteration = (env_info.num_agents * cfg.num_envs_per_worker) // cfg.worker_num_splits
-            assert math.gcd(self.trajectories_per_training_iteration, worker_traj_per_iteration) == min(
-                self.trajectories_per_training_iteration, worker_traj_per_iteration
-            ), f"{worker_traj_per_iteration=} should divide the {self.trajectories_per_training_iteration=} or vice versa"
-            self.sampling_trajectories_per_iteration = worker_traj_per_iteration
+            assert math.gcd(self._state.trajectories_per_training_iteration, worker_traj_per_iteration) == min(
+                self._state.trajectories_per_training_iteration, worker_traj_per_iteration
+            ), f"{worker_traj_per_iteration=} should divide the {self._state.trajectories_per_training_iteration=} or vice versa"
+            self._state.sampling_trajectories_per_iteration = worker_traj_per_iteration
         else:
-            self.sampling_trajectories_per_iteration = -1
+            self._state.sampling_trajectories_per_iteration = -1
 
         share = not cfg.serial_mode
 
@@ -185,34 +189,34 @@ class BufferMgr(Configurable):
             # One set of buffers to sample, one to learn from. Coefficient 2 seems appropriate here.
             # Also: multi-policy training may require more buffers since some trajectories need to be sent
             # to multiple workers.
-            for device in self.buffers_per_device:
-                self.buffers_per_device[device] *= 2
+            for device in self._state.buffers_per_device:
+                self._state.buffers_per_device[device] *= 2
         else:
             # in synchronous mode we only allocate a single set of trajectories
             # and they are not released until the learner finishes learning from them
             pass
 
         # determine the number of minibatches we're allowed to accumulate before experience collection is halted
-        self.max_batches_to_accumulate = cfg.num_batches_to_accumulate
+        self._state.max_batches_to_accumulate = cfg.num_batches_to_accumulate
         if not cfg.async_rl:
             log.debug("In synchronous mode, we only accumulate one batch. Setting num_batches_to_accumulate to 1")
-            self.max_batches_to_accumulate = 1
+            self._state.max_batches_to_accumulate = 1
 
         # allocate trajectory buffers for sampling
-        self.traj_buffer_queues: Dict[Device, MpQueue] = dict()
-        self.traj_tensors_torch = dict()
-        self.policy_output_tensors_torch = dict()
+        self._state.traj_buffer_queues: Dict[Device, MpQueue] = dict()
+        self._state.traj_tensors_torch = dict()
+        self._state.policy_output_tensors_torch = dict()
 
-        for device, num_buffers in self.buffers_per_device.items():
+        for device, num_buffers in self._state.buffers_per_device.items():
             # make sure that at the very least we have enough buffers to feed the learner
             num_buffers = max(
                 num_buffers,
-                self.max_batches_to_accumulate * self.trajectories_per_training_iteration * cfg.num_policies,
+                self._state.max_batches_to_accumulate * self._state.trajectories_per_training_iteration * cfg.num_policies,
             )
 
-            self.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
+            self._state.traj_buffer_queues[device] = get_queue(cfg.serial_mode)
 
-            self.traj_tensors_torch[device] = alloc_trajectory_tensors(
+            self._state.traj_tensors_torch[device] = alloc_trajectory_tensors(
                 env_info,
                 num_buffers,
                 cfg.rollout,
@@ -220,20 +224,20 @@ class BufferMgr(Configurable):
                 device,
                 share,
             )
-            self.policy_output_tensors_torch[device], output_names, output_sizes = alloc_policy_output_tensors(
+            self._state.policy_output_tensors_torch[device], output_names, output_sizes = alloc_policy_output_tensors(
                 cfg, env_info, rnn_size, device, share
             )
-            self.output_names, self.output_sizes = output_names, output_sizes
+            self._state.output_names, self._state.output_sizes = output_names, output_sizes
 
             if cfg.batched_sampling:
                 # big trajectory batches (slices) for batched sampling
-                for i in range(0, num_buffers, self.sampling_trajectories_per_iteration):
-                    self.traj_buffer_queues[device].put(slice(i, i + self.sampling_trajectories_per_iteration))
+                for i in range(0, num_buffers, self._state.sampling_trajectories_per_iteration):
+                    self._state.traj_buffer_queues[device].put(slice(i, i + self._state.sampling_trajectories_per_iteration))
             else:
                 # individual trajectories for more flexible non-batched sampling
                 for i in range(num_buffers):
-                    self.traj_buffer_queues[device].put(i)
+                    self._state.traj_buffer_queues[device].put(i)
 
-        self.policy_versions = torch.zeros([cfg.num_policies], dtype=torch.int32)
+        self._state.policy_versions = torch.zeros([cfg.num_policies], dtype=torch.int32)
         if share:
-            self.policy_versions.share_memory_()
+            self._state.policy_versions.share_memory_()

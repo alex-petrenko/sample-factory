@@ -205,25 +205,49 @@ class ActorCriticSeparateWeights(ActorCritic):
     ):
         super().__init__(obs_space, action_space, cfg)
 
-        self.actor_encoder = model_factory.make_model_encoder_func(cfg, obs_space)
-        self.actor_core = model_factory.make_model_core_func(cfg, self.actor_encoder.get_out_size())
+        actor_encoder = model_factory.make_model_encoder_func(cfg, obs_space)
+        actor_core = model_factory.make_model_core_func(cfg, actor_encoder.get_out_size())
 
-        self.critic_encoder = model_factory.make_model_encoder_func(cfg, obs_space)
-        self.critic_core = model_factory.make_model_core_func(cfg, self.critic_encoder.get_out_size())
+        critic_encoder = model_factory.make_model_encoder_func(cfg, obs_space)
+        critic_core = model_factory.make_model_core_func(cfg, critic_encoder.get_out_size())
 
-        self.encoders = [self.actor_encoder, self.critic_encoder]
-        self.cores = [self.actor_core, self.critic_core]
+        self.encoders = nn.ModuleList([actor_encoder, critic_encoder])
+        self.cores = nn.ModuleList([actor_core, critic_core])
 
         self.core_func = self._core_rnn if self.cfg.use_rnn else self._core_empty
 
-        self.actor_decoder = model_factory.make_model_decoder_func(cfg, self.actor_core.get_out_size())
-        self.critic_decoder = model_factory.make_model_decoder_func(cfg, self.critic_core.get_out_size())
-        self.decoders = [self.actor_decoder, self.critic_decoder]
+        actor_decoder = model_factory.make_model_decoder_func(cfg, actor_core.get_out_size())
+        critic_decoder = model_factory.make_model_decoder_func(cfg, critic_core.get_out_size())
+        self.decoders = nn.ModuleList([actor_decoder, critic_decoder])
 
         self.critic_linear = nn.Linear(self.critic_decoder.get_out_size(), 1)
         self.action_parameterization = self.get_action_parameterization(self.critic_decoder.get_out_size())
 
         self.apply(self.initialize_weights)
+
+    @property
+    def actor_encoder(self):
+        return self.encoders[0]
+
+    @property
+    def critic_encoder(self):
+        return self.encoders[1]
+
+    @property
+    def actor_core(self):
+        return self.cores[0]
+
+    @property
+    def critic_core(self):
+        return self.cores[1]
+
+    @property
+    def actor_decoder(self):
+        return self.decoders[0]
+
+    @property
+    def critic_decoder(self):
+        return self.decoders[1]
 
     def _core_rnn(self, head_output, rnn_states):
         """

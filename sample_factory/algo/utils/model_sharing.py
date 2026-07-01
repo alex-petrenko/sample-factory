@@ -12,6 +12,7 @@ from sample_factory.algo.utils.multiprocessing_utils import get_lock, get_mp_ctx
 from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log
+from sample_factory.utils.state_proxy import StateProxy
 
 
 class ParameterServer:
@@ -43,35 +44,38 @@ class ParameterServer:
         self.policy_versions[self.policy_id] = policy_version
 
 
-class ParameterClient:
+class ParameterClient(StateProxy):
+    _STATE_ATTRS = frozenset(('_actor_critic', '_policy_lock', 'cfg', 'env_info', 'latest_policy_version', 'policy_id', 'policy_versions', 'server', 'timing'))
+
     def __init__(self, param_server: ParameterServer, cfg, env_info, timing: Timing):
-        self.server = param_server
-        self.policy_id = param_server.policy_id
-        self.policy_versions = param_server.policy_versions
+        self._init_state_proxy()
+        self._state.server = param_server
+        self._state.policy_id = param_server.policy_id
+        self._state.policy_versions = param_server.policy_versions
 
-        self.cfg = cfg
-        self.env_info = env_info
+        self._state.cfg = cfg
+        self._state.env_info = env_info
 
-        self.latest_policy_version = -1
+        self._state.latest_policy_version = -1
 
-        self._actor_critic = None
-        self._policy_lock = param_server.policy_lock
+        self._state._actor_critic = None
+        self._state._policy_lock = param_server.policy_lock
 
-        self.timing = timing
+        self._state.timing = timing
 
     @property
     def actor_critic(self):
-        return self._actor_critic
+        return self._state._actor_critic
 
     @property
     def policy_version(self):
-        return self.latest_policy_version
+        return self._state.latest_policy_version
 
     def _get_server_policy_version(self):
-        return self.policy_versions[self.policy_id].item()
+        return self._state.policy_versions[self._state.policy_id].item()
 
     def on_weights_initialized(self, state_dict, device: torch.device, policy_version: int) -> None:
-        self.latest_policy_version = policy_version
+        self._state.latest_policy_version = policy_version
 
     def ensure_weights_updated(self):
         raise NotImplementedError()

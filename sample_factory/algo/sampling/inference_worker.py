@@ -35,6 +35,7 @@ from sample_factory.utils.gpu_utils import cuda_envvars_for_policy
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import Device, InitModelData, MpQueue, PolicyID
 from sample_factory.utils.utils import debug_log_every_n, init_file_logger, log
+from sample_factory.utils.state_proxy import StateProxy
 
 AdvanceRolloutSignals = Dict[int, List[Tuple[int, PolicyID]]]
 PrepareOutputsFunc = Callable[[int, TensorDict, List], AdvanceRolloutSignals]
@@ -63,7 +64,9 @@ def init_inference_process(sf_context: SampleFactoryContext, worker: InferenceWo
     init_torch_runtime(cfg)
 
 
-class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
+class InferenceWorker(StateProxy, HeartbeatStoppableEventLoopObject, Configurable):
+    _STATE_ATTRS = frozenset(('_batch_func', '_get_inference_requests_func', '_prepare_policy_outputs_func', 'buffer_mgr', 'cache_cleanup_timer', 'device', 'inference_loop', 'inference_queue', 'is_initialized', 'is_ready', 'last_report_samples', 'min_num_requests', 'param_client', 'policy_id', 'policy_output_tensors', 'report_timer', 'request_count', 'requests', 'timing', 'total_num_samples', 'traj_tensors', 'worker_idx'))
+
     def __init__(
         self,
         event_loop,
@@ -75,26 +78,27 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         cfg,
         env_info: EnvInfo,
     ):
+        self._init_state_proxy()
         Configurable.__init__(self, cfg)
         unique_name = f"{InferenceWorker.__name__}_p{policy_id}-w{worker_idx}"
         HeartbeatStoppableEventLoopObject.__init__(self, event_loop, unique_name, cfg.heartbeat_interval)
 
-        self.timing = Timing(name=f"{self.object_id} profile")
+        self._state.timing = Timing(name=f"{self.object_id} profile")
 
-        self.policy_id: PolicyID = policy_id
-        self.worker_idx: int = worker_idx
+        self._state.policy_id: PolicyID = policy_id
+        self._state.worker_idx: int = worker_idx
 
-        self.buffer_mgr = buffer_mgr
+        self._state.buffer_mgr = buffer_mgr
 
         # shallow copy
-        self.traj_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.traj_tensors_torch)
-        self.policy_output_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.policy_output_tensors_torch)
+        self._state.traj_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.traj_tensors_torch)
+        self._state.policy_output_tensors: Dict[Device, TensorDict] = copy.copy(buffer_mgr.policy_output_tensors_torch)
 
-        self.device: torch.device = policy_device(cfg, policy_id)
-        self.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self.timing)
-        self.inference_queue = inference_queue
+        self._state.device: torch.device = policy_device(cfg, policy_id)
+        self._state.param_client = make_parameter_client(cfg.serial_mode, param_server, cfg, env_info, self._state.timing)
+        self._state.inference_queue = inference_queue
 
-        self.request_count = deque(maxlen=50)
+        self._state.request_count = deque(maxlen=50)
 
         # very conservative limit on the minimum number of requests to wait for
         # this will almost guarantee that the system will continue collecting experience
@@ -104,34 +108,34 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         # batches)
         min_num_requests = self.cfg.num_workers // (self.cfg.num_policies * self.cfg.policy_workers_per_policy)
         min_num_requests //= 3
-        self.min_num_requests = max(1, min_num_requests)
-        log.info(f"{self.object_id}: min num requests: %d", self.min_num_requests)
+        self._state.min_num_requests = max(1, min_num_requests)
+        log.info(f"{self.object_id}: min num requests: %d", self._state.min_num_requests)
 
-        self.requests = []
-        self.total_num_samples = self.last_report_samples = 0
+        self._state.requests = []
+        self._state.total_num_samples = self._state.last_report_samples = 0
 
-        self._get_inference_requests_func = (
+        self._state._get_inference_requests_func = (
             self._get_inference_requests_serial if cfg.serial_mode else self._get_inference_requests_async
         )
 
-        self.inference_loop: Optional[Timer] = None  # zero delay timer
-        self.report_timer: Optional[Timer] = None
-        self.cache_cleanup_timer: Optional[Timer] = None
+        self._state.inference_loop: Optional[Timer] = None  # zero delay timer
+        self._state.report_timer: Optional[Timer] = None
+        self._state.cache_cleanup_timer: Optional[Timer] = None
 
         # flag used by the runner to determine when the worker is ready
-        self.is_ready = False
+        self._state.is_ready = False
 
         # behavior configuration depending on whether we're in batched or non-batched sampling regime
         if cfg.batched_sampling:
-            self._batch_func = self._batch_slices
+            self._state._batch_func = self._batch_slices
             prepare_policy_outputs = self._prepare_policy_outputs_batched
         else:
-            self._batch_func = self._batch_individual_steps
+            self._state._batch_func = self._batch_individual_steps
             prepare_policy_outputs = self._prepare_policy_outputs_non_batched
 
-        self._prepare_policy_outputs_func: PrepareOutputsFunc = prepare_policy_outputs
+        self._state._prepare_policy_outputs_func: PrepareOutputsFunc = prepare_policy_outputs
 
-        self.is_initialized = False
+        self._state.is_initialized = False
 
     @signal
     def initialized(self): ...
@@ -140,53 +144,53 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
     def report_msg(self): ...
 
     def init(self, init_model_data: Optional[InitModelData]):
-        if self.is_initialized:
+        if self._state.is_initialized:
             return
 
-        if "cpu" in self.traj_tensors:
-            self.traj_tensors["cpu"] = to_numpy(self.traj_tensors["cpu"])
-            self.policy_output_tensors["cpu"] = to_numpy(self.policy_output_tensors["cpu"])
+        if "cpu" in self._state.traj_tensors:
+            self._state.traj_tensors["cpu"] = to_numpy(self._state.traj_tensors["cpu"])
+            self._state.policy_output_tensors["cpu"] = to_numpy(self._state.policy_output_tensors["cpu"])
 
         state_dict = None
         policy_version = 0
         if init_model_data is not None:
-            policy_id, state_dict, self.device, policy_version = init_model_data
-            if policy_id != self.policy_id:
+            policy_id, state_dict, self._state.device, policy_version = init_model_data
+            if policy_id != self._state.policy_id:
                 return
 
-        self.param_client.on_weights_initialized(state_dict, self.device, policy_version)
+        self._state.param_client.on_weights_initialized(state_dict, self._state.device, policy_version)
 
         # we can create and connect Timers and EventLoopObjects here because they all interact within one loop
-        self.inference_loop = TightLoop(self.event_loop)
-        self.inference_loop.iteration.connect(self._run)
+        self._state.inference_loop = TightLoop(self.event_loop)
+        self._state.inference_loop.iteration.connect(self._run)
 
-        self.report_timer = Timer(self.event_loop, 3.0)
-        self.report_timer.timeout.connect(self._report_stats)
+        self._state.report_timer = Timer(self.event_loop, 3.0)
+        self._state.report_timer.timeout.connect(self._report_stats)
 
-        self.cache_cleanup_timer = Timer(self.event_loop, 0.5)
+        self._state.cache_cleanup_timer = Timer(self.event_loop, 0.5)
         if not self.cfg.benchmark:
-            self.cache_cleanup_timer.timeout.connect(self._cache_cleanup)
+            self._state.cache_cleanup_timer.timeout.connect(self._cache_cleanup)
 
         # singal to main process (runner) that we're ready
-        self.initialized.emit(self.policy_id, self.worker_idx)
+        self.initialized.emit(self._state.policy_id, self._state.worker_idx)
 
-        self.is_initialized = True
+        self._state.is_initialized = True
 
     def should_stop_experience_collection(self):
         debug_log_every_n(50, f"{self.object_id}: stopping experience collection")
-        self.inference_loop.stop()
+        self._state.inference_loop.stop()
 
     def should_resume_experience_collection(self):
         debug_log_every_n(50, f"{self.object_id}: resuming experience collection")
-        self.inference_loop.start()
+        self._state.inference_loop.start()
 
     def _batch_slices(self, timing):
         with timing.add_time("deserialize"):
             obs = dict()
             rnn_states = []
-            for actor_idx, split_idx, traj_idx, device in self.requests:
+            for actor_idx, split_idx, traj_idx, device in self._state.requests:
                 # TODO: what should we do with data sampled on different devices
-                traj_tensors = self.traj_tensors[device]
+                traj_tensors = self._state.traj_tensors[device]
                 dict_of_lists_append_idx(obs, traj_tensors["obs"], traj_idx)
                 rnn_states.append(traj_tensors["rnn_states"][traj_idx])
 
@@ -207,7 +211,7 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
     def _batch_individual_steps(self, timing):
         with timing.add_time("deserialize"):
             indices = []
-            for request in self.requests:
+            for request in self._state.requests:
                 # TODO: what should we do with data sampled on different devices
                 actor_idx, split_idx, request_data, device = request
                 for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
@@ -215,7 +219,7 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
                     indices.append(index)
 
             indices = tuple(np.array(indices).T)
-            traj_tensors = self.traj_tensors[device]  # TODO: multiple sampling devices?
+            traj_tensors = self._state.traj_tensors[device]  # TODO: multiple sampling devices?
             observations = traj_tensors["obs"][indices]
             rnn_states = traj_tensors["rnn_states"][indices]
 
@@ -249,13 +253,13 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         ofs = 0
         devices_to_sync = set()
         for actor_idx, split_idx, _, device in requests:
-            self.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[ofs : ofs + samples_per_actor]
+            self._state.policy_output_tensors[device][actor_idx, split_idx] = policy_outputs[ofs : ofs + samples_per_actor]
             ofs += samples_per_actor
             devices_to_sync.add(device)
 
         signals_to_send: AdvanceRolloutSignals = dict()
         for actor_idx, split_idx, _, _ in requests:
-            payload = (split_idx, self.policy_id)
+            payload = (split_idx, self._state.policy_id)
             if actor_idx in signals_to_send:
                 signals_to_send[actor_idx].append(payload)
             else:
@@ -275,13 +279,13 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         # Although it is hard to imagine a scenario where we have a non-batched env with observations on gpu
         device = "cpu"
 
-        with self.timing.add_time("to_cpu"):
+        with self._state.timing.add_time("to_cpu"):
             for key, output_value in policy_outputs.items():
                 policy_outputs[key] = output_value.to(device)
 
         # concat all tensors into a single tensor for performance
         output_tensors = []
-        for name in self.buffer_mgr.output_names:
+        for name in self._state.buffer_mgr.output_names:
             output_value = policy_outputs[name].float()
             while output_value.dim() <= 1:
                 output_value.unsqueeze_(-1)
@@ -296,14 +300,14 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
             for env_idx, agent_idx, traj_buffer_idx, rollout_step in request_data:
                 output_indices.append([actor_idx, split_idx, env_idx, agent_idx])
 
-            payload = (split_idx, self.policy_id)
+            payload = (split_idx, self._state.policy_id)
             if actor_idx in signals_to_send:
                 signals_to_send[actor_idx].append(payload)
             else:
                 signals_to_send[actor_idx] = [payload]
 
         output_indices = tuple(np.array(output_indices).T)
-        self.policy_output_tensors[device][output_indices] = output_tensors.numpy()
+        self._state.policy_output_tensors[device][output_indices] = output_tensors.numpy()
 
         # this should be a no-op unless we have a non-batched env with observations on gpu
         synchronize(self.cfg, device)
@@ -312,37 +316,37 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
 
     def _handle_policy_steps(self, timing):
         with inference_context(self.cfg.serial_mode):
-            obs, rnn_states = self._batch_func(timing)
+            obs, rnn_states = self._state._batch_func(timing)
             num_samples = rnn_states.shape[0]
-            self.total_num_samples += num_samples
+            self._state.total_num_samples += num_samples
 
             with timing.add_time("obs_to_device_normalize"):
-                actor_critic = self.param_client.actor_critic
+                actor_critic = self._state.param_client.actor_critic
                 if actor_critic.training:
                     actor_critic.eval()  # need to call this because we can be in serial mode
 
                 action_mask = (
-                    ensure_torch_tensor(obs.pop("action_mask")).to(self.device) if "action_mask" in obs else None
+                    ensure_torch_tensor(obs.pop("action_mask")).to(self._state.device) if "action_mask" in obs else None
                 )
                 normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
-                rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
+                rnn_states = ensure_torch_tensor(rnn_states).to(self._state.device).float()
 
             with timing.add_time("forward"):
                 policy_outputs = actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
-                policy_outputs["policy_version"] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
+                policy_outputs["policy_version"] = torch.empty([num_samples]).fill_(self._state.param_client.policy_version)
 
             with timing.add_time("prepare_outputs"):
-                signals_to_send = self._prepare_policy_outputs_func(num_samples, policy_outputs, self.requests)
+                signals_to_send = self._state._prepare_policy_outputs_func(num_samples, policy_outputs, self._state.requests)
 
             with timing.add_time("send_messages"):
                 for actor_idx, data in signals_to_send.items():
                     self.emit_many(advance_rollouts_signal(actor_idx), data)
 
-            self.requests = []
+            self._state.requests = []
 
     def _get_inference_requests_serial(self):
         try:
-            self.requests.extend(self.inference_queue.get_many(block=False))
+            self._state.requests.extend(self._state.inference_queue.get_many(block=False))
         except Empty:
             pass
 
@@ -351,43 +355,43 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         wait_for_min_requests = 0.025
 
         waiting_started = time.time()
-        while len(self.requests) < self.min_num_requests and time.time() - waiting_started < wait_for_min_requests:
+        while len(self._state.requests) < self._state.min_num_requests and time.time() - waiting_started < wait_for_min_requests:
             try:
-                with self.timing.timeit("wait_policy"), self.timing.add_time("wait_policy_total"):
-                    policy_requests = self.inference_queue.get_many(timeout=0.005)
-                self.requests.extend(policy_requests)
+                with self._state.timing.timeit("wait_policy"), self._state.timing.add_time("wait_policy_total"):
+                    policy_requests = self._state.inference_queue.get_many(timeout=0.005)
+                self._state.requests.extend(policy_requests)
             except Empty:
                 pass
 
     def _run(self):
-        self._get_inference_requests_func()
-        if not self.requests:
+        self._state._get_inference_requests_func()
+        if not self._state.requests:
             return
 
-        with self.timing.add_time("update_model"):
-            self.param_client.ensure_weights_updated()
+        with self._state.timing.add_time("update_model"):
+            self._state.param_client.ensure_weights_updated()
 
-        with self.timing.timeit("one_step"), self.timing.add_time("handle_policy_step"):
-            self.request_count.append(len(self.requests))
-            self._handle_policy_steps(self.timing)
+        with self._state.timing.timeit("one_step"), self._state.timing.add_time("handle_policy_step"):
+            self._state.request_count.append(len(self._state.requests))
+            self._handle_policy_steps(self._state.timing)
 
     def _report_stats(self):
-        if "one_step" not in self.timing:
+        if "one_step" not in self._state.timing:
             return
 
-        timing_stats = dict(wait_policy=self.timing.get("wait_policy", 0), step_policy=self.timing.one_step)
-        samples_since_last_report = self.total_num_samples - self.last_report_samples
-        self.last_report_samples = self.total_num_samples
+        timing_stats = dict(wait_policy=self._state.timing.get("wait_policy", 0), step_policy=self._state.timing.one_step)
+        samples_since_last_report = self._state.total_num_samples - self._state.last_report_samples
+        self._state.last_report_samples = self._state.total_num_samples
 
-        stats = memory_stats("policy_worker", self.device)
-        if len(self.request_count) > 0:
-            stats["avg_request_count"] = np.mean(self.request_count)
+        stats = memory_stats("policy_worker", self._state.device)
+        if len(self._state.request_count) > 0:
+            stats["avg_request_count"] = np.mean(self._state.request_count)
 
         self.report_msg.emit(
             {
                 TIMING_STATS: timing_stats,
                 SAMPLES_COLLECTED: samples_since_last_report,
-                POLICY_ID_KEY: self.policy_id,
+                POLICY_ID_KEY: self._state.policy_id,
                 STATS_KEY: stats,
             }
         )
@@ -397,13 +401,13 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
             torch.cuda.empty_cache()
 
         # initially we clean cache very frequently, later on do it every few minutes
-        if self.total_num_samples > 1000:
-            self.cache_cleanup_timer.set_interval(60.0)
+        if self._state.total_num_samples > 1000:
+            self._state.cache_cleanup_timer.set_interval(60.0)
 
     def on_stop(self, *args):
-        if self.is_initialized:
-            self.param_client.cleanup()
-            del self.param_client
+        if self._state.is_initialized:
+            self._state.param_client.cleanup()
+            del self._state.param_client
 
-        self.stop.emit(self.object_id, {self.object_id: self.timing})
+        self.stop.emit(self.object_id, {self.object_id: self._state.timing})
         super().on_stop(*args)

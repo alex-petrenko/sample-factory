@@ -28,6 +28,7 @@ from sample_factory.utils.utils import (
     log,
     set_process_cpu_affinity,
 )
+from sample_factory.utils.state_proxy import StateProxy
 
 
 def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: RolloutWorker):
@@ -76,34 +77,37 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
     torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
+class RolloutWorker(StateProxy, HeartbeatStoppableEventLoopObject, Configurable):
+    _STATE_ATTRS = frozenset(('buffer_mgr', 'env_info', 'env_runners', 'experience_decorrelated', 'inference_queues', 'is_initialized', 'num_splits', 'remaining_rollouts', 'rollouts_per_iteration', 'sampling_device', 'timing', 'training_info', 'training_iteration', 'vector_size', 'worker_idx'))
+
     def __init__(
         self, event_loop, worker_idx: int, buffer_mgr, inference_queues: Dict[PolicyID, MpQueue], cfg, env_info: EnvInfo
     ):
+        self._init_state_proxy()
         Configurable.__init__(self, cfg)
         unique_name = f"{RolloutWorker.__name__}_w{worker_idx}"
         HeartbeatStoppableEventLoopObject.__init__(self, event_loop, unique_name, cfg.heartbeat_interval)
 
-        self.timing = Timing(name=f"{self.object_id} profile")
+        self._state.timing = Timing(name=f"{self.object_id} profile")
 
-        self.buffer_mgr = buffer_mgr
-        self.inference_queues = inference_queues
+        self._state.buffer_mgr = buffer_mgr
+        self._state.inference_queues = inference_queues
 
-        self.env_info = env_info
-        self.worker_idx = worker_idx
-        self.sampling_device = str(rollout_worker_device(self.worker_idx, self.cfg, self.env_info))
+        self._state.env_info = env_info
+        self._state.worker_idx = worker_idx
+        self._state.sampling_device = str(rollout_worker_device(self._state.worker_idx, self.cfg, self._state.env_info))
 
-        self.vector_size = cfg.num_envs_per_worker
-        self.num_splits = cfg.worker_num_splits
-        assert self.vector_size >= self.num_splits
-        assert self.vector_size % self.num_splits == 0, "Vector size should be divisible by num_splits"
+        self._state.vector_size = cfg.num_envs_per_worker
+        self._state.num_splits = cfg.worker_num_splits
+        assert self._state.vector_size >= self._state.num_splits
+        assert self._state.vector_size % self._state.num_splits == 0, "Vector size should be divisible by num_splits"
 
-        self.env_runners: List[VectorEnvRunner] = []
+        self._state.env_runners: List[VectorEnvRunner] = []
 
         # training status updated by the runner
-        self.training_info: List[Optional[Dict[str, Any]]] = [None for _ in range(self.cfg.num_policies)]
+        self._state.training_info: List[Optional[Dict[str, Any]]] = [None for _ in range(self.cfg.num_policies)]
 
-        self.training_iteration: List[int] = [0] * self.cfg.num_policies
+        self._state.training_iteration: List[int] = [0] * self.cfg.num_policies
 
         if cfg.async_rl:
             rollouts_per_iteration = int(1e10)
@@ -122,36 +126,36 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
             assert rollouts_per_iteration > 0
 
         # log.debug(f"Rollout worker {worker_idx} rollouts per iteration: {rollouts_per_iteration}")
-        self.rollouts_per_iteration: int = rollouts_per_iteration
-        self.remaining_rollouts: List[int] = [self.rollouts_per_iteration for _ in range(self.num_splits)]
+        self._state.rollouts_per_iteration: int = rollouts_per_iteration
+        self._state.remaining_rollouts: List[int] = [self._state.rollouts_per_iteration for _ in range(self._state.num_splits)]
 
-        self.experience_decorrelated: bool = False
-        self.is_initialized: bool = False
+        self._state.experience_decorrelated: bool = False
+        self._state.is_initialized: bool = False
 
     @signal
     def report_msg(self): ...
 
     def init(self):
-        for split_idx in range(self.num_splits):
+        for split_idx in range(self._state.num_splits):
             env_runner_cls = BatchedVectorEnvRunner if self.cfg.batched_sampling else NonBatchedVectorEnvRunner
 
             env_runner = env_runner_cls(
                 self.cfg,
-                self.env_info,
-                self.vector_size // self.num_splits,
-                self.worker_idx,
+                self._state.env_info,
+                self._state.vector_size // self._state.num_splits,
+                self._state.worker_idx,
                 split_idx,
-                self.buffer_mgr,
-                self.sampling_device,
-                self.training_info,
+                self._state.buffer_mgr,
+                self._state.sampling_device,
+                self._state.training_info,
             )
 
-            env_runner.init(self.timing)
+            env_runner.init(self._state.timing)
 
             # send signal to the inference worker to start processing new observations
-            self.env_runners.append(env_runner)
+            self._state.env_runners.append(env_runner)
 
-        for r in self.env_runners:
+        for r in self._state.env_runners:
             # This should kickstart experience collection. We will send a policy request to inference worker and
             # will get an "advance_rollout" signal back, and continue this loop of
             # advance_rollout->inference->advance_rollout until we collect the full rollout.
@@ -160,38 +164,38 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
             # a buffer is freed (see on_trajectory_buffers_available()).
             self._maybe_send_policy_request(r)
 
-        self.is_initialized = True
+        self._state.is_initialized = True
 
     def _decorrelate_experience(self):
-        delay = (float(self.worker_idx) / self.cfg.num_workers) * self.cfg.decorrelate_experience_max_seconds
+        delay = (float(self._state.worker_idx) / self.cfg.num_workers) * self.cfg.decorrelate_experience_max_seconds
         if delay > 0.0:
             log.info(
                 "Worker %d, sleep for %.3f sec to decorrelate experience collection",
-                self.worker_idx,
+                self._state.worker_idx,
                 delay,
             )
             time.sleep(delay)
-            log.info("Worker %d awakens!", self.worker_idx)
+            log.info("Worker %d awakens!", self._state.worker_idx)
 
     def _maybe_send_policy_request(self, runner: VectorEnvRunner):
-        if self.remaining_rollouts[runner.split_idx] <= 0:
+        if self._state.remaining_rollouts[runner.split_idx] <= 0:
             # This should only happen in sync mode -- means we completed a sufficient number of rollouts
             # to saturate the learner for one iteration. We will wait for the next iteration to start before
             # we can continue sampling.
-            # log.debug(f"Ran out of remaining rollouts on {runner.worker_idx}-{runner.split_idx}: {self.remaining_rollouts}")
+            # log.debug(f"Ran out of remaining rollouts on {runner.worker_idx}-{runner.split_idx}: {self._state.remaining_rollouts}")
             return
 
-        if not runner.update_trajectory_buffers(self.timing):
+        if not runner.update_trajectory_buffers(self._state.timing):
             # could not get a buffer, wait for one to be freed
             return
 
-        with self.timing.add_time("enqueue_policy_requests"):
+        with self._state.timing.add_time("enqueue_policy_requests"):
             policy_request = runner.generate_policy_request()
 
             # make sure all writes to shared device buffers are completed
             runner.synchronize_devices()
 
-        with self.timing.add_time("enqueue_policy_requests"):
+        with self._state.timing.add_time("enqueue_policy_requests"):
             if policy_request is not None:
                 self._enqueue_policy_request(runner.split_idx, policy_request)
 
@@ -199,20 +203,20 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
         """Distribute action requests to their corresponding queues."""
 
         for policy_id, requests in policy_inputs.items():
-            policy_request = (self.worker_idx, split_idx, requests, self.sampling_device)
-            self.inference_queues[policy_id].put(policy_request)
+            policy_request = (self._state.worker_idx, split_idx, requests, self._state.sampling_device)
+            self._state.inference_queues[policy_id].put(policy_request)
 
         if not policy_inputs:
             # This can happen if all agents on this worker were deactivated (is_active=False)
             debug_log_every_n(
                 100,
-                f"Worker {self.worker_idx}-{split_idx} has no active agents... We immediately continue to the next iteration without notifying the inference worker",
+                f"Worker {self._state.worker_idx}-{split_idx} has no active agents... We immediately continue to the next iteration without notifying the inference worker",
             )
             fake_policy_id = -1
             # it's easier to self ourselves a signal than call advance_rollouts() directly because
             # this way we don't have to worry about getting stuck in an infinite loop or processing things like
             # stopping signal
-            self.emit(advance_rollouts_signal(self.worker_idx), split_idx, fake_policy_id)
+            self.emit(advance_rollouts_signal(self._state.worker_idx), split_idx, fake_policy_id)
 
     def _enqueue_complete_rollouts(self, complete_rollouts: List[Dict]):
         """Emit complete rollouts."""
@@ -224,7 +228,7 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
             rollouts_per_policy[policy_id].append(rollout)
 
         for policy_id, rollouts in rollouts_per_policy.items():
-            self.emit(new_trajectories_signal(policy_id), rollouts, self.sampling_device)
+            self.emit(new_trajectories_signal(policy_id), rollouts, self._state.sampling_device)
 
     def advance_rollouts(self, split_idx: int, policy_id: PolicyID) -> None:
         # TODO: update comment
@@ -236,19 +240,19 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
         next step. If we completed the entire rollout, also send request to the learner!
         """
         with inference_context(self.cfg.serial_mode):
-            runner = self.env_runners[split_idx]
-            complete_rollouts, episodic_stats = runner.advance_rollouts(policy_id, self.timing)
+            runner = self._state.env_runners[split_idx]
+            complete_rollouts, episodic_stats = runner.advance_rollouts(policy_id, self._state.timing)
 
-            with self.timing.add_time("complete_rollouts"):
+            with self._state.timing.add_time("complete_rollouts"):
                 if complete_rollouts:
                     self._enqueue_complete_rollouts(complete_rollouts)
-                    if not self.experience_decorrelated and not self.cfg.benchmark:
+                    if not self._state.experience_decorrelated and not self.cfg.benchmark:
                         # we just finished our first complete rollouts, perfect time to wait for experience derorrelation
                         # this guarantees that there won't be any obsolete trajectories when we awaken
                         self._decorrelate_experience()
-                        self.experience_decorrelated = True
+                        self._state.experience_decorrelated = True
 
-                    self.remaining_rollouts[split_idx] -= 1
+                    self._state.remaining_rollouts[split_idx] -= 1
 
             if episodic_stats:
                 self.report_msg.emit(episodic_stats)
@@ -272,37 +276,37 @@ class RolloutWorker(HeartbeatStoppableEventLoopObject, Configurable):
         """
         if not self.cfg.async_rl:
             # in sync mode we progress one iteration at a time
-            assert training_iteration - self.training_iteration[policy_id] in (0, 1)
+            assert training_iteration - self._state.training_iteration[policy_id] in (0, 1)
 
-        prev_iteration = min(self.training_iteration)
-        self.training_iteration[policy_id] = training_iteration
-        curr_iteration = min(self.training_iteration)
+        prev_iteration = min(self._state.training_iteration)
+        self._state.training_iteration[policy_id] = training_iteration
+        curr_iteration = min(self._state.training_iteration)
         if curr_iteration > prev_iteration:
             # allow runners to collect the next portion of rollouts
-            self.remaining_rollouts = [self.rollouts_per_iteration for _ in range(self.num_splits)]
+            self._state.remaining_rollouts = [self._state.rollouts_per_iteration for _ in range(self._state.num_splits)]
 
         # we can receive this signal during batcher initialization, before the worker is initialized
         # this is fine, we just ignore it and get the trajectory buffers from the queue later after we do env.reset()
-        if not self.is_initialized:
+        if not self._state.is_initialized:
             return
 
         # it is possible that we finished the simulation step, but were unable to send data to inference worker
         # because we ran out of trajectory buffers. The purpose of this signal handler is to wake up the worker,
         # request a new trajectory (since they're now available), and finally send observations to the inference worker
-        for split_idx in range(self.num_splits):
-            self._maybe_send_policy_request(self.env_runners[split_idx])
+        for split_idx in range(self._state.num_splits):
+            self._maybe_send_policy_request(self._state.env_runners[split_idx])
 
     def on_update_training_info(self, training_info: Dict[PolicyID, Dict[str, Any]]) -> None:
         """Update training info, this will be propagated to environments using TrainingInfoInterface and RewardShapingInterface."""
         for policy_id, info in training_info.items():
-            self.training_info[policy_id] = info
+            self._state.training_info[policy_id] = info
 
     def on_stop(self, *args):
-        for env_runner in self.env_runners:
+        for env_runner in self._state.env_runners:
             env_runner.close()
 
         timings = dict()
-        if self.worker_idx in [0, self.cfg.num_workers - 1]:
-            timings[self.object_id] = self.timing
+        if self._state.worker_idx in [0, self.cfg.num_workers - 1]:
+            timings[self.object_id] = self._state.timing
         self.stop.emit(self.object_id, timings)
         super().on_stop(*args)

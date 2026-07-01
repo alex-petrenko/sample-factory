@@ -10,23 +10,27 @@ from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.gpu_utils import gpus_for_process
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.typing import PolicyID
+from sample_factory.utils.state_proxy import StateProxy
 
 
-class VectorEnvRunner(Configurable):
+class VectorEnvRunner(StateProxy, Configurable):
+    _STATE_ATTRS = frozenset(('buffer_mgr', 'env_info', 'env_step_ready', 'policy_output_tensors', 'rollout_step', 'split_idx', 'traj_buffer_queue', 'traj_tensors', 'worker_idx'))
+
     def __init__(self, cfg: AttrDict, env_info: EnvInfo, worker_idx, split_idx, buffer_mgr, sampling_device: str):
+        self._init_state_proxy()
         super().__init__(cfg)
-        self.env_info: EnvInfo = env_info
+        self._state.env_info: EnvInfo = env_info
 
-        self.worker_idx = worker_idx
-        self.split_idx = split_idx
+        self._state.worker_idx = worker_idx
+        self._state.split_idx = split_idx
 
-        self.rollout_step: int = 0  # current position in the rollout across all envs
-        self.env_step_ready = False
+        self._state.rollout_step: int = 0  # current position in the rollout across all envs
+        self._state.env_step_ready = False
 
-        self.buffer_mgr = buffer_mgr
-        self.traj_buffer_queue = buffer_mgr.traj_buffer_queues[sampling_device]
-        self.traj_tensors = buffer_mgr.traj_tensors_torch[sampling_device]
-        self.policy_output_tensors = buffer_mgr.policy_output_tensors_torch[sampling_device][worker_idx, split_idx]
+        self._state.buffer_mgr = buffer_mgr
+        self._state.traj_buffer_queue = buffer_mgr.traj_buffer_queues[sampling_device]
+        self._state.traj_tensors = buffer_mgr.traj_tensors_torch[sampling_device]
+        self._state.policy_output_tensors = buffer_mgr.policy_output_tensors_torch[sampling_device][worker_idx, split_idx]
 
     def init(self, timing: Timing):
         raise NotImplementedError()
