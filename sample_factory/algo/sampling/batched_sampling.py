@@ -83,6 +83,8 @@ def process_action_space(
 
 
 class BatchedVectorEnvRunner(VectorEnvRunner):
+    _STATE_ATTRS = frozenset(('curr_episode_len', 'curr_episode_reward', 'curr_step', 'curr_traj', 'curr_traj_slice', 'device', 'env_step_ready', 'env_training_info_interface', 'last_obs', 'last_rnn_state', 'max_raw_rewards', 'min_raw_rewards', 'num_envs', 'policy_id', 'policy_id_buffer', 'rollout_step', 'training_info', 'vec_env'))
+
     # TODO: comment
     """
     A collection of environments simulated sequentially.
@@ -113,6 +115,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         training_info: List[Optional[Dict]],
     ):
         # TODO: comment
+        self._init_state_proxy()
         """
         Ctor.
 
@@ -127,29 +130,29 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         """
         super().__init__(cfg, env_info, worker_idx, split_idx, buffer_mgr, sampling_device)
 
-        self.policy_id = worker_idx % self.cfg.num_policies
-        log.debug(f"EnvRunner {worker_idx}-{split_idx} uses policy {self.policy_id}")
+        self._state.policy_id = worker_idx % self.cfg.num_policies
+        log.debug(f"EnvRunner {worker_idx}-{split_idx} uses policy {self._state.policy_id}")
 
-        self.num_envs = num_envs
+        self._state.num_envs = num_envs
 
-        self.vec_env: Optional[BatchedVecEnv | SequentialVectorizeWrapper] = None
-        self.env_training_info_interface: Optional[TrainingInfoInterface] = None
+        self._state.vec_env: Optional[BatchedVecEnv | SequentialVectorizeWrapper] = None
+        self._state.env_training_info_interface: Optional[TrainingInfoInterface] = None
 
-        self.last_obs = None
-        self.last_rnn_state = None
-        self.policy_id_buffer = None
+        self._state.last_obs = None
+        self._state.last_rnn_state = None
+        self._state.policy_id_buffer = None
 
-        self.curr_traj: Optional[TensorDict] = None
-        self.curr_step: Optional[TensorDict] = None
-        self.curr_traj_slice: Optional[slice] = None
+        self._state.curr_traj: Optional[TensorDict] = None
+        self._state.curr_step: Optional[TensorDict] = None
+        self._state.curr_traj_slice: Optional[slice] = None
 
-        self.curr_episode_reward = self.curr_episode_len = None
+        self._state.curr_episode_reward = self._state.curr_episode_len = None
 
-        self.training_info: List[Optional[Dict]] = training_info
+        self._state.training_info: List[Optional[Dict]] = training_info
 
-        self.min_raw_rewards = self.max_raw_rewards = None
+        self._state.min_raw_rewards = self._state.max_raw_rewards = None
 
-        self.device: Optional[torch.device] = None
+        self._state.device: Optional[torch.device] = None
 
     def init(self, timing):
         """
@@ -157,8 +160,8 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         Also creates ActorState objects that hold the state of individual actors in (potentially) multi-agent envs.
         """
         envs: List[BatchedVecEnv] = []
-        for env_i in range(self.num_envs):
-            vector_idx = self.split_idx * self.num_envs + env_i
+        for env_i in range(self._state.num_envs):
+            vector_idx = self.split_idx * self._state.num_envs + env_i
 
             # global env id within the entire system
             env_id = self.worker_idx * self.cfg.num_envs_per_worker + vector_idx
@@ -180,44 +183,44 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         if len(envs) == 1:
             # assuming this is already a vectorized environment
             assert envs[0].num_agents >= 1  # sanity check
-            self.vec_env = envs[0]
+            self._state.vec_env = envs[0]
         else:
-            self.vec_env = SequentialVectorizeWrapper(envs)
+            self._state.vec_env = SequentialVectorizeWrapper(envs)
 
-        self.env_training_info_interface = find_training_info_interface(self.vec_env)
+        self._state.env_training_info_interface = find_training_info_interface(self._state.vec_env)
 
-        self.last_obs, info = self.vec_env.reset()  # anything we need to do with info? Currently we ignore it
+        self._state.last_obs, info = self._state.vec_env.reset()  # anything we need to do with info? Currently we ignore it
 
-        self.last_rnn_state = torch.zeros_like(self.traj_tensors["rnn_states"][0 : self.vec_env.num_agents, 0])
+        self._state.last_rnn_state = torch.zeros_like(self.traj_tensors["rnn_states"][0 : self._state.vec_env.num_agents, 0])
 
         # we assume that all data will be on the same device
-        self.device = self.last_rnn_state.device
+        self._state.device = self._state.last_rnn_state.device
 
-        self.policy_id_buffer = torch.empty_like(self.traj_tensors["policy_id"][0 : self.vec_env.num_agents, 0])
-        self.policy_id_buffer[:] = self.policy_id
+        self._state.policy_id_buffer = torch.empty_like(self.traj_tensors["policy_id"][0 : self._state.vec_env.num_agents, 0])
+        self._state.policy_id_buffer[:] = self._state.policy_id
 
-        assert self.rollout_step == 0
+        assert self._state.rollout_step == 0
 
-        self.curr_episode_reward = torch.zeros(self.vec_env.num_agents)
-        self.curr_episode_len = torch.zeros(self.vec_env.num_agents, dtype=torch.int32)
-        self.min_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(np.inf)
-        self.max_raw_rewards = torch.empty_like(self.curr_episode_reward).fill_(-np.inf)
+        self._state.curr_episode_reward = torch.zeros(self._state.vec_env.num_agents)
+        self._state.curr_episode_len = torch.zeros(self._state.vec_env.num_agents, dtype=torch.int32)
+        self._state.min_raw_rewards = torch.empty_like(self._state.curr_episode_reward).fill_(np.inf)
+        self._state.max_raw_rewards = torch.empty_like(self._state.curr_episode_reward).fill_(-np.inf)
 
-        self.env_step_ready = True
+        self._state.env_step_ready = True
 
     def _process_rewards(self, rewards_orig: Tensor, rewards_orig_cpu: Tensor) -> Tensor:
         rewards = rewards_orig * self.cfg.reward_scale
         rewards.clamp_(-self.cfg.reward_clip, self.cfg.reward_clip)
-        self.min_raw_rewards = torch.min(self.min_raw_rewards, rewards_orig_cpu)
-        self.max_raw_rewards = torch.max(self.max_raw_rewards, rewards_orig_cpu)
+        self._state.min_raw_rewards = torch.min(self._state.min_raw_rewards, rewards_orig_cpu)
+        self._state.max_raw_rewards = torch.max(self._state.max_raw_rewards, rewards_orig_cpu)
         return rewards
 
     def _process_env_step(self, rewards: Tensor, dones_orig: Tensor, infos):
         dones = dones_orig.cpu()
         num_dones = dones.sum().item()
 
-        self.curr_episode_reward += rewards
-        self.curr_episode_len += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
+        self._state.curr_episode_reward += rewards
+        self._state.curr_episode_len += self.env_info.frameskip if self.cfg.summaries_use_frameskip else 1
 
         reports = []
         if num_dones <= 0:
@@ -226,10 +229,10 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         finished = dones.nonzero(as_tuple=True)[0]
 
         stats = dict(
-            reward=self.curr_episode_reward[finished],
-            len=self.curr_episode_len[finished],
-            min_raw_reward=self.min_raw_rewards[finished],
-            max_raw_reward=self.max_raw_rewards[finished],
+            reward=self._state.curr_episode_reward[finished],
+            len=self._state.curr_episode_len[finished],
+            min_raw_reward=self._state.min_raw_rewards[finished],
+            max_raw_reward=self._state.max_raw_rewards[finished],
         )
 
         if isinstance(infos, dict):
@@ -242,7 +245,7 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                 if isinstance(value, Tensor):
                     if value.numel() == 1:
                         stats[key_str] = value.item()
-                    elif len(value.shape) >= 1 and len(value) == self.vec_env.num_agents:
+                    elif len(value.shape) >= 1 and len(value) == self._state.vec_env.num_agents:
                         # saving value for all agents who finished the episode
                         stats[key_str] = value[finished]
                     else:
@@ -277,22 +280,22 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
                     value, numbers.Number
                 ), f"Expect stats[{key}] to be a scalar or numpy array, got {type(value)}"
 
-        reports.append({EPISODIC: stats, POLICY_ID_KEY: self.policy_id})
+        reports.append({EPISODIC: stats, POLICY_ID_KEY: self._state.policy_id})
 
-        self.curr_episode_reward[finished] = 0
-        self.curr_episode_len[finished] = 0
-        self.min_raw_rewards[finished] = np.inf
-        self.max_raw_rewards[finished] = -np.inf
+        self._state.curr_episode_reward[finished] = 0
+        self._state.curr_episode_len[finished] = 0
+        self._state.min_raw_rewards[finished] = np.inf
+        self._state.max_raw_rewards[finished] = -np.inf
 
         return reports
 
     def _finalize_trajectories(self) -> List[Dict]:
         # Saving obs and hidden states for the step AFTER the last step in the current rollout.
         # We're going to need them later when we calculate next step value estimates.
-        self.curr_traj["obs"][:, self.cfg.rollout] = self.last_obs
-        self.curr_traj["rnn_states"][:, self.cfg.rollout] = self.last_rnn_state
+        self._state.curr_traj["obs"][:, self.cfg.rollout] = self._state.last_obs
+        self._state.curr_traj["rnn_states"][:, self.cfg.rollout] = self._state.last_rnn_state
 
-        traj_dict = dict(policy_id=self.policy_id, traj_buffer_idx=self.curr_traj_slice)
+        traj_dict = dict(policy_id=self._state.policy_id, traj_buffer_idx=self._state.curr_traj_slice)
         return [traj_dict]
 
     def advance_rollouts(self, policy_id: PolicyID, timing) -> Tuple[List[Dict], List[Dict]]:
@@ -307,57 +310,57 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
         """
         with timing.add_time("process_policy_outputs"):
             # save actions/logits/values etc. for the current rollout step
-            self.curr_step[:] = self.policy_output_tensors
+            self._state.curr_step[:] = self.policy_output_tensors
             actions = preprocess_actions(self.env_info, self.policy_output_tensors["actions"])
 
         complete_rollouts, episodic_stats = [], []
 
         with timing.add_time("env_step"):
-            self.last_obs, rewards, terminated, truncated, infos = self.vec_env.step(actions)
+            self._state.last_obs, rewards, terminated, truncated, infos = self._state.vec_env.step(actions)
             dones = terminated | truncated  # both should be either tensors or numpy arrays of bools
 
         with timing.add_time("post_env_step"):
-            self.policy_id_buffer[:] = self.policy_id
+            self._state.policy_id_buffer[:] = self._state.policy_id
 
             # record the results from the env step
             rewards_cpu = rewards.cpu()
             processed_rewards = self._process_rewards(rewards, rewards_cpu)
-            self.curr_step[:] = dict(
+            self._state.curr_step[:] = dict(
                 rewards=processed_rewards,
                 dones=dones,
                 time_outs=truncated,  # true only when done is also true, used for value bootstrapping
-                policy_id=self.policy_id_buffer,
+                policy_id=self._state.policy_id_buffer,
             )
 
             # reset next-step hidden states to zero if we encountered an episode boundary
             # not sure if this is the best practice, but this is what everybody seems to be doing
-            not_done = (1.0 - self.curr_step["dones"].float()).unsqueeze(-1)
-            self.last_rnn_state = self.policy_output_tensors["new_rnn_states"] * not_done
+            not_done = (1.0 - self._state.curr_step["dones"].float()).unsqueeze(-1)
+            self._state.last_rnn_state = self.policy_output_tensors["new_rnn_states"] * not_done
 
             with timing.add_time("process_env_step"):
                 stats = self._process_env_step(rewards_cpu, dones, infos)
             episodic_stats.extend(stats)
 
-        self.rollout_step += 1
+        self._state.rollout_step += 1
 
         with timing.add_time("finalize_trajectories"):
-            if self.rollout_step == self.cfg.rollout:
+            if self._state.rollout_step == self.cfg.rollout:
                 # finalize and serialize the trajectory if we have a complete rollout
                 complete_rollouts = self._finalize_trajectories()
-                self.rollout_step = 0
+                self._state.rollout_step = 0
                 # we will need to request a new trajectory buffer!
-                self.curr_traj_slice = self.curr_traj = None
+                self._state.curr_traj_slice = self._state.curr_traj = None
 
-                if self.training_info[self.policy_id] is not None:
-                    reward_shaping = self.training_info[self.policy_id].get("reward_shaping", None)
-                    set_reward_shaping(self.vec_env, reward_shaping, slice(0, self.vec_env.num_agents))
-                    set_training_info(self.env_training_info_interface, self.training_info[self.policy_id])
+                if self._state.training_info[self._state.policy_id] is not None:
+                    reward_shaping = self._state.training_info[self._state.policy_id].get("reward_shaping", None)
+                    set_reward_shaping(self._state.vec_env, reward_shaping, slice(0, self._state.vec_env.num_agents))
+                    set_training_info(self._state.env_training_info_interface, self._state.training_info[self._state.policy_id])
 
-        self.env_step_ready = True
+        self._state.env_step_ready = True
         return complete_rollouts, episodic_stats
 
     def update_trajectory_buffers(self, timing) -> bool:
-        if self.curr_traj_slice is not None and self.curr_traj is not None:
+        if self._state.curr_traj_slice is not None and self._state.curr_traj is not None:
             # don't need to do anything - we have a trajectory buffer already
             return True
 
@@ -367,29 +370,29 @@ class BatchedVectorEnvRunner(VectorEnvRunner):
             except Empty:
                 return False
 
-            self.curr_traj_slice = buffers
-            self.curr_traj = self.traj_tensors[self.curr_traj_slice]
+            self._state.curr_traj_slice = buffers
+            self._state.curr_traj = self.traj_tensors[self._state.curr_traj_slice]
             return True
 
     def generate_policy_request(self) -> Optional[Dict]:
-        if not self.env_step_ready:
+        if not self._state.env_step_ready:
             # we haven't actually simulated the environment yet
             return None
 
-        if self.curr_traj is None:
+        if self._state.curr_traj is None:
             # we don't have a shared buffer to store data in - still waiting for one to become available
             return None
 
-        self.curr_step = self.curr_traj[:, self.rollout_step]
+        self._state.curr_step = self._state.curr_traj[:, self._state.rollout_step]
         # save observations and RNN states in a trajectory
-        self.curr_step[:] = dict(obs=self.last_obs, rnn_states=self.last_rnn_state)
-        policy_request = {self.policy_id: (self.curr_traj_slice, self.rollout_step)}
-        self.env_step_ready = False
+        self._state.curr_step[:] = dict(obs=self._state.last_obs, rnn_states=self._state.last_rnn_state)
+        policy_request = {self._state.policy_id: (self._state.curr_traj_slice, self._state.rollout_step)}
+        self._state.env_step_ready = False
         return policy_request
 
     def synchronize_devices(self) -> None:
         """Make sure all writes to shared device buffers are finished."""
-        synchronize(self.cfg, self.device)
+        synchronize(self.cfg, self._state.device)
 
     def close(self):
-        self.vec_env.close()
+        self._state.vec_env.close()

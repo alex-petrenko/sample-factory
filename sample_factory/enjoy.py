@@ -100,9 +100,7 @@ def load_state_dict(cfg: Config, actor_critic: ActorCritic, device: torch.device
         raise RuntimeError("Could not load checkpoint")
 
 
-def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
-    verbose = False
-
+def _prepare_eval_config(cfg: Config):
     cfg = load_from_checkpoint(cfg)
 
     eval_env_frameskip: int = cfg.env_frameskip if cfg.eval_env_frameskip is None else cfg.eval_env_frameskip
@@ -114,12 +112,193 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
     log.debug(f"Using frameskip {cfg.env_frameskip} and {render_action_repeat=} for evaluation")
 
     cfg.num_envs = 1
-
     render_mode = "human"
     if cfg.save_video:
         render_mode = "rgb_array"
     elif cfg.no_render:
         render_mode = None
+
+    return cfg, render_action_repeat, render_mode
+
+
+def _init_eval_actor_critic(cfg: Config, env: BatchedVecEnv) -> Tuple[ActorCritic, torch.device]:
+    actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
+    actor_critic.eval()
+
+    device = torch.device("cpu" if cfg.device == "cpu" else "cuda")
+    actor_critic.model_to_device(device)
+    load_state_dict(cfg, actor_critic, device)
+    return actor_critic, device
+
+
+def _init_enjoy_state(cfg: Config, env: BatchedVecEnv, device: torch.device) -> AttrDict:
+    obs, infos = env.reset()
+    action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
+
+    return AttrDict(
+        obs=obs,
+        infos=infos,
+        action_mask=action_mask,
+        rnn_states=torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device),
+        episode_rewards=[deque([], maxlen=100) for _ in range(env.num_agents)],
+        true_objectives=[deque([], maxlen=100) for _ in range(env.num_agents)],
+        episode_reward=None,
+        finished_episode=[False for _ in range(env.num_agents)],
+        video_frames=[],
+        reward_list=[],
+        num_frames=0,
+        num_episodes=0,
+        last_render_start=time.time(),
+    )
+
+
+def _max_frames_reached(cfg: Config, frames: int) -> bool:
+    return cfg.max_num_frames is not None and frames > cfg.max_num_frames
+
+
+def _select_actions(cfg: Config, env_info, actor_critic: ActorCritic, state: AttrDict) -> Tensor:
+    normalized_obs = prepare_and_normalize_obs(actor_critic, state.obs)
+
+    if not cfg.no_render:
+        visualize_policy_inputs(normalized_obs)
+    policy_outputs = actor_critic(normalized_obs, state.rnn_states, action_mask=state.action_mask)
+
+    actions = policy_outputs["actions"]
+    if cfg.eval_deterministic:
+        action_distribution = actor_critic.action_distribution()
+        actions = argmax_actions(action_distribution)
+
+    if actions.ndim == 1:
+        actions = unsqueeze_tensor(actions, dim=-1)
+
+    state.rnn_states = policy_outputs["new_rnn_states"]
+    return preprocess_actions(env_info, actions)
+
+
+def _update_episode_reward(state: AttrDict, rew: Tensor) -> None:
+    if state.episode_reward is None:
+        state.episode_reward = rew.float().clone()
+    else:
+        state.episode_reward += rew.float()
+
+
+def _record_done_agent(cfg: Config, env: BatchedVecEnv, state: AttrDict, infos, agent_i: int, verbose: bool) -> None:
+    state.finished_episode[agent_i] = True
+    rew = state.episode_reward[agent_i].item()
+    state.episode_rewards[agent_i].append(rew)
+
+    true_objective = rew
+    if isinstance(infos, (list, tuple)):
+        true_objective = infos[agent_i].get("true_objective", rew)
+    state.true_objectives[agent_i].append(true_objective)
+
+    if verbose:
+        log.info(
+            "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
+            agent_i,
+            state.num_frames,
+            state.episode_reward[agent_i],
+            state.true_objectives[agent_i][-1],
+        )
+
+    device = state.rnn_states.device
+    state.rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
+    state.episode_reward[agent_i] = 0
+
+    if cfg.use_record_episode_statistics:
+        if "episode" in infos[agent_i].keys():
+            state.num_episodes += 1
+            state.reward_list.append(infos[agent_i]["episode"]["r"])
+    else:
+        state.num_episodes += 1
+        state.reward_list.append(true_objective)
+
+
+def _log_completed_episodes(env: BatchedVecEnv, state: AttrDict) -> None:
+    state.finished_episode = [False] * env.num_agents
+    avg_episode_rewards, avg_true_objectives = [], []
+
+    for agent_i in range(env.num_agents):
+        avg_rew = np.mean(state.episode_rewards[agent_i])
+        avg_true_obj = np.mean(state.true_objectives[agent_i])
+
+        if not np.isnan(avg_rew):
+            avg_episode_rewards.append(f"#{agent_i}: {avg_rew:.3f}")
+        if not np.isnan(avg_true_obj):
+            avg_true_objectives.append(f"#{agent_i}: {avg_true_obj:.3f}")
+
+    log.info(
+        "Avg episode rewards: %s, true rewards: %s",
+        ", ".join(avg_episode_rewards),
+        ", ".join(avg_true_objectives),
+    )
+    log.info(
+        "Avg episode reward: %.3f, avg true_objective: %.3f",
+        np.mean([np.mean(state.episode_rewards[i]) for i in range(env.num_agents)]),
+        np.mean([np.mean(state.true_objectives[i]) for i in range(env.num_agents)]),
+    )
+
+
+def _advance_env_once(
+    cfg: Config, env: BatchedVecEnv, env_info, device: torch.device, state: AttrDict, actions
+) -> None:
+    state.last_render_start = render_frame(cfg, env, state.video_frames, state.num_episodes, state.last_render_start)
+
+    state.obs, rew, terminated, truncated, infos = env.step(actions)
+    state.action_mask = state.obs.pop("action_mask").to(device) if "action_mask" in state.obs else None
+    dones = make_dones(terminated, truncated)
+    infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
+    state.infos = infos
+
+    _update_episode_reward(state, rew)
+
+    state.num_frames += 1
+    if state.num_frames % 100 == 0:
+        log.debug(f"Num frames {state.num_frames}...")
+
+    state.dones = dones.cpu().numpy()
+
+
+def _handle_env_step_end(cfg: Config, env: BatchedVecEnv, state: AttrDict, verbose: bool) -> None:
+    for agent_i, done_flag in enumerate(state.dones):
+        if done_flag:
+            _record_done_agent(cfg, env, state, state.infos, agent_i, verbose)
+
+    if all(state.dones):
+        render_frame(cfg, env, state.video_frames, state.num_episodes, state.last_render_start)
+        time.sleep(0.05)
+
+    if all(state.finished_episode):
+        _log_completed_episodes(env, state)
+
+
+def _generate_enjoy_outputs(cfg: Config, state: AttrDict) -> None:
+    if cfg.save_video:
+        fps = cfg.fps if cfg.fps > 0 else 30
+        generate_replay_video(experiment_dir(cfg=cfg), state.video_frames, fps, cfg)
+
+    if cfg.push_to_hub:
+        generate_model_card(
+            experiment_dir(cfg=cfg),
+            cfg.algo,
+            cfg.env,
+            cfg.hf_repository,
+            state.reward_list,
+            cfg.enjoy_script,
+            cfg.train_script,
+        )
+        push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository)
+
+
+def _mean_episode_reward(env: BatchedVecEnv, state: AttrDict) -> float:
+    return sum([sum(state.episode_rewards[i]) for i in range(env.num_agents)]) / sum(
+        [len(state.episode_rewards[i]) for i in range(env.num_agents)]
+    )
+
+
+def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
+    verbose = False
+    cfg, render_action_repeat, render_mode = _prepare_eval_config(cfg)
 
     env = make_env(cfg, render_mode=render_mode)
     env_info = extract_env_info(env, cfg)
@@ -128,134 +307,15 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
         # reset call ruins the demo recording for VizDoom
         env.unwrapped.reset_on_init = False
 
-    actor_critic = create_actor_critic(cfg, env.observation_space, env.action_space)
-    actor_critic.eval()
-
-    device = torch.device("cpu" if cfg.device == "cpu" else "cuda")
-    actor_critic.model_to_device(device)
-
-    load_state_dict(cfg, actor_critic, device)
-
-    episode_rewards = [deque([], maxlen=100) for _ in range(env.num_agents)]
-    true_objectives = [deque([], maxlen=100) for _ in range(env.num_agents)]
-    num_frames = 0
-
-    last_render_start = time.time()
-
-    def max_frames_reached(frames):
-        return cfg.max_num_frames is not None and frames > cfg.max_num_frames
-
-    reward_list = []
-
-    obs, infos = env.reset()
-    action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
-    rnn_states = torch.zeros([env.num_agents, get_rnn_size(cfg)], dtype=torch.float32, device=device)
-    episode_reward = None
-    finished_episode = [False for _ in range(env.num_agents)]
-
-    video_frames = []
-    num_episodes = 0
+    actor_critic, device = _init_eval_actor_critic(cfg, env)
+    state = _init_enjoy_state(cfg, env, device)
 
     with torch.no_grad():
-        while not max_frames_reached(num_frames):
-            normalized_obs = prepare_and_normalize_obs(actor_critic, obs)
-
-            if not cfg.no_render:
-                visualize_policy_inputs(normalized_obs)
-            policy_outputs = actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
-
-            # sample actions from the distribution by default
-            actions = policy_outputs["actions"]
-
-            if cfg.eval_deterministic:
-                action_distribution = actor_critic.action_distribution()
-                actions = argmax_actions(action_distribution)
-
-            # actions shape should be [num_agents, num_actions] even if it's [1, 1]
-            if actions.ndim == 1:
-                actions = unsqueeze_tensor(actions, dim=-1)
-            actions = preprocess_actions(env_info, actions)
-
-            rnn_states = policy_outputs["new_rnn_states"]
-
+        while not _max_frames_reached(cfg, state.num_frames):
+            actions = _select_actions(cfg, env_info, actor_critic, state)
             for _ in range(render_action_repeat):
-                last_render_start = render_frame(cfg, env, video_frames, num_episodes, last_render_start)
-
-                obs, rew, terminated, truncated, infos = env.step(actions)
-                action_mask = obs.pop("action_mask").to(device) if "action_mask" in obs else None
-                dones = make_dones(terminated, truncated)
-                infos = [{} for _ in range(env_info.num_agents)] if infos is None else infos
-
-                if episode_reward is None:
-                    episode_reward = rew.float().clone()
-                else:
-                    episode_reward += rew.float()
-
-                num_frames += 1
-                if num_frames % 100 == 0:
-                    log.debug(f"Num frames {num_frames}...")
-
-                dones = dones.cpu().numpy()
-                for agent_i, done_flag in enumerate(dones):
-                    if done_flag:
-                        finished_episode[agent_i] = True
-                        rew = episode_reward[agent_i].item()
-                        episode_rewards[agent_i].append(rew)
-
-                        true_objective = rew
-                        if isinstance(infos, (list, tuple)):
-                            true_objective = infos[agent_i].get("true_objective", rew)
-                        true_objectives[agent_i].append(true_objective)
-
-                        if verbose:
-                            log.info(
-                                "Episode finished for agent %d at %d frames. Reward: %.3f, true_objective: %.3f",
-                                agent_i,
-                                num_frames,
-                                episode_reward[agent_i],
-                                true_objectives[agent_i][-1],
-                            )
-                        rnn_states[agent_i] = torch.zeros([get_rnn_size(cfg)], dtype=torch.float32, device=device)
-                        episode_reward[agent_i] = 0
-
-                        if cfg.use_record_episode_statistics:
-                            # we want the scores from the full episode not a single agent death (due to EpisodicLifeEnv wrapper)
-                            if "episode" in infos[agent_i].keys():
-                                num_episodes += 1
-                                reward_list.append(infos[agent_i]["episode"]["r"])
-                        else:
-                            num_episodes += 1
-                            reward_list.append(true_objective)
-
-                # if episode terminated synchronously for all agents, pause a bit before starting a new one
-                if all(dones):
-                    render_frame(cfg, env, video_frames, num_episodes, last_render_start)
-                    time.sleep(0.05)
-
-                if all(finished_episode):
-                    finished_episode = [False] * env.num_agents
-                    avg_episode_rewards_str, avg_true_objective_str = "", ""
-                    for agent_i in range(env.num_agents):
-                        avg_rew = np.mean(episode_rewards[agent_i])
-                        avg_true_obj = np.mean(true_objectives[agent_i])
-
-                        if not np.isnan(avg_rew):
-                            if avg_episode_rewards_str:
-                                avg_episode_rewards_str += ", "
-                            avg_episode_rewards_str += f"#{agent_i}: {avg_rew:.3f}"
-                        if not np.isnan(avg_true_obj):
-                            if avg_true_objective_str:
-                                avg_true_objective_str += ", "
-                            avg_true_objective_str += f"#{agent_i}: {avg_true_obj:.3f}"
-
-                    log.info(
-                        "Avg episode rewards: %s, true rewards: %s", avg_episode_rewards_str, avg_true_objective_str
-                    )
-                    log.info(
-                        "Avg episode reward: %.3f, avg true_objective: %.3f",
-                        np.mean([np.mean(episode_rewards[i]) for i in range(env.num_agents)]),
-                        np.mean([np.mean(true_objectives[i]) for i in range(env.num_agents)]),
-                    )
+                _advance_env_once(cfg, env, env_info, device, state, actions)
+                _handle_env_step_end(cfg, env, state, verbose)
 
                 # VizDoom multiplayer stuff
                 # for player in [1, 2, 3, 4, 5, 6, 7, 8]:
@@ -263,30 +323,9 @@ def enjoy(cfg: Config) -> Tuple[StatusCode, float]:
                 #     if key in infos[0]:
                 #         log.debug('Score for player %d: %r', player, infos[0][key])
 
-            if num_episodes >= cfg.max_num_episodes:
+            if state.num_episodes >= cfg.max_num_episodes:
                 break
 
     env.close()
-
-    if cfg.save_video:
-        if cfg.fps > 0:
-            fps = cfg.fps
-        else:
-            fps = 30
-        generate_replay_video(experiment_dir(cfg=cfg), video_frames, fps, cfg)
-
-    if cfg.push_to_hub:
-        generate_model_card(
-            experiment_dir(cfg=cfg),
-            cfg.algo,
-            cfg.env,
-            cfg.hf_repository,
-            reward_list,
-            cfg.enjoy_script,
-            cfg.train_script,
-        )
-        push_to_hf(experiment_dir(cfg=cfg), cfg.hf_repository)
-
-    return ExperimentStatus.SUCCESS, sum([sum(episode_rewards[i]) for i in range(env.num_agents)]) / sum(
-        [len(episode_rewards[i]) for i in range(env.num_agents)]
-    )
+    _generate_enjoy_outputs(cfg, state)
+    return ExperimentStatus.SUCCESS, _mean_episode_reward(env, state)
