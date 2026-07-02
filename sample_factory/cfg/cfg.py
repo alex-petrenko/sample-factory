@@ -40,8 +40,7 @@ def add_basic_cli_args(p: ArgumentParser):
     p.add_argument("--seed", default=None, type=int, help="Set a fixed seed value")
 
 
-def add_rl_args(p: ArgumentParser):
-    """Arguments not specific to any particular RL algorithm."""
+def _add_rl_system_args(p: ArgumentParser):
     # RL training system configuration (i.e. whether sync or async, etc.)
     p.add_argument(
         "--num_policies",
@@ -110,6 +109,8 @@ def add_rl_args(p: ArgumentParser):
         help="Max policy lag in policy versions. Discard all experience that is older than this.",
     )
 
+
+def _add_rl_regime_args(p: ArgumentParser):
     # RL algorithm data collection & learning regime (rollout length, batch size, etc.)
     p.add_argument(
         "--num_workers",
@@ -170,6 +171,8 @@ def add_rl_args(p: ArgumentParser):
         help="Whether to randomize and shuffle minibatches between iterations (this is a slow operation when batches are large, disabling this increases learner throughput when training with multiple epochs/minibatches per epoch)",
     )
 
+
+def _add_rl_basic_params(p: ArgumentParser):
     # basic RL parameters
     p.add_argument("--gamma", default=0.99, type=float, help="Discount factor")
     p.add_argument(
@@ -201,6 +204,8 @@ def add_rl_args(p: ArgumentParser):
         help="Whether to use running mean and standard deviation to normalize discounted returns",
     )
 
+
+def _add_rl_loss_args(p: ArgumentParser):
     # components of the loss function
     p.add_argument(
         "--exploration_loss_coeff",
@@ -238,6 +243,8 @@ def add_rl_args(p: ArgumentParser):
         "Empirically, symmetric KL-divergence yielded slightly better results on some problems.",
     )
 
+
+def _add_rl_policy_gradient_args(p: ArgumentParser):
     # more specific to policy gradient algorithms or PPO
     p.add_argument(
         "--gae_lambda",
@@ -276,6 +283,8 @@ def add_rl_args(p: ArgumentParser):
         help="c_hat clipping parameter of the V-trace algorithm. Low values for c_hat can reduce variance of the advantage estimates (similar to GAE lambda < 1)",
     )
 
+
+def _add_rl_optimization_args(p: ArgumentParser):
     # optimization
     p.add_argument("--optimizer", default="adam", type=str, choices=["adam", "lamb"], help="Type of optimizer to use")
     p.add_argument(
@@ -293,6 +302,8 @@ def add_rl_args(p: ArgumentParser):
         help="Max L2 norm of the gradient vector, set to 0 to disable gradient clipping",
     )
 
+
+def _add_rl_learning_rate_args(p: ArgumentParser):
     # learning rate
     p.add_argument("--learning_rate", default=1e-4, type=float, help="LR")
     p.add_argument(
@@ -320,6 +331,8 @@ def add_rl_args(p: ArgumentParser):
         ),
     )
 
+
+def _add_rl_observation_args(p: ArgumentParser):
     # observation preprocessing
     p.add_argument(
         "--obs_subtract_mean",
@@ -347,6 +360,8 @@ def add_rl_args(p: ArgumentParser):
         help="Which observation keys to use for normalization. If None, all observation keys are used (be careful with this!)",
     )
 
+
+def _add_rl_decorrelation_args(p: ArgumentParser):
     # decorrelating experience on startup (optional)
     p.add_argument(
         "--decorrelate_experience_max_seconds",
@@ -366,6 +381,8 @@ def add_rl_args(p: ArgumentParser):
         "For environments with a fixed episode length it can prevent the reset from happening in the same rollout for all envs simultaneously, which makes experience collection more uniform.",
     )
 
+
+def _add_rl_performance_args(p: ArgumentParser):
     # performance optimizations
     p.add_argument(
         "--actor_worker_gpus",
@@ -398,6 +415,8 @@ def add_rl_args(p: ArgumentParser):
         help="Niceness of the highest priority process (the learner). Values below zero require elevated privileges.",
     )
 
+
+def _add_rl_logging_args(p: ArgumentParser):
     # logging and summaries
     p.add_argument(
         "--log_to_file",
@@ -444,6 +463,8 @@ def add_rl_args(p: ArgumentParser):
         help="How often in seconds the runner checks for heartbeats",
     )
 
+
+def _add_rl_termination_args(p: ArgumentParser):
     # experiment termination
     p.add_argument(
         "--train_for_env_steps",
@@ -453,6 +474,8 @@ def add_rl_args(p: ArgumentParser):
     )
     p.add_argument("--train_for_seconds", default=int(1e10), type=int, help="Stop training after this many seconds")
 
+
+def _add_rl_checkpoint_args(p: ArgumentParser):
     # model saving
     p.add_argument("--save_every_sec", default=120, type=int, help="Checkpointing rate")
     p.add_argument("--keep_checkpoints", default=2, type=int, help="Number of model checkpoints to keep")
@@ -486,10 +509,29 @@ def add_rl_args(p: ArgumentParser):
         help='Start saving "best" policies after this many env steps to filter lucky episodes that succeed and dominate the statistics early on',
     )
 
+
+def _add_rl_debug_args(p: ArgumentParser):
     # debugging options
     p.add_argument("--benchmark", default=False, type=str2bool, help="Benchmark mode")
 
 
+
+def add_rl_args(p: ArgumentParser):
+    """Arguments not specific to any particular RL algorithm."""
+    _add_rl_system_args(p)
+    _add_rl_regime_args(p)
+    _add_rl_basic_params(p)
+    _add_rl_loss_args(p)
+    _add_rl_policy_gradient_args(p)
+    _add_rl_optimization_args(p)
+    _add_rl_learning_rate_args(p)
+    _add_rl_observation_args(p)
+    _add_rl_decorrelation_args(p)
+    _add_rl_performance_args(p)
+    _add_rl_logging_args(p)
+    _add_rl_termination_args(p)
+    _add_rl_checkpoint_args(p)
+    _add_rl_debug_args(p)
 def add_model_args(p: ArgumentParser):
     """
     Policy size, configuration, etc.
