@@ -19,6 +19,7 @@ from sample_factory.algo.utils.misc import EPS
 from sample_factory.utils.dicts import iter_dicts_recursively, iterate_recursively
 from sample_factory.utils.typing import Config, PolicyID
 from sample_factory.utils.utils import experiment_dir, log
+from sample_factory.utils.state_proxy import StateProxy
 
 
 def perturb_float(x, perturb_amount=1.2):
@@ -104,14 +105,17 @@ def load_model_signal(policy_id: PolicyID) -> str:
     return f"load_model{policy_id}"
 
 
-class PopulationBasedTraining(AlgoObserver, EventLoopObject):
+class PopulationBasedTraining(StateProxy, AlgoObserver, EventLoopObject):
+    _STATE_ATTRS = frozenset(('cfg', 'default_reward_shaping', 'env_info', 'last_pbt_summaries', 'last_update', 'policy_cfg', 'policy_reward_shaping', 'replacement_policy', 'reward_categories_to_tune', 'runner'))
+
     def __init__(self, cfg: Config, runner: Runner):
+        self._init_state_proxy()
         EventLoopObject.__init__(self, runner.event_loop, "PBT")
 
-        self.cfg: Config = cfg
-        self.env_info: Optional[EnvInfo] = None
+        self._state.cfg: Config = cfg
+        self._state.env_info: Optional[EnvInfo] = None
 
-        self.runner: Runner = runner
+        self._state.runner: Runner = runner
 
         # currently not supported, would require changes on the batcher
         # if cfg.pbt_optimize_batch_size:
@@ -120,47 +124,47 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
         if cfg.pbt_optimize_gamma:
             HYPERPARAMS_TO_TUNE.add("gamma")
 
-        self.last_update = [0] * self.cfg.num_policies
+        self._state.last_update = [0] * self._state.cfg.num_policies
 
-        self.policy_cfg = [dict() for _ in range(self.cfg.num_policies)]
-        self.policy_reward_shaping = [dict() for _ in range(self.cfg.num_policies)]
+        self._state.policy_cfg = [dict() for _ in range(self._state.cfg.num_policies)]
+        self._state.policy_reward_shaping = [dict() for _ in range(self._state.cfg.num_policies)]
 
-        self.default_reward_shaping: Optional[Dict] = None
+        self._state.default_reward_shaping: Optional[Dict] = None
 
-        self.last_pbt_summaries = 0
+        self._state.last_pbt_summaries = 0
 
-        self.reward_categories_to_tune = []
+        self._state.reward_categories_to_tune = []
         for env_prefix, categories in REWARD_CATEGORIES_TO_TUNE.items():
             if cfg.env.startswith(env_prefix):
-                self.reward_categories_to_tune = categories
+                self._state.reward_categories_to_tune = categories
 
         # Set to non-None when policy x has to be replaced by replacement_policy[x]
-        self.replacement_policy: Dict[PolicyID, Optional[PolicyID]] = {p: None for p in range(self.cfg.num_policies)}
+        self._state.replacement_policy: Dict[PolicyID, Optional[PolicyID]] = {p: None for p in range(self._state.cfg.num_policies)}
 
     def on_init(self, runner: Runner) -> None:
-        self.env_info = runner.env_info
-        self.default_reward_shaping = self.env_info.reward_shaping_scheme
+        self._state.env_info = runner.env_info
+        self._state.default_reward_shaping = self._state.env_info.reward_shaping_scheme
 
-        for policy_id in range(self.cfg.num_policies):
+        for policy_id in range(self._state.cfg.num_policies):
             # save the policy-specific configs if they don't exist, or else load them from files
-            policy_cfg_filename = policy_cfg_file(self.cfg, policy_id)
+            policy_cfg_filename = policy_cfg_file(self._state.cfg, policy_id)
             if os.path.exists(policy_cfg_filename):
                 with open(policy_cfg_filename, "r") as json_file:
                     log.debug("Loading initial policy %d configuration from file %s", policy_id, policy_cfg_filename)
                     json_params = json.load(json_file)
-                    self.policy_cfg[policy_id] = json_params
+                    self._state.policy_cfg[policy_id] = json_params
             else:
-                self.policy_cfg[policy_id] = dict()
+                self._state.policy_cfg[policy_id] = dict()
                 for param_name in HYPERPARAMS_TO_TUNE:
-                    self.policy_cfg[policy_id][param_name] = self.cfg[param_name]
+                    self._state.policy_cfg[policy_id][param_name] = self._state.cfg[param_name]
 
                 if policy_id > 0:  # keep one policy with default settings in the beginning
                     log.debug("Initial cfg mutation for policy %d", policy_id)
-                    self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[policy_id])
+                    self._state.policy_cfg[policy_id] = self._perturb_cfg(self._state.policy_cfg[policy_id])
 
-        for policy_id in range(self.cfg.num_policies):
+        for policy_id in range(self._state.cfg.num_policies):
             # save the policy-specific reward shaping if it doesn't exist, or else load from file
-            policy_reward_shaping_filename = policy_reward_shaping_file(self.cfg, policy_id)
+            policy_reward_shaping_filename = policy_reward_shaping_file(self._state.cfg, policy_id)
 
             if os.path.exists(policy_reward_shaping_filename):
                 with open(policy_reward_shaping_filename, "r") as json_file:
@@ -170,14 +174,14 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
                         policy_reward_shaping_filename,
                     )
                     json_params = json.load(json_file)
-                    self.policy_reward_shaping[policy_id] = json_params
+                    self._state.policy_reward_shaping[policy_id] = json_params
             else:
-                self.policy_reward_shaping[policy_id] = copy.deepcopy(self.default_reward_shaping)
+                self._state.policy_reward_shaping[policy_id] = copy.deepcopy(self._state.default_reward_shaping)
                 if policy_id > 0:  # keep one policy with default settings in the beginning
                     log.debug("Initial rewards mutation for policy %d", policy_id)
-                    self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[policy_id])
+                    self._state.policy_reward_shaping[policy_id] = self._perturb_reward(self._state.policy_reward_shaping[policy_id])
 
-        for policy_id in range(self.cfg.num_policies):
+        for policy_id in range(self._state.cfg.num_policies):
             self._save_cfg(policy_id)
             self._save_reward_shaping(policy_id)
 
@@ -190,25 +194,25 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
 
     def on_start(self, runner: Runner) -> None:
         # send initial configuration to the system components
-        for policy_id in range(self.cfg.num_policies):
+        for policy_id in range(self._state.cfg.num_policies):
             self._learner_update_cfg(policy_id)
-            runner.update_reward_shaping(policy_id, self.policy_reward_shaping[policy_id])
+            runner.update_reward_shaping(policy_id, self._state.policy_reward_shaping[policy_id])
 
     def _save_cfg(self, policy_id):
-        policy_cfg_filename = policy_cfg_file(self.cfg, policy_id)
+        policy_cfg_filename = policy_cfg_file(self._state.cfg, policy_id)
         with open(policy_cfg_filename, "w") as json_file:
             log.debug("Saving policy-specific configuration %d to file %s", policy_id, policy_cfg_filename)
-            json.dump(self.policy_cfg[policy_id], json_file)
+            json.dump(self._state.policy_cfg[policy_id], json_file)
 
     def _save_reward_shaping(self, policy_id):
-        policy_reward_shaping_filename = policy_reward_shaping_file(self.cfg, policy_id)
+        policy_reward_shaping_filename = policy_reward_shaping_file(self._state.cfg, policy_id)
         with open(policy_reward_shaping_filename, "w") as json_file:
             log.debug("Saving policy-specific reward shaping %d to file %s", policy_id, policy_reward_shaping_filename)
-            json.dump(self.policy_reward_shaping[policy_id], json_file)
+            json.dump(self._state.policy_reward_shaping[policy_id], json_file)
 
     def _perturb_param(self, param, param_name, default_param):
         # toss a coin whether we perturb the parameter at all
-        if random.random() > self.cfg.pbt_mutation_rate:
+        if random.random() > self._state.cfg.pbt_mutation_rate:
             return param
 
         if param != default_param and random.random() < 0.01:
@@ -217,11 +221,11 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
             return default_param
 
         if param_name in SPECIAL_PERTURBATION:
-            new_value = SPECIAL_PERTURBATION[param_name](param, self.cfg)
+            new_value = SPECIAL_PERTURBATION[param_name](param, self._state.cfg)
         elif type(param) is bool:
             new_value = not param
         elif isinstance(param, SupportsFloat):
-            perturb_amount = random.uniform(self.cfg.pbt_perturb_min, self.cfg.pbt_perturb_max)
+            perturb_amount = random.uniform(self._state.cfg.pbt_perturb_min, self._state.cfg.pbt_perturb_max)
             new_value = perturb_float(float(param), perturb_amount=perturb_amount)
         else:
             raise RuntimeError("Unsupported parameter type")
@@ -250,7 +254,7 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
 
     def _perturb_cfg(self, original_cfg):
         replacement_cfg = copy.deepcopy(original_cfg)
-        return self._perturb(replacement_cfg, default_params=self.cfg)
+        return self._perturb(replacement_cfg, default_params=self._state.cfg)
 
     def _perturb_reward(self, original_reward_shaping):
         if original_reward_shaping is None:
@@ -258,21 +262,21 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
 
         replacement_shaping = copy.deepcopy(original_reward_shaping)
 
-        if len(self.reward_categories_to_tune) > 0:
-            for category in self.reward_categories_to_tune:
+        if len(self._state.reward_categories_to_tune) > 0:
+            for category in self._state.reward_categories_to_tune:
                 if category in replacement_shaping:
                     replacement_shaping[category] = self._perturb(
                         replacement_shaping[category],
-                        default_params=self.default_reward_shaping[category],
+                        default_params=self._state.default_reward_shaping[category],
                     )
         else:
-            replacement_shaping = self._perturb(replacement_shaping, default_params=self.default_reward_shaping)
+            replacement_shaping = self._perturb(replacement_shaping, default_params=self._state.default_reward_shaping)
 
         return replacement_shaping
 
     def _learner_update_cfg(self, policy_id: PolicyID) -> None:
         log.debug(f"Sending learning configuration to learner {policy_id}...")
-        self.emit(update_cfg_signal(policy_id), self.policy_cfg[policy_id])
+        self.emit(update_cfg_signal(policy_id), self._state.policy_cfg[policy_id])
 
     @staticmethod
     def _write_dict_summaries(dictionary, writer, name, env_steps):
@@ -289,15 +293,15 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
                 log.error("Unsupported type in pbt summaries %r", type(value))
 
     def _write_pbt_summaries(self, policy_id, env_steps, writer: SummaryWriter):
-        self._write_dict_summaries(self.policy_cfg[policy_id], writer, "cfg", env_steps)
-        if self.policy_reward_shaping[policy_id] is not None:
-            self._write_dict_summaries(self.policy_reward_shaping[policy_id], writer, "rew", env_steps)
+        self._write_dict_summaries(self._state.policy_cfg[policy_id], writer, "cfg", env_steps)
+        if self._state.policy_reward_shaping[policy_id] is not None:
+            self._write_dict_summaries(self._state.policy_reward_shaping[policy_id], writer, "rew", env_steps)
 
     def _update_policy(self, policy_id, policy_stats):
-        if self.cfg.pbt_target_objective not in policy_stats:
+        if self._state.cfg.pbt_target_objective not in policy_stats:
             return
 
-        target_objectives = policy_stats[self.cfg.pbt_target_objective]
+        target_objectives = policy_stats[self._state.cfg.pbt_target_objective]
 
         # not enough data to perform PBT yet
         for objectives in target_objectives:
@@ -306,12 +310,12 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
 
         target_objectives = [np.mean(o) for o in target_objectives]
 
-        policies = list(range(self.cfg.num_policies))
+        policies = list(range(self._state.cfg.num_policies))
         policies_sorted = sorted(zip(target_objectives, policies), reverse=True)
         policies_sorted = [p for objective, p in policies_sorted]
 
-        replace_fraction = self.cfg.pbt_replace_fraction
-        replace_number = math.ceil(replace_fraction * self.cfg.num_policies)
+        replace_fraction = self._state.cfg.pbt_replace_fraction
+        replace_number = math.ceil(replace_fraction * self._state.cfg.num_policies)
 
         best_policies = policies_sorted[:replace_number]
         worst_policies = policies_sorted[-replace_number:]
@@ -336,8 +340,8 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
             )  # TODO: this might not work correctly with negative rewards
 
             if (
-                abs(reward_delta) > self.cfg.pbt_replace_reward_gap_absolute
-                and reward_delta_relative > self.cfg.pbt_replace_reward_gap
+                abs(reward_delta) > self._state.cfg.pbt_replace_reward_gap_absolute
+                and reward_delta_relative > self._state.cfg.pbt_replace_reward_gap
             ):
                 replacement_policy = replacement_policy_candidate
                 log.debug(
@@ -353,15 +357,15 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
         if policy_id == 0:
             # Do not ever mutate the 1st policy, leave it for the reference
             # Still we allow replacements in case it's really bad
-            self.policy_cfg[policy_id] = self.policy_cfg[replacement_policy]
-            self.policy_reward_shaping[policy_id] = self.policy_reward_shaping[replacement_policy]
+            self._state.policy_cfg[policy_id] = self._state.policy_cfg[replacement_policy]
+            self._state.policy_reward_shaping[policy_id] = self._state.policy_reward_shaping[replacement_policy]
         else:
-            self.policy_cfg[policy_id] = self._perturb_cfg(self.policy_cfg[replacement_policy])
-            self.policy_reward_shaping[policy_id] = self._perturb_reward(self.policy_reward_shaping[replacement_policy])
+            self._state.policy_cfg[policy_id] = self._perturb_cfg(self._state.policy_cfg[replacement_policy])
+            self._state.policy_reward_shaping[policy_id] = self._perturb_reward(self._state.policy_reward_shaping[replacement_policy])
 
         # force replacement policy learner to save its model so we get the latest version
         # for simplicity we do this even if the policy is replaced by itself (so no replacement happens)
-        self.replacement_policy[policy_id] = replacement_policy
+        self._state.replacement_policy[policy_id] = replacement_policy
         self.emit(save_model_signal(replacement_policy))
 
     def on_saved_model(self, replacement_policy: PolicyID) -> None:
@@ -369,8 +373,8 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
         Called when learner saves its model. At this point we're free to use this model to
         replace other policies.
         """
-        for policy_id in range(self.cfg.num_policies):
-            if self.replacement_policy[policy_id] != replacement_policy:
+        for policy_id in range(self._state.cfg.num_policies):
+            if self._state.replacement_policy[policy_id] != replacement_policy:
                 continue
 
             if replacement_policy != policy_id:
@@ -378,38 +382,38 @@ class PopulationBasedTraining(AlgoObserver, EventLoopObject):
                 log.debug(f"Asking learner {policy_id} to load model from {replacement_policy}")
                 self.emit(load_model_signal(policy_id), replacement_policy)
 
-            self.replacement_policy[policy_id] = None
+            self._state.replacement_policy[policy_id] = None
 
             self._save_cfg(policy_id)
             self._save_reward_shaping(policy_id)
             self._learner_update_cfg(policy_id)
 
-            self.runner.update_reward_shaping(policy_id, self.policy_reward_shaping[policy_id])
+            self._state.runner.update_reward_shaping(policy_id, self._state.policy_reward_shaping[policy_id])
 
     def on_training_step(self, runner: Runner, training_iteration_since_resume: int) -> None:
-        if not self.cfg.with_pbt or self.cfg.num_policies <= 1:
+        if not self._state.cfg.with_pbt or self._state.cfg.num_policies <= 1:
             return
 
         env_steps = runner.env_steps
         policy_avg_stats = runner.policy_avg_stats
 
-        for policy_id in range(self.cfg.num_policies):
+        for policy_id in range(self._state.cfg.num_policies):
             if policy_id not in env_steps:
                 continue
 
-            if env_steps[policy_id] < self.cfg.pbt_start_mutation:
+            if env_steps[policy_id] < self._state.cfg.pbt_start_mutation:
                 continue
 
-            steps_since_last_update = env_steps[policy_id] - self.last_update[policy_id]
-            if steps_since_last_update > self.cfg.pbt_period_env_steps:
+            steps_since_last_update = env_steps[policy_id] - self._state.last_update[policy_id]
+            if steps_since_last_update > self._state.cfg.pbt_period_env_steps:
                 self._update_policy(policy_id, policy_avg_stats)
                 self._write_pbt_summaries(policy_id, env_steps[policy_id], runner.writers[policy_id])
-                self.last_update[policy_id] = env_steps[policy_id]
+                self._state.last_update[policy_id] = env_steps[policy_id]
 
         # also periodically dump a pbt summary even if we didn't change anything
         now = time.time()
-        if now - self.last_pbt_summaries > 5 * 60:
-            for policy_id in range(self.cfg.num_policies):
+        if now - self._state.last_pbt_summaries > 5 * 60:
+            for policy_id in range(self._state.cfg.num_policies):
                 if policy_id in env_steps:
                     self._write_pbt_summaries(policy_id, env_steps[policy_id], runner.writers[policy_id])
-                    self.last_pbt_summaries = now
+                    self._state.last_pbt_summaries = now

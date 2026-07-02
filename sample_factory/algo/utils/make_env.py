@@ -19,6 +19,7 @@ from sample_factory.envs.env_utils import (
 )
 from sample_factory.utils.dicts import dict_of_lists_append, list_of_dicts_to_dict_of_lists
 from sample_factory.utils.typing import Config
+from sample_factory.utils.state_proxy import StateProxy
 
 Actions = Any
 ListActions = Sequence[Actions]
@@ -144,12 +145,15 @@ class BatchedListToDictWrapper(Wrapper):
         return obs, rew, terminated, truncated, info
 
 
-class BatchedVecEnv(Wrapper):
+class BatchedVecEnv(StateProxy, Wrapper):
+    _STATE_ATTRS = frozenset(('_convert_obs_func', '_convert_rew_func', '_convert_terminated_func', '_convert_truncated_func', '_seed', '_seeded', 'is_multiagent', 'num_agents'))
+
     """Ensures that the env returns a dictionary of tensors for observations, and tensors for rewards and dones."""
 
     ConvertFunc = Callable[[Any], Tensor]
 
     def __init__(self, env):
+        self._init_state_proxy()
         if not isinstance(env.observation_space, spaces.Dict):
             env = BatchedDictObservationsWrapper(env)
         if not is_multiagent_env(env):
@@ -158,21 +162,21 @@ class BatchedVecEnv(Wrapper):
             env = BatchedListToDictWrapper(env)
 
         is_multiagent, num_agents = get_multiagent_info(env)
-        self.is_multiagent: bool = is_multiagent
-        self.num_agents: int = num_agents
+        self._state.is_multiagent: bool = is_multiagent
+        self._state.num_agents: int = num_agents
 
-        self._convert_obs_func: Dict[str, BatchedVecEnv.ConvertFunc] = dict()
-        self._convert_rew_func = self._convert_terminated_func = self._convert_truncated_func = None
+        self._state._convert_obs_func: Dict[str, BatchedVecEnv.ConvertFunc] = dict()
+        self._state._convert_rew_func = self._state._convert_terminated_func = self._state._convert_truncated_func = None
 
-        self._seed: Optional[int] = None
-        self._seeded: bool = False
+        self._state._seed: Optional[int] = None
+        self._state._seeded: bool = False
 
         super().__init__(env)
 
     def _convert(self, obs: Dict[str, Any]) -> DictOfTensorObservations:
         result = dict()
         for key, value in obs.items():
-            result[key] = self._convert_obs_func[key](value)
+            result[key] = self._state._convert_obs_func[key](value)
         return result
 
     @staticmethod
@@ -202,19 +206,19 @@ class BatchedVecEnv(Wrapper):
         Sample Factory uses its own wrappers around gym.Env so we just keep this function and forward the seed to
         the first reset() if needed.
         """
-        self._seed = seed
+        self._state._seed = seed
 
     def reset(self, **kwargs) -> Tuple[DictOfTensorObservations, Dict]:
-        if not self._seeded and self._seed is not None:
-            kwargs["seed"] = self._seed
-            self._seeded = True
+        if not self._state._seeded and self._state._seed is not None:
+            kwargs["seed"] = self._state._seed
+            self._state._seeded = True
 
         obs, info = self.env.reset(**kwargs)
         assert isinstance(obs, dict)
 
         for key, value in obs.items():
-            if key not in self._convert_obs_func:
-                self._convert_obs_func[key] = self._get_convert_func(value)
+            if key not in self._state._convert_obs_func:
+                self._state._convert_obs_func[key] = self._get_convert_func(value)
 
         return self._convert(obs), info
 
@@ -222,116 +226,119 @@ class BatchedVecEnv(Wrapper):
         obs, rew, terminated, truncated, infos = self.env.step(action)
         obs = self._convert(obs)
 
-        if not self._convert_rew_func:
+        if not self._state._convert_rew_func:
             # the only way to reliably find out the format of data is to actually look what the environment returns
             # noinspection PyTypeChecker
-            self._convert_rew_func = self._get_convert_func(rew)
+            self._state._convert_rew_func = self._get_convert_func(rew)
             # noinspection PyTypeChecker
-            self._convert_terminated_func = self._get_convert_func(terminated)
+            self._state._convert_terminated_func = self._get_convert_func(terminated)
             # noinspection PyTypeChecker
-            self._convert_truncated_func = self._get_convert_func(truncated)
+            self._state._convert_truncated_func = self._get_convert_func(truncated)
 
-        rew = self._convert_rew_func(rew)
-        terminated = self._convert_terminated_func(terminated)
-        truncated = self._convert_truncated_func(truncated)
+        rew = self._state._convert_rew_func(rew)
+        terminated = self._state._convert_terminated_func(terminated)
+        truncated = self._state._convert_truncated_func(truncated)
         return obs, rew, terminated, truncated, infos
 
 
-class SequentialVectorizeWrapper(Wrapper, TrainingInfoInterface, RewardShapingInterface):
+class SequentialVectorizeWrapper(StateProxy, Wrapper, TrainingInfoInterface, RewardShapingInterface):
+    _STATE_ATTRS = frozenset(('envs', 'infos', 'num_agents', 'obs', 'rew', 'reward_shaping_interfaces', 'single_env_agents', 'terminated', 'training_info_interfaces', 'truncated'))
+
     """Vector interface for multiple environments simulated sequentially on one worker."""
 
     def __init__(self, envs: Sequence):
+        self._init_state_proxy()
         Wrapper.__init__(self, envs[0])
         TrainingInfoInterface.__init__(self)
-        self.single_env_agents = envs[0].num_agents
+        self._state.single_env_agents = envs[0].num_agents
         assert all(
-            e.num_agents == self.single_env_agents for e in envs
-        ), f"Expect all envs to have the same number of agents {self.single_env_agents}"
+            e.num_agents == self._state.single_env_agents for e in envs
+        ), f"Expect all envs to have the same number of agents {self._state.single_env_agents}"
 
-        self.envs = envs
-        self.num_agents = self.single_env_agents * len(envs)
+        self._state.envs = envs
+        self._state.num_agents = self._state.single_env_agents * len(envs)
 
-        self.obs = self.rew = self.terminated = self.truncated = self.infos = None
+        self._state.obs = self._state.rew = self._state.terminated = self._state.truncated = self._state.infos = None
 
-        self.training_info_interfaces: Optional[List[TrainingInfoInterface]] = []
-        self.reward_shaping_interfaces: Optional[List[RewardShapingInterface]] = []
+        self._state.training_info_interfaces: Optional[List[TrainingInfoInterface]] = []
+        self._state.reward_shaping_interfaces: Optional[List[RewardShapingInterface]] = []
         for env in envs:
             env_train_info = find_training_info_interface(env)
             if env_train_info is None:
-                self.training_info_interfaces = None
+                self._state.training_info_interfaces = None
                 break
             else:
-                self.training_info_interfaces.append(env_train_info)
+                self._state.training_info_interfaces.append(env_train_info)
 
             env_rew_shaping = find_wrapper_interface(env, RewardShapingInterface)
             if env_rew_shaping is None:
-                self.reward_shaping_interfaces = None
+                self._state.reward_shaping_interfaces = None
                 break
             else:
-                self.reward_shaping_interfaces.append(env_rew_shaping)
+                self._state.reward_shaping_interfaces.append(env_rew_shaping)
 
     def reset(self, **kwargs) -> Tuple[Dict, List[Dict]]:
         infos = []
-        self.obs = dict()
-        for e in self.envs:
+        self._state.obs = dict()
+        for e in self._state.envs:
             obs, info = e.reset(**kwargs)
-            dict_of_lists_append(self.obs, obs)
+            dict_of_lists_append(self._state.obs, obs)
             infos.extend(info)
 
-        dict_of_lists_cat(self.obs)
-        return self.obs, infos
+        dict_of_lists_cat(self._state.obs)
+        return self._state.obs, infos
 
     def step(self, actions: Tensor):
         infos = []
         ofs = 0
-        next_ofs = self.single_env_agents
-        for i, e in enumerate(self.envs):
+        next_ofs = self._state.single_env_agents
+        for i, e in enumerate(self._state.envs):
             idx = slice(ofs, next_ofs)
             env_actions = actions[idx]
             obs, rew, terminated, truncated, info = e.step(env_actions)
 
             # TODO: test if this works for multi-agent envs
             for key, x in obs.items():
-                self.obs[key][idx] = x
+                self._state.obs[key][idx] = x
 
-            if self.rew is None:
-                self.rew = rew.repeat(len(self.envs))
-                self.terminated = terminated.repeat(len(self.envs))
-                self.truncated = truncated.repeat(len(self.envs))
+            if self._state.rew is None:
+                self._state.rew = rew.repeat(len(self._state.envs))
+                self._state.terminated = terminated.repeat(len(self._state.envs))
+                self._state.truncated = truncated.repeat(len(self._state.envs))
 
-            self.rew[idx] = rew
-            self.terminated[idx] = terminated
-            self.truncated[idx] = truncated
+            self._state.rew[idx] = rew
+            self._state.terminated[idx] = terminated
+            self._state.truncated[idx] = truncated
 
             infos.extend(info)
 
-            ofs += self.single_env_agents
-            next_ofs += self.single_env_agents
+            ofs += self._state.single_env_agents
+            next_ofs += self._state.single_env_agents
 
-        return self.obs, self.rew, self.terminated, self.truncated, infos
+        return self._state.obs, self._state.rew, self._state.terminated, self._state.truncated, infos
 
     def set_training_info(self, training_info: Dict) -> None:
-        if self.training_info_interfaces is None:
+        if self._state.training_info_interfaces is None:
             return
 
-        for env_train_info in self.training_info_interfaces:
+        for env_train_info in self._state.training_info_interfaces:
             env_train_info.set_training_info(training_info)
 
     def get_default_reward_shaping(self) -> Optional[Dict[str, Any]]:
-        if self.reward_shaping_interfaces is not None:
-            return self.reward_shaping_interfaces[0].get_default_reward_shaping()
+        if self._state.reward_shaping_interfaces is not None:
+            return self._state.reward_shaping_interfaces[0].get_default_reward_shaping()
         else:
             return None
 
     def set_reward_shaping(self, reward_shaping: Dict[str, Any], agent_indices: int | slice) -> None:
         assert isinstance(agent_indices, slice)
         for agent_idx in range(agent_indices.start, agent_indices.stop):
-            env_idx = agent_idx // self.single_env_agents
-            env_agent_idx = agent_idx % self.single_env_agents
-            self.reward_shaping_interfaces[env_idx].set_reward_shaping(reward_shaping, env_agent_idx)
+            env_idx = agent_idx // self._state.single_env_agents
+            env_agent_idx = agent_idx % self._state.single_env_agents
+            self._state.reward_shaping_interfaces[env_idx].set_reward_shaping(reward_shaping, env_agent_idx)
 
     def close(self):
-        for e in self.envs:
+        for e in self._state.envs:
             e.close()
 
 

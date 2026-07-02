@@ -15,6 +15,7 @@ from gymnasium import ObservationWrapper, RewardWrapper, spaces
 
 from sample_factory.envs.env_utils import num_env_steps
 from sample_factory.utils.utils import ensure_dir_exists, log
+from sample_factory.utils.state_proxy import StateProxy
 
 
 def has_image_observations(observation_space):
@@ -191,74 +192,77 @@ class PixelFormatChwWrapper(ObservationWrapper):
         return observation
 
 
-class RecordingWrapper(gym.core.Wrapper):
+class RecordingWrapper(StateProxy, gym.core.Wrapper):
+    _STATE_ATTRS = frozenset(('_episode_recording_dir', '_frame_id', '_player_id', '_record_id', '_record_to', '_recorded_actions', '_recorded_episode_reward', '_recorded_episode_shaping_reward'))
+
     def __init__(self, env, record_to, player_id):
+        self._init_state_proxy()
         super().__init__(env)
 
-        self._record_to = record_to
-        self._episode_recording_dir = None
-        self._record_id = 0
-        self._frame_id = 0
-        self._player_id = player_id
-        self._recorded_episode_reward = 0
-        self._recorded_episode_shaping_reward = 0
+        self._state._record_to = record_to
+        self._state._episode_recording_dir = None
+        self._state._record_id = 0
+        self._state._frame_id = 0
+        self._state._player_id = player_id
+        self._state._recorded_episode_reward = 0
+        self._state._recorded_episode_shaping_reward = 0
 
-        self._recorded_actions = []
+        self._state._recorded_actions = []
 
         # Experimental! Recording Doom replay. Does not work in all scenarios, e.g. when there are in-game bots.
         self.unwrapped.record_to = record_to
 
     def reset(self, **kwargs):
-        if self._episode_recording_dir is not None and self._record_id > 0:
+        if self._state._episode_recording_dir is not None and self._state._record_id > 0:
             # save actions to text file
-            with open(join(self._episode_recording_dir, "actions.json"), "w") as actions_file:
-                json.dump(self._recorded_actions, actions_file)
+            with open(join(self._state._episode_recording_dir, "actions.json"), "w") as actions_file:
+                json.dump(self._state._recorded_actions, actions_file)
 
             # rename previous episode dir
-            reward = self._recorded_episode_reward + self._recorded_episode_shaping_reward
-            new_dir_name = self._episode_recording_dir + f"_r{reward:.2f}"
-            os.rename(self._episode_recording_dir, new_dir_name)
+            reward = self._state._recorded_episode_reward + self._state._recorded_episode_shaping_reward
+            new_dir_name = self._state._episode_recording_dir + f"_r{reward:.2f}"
+            os.rename(self._state._episode_recording_dir, new_dir_name)
             log.info(
                 "Finished recording %s (rew %.3f, shaping %.3f)",
                 new_dir_name,
                 reward,
-                self._recorded_episode_shaping_reward,
+                self._state._recorded_episode_shaping_reward,
             )
 
-        dir_name = f"ep_{self._record_id:03d}_p{self._player_id}"
-        self._episode_recording_dir = join(self._record_to, dir_name)
-        ensure_dir_exists(self._episode_recording_dir)
+        dir_name = f"ep_{self._state._record_id:03d}_p{self._state._player_id}"
+        self._state._episode_recording_dir = join(self._state._record_to, dir_name)
+        ensure_dir_exists(self._state._episode_recording_dir)
 
-        self._record_id += 1
-        self._frame_id = 0
-        self._recorded_episode_reward = 0
-        self._recorded_episode_shaping_reward = 0
+        self._state._record_id += 1
+        self._state._frame_id = 0
+        self._state._recorded_episode_reward = 0
+        self._state._recorded_episode_shaping_reward = 0
 
-        self._recorded_actions = []
+        self._state._recorded_actions = []
 
         return self.env.reset(**kwargs)
 
     def _record(self, img):
-        frame_name = f"{self._frame_id:05d}.png"
+        frame_name = f"{self._state._frame_id:05d}.png"
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(join(self._episode_recording_dir, frame_name), img)
-        self._frame_id += 1
+        cv2.imwrite(join(self._state._episode_recording_dir, frame_name), img)
+        self._state._frame_id += 1
 
     def step(self, action):
         observation, reward, terminated, truncated, info = self.env.step(action)
 
         if isinstance(action, np.ndarray):
-            self._recorded_actions.append(action.tolist())
+            self._state._recorded_actions.append(action.tolist())
         elif np.issubdtype(type(action), np.integer):
-            self._recorded_actions.append(int(action))
+            self._state._recorded_actions.append(int(action))
         else:
-            self._recorded_actions.append(action)
+            self._state._recorded_actions.append(action)
 
         self._record(observation)
-        self._recorded_episode_reward += reward
+        self._state._recorded_episode_reward += reward
         if hasattr(self.env.unwrapped, "_total_shaping_reward"):
             # noinspection PyProtectedMember
-            self._recorded_episode_shaping_reward = self.env.unwrapped._total_shaping_reward
+            self._state._recorded_episode_shaping_reward = self.env.unwrapped._total_shaping_reward
 
         return observation, reward, terminated, truncated, info
 
