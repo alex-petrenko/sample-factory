@@ -235,5 +235,8 @@ class BufferMgr(Configurable):
                     self.traj_buffer_queues[device].put(i)
 
         self.policy_versions = torch.zeros([cfg.num_policies], dtype=torch.int32)
+        # Global env steps counter for DQN epsilon schedule synchronization
+        self.global_env_steps = torch.zeros([cfg.num_policies], dtype=torch.int64)
         if share:
             self.policy_versions.share_memory_()
+            self.global_env_steps.share_memory_()

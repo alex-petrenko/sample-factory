@@ -11,6 +11,7 @@ from torch import Tensor
 
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.learning.learner import Learner
+from sample_factory.algo.learning.learner_dqn import DQNLearner
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
@@ -66,8 +67,17 @@ class LearnerWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self.batcher_thread: Optional[Thread] = None
 
         policy_versions_tensor: Tensor = buffer_mgr.policy_versions
+        global_env_steps_tensor: Tensor = buffer_mgr.global_env_steps
         self.param_server = ParameterServer(policy_id, policy_versions_tensor, cfg.serial_mode)
-        self.learner: Learner = Learner(cfg, env_info, policy_versions_tensor, policy_id, self.param_server)
+
+        # TODO: Maybe use hashmap to scale up with more algo
+        algo = getattr(cfg, "algo", "APPO").upper()
+        if algo == "DQN":
+            self.learner: Learner = DQNLearner(
+                cfg, env_info, policy_versions_tensor, policy_id, self.param_server, global_env_steps_tensor
+            )
+        else:
+            self.learner = Learner(cfg, env_info, policy_versions_tensor, policy_id, self.param_server)
 
         # total number of full training iterations (potentially multiple minibatches/epochs per iteration)
         self.training_iteration_since_resume: int = 0

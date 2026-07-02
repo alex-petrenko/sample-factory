@@ -14,6 +14,7 @@ from signal_slot.signal_slot import TightLoop, Timer, signal
 
 from sample_factory.algo.utils.context import SampleFactoryContext, set_global_context
 from sample_factory.algo.utils.env_info import EnvInfo
+from sample_factory.algo.utils.epsilon_schedule import EpsilonSchedule
 from sample_factory.algo.utils.heartbeat import HeartbeatStoppableEventLoopObject
 from sample_factory.algo.utils.misc import (
     POLICY_ID_KEY,
@@ -132,6 +133,30 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
         self._prepare_policy_outputs_func: PrepareOutputsFunc = prepare_policy_outputs
 
         self.is_initialized = False
+
+        # epsilon-greedy exploration for DQN
+        self.epsilon_schedule: Optional[EpsilonSchedule] = None
+        self.action_space_d: Optional[List] = None
+        # Global env steps tensor for epsilon schedule synchronization
+        self.global_env_steps_tensor = getattr(buffer_mgr, "global_env_steps", None)
+        if getattr(cfg, "algo", "APPO").upper() == "DQN":
+            self.epsilon_schedule = EpsilonSchedule(
+                epsilon_start=cfg.epsilon_start,
+                epsilon_end=cfg.epsilon_end,
+                decay_steps=cfg.epsilon_decay_steps,
+            )
+            action_space = env_info.action_space
+            if hasattr(action_space, "n"):
+                self.action_space_d = [action_space.n]
+            elif hasattr(action_space, "spaces"):
+                self.action_space_d = [s.n for s in action_space.spaces if hasattr(s, "n")]
+            else:
+                log.warning(f"Invalid action space for DQN epg: {type(action_space)}")
+
+            if self.action_space_d:
+                log.info(
+                    f"{self.object_id}: start={cfg.epsilon_start}, end={cfg.epsilon_end}, {cfg.epsilon_decay_steps} steps, action_space_info={self.action_space_d}"
+                )
 
     @signal
     def initialized(self): ...
@@ -328,8 +353,58 @@ class InferenceWorker(HeartbeatStoppableEventLoopObject, Configurable):
                 rnn_states = ensure_torch_tensor(rnn_states).to(self.device).float()
 
             with timing.add_time("forward"):
-                policy_outputs = actor_critic(normalized_obs, rnn_states, action_mask=action_mask)
+                sample_actions = self.epsilon_schedule is None
+                policy_outputs = actor_critic(
+                    normalized_obs,
+                    rnn_states,
+                    action_mask=action_mask,
+                    sample_actions=sample_actions,
+                )
                 policy_outputs["policy_version"] = torch.empty([num_samples]).fill_(self.param_client.policy_version)
+
+                if not sample_actions:
+                    action_logits = policy_outputs["action_logits"]
+                    if self.action_space_d is None:
+                        raise RuntimeError("action_space_d is None for DQN griddy action")
+
+                    if len(self.action_space_d) == 1:
+                        actions = action_logits.argmax(dim=1)
+                    else:
+                        action_logits_splits = torch.split(action_logits, self.action_space_d, dim=1)
+                        actions = torch.stack([q.argmax(dim=1) for q in action_logits_splits], dim=1)
+
+                    policy_outputs["actions"] = actions
+                    policy_outputs["log_prob_actions"] = torch.zeros(num_samples, device=self.device)
+
+            # Random actions for epsilon-greedy
+            if self.epsilon_schedule is not None and self.action_space_d is not None:
+                with timing.add_time("epsilon_greedy"):
+                    # Use global env steps for synchronized epsilon decay across all workers
+                    if self.global_env_steps_tensor is not None:
+                        global_steps = self.global_env_steps_tensor[self.policy_id].item()
+                        epsilon = self.epsilon_schedule.get_epsilon(global_steps)
+                    else:
+                        # Local step counter if global is none
+                        epsilon = self.epsilon_schedule.step(num_samples)
+                    actions = policy_outputs["actions"]
+                    device = actions.device
+                    mask = torch.rand(num_samples, device=device) < epsilon
+                    if mask.any():
+                        if len(self.action_space_d) == 1:  # Single
+                            rand_actions = torch.randint(0, self.action_space_d[0], (num_samples,), device=device)
+                            if actions.dim() > 1:
+                                rand_actions = rand_actions.unsqueeze(-1)
+                                mask_expanded = mask.unsqueeze(-1)
+                            else:
+                                mask_expanded = mask
+                            policy_outputs["actions"] = torch.where(mask_expanded, rand_actions, actions)
+                        else:  # Multi
+                            actions_lst = []
+                            for n_actions in self.action_space_d:
+                                actions_lst.append(torch.randint(0, n_actions, (num_samples,), device=device))
+                            rand_actions = torch.stack(actions_lst, dim=1)
+                            mask_expanded = mask.unsqueeze(-1)
+                            policy_outputs["actions"] = torch.where(mask_expanded, rand_actions, actions)
 
             with timing.add_time("prepare_outputs"):
                 signals_to_send = self._prepare_policy_outputs_func(num_samples, policy_outputs, self.requests)
