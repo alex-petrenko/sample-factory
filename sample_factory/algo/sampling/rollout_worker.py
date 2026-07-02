@@ -61,7 +61,12 @@ def init_rollout_worker_process(sf_context: SampleFactoryContext, worker: Rollou
         set_process_cpu_affinity(worker.worker_idx, cfg.num_workers)
 
     if cfg.num_workers > 1:
-        psutil.Process().nice(min(cfg.default_niceness + 10, 20))
+        # renicing can fail (AccessDenied) on restricted nodes (SLURM cgroups /
+        # shared local nodes); it is best-effort and must never kill the worker.
+        try:
+            psutil.Process().nice(min(cfg.default_niceness + 10, 20))
+        except (psutil.AccessDenied, PermissionError) as e:
+            log.warning("Unable to set rollout worker niceness (continuing): %s", e)
         torch.set_num_threads(1)
 
     if cfg.actor_worker_gpus:
