@@ -7,9 +7,21 @@ from sample_factory.utils.utils import str2bool
 
 
 def add_basic_cli_args(p: ArgumentParser):
-    p.add_argument("-h", "--help", action="store_true", help="Print the help message", required=False)
+    p.add_argument(
+        "-h",
+        "--help",
+        action="store_true",
+        help="Print the help message",
+        required=False,
+    )
     p.add_argument("--algo", type=str, default="APPO", help="Algorithm to use")
-    p.add_argument("--env", type=str, default=None, required=True, help="Name of the environment to use")
+    p.add_argument(
+        "--env",
+        type=str,
+        default=None,
+        required=True,
+        help="Name of the environment to use",
+    )
     p.add_argument(
         "--experiment",
         type=str,
@@ -18,7 +30,12 @@ def add_basic_cli_args(p: ArgumentParser):
         "If the experiment folder with this name aleady exists the experiment will be RESUMED!"
         "Any parameters passed from command line that do not match the parameters stored in the experiment config.json file will be overridden.",
     )
-    p.add_argument("--train_dir", default=join(os.getcwd(), "train_dir"), type=str, help="Root for all experiments")
+    p.add_argument(
+        "--train_dir",
+        default=join(os.getcwd(), "train_dir"),
+        type=str,
+        help="Root for all experiments",
+    )
     p.add_argument(
         "--restart_behavior",
         default="resume",
@@ -208,7 +225,12 @@ def add_rl_args(p: ArgumentParser):
         type=float,
         help="Coefficient for the exploration component of the loss function.",
     )
-    p.add_argument("--value_loss_coeff", default=0.5, type=float, help="Coefficient for the critic loss")
+    p.add_argument(
+        "--value_loss_coeff",
+        default=0.5,
+        type=float,
+        help="Coefficient for the critic loss",
+    )
     p.add_argument(
         "--kl_loss_coeff",
         default=0.0,
@@ -277,7 +299,13 @@ def add_rl_args(p: ArgumentParser):
     )
 
     # optimization
-    p.add_argument("--optimizer", default="adam", type=str, choices=["adam", "lamb"], help="Type of optimizer to use")
+    p.add_argument(
+        "--optimizer",
+        default="adam",
+        type=str,
+        choices=["adam", "lamb"],
+        help="Type of optimizer to use",
+    )
     p.add_argument(
         "--adam_eps",
         default=1e-6,
@@ -285,7 +313,12 @@ def add_rl_args(p: ArgumentParser):
         help="Adam epsilon parameter (1e-8 to 1e-5 seem to reliably work okay, 1e-3 and up does not work)",
     )
     p.add_argument("--adam_beta1", default=0.9, type=float, help="Adam momentum decay coefficient")
-    p.add_argument("--adam_beta2", default=0.999, type=float, help="Adam second momentum decay coefficient")
+    p.add_argument(
+        "--adam_beta2",
+        default=0.999,
+        type=float,
+        help="Adam second momentum decay coefficient",
+    )
     p.add_argument(
         "--max_grad_norm",
         default=4.0,
@@ -307,7 +340,12 @@ def add_rl_args(p: ArgumentParser):
             "increased or decreased"
         ),
     )
-    p.add_argument("--lr_schedule_kl_threshold", default=0.008, type=float, help="Used with kl_adaptive_* schedulers")
+    p.add_argument(
+        "--lr_schedule_kl_threshold",
+        default=0.008,
+        type=float,
+        help="Used with kl_adaptive_* schedulers",
+    )
     p.add_argument("--lr_adaptive_min", default=1e-6, type=float, help="Minimum learning rate")
     p.add_argument(
         "--lr_adaptive_max",
@@ -451,11 +489,21 @@ def add_rl_args(p: ArgumentParser):
         type=int,
         help="Stop after all policies are trained for this many env steps",
     )
-    p.add_argument("--train_for_seconds", default=int(1e10), type=int, help="Stop training after this many seconds")
+    p.add_argument(
+        "--train_for_seconds",
+        default=int(1e10),
+        type=int,
+        help="Stop training after this many seconds",
+    )
 
     # model saving
     p.add_argument("--save_every_sec", default=120, type=int, help="Checkpointing rate")
-    p.add_argument("--keep_checkpoints", default=2, type=int, help="Number of model checkpoints to keep")
+    p.add_argument(
+        "--keep_checkpoints",
+        default=2,
+        type=int,
+        help="Number of model checkpoints to keep",
+    )
     p.add_argument(
         "--load_checkpoint_kind",
         default="latest",
@@ -488,6 +536,107 @@ def add_rl_args(p: ArgumentParser):
 
     # debugging options
     p.add_argument("--benchmark", default=False, type=str2bool, help="Benchmark mode")
+
+
+def add_dqn_args(p: ArgumentParser):
+    """DQN arguments"""
+    p.add_argument(
+        "--replay_buffer_size",
+        default=1000000,  # Also change in arguments.py if change this
+        type=int,
+        help="Size of the replay buffer in transitions",
+    )
+    p.add_argument(
+        "--learning_starts", default=10000, type=int, help="How many transitions to collect before starting training."
+    )
+    p.add_argument(
+        "--target_update_interval",
+        default=1000,
+        type=int,
+        help="How many each learning steps to update the target network",
+    )
+    p.add_argument(
+        "--target_update_tau",
+        default=1.0,
+        type=float,
+        help="Update coefficient for target network, 1 is copying weight",
+    )
+    p.add_argument(
+        "--epsilon_start",
+        default=1.0,
+        type=float,
+        help="For epsilon-greedy exploration",
+    )
+    p.add_argument(
+        "--epsilon_end",
+        default=0.01,
+        type=float,
+        help="For epsilon-greedy exploration after annealing",
+    )
+    p.add_argument(
+        "--epsilon_decay_steps",
+        default=100000,
+        type=int,
+        help="Number of env steps over to anneal epsilon from epsilon_start to epsilon_end",
+    )
+    p.add_argument(
+        "--double_dqn",
+        default=True,
+        type=str2bool,
+        help="Use Double DQN",
+    )
+    p.add_argument(
+        "--train_frequency",
+        default=4,
+        type=int,
+        help="How often to update training. Dont set to 0.",
+    )
+
+    p.add_argument(
+        "--dqn_max_updates_per_batch",
+        default=1,
+        type=int,
+        help="Cap the number of DQNLearner updates per batch. 0 is no cap",
+    )
+
+    p.add_argument(
+        "--dqn_batch_size",
+        default=0,
+        type=int,
+        help="Replay sampling batch size for DQN. 0 uses --batch_size",
+    )
+
+    p.add_argument(
+        "--dqn_reward_clip",
+        default=0.0,
+        type=float,
+        help="Clip rewards in calculating DQN loss. 0 means disable",
+    )
+
+    p.add_argument(
+        "--per",
+        default=True,
+        type=str2bool,
+        help="Use Prioritized experience replay",
+    )
+    p.add_argument(
+        "--per_omega",
+        default=0.6,
+        type=float,
+        help="Hyper-parameter that determines the shape of the distribution",
+    )
+    p.add_argument(
+        "--per_beta_start",
+        default=0.4,
+        type=float,
+        help="Initial importance sampling weight exponent",
+    )
+    p.add_argument(
+        "--per_beta_frames",
+        default=100000,
+        type=int,
+        help="Number of frames beta anneals from per_beta_start to 1.0",
+    )
 
 
 def add_model_args(p: ArgumentParser):
@@ -526,7 +675,12 @@ def add_model_args(p: ArgumentParser):
     )
 
     # model core settings (core is identity function if we're not using RNNs)
-    p.add_argument("--use_rnn", default=True, type=str2bool, help="Whether to use RNN core in a policy or not")
+    p.add_argument(
+        "--use_rnn",
+        default=True,
+        type=str2bool,
+        help="Whether to use RNN core in a policy or not",
+    )
     p.add_argument(
         "--rnn_size",
         default=512,
@@ -540,7 +694,12 @@ def add_model_args(p: ArgumentParser):
         type=str,
         help="Type of RNN cell to use if use_rnn is True",
     )
-    p.add_argument("--rnn_num_layers", default=1, type=int, help="Number of RNN layers to use if use_rnn is True")
+    p.add_argument(
+        "--rnn_num_layers",
+        default=1,
+        type=int,
+        help="Number of RNN layers to use if use_rnn is True",
+    )
 
     # Decoder settings. Decoder appears between policy core (RNN) and action/critic heads.
     p.add_argument(
@@ -552,7 +711,11 @@ def add_model_args(p: ArgumentParser):
     )
 
     p.add_argument(
-        "--nonlinearity", default="elu", choices=["elu", "relu", "tanh"], type=str, help="Type of nonlinearity to use."
+        "--nonlinearity",
+        default="elu",
+        choices=["elu", "relu", "tanh"],
+        type=str,
+        help="Type of nonlinearity to use.",
     )
     p.add_argument(
         "--policy_initialization",
@@ -597,7 +760,12 @@ def add_model_args(p: ArgumentParser):
 
 def add_default_env_args(p: ArgumentParser):
     """Configuration related to the environments, i.e. things that might be difficult to query from an environment instance."""
-    p.add_argument("--use_env_info_cache", default=False, type=str2bool, help="Whether to use cached env info")
+    p.add_argument(
+        "--use_env_info_cache",
+        default=False,
+        type=str2bool,
+        help="Whether to use cached env info",
+    )
     p.add_argument(
         "--env_gpu_actions",
         default=False,
@@ -625,10 +793,16 @@ def add_default_env_args(p: ArgumentParser):
         "Frameskip=1 (default) means no frameskip, we process every frame.",
     )
     p.add_argument(
-        "--env_framestack", default=1, type=int, help="Frame stacking (only used in Atari, and it is usually set to 4)"
+        "--env_framestack",
+        default=1,
+        type=int,
+        help="Frame stacking (only used in Atari, and it is usually set to 4)",
     )  # <-- this probably should be moved to environment-specific scripts
     p.add_argument(
-        "--pixel_format", default="CHW", type=str, help="PyTorch expects CHW by default, Ray & TensorFlow expect HWC"
+        "--pixel_format",
+        default="CHW",
+        type=str,
+        help="PyTorch expects CHW by default, Ray & TensorFlow expect HWC",
     )
     p.add_argument(
         "--use_record_episode_statistics",
@@ -662,9 +836,17 @@ def add_eval_args(parser):
         "If eval_env_frameskip is different from env_frameskip, we will repeat actions during evaluation "
         "env_frameskip / eval_env_frameskip times to match the training regime.",
     )
-    parser.add_argument("--no_render", action="store_true", help="Do not render the environment during evaluation")
+    parser.add_argument(
+        "--no_render",
+        action="store_true",
+        help="Do not render the environment during evaluation",
+    )
 
-    parser.add_argument("--save_video", action="store_true", help="Save video instead of rendering during evaluation")
+    parser.add_argument(
+        "--save_video",
+        action="store_true",
+        help="Save video instead of rendering during evaluation",
+    )
     parser.add_argument(
         "--video_frames",
         default=1e9,
@@ -672,10 +854,24 @@ def add_eval_args(parser):
         help="Number of frames to render for the video. Defaults to 1e9 which will be the same as having video_frames = max_num_frames. You can also set to -1 which only renders one episode",
     )
     parser.add_argument("--video_name", default=None, type=str, help="Name of video to save")
-    parser.add_argument("--max_num_frames", default=1e9, type=int, help="Maximum number of frames for evaluation")
-    parser.add_argument("--max_num_episodes", default=1e9, type=int, help="Maximum number of episodes for evaluation")
+    parser.add_argument(
+        "--max_num_frames",
+        default=1e9,
+        type=int,
+        help="Maximum number of frames for evaluation",
+    )
+    parser.add_argument(
+        "--max_num_episodes",
+        default=1e9,
+        type=int,
+        help="Maximum number of episodes for evaluation",
+    )
 
-    parser.add_argument("--push_to_hub", action="store_true", help="Push experiment folder to HuggingFace Hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push experiment folder to HuggingFace Hub",
+    )
     parser.add_argument(
         "--hf_repository",
         default=None,
@@ -684,7 +880,10 @@ def add_eval_args(parser):
     )
 
     parser.add_argument(
-        "--policy_index", default=0, type=int, help="Policy to evaluate in case of multi-policy training"
+        "--policy_index",
+        default=0,
+        type=int,
+        help="Policy to evaluate in case of multi-policy training",
     )
 
     parser.add_argument(
@@ -722,7 +921,12 @@ def add_eval_args(parser):
 
 def add_wandb_args(p: ArgumentParser):
     """Weights and Biases experiment monitoring."""
-    p.add_argument("--with_wandb", default=False, type=str2bool, help="Enables Weights and Biases integration")
+    p.add_argument(
+        "--with_wandb",
+        default=False,
+        type=str2bool,
+        help="Enables Weights and Biases integration",
+    )
     p.add_argument(
         "--wandb_user",
         default=None,
@@ -754,7 +958,12 @@ def add_wandb_args(p: ArgumentParser):
 
 def add_pbt_args(p: ArgumentParser):
     """Population-based training (PBT) arguments."""
-    p.add_argument("--with_pbt", default=False, type=str2bool, help="Enables population-based training (PBT)")
+    p.add_argument(
+        "--with_pbt",
+        default=False,
+        type=str2bool,
+        help="Enables population-based training (PBT)",
+    )
     p.add_argument(
         "--pbt_mix_policies_in_one_env",
         default=True,
@@ -779,7 +988,12 @@ def add_pbt_args(p: ArgumentParser):
         type=float,
         help="A portion of policies performing worst to be replace by better policies (rounded up)",
     )
-    p.add_argument("--pbt_mutation_rate", default=0.15, type=float, help="Probability that a parameter mutates")
+    p.add_argument(
+        "--pbt_mutation_rate",
+        default=0.15,
+        type=float,
+        help="Probability that a parameter mutates",
+    )
     p.add_argument(
         "--pbt_replace_reward_gap",
         default=0.1,

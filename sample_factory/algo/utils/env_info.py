@@ -73,7 +73,16 @@ def extract_env_info(env: BatchedVecEnv | NonBatchedVecEnv, cfg: Config) -> EnvI
 
 def check_env_info(env: BatchedVecEnv | NonBatchedVecEnv, env_info: EnvInfo, cfg: Config) -> None:
     new_env_info = extract_env_info(env, cfg)
-    if new_env_info != env_info:
+    # Only compare important info (obs_space, action_space, frameskip)
+    # since num_agents can differ between temp env used for info extraction and actual multi-agent env
+    info = (
+        new_env_info.obs_space == env_info.obs_space
+        and new_env_info.action_space == env_info.action_space
+        and new_env_info.frameskip == env_info.frameskip
+        and new_env_info.action_splits == env_info.action_splits
+        and new_env_info.all_discrete == env_info.all_discrete
+    )
+    if not info:
         cache_filename = env_info_cache_filename(cfg)
         log.error(
             f"Env info does not match the cached value: {env_info} != {new_env_info}. Deleting the cache entry {cache_filename}"
@@ -90,6 +99,14 @@ def check_env_info(env: BatchedVecEnv | NonBatchedVecEnv, env_info: EnvInfo, cfg
             "Either restart the experiment to fix this or run with --use_env_info_cache=False to avoid such problems in the future."
         )
         raise ValueError("Env info mismatch. See logs above for details.")
+    elif new_env_info.num_agents != env_info.num_agents:
+        # temp env created to extract info can have diff num_agents for some reason
+        # May remove this, it was here primarily for debugging
+        log.warning(
+            f"num_agents mismatch (cached: {env_info.num_agents}, actual: {new_env_info.num_agents}). "
+            "Updating env_info.num_agents to actual value."
+        )
+        object.__setattr__(env_info, "num_agents", new_env_info.num_agents)
 
 
 def spawn_tmp_env_and_get_info(sf_context, res_queue, cfg):

@@ -5,11 +5,14 @@ import os
 import sys
 from typing import List, Optional, Tuple
 
+import numpy as np
+
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.rl_utils import total_num_agents
 from sample_factory.cfg.cfg import (
     add_basic_cli_args,
     add_default_env_args,
+    add_dqn_args,
     add_eval_args,
     add_model_args,
     add_pbt_args,
@@ -44,6 +47,7 @@ def parse_sf_args(
     add_default_env_args(p)
     add_wandb_args(p)
     add_pbt_args(p)
+    add_dqn_args(p)
 
     if evaluation:
         add_eval_args(p)
@@ -99,6 +103,52 @@ def preprocess_cfg(cfg: Config, env_info: EnvInfo) -> bool:
         cfg.recurrence = cfg.rollout if cfg.use_rnn else 1
         log.debug(f"Automatically setting recurrence to {cfg.recurrence}")
 
+    if str(cfg.algo).upper() == "DQN":
+        dqn_batch_size = getattr(cfg, "dqn_batch_size", 0)
+        if dqn_batch_size <= 0:
+            cfg.dqn_batch_size = min(cfg.batch_size, 256)
+            log.info(f"DQN: Use batch_size {cfg.dqn_batch_size}")
+        if cfg.dqn_batch_size < cfg.rollout:
+            log.warning("DQN: Set dqn_batch_size to rollout")
+            cfg.dqn_batch_size = cfg.rollout
+        if cfg.dqn_batch_size % cfg.rollout != 0:
+            adjusted = max(cfg.rollout, (cfg.dqn_batch_size // cfg.rollout) * cfg.rollout)
+            log.warning(
+                f"DQN: dqn_batch_size ({cfg.dqn_batch_size}) not divisible by rollout ({cfg.rollout}), dqn_batch_size={adjusted}"
+            )
+            cfg.dqn_batch_size = adjusted
+
+        # Big replay buffer causes overhead in memory allocation
+        # So cap RAM usage to 1GB (1Bil bytes) by how many bytes each observation takes
+        # Only when replay_buffer_size is not passed in cli args
+        cli_args = getattr(cfg, "cli_args", {})  # as in config.json
+        if "replay_buffer_size" not in cli_args and cfg.replay_buffer_size >= 1000000:
+            obs_space = env_info.obs_space
+            bytes_per_obs = 0
+            if hasattr(obs_space, "spaces"):
+                for space in obs_space.spaces.values():
+                    if hasattr(space, "shape"):
+                        dtype = np.dtype(space.dtype) if space.dtype is not None else np.float32
+                        bytes_per_obs += int(np.prod(space.shape)) * dtype.itemsize
+            elif hasattr(obs_space, "shape"):
+                dtype = np.dtype(obs_space.dtype) if obs_space.dtype is not None else np.float32
+                bytes_per_obs = int(np.prod(obs_space.shape)) * dtype.itemsize
+
+            bytes_per_transition = bytes_per_obs * 2
+            if bytes_per_transition > 0:
+                max_size = max(1000, int(1_000_000_000 // bytes_per_transition))  # Approx 1GB
+                if max_size < cfg.replay_buffer_size:
+                    log.warning(f"DQN: Cap replay_buffer_size to {max_size}")
+                    cfg.replay_buffer_size = max_size
+
+        # learning_starts cant exceed buffer size
+        if cfg.learning_starts > cfg.replay_buffer_size:
+            old_learning_starts = cfg.learning_starts
+            cfg.learning_starts = max(1000, cfg.replay_buffer_size // 2)
+            log.warning(
+                f"DQN: learning_starts ({old_learning_starts}) > replay_buffer_size ({cfg.replay_buffer_size}), capped to {cfg.learning_starts}"
+            )
+
     return verify_cfg(cfg, env_info)
 
 
@@ -145,7 +195,17 @@ def verify_cfg(cfg: Config, env_info: EnvInfo) -> bool:
         )
 
     sync_rl = not cfg.async_rl
-    samples_per_training_iteration = cfg.num_batches_per_epoch * cfg.batch_size
+    batch_size = cfg.batch_size
+    if str(cfg.algo).upper() == "DQN":
+        dqn_batch_size = getattr(cfg, "dqn_batch_size", 0)
+        if dqn_batch_size > 0:
+            batch_size = dqn_batch_size
+            if dqn_batch_size < cfg.rollout:
+                cfg_error(f"{dqn_batch_size=} must >= {cfg.rollout=}")
+            if dqn_batch_size % cfg.rollout != 0:
+                cfg_error(f"{dqn_batch_size=} must be divisible by {cfg.rollout=}")
+
+    samples_per_training_iteration = cfg.num_batches_per_epoch * batch_size
     samples_from_all_workers_per_rollout = total_num_agents(cfg, env_info) * cfg.rollout // cfg.num_policies
 
     if sync_rl:
