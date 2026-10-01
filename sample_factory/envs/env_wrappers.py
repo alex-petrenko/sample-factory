@@ -239,6 +239,12 @@ class RecordingWrapper(gym.core.Wrapper):
         return self.env.reset(**kwargs)
 
     def _record(self, img):
+        # Some environments return no observation on the terminal step. There is
+        # no frame to encode in that case, but action and reward bookkeeping in
+        # step() must still be allowed to finish.
+        if img is None or np.size(img) == 0:
+            return
+
         frame_name = f"{self._frame_id:05d}.png"
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(join(self._episode_recording_dir, frame_name), img)
