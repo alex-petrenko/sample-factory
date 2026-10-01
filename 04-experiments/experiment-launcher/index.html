@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -2793,20 +2793,20 @@ directly use Python scripts for ultimate flexibility.</p>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">_params</span> <span class="o">=</span> <span class="n">ParamGrid</span><span class="p">(</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="p">[</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="p">(</span><span class="s2">&quot;seed&quot;</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1111</span><span class="p">,</span> <span class="mi">2222</span><span class="p">,</span> <span class="mi">3333</span><span class="p">,</span> <span class="mi">4444</span><span class="p">,</span> <span class="mi">5555</span><span class="p">,</span> <span class="mi">6666</span><span class="p">,</span> <span class="mi">7777</span><span class="p">,</span> <span class="mi">8888</span><span class="p">,</span> <span class="mi">9999</span><span class="p">]),</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="p">(</span><span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;mujoco_ant&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_halfcheetah&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_hopper&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_humanoid&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_doublependulum&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_pendulum&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_reacher&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_swimmer&quot;</span><span class="p">,</span> <span class="s2">&quot;mujoco_walker&quot;</span><span class="p">]),</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="p">(</span><span class="s2">"seed"</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1111</span><span class="p">,</span> <span class="mi">2222</span><span class="p">,</span> <span class="mi">3333</span><span class="p">,</span> <span class="mi">4444</span><span class="p">,</span> <span class="mi">5555</span><span class="p">,</span> <span class="mi">6666</span><span class="p">,</span> <span class="mi">7777</span><span class="p">,</span> <span class="mi">8888</span><span class="p">,</span> <span class="mi">9999</span><span class="p">]),</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="p">(</span><span class="s2">"env"</span><span class="p">,</span> <span class="p">[</span><span class="s2">"mujoco_ant"</span><span class="p">,</span> <span class="s2">"mujoco_halfcheetah"</span><span class="p">,</span> <span class="s2">"mujoco_hopper"</span><span class="p">,</span> <span class="s2">"mujoco_humanoid"</span><span class="p">,</span> <span class="s2">"mujoco_doublependulum"</span><span class="p">,</span> <span class="s2">"mujoco_pendulum"</span><span class="p">,</span> <span class="s2">"mujoco_reacher"</span><span class="p">,</span> <span class="s2">"mujoco_swimmer"</span><span class="p">,</span> <span class="s2">"mujoco_walker"</span><span class="p">]),</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="p">]</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">_experiments</span> <span class="o">=</span> <span class="p">[</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">Experiment</span><span class="p">(</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="s2">&quot;mujoco_all_envs&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="s2">&quot;python -m sf_examples.mujoco.train_mujoco --algo=APPO --with_wandb=True --wandb_tags mujoco&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="s2">"mujoco_all_envs"</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="s2">"python -m sf_examples.mujoco.train_mujoco --algo=APPO --with_wandb=True --wandb_tags mujoco"</span><span class="p">,</span>
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="n">_params</span><span class="o">.</span><span class="n">generate_params</span><span class="p">(</span><span class="n">randomize</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="p">),</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">]</span>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">RUN_DESCRIPTION</span> <span class="o">=</span> <span class="n">RunDescription</span><span class="p">(</span><span class="s2">&quot;mujoco_all_envs&quot;</span><span class="p">,</span> <span class="n">experiments</span><span class="o">=</span><span class="n">_experiments</span><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">RUN_DESCRIPTION</span> <span class="o">=</span> <span class="n">RunDescription</span><span class="p">(</span><span class="s2">"mujoco_all_envs"</span><span class="p">,</span> <span class="n">experiments</span><span class="o">=</span><span class="n">_experiments</span><span class="p">)</span>
 </code></pre></div>
 <p>This script defines a list of experiments to run. Here we have 10 seeds and 9 environments, so we will run 90 experiments in total with 90 different seed/env combinations.
 This can be extended in a straightforward way to run hyperparameter searches and so on.</p>
@@ -2822,9 +2822,9 @@ In some cases we want searches over pairs (or tuples) of parameters at the same 
 <p>For example:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">_params</span> <span class="o">=</span> <span class="n">ParamGrid</span><span class="p">(</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="p">[</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="p">(</span><span class="s2">&quot;seed&quot;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1111</span><span class="p">,</span> <span class="mi">2222</span><span class="p">,</span> <span class="mi">3333</span><span class="p">,</span> <span class="mi">4444</span><span class="p">]),</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="p">((</span><span class="s2">&quot;serial_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;async_rl&quot;</span><span class="p">),</span> <span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">],</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">])),</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="p">((</span><span class="s2">&quot;use_rnn&quot;</span><span class="p">,</span> <span class="s2">&quot;recurrence&quot;</span><span class="p">),</span> <span class="p">([</span><span class="kc">False</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="mi">16</span><span class="p">])),</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="p">(</span><span class="s2">"seed"</span><span class="p">,</span> <span class="p">[</span><span class="mi">1111</span><span class="p">,</span> <span class="mi">2222</span><span class="p">,</span> <span class="mi">3333</span><span class="p">,</span> <span class="mi">4444</span><span class="p">]),</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="p">((</span><span class="s2">"serial_mode"</span><span class="p">,</span> <span class="s2">"async_rl"</span><span class="p">),</span> <span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">],</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">])),</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="p">((</span><span class="s2">"use_rnn"</span><span class="p">,</span> <span class="s2">"recurrence"</span><span class="p">),</span> <span class="p">([</span><span class="kc">False</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="mi">16</span><span class="p">])),</span>
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="p">]</span>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
 </code></pre></div>
@@ -2839,21 +2839,21 @@ If we used a simple grid, we would have to execute useless combinations of param
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="bp">self</span><span class="p">,</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="n">run_name</span><span class="p">,</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="n">experiments</span><span class="p">,</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">experiment_arg_name</span><span class="o">=</span><span class="s2">&quot;--experiment&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">experiment_dir_arg_name</span><span class="o">=</span><span class="s2">&quot;--train_dir&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">experiment_arg_name</span><span class="o">=</span><span class="s2">"--experiment"</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">experiment_dir_arg_name</span><span class="o">=</span><span class="s2">"--train_dir"</span><span class="p">,</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="n">customize_experiment_name</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="n">param_prefix</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="n">param_prefix</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="p">):</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">        </span><span class="sd">"""</span>
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="sd">        :param run_name: overall name of the experiment and the name of the root folder</span>
 <a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="sd">        :param experiments: a list of Experiment objects to run</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="sd">        :param experiment_arg_name: CLI argument of the underlying experiment that determines it&#39;s unique name</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="sd">        :param experiment_arg_name: CLI argument of the underlying experiment that determines it's unique name</span>
 <a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="sd">               to be generated by the launcher. Default: --experiment</span>
 <a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="sd">        :param experiment_dir_arg_name: CLI argument for the root train dir of your experiment. Default: --train_dir</span>
 <a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="sd">        :param customize_experiment_name: whether to add a hyperparameter combination to the experiment name</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="sd">        :param param_prefix: most experiments will use &quot;--&quot; prefix for each parameter, but some apps don&#39;t have this</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="sd">        :param param_prefix: most experiments will use "--" prefix for each parameter, but some apps don't have this</span>
 <a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="sd">               prefix, i.e. with Hydra you should set it to empty string.</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="sd">        &quot;&quot;&quot;</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="sd">        """</span>
 </code></pre></div>
 <h2 id="using-a-launcher-script">Using a launcher script<a class="headerlink" href="#using-a-launcher-script" title="Permanent link">&para;</a></h2>
 <p>The script above can be executed using one of several backends.
@@ -2945,8 +2945,8 @@ Point <code>--train_dir</code> to a mounted workspace folder so that you can acc
 <a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>                        Optional workdir. Used by slurm launcher to store
 <a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a>                        logfiles etc.
 <a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a>  --slurm_partition SLURM_PARTITION
-<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a>                        Adds slurm partition, i.e. for &quot;gpu&quot; it will add &quot;-p
-<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>                        gpu&quot; to sbatch command line
+<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a>                        Adds slurm partition, i.e. for "gpu" it will add "-p
+<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>                        gpu" to sbatch command line
 <a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a>  --slurm_sbatch_template SLURM_SBATCH_TEMPLATE
 <a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a>                        Commands to run before the actual experiment (i.e.
 <a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a>                        activate conda env, etc.) Example: https://github.com/alex-petrenko/megaverse/blob/master/megaverse_rl/slurm/sbatch_template.sh
@@ -3126,7 +3126,7 @@ Point <code>--train_dir</code> to a mounted workspace folder so that you can acc
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

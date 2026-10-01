@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -2642,11 +2642,11 @@ Other environments may have other custom params than can also be viewed with <co
 <a id="__codelineno-0-122" name="__codelineno-0-122" href="#__codelineno-0-122"></a>                        factory/train_dir)
 <a id="__codelineno-0-123" name="__codelineno-0-123" href="#__codelineno-0-123"></a>  --restart_behavior {resume,restart,overwrite}
 <a id="__codelineno-0-124" name="__codelineno-0-124" href="#__codelineno-0-124"></a>                        How to handle the experiment if the directory with the
-<a id="__codelineno-0-125" name="__codelineno-0-125" href="#__codelineno-0-125"></a>                        same name already exists. &quot;resume&quot; (default) will
-<a id="__codelineno-0-126" name="__codelineno-0-126" href="#__codelineno-0-126"></a>                        resume the experiment, &quot;restart&quot; will preserve the
+<a id="__codelineno-0-125" name="__codelineno-0-125" href="#__codelineno-0-125"></a>                        same name already exists. "resume" (default) will
+<a id="__codelineno-0-126" name="__codelineno-0-126" href="#__codelineno-0-126"></a>                        resume the experiment, "restart" will preserve the
 <a id="__codelineno-0-127" name="__codelineno-0-127" href="#__codelineno-0-127"></a>                        existing experiment folder under a different name
-<a id="__codelineno-0-128" name="__codelineno-0-128" href="#__codelineno-0-128"></a>                        (with &quot;old&quot; suffix) and will start training from
-<a id="__codelineno-0-129" name="__codelineno-0-129" href="#__codelineno-0-129"></a>                        scratch, &quot;overwrite&quot; will delete the existing
+<a id="__codelineno-0-128" name="__codelineno-0-128" href="#__codelineno-0-128"></a>                        (with "old" suffix) and will start training from
+<a id="__codelineno-0-129" name="__codelineno-0-129" href="#__codelineno-0-129"></a>                        scratch, "overwrite" will delete the existing
 <a id="__codelineno-0-130" name="__codelineno-0-130" href="#__codelineno-0-130"></a>                        experiment folder and start from scratch. This
 <a id="__codelineno-0-131" name="__codelineno-0-131" href="#__codelineno-0-131"></a>                        parameter does not have any effect if the experiment
 <a id="__codelineno-0-132" name="__codelineno-0-132" href="#__codelineno-0-132"></a>                        directory does not exist. (default: resume)
@@ -2705,7 +2705,7 @@ Other environments may have other custom params than can also be viewed with <co
 <a id="__codelineno-0-185" name="__codelineno-0-185" href="#__codelineno-0-185"></a>                        of increased policy-lag. (default: 2)
 <a id="__codelineno-0-186" name="__codelineno-0-186" href="#__codelineno-0-186"></a>  --worker_num_splits WORKER_NUM_SPLITS
 <a id="__codelineno-0-187" name="__codelineno-0-187" href="#__codelineno-0-187"></a>                        Typically we split a vector of envs into two parts for
-<a id="__codelineno-0-188" name="__codelineno-0-188" href="#__codelineno-0-188"></a>                        &quot;double buffered&quot; experience collection Set this to 1
+<a id="__codelineno-0-188" name="__codelineno-0-188" href="#__codelineno-0-188"></a>                        "double buffered" experience collection Set this to 1
 <a id="__codelineno-0-189" name="__codelineno-0-189" href="#__codelineno-0-189"></a>                        to disable double buffering. Set this to 3 for triple
 <a id="__codelineno-0-190" name="__codelineno-0-190" href="#__codelineno-0-190"></a>                        buffering! (default: 2)
 <a id="__codelineno-0-191" name="__codelineno-0-191" href="#__codelineno-0-191"></a>  --policy_workers_per_policy POLICY_WORKERS_PER_POLICY
@@ -2892,7 +2892,7 @@ Other environments may have other custom params than can also be viewed with <co
 <a id="__codelineno-0-372" name="__codelineno-0-372" href="#__codelineno-0-372"></a>                        Decorrelating experience serves two benefits. First:
 <a id="__codelineno-0-373" name="__codelineno-0-373" href="#__codelineno-0-373"></a>                        this is better for learning because samples from
 <a id="__codelineno-0-374" name="__codelineno-0-374" href="#__codelineno-0-374"></a>                        workers come from random moments in the episode,
-<a id="__codelineno-0-375" name="__codelineno-0-375" href="#__codelineno-0-375"></a>                        becoming more &quot;i.i.d&quot;.Second, and more important one:
+<a id="__codelineno-0-375" name="__codelineno-0-375" href="#__codelineno-0-375"></a>                        becoming more "i.i.d".Second, and more important one:
 <a id="__codelineno-0-376" name="__codelineno-0-376" href="#__codelineno-0-376"></a>                        this is good for environments with highly non-uniform
 <a id="__codelineno-0-377" name="__codelineno-0-377" href="#__codelineno-0-377"></a>                        one-step times, including long and expensive episode
 <a id="__codelineno-0-378" name="__codelineno-0-378" href="#__codelineno-0-378"></a>                        resets. If experience is not decorrelatedthen training
@@ -2992,10 +2992,10 @@ Other environments may have other custom params than can also be viewed with <co
 <a id="__codelineno-0-472" name="__codelineno-0-472" href="#__codelineno-0-472"></a>                        How often we check if we should save the policy with
 <a id="__codelineno-0-473" name="__codelineno-0-473" href="#__codelineno-0-473"></a>                        the best score ever (default: 5)
 <a id="__codelineno-0-474" name="__codelineno-0-474" href="#__codelineno-0-474"></a>  --save_best_metric SAVE_BEST_METRIC
-<a id="__codelineno-0-475" name="__codelineno-0-475" href="#__codelineno-0-475"></a>                        Save &quot;best&quot; policies based on this metric (just env
+<a id="__codelineno-0-475" name="__codelineno-0-475" href="#__codelineno-0-475"></a>                        Save "best" policies based on this metric (just env
 <a id="__codelineno-0-476" name="__codelineno-0-476" href="#__codelineno-0-476"></a>                        reward by default) (default: reward)
 <a id="__codelineno-0-477" name="__codelineno-0-477" href="#__codelineno-0-477"></a>  --save_best_after SAVE_BEST_AFTER
-<a id="__codelineno-0-478" name="__codelineno-0-478" href="#__codelineno-0-478"></a>                        Start saving &quot;best&quot; policies after this many env steps
+<a id="__codelineno-0-478" name="__codelineno-0-478" href="#__codelineno-0-478"></a>                        Start saving "best" policies after this many env steps
 <a id="__codelineno-0-479" name="__codelineno-0-479" href="#__codelineno-0-479"></a>                        to filter lucky episodes that succeed and dominate the
 <a id="__codelineno-0-480" name="__codelineno-0-480" href="#__codelineno-0-480"></a>                        statistics early on (default: 100000)
 <a id="__codelineno-0-481" name="__codelineno-0-481" href="#__codelineno-0-481"></a>  --benchmark BENCHMARK
@@ -3096,9 +3096,9 @@ Other environments may have other custom params than can also be viewed with <co
 <a id="__codelineno-0-576" name="__codelineno-0-576" href="#__codelineno-0-576"></a>                        https://docs.wandb.ai/quickstart#1.-set-up-wandb
 <a id="__codelineno-0-577" name="__codelineno-0-577" href="#__codelineno-0-577"></a>                        (default: None)
 <a id="__codelineno-0-578" name="__codelineno-0-578" href="#__codelineno-0-578"></a>  --wandb_project WANDB_PROJECT
-<a id="__codelineno-0-579" name="__codelineno-0-579" href="#__codelineno-0-579"></a>                        WandB &quot;Project&quot; (default: sample_factory)
+<a id="__codelineno-0-579" name="__codelineno-0-579" href="#__codelineno-0-579"></a>                        WandB "Project" (default: sample_factory)
 <a id="__codelineno-0-580" name="__codelineno-0-580" href="#__codelineno-0-580"></a>  --wandb_group WANDB_GROUP
-<a id="__codelineno-0-581" name="__codelineno-0-581" href="#__codelineno-0-581"></a>                        WandB &quot;Group&quot; (to group your experiments). By default
+<a id="__codelineno-0-581" name="__codelineno-0-581" href="#__codelineno-0-581"></a>                        WandB "Group" (to group your experiments). By default
 <a id="__codelineno-0-582" name="__codelineno-0-582" href="#__codelineno-0-582"></a>                        this is the name of the env. (default: None)
 <a id="__codelineno-0-583" name="__codelineno-0-583" href="#__codelineno-0-583"></a>  --wandb_job_type WANDB_JOB_TYPE
 <a id="__codelineno-0-584" name="__codelineno-0-584" href="#__codelineno-0-584"></a>                        WandB job type (default: SF)
@@ -3139,7 +3139,7 @@ Other environments may have other custom params than can also be viewed with <co
 <a id="__codelineno-0-619" name="__codelineno-0-619" href="#__codelineno-0-619"></a>                        Policy stat to optimize with PBT. true_objective
 <a id="__codelineno-0-620" name="__codelineno-0-620" href="#__codelineno-0-620"></a>                        (default) is equal to raw env reward if not specified,
 <a id="__codelineno-0-621" name="__codelineno-0-621" href="#__codelineno-0-621"></a>                        but can also be any other per-policy stat.For DMlab-30
-<a id="__codelineno-0-622" name="__codelineno-0-622" href="#__codelineno-0-622"></a>                        use value &quot;dmlab_target_objective&quot; (which is capped
+<a id="__codelineno-0-622" name="__codelineno-0-622" href="#__codelineno-0-622"></a>                        use value "dmlab_target_objective" (which is capped
 <a id="__codelineno-0-623" name="__codelineno-0-623" href="#__codelineno-0-623"></a>                        human normalized score) (default: true_objective)
 <a id="__codelineno-0-624" name="__codelineno-0-624" href="#__codelineno-0-624"></a>  --pbt_perturb_min PBT_PERTURB_MIN
 <a id="__codelineno-0-625" name="__codelineno-0-625" href="#__codelineno-0-625"></a>                        When PBT mutates a float hyperparam, it samples the
@@ -3320,7 +3320,7 @@ Other environments may have other custom params than can also be viewed with <co
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
