@@ -4,11 +4,15 @@ This isn't production code, but feel free to use as an example for your NGC setu
 
 """
 
+import shlex
 import time
 from multiprocessing.pool import ThreadPool
 from subprocess import PIPE, Popen
 
 from sample_factory.utils.utils import log, str2bool
+
+_NAME_PLACEHOLDER = "__SF_NGC_JOB_NAME__"
+_CMD_PLACEHOLDER = "__SF_NGC_EXPERIMENT_CMD__"
 
 
 def add_ngc_args(parser):
@@ -40,6 +44,10 @@ def run_ngc(run_description, args):
     ngc_template = " ".join(ngc_template.split())
 
     log.info("NGC template: %s", ngc_template)
+    ngc_template = ngc_template.replace("{{ name }}", _NAME_PLACEHOLDER)
+    ngc_template = ngc_template.replace("{{ experiment_cmd }}", _CMD_PLACEHOLDER)
+    ngc_template_tokens = shlex.split(ngc_template)
+
     experiments = run_description.generate_experiments(args.train_dir, makedirs=False)
     experiments = list(experiments)
     log.info(f"{len(experiments)} experiments to run")
@@ -52,12 +60,15 @@ def run_ngc(run_description, args):
         job_name = name
         log.info("Job name: %s", job_name)
 
-        ngc_job_cmd = ngc_template.replace("{{ name }}", job_name).replace("{{ experiment_cmd }}", cmd)
+        # split the template into args first and substitute afterwards, so no shell ever parses the values
+        ngc_job_cmd = [
+            token.replace(_NAME_PLACEHOLDER, job_name).replace(_CMD_PLACEHOLDER, cmd) for token in ngc_template_tokens
+        ]
 
-        log.info("Executing %s...", ngc_job_cmd)
+        log.info("Executing %s...", shlex.join(ngc_job_cmd))
 
         if not args.ngc_print_only:
-            process = Popen(ngc_job_cmd, stdout=PIPE, shell=True)
+            process = Popen(ngc_job_cmd, stdout=PIPE)
             output, err = process.communicate()
             exit_code = process.wait()
             log.info("Output: %s, err: %s, exit code: %r", output, err, exit_code)

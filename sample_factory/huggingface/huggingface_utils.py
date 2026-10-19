@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 import cv2
 import numpy as np
@@ -12,6 +13,8 @@ MIN_FRAME_SIZE = 180
 
 def generate_replay_video(dir_path: str, frames: list, fps: int, cfg: Config):
     video_fname = "replay.mp4" if cfg.video_name is None else cfg.video_name
+    # video_name can come from a third-party config.json, only allow a plain filename inside dir_path
+    video_fname = os.path.basename(video_fname)
     if not video_fname.endswith(".mp4"):
         video_fname += ".mp4"
 
@@ -36,7 +39,8 @@ def generate_replay_video(dir_path: str, frames: list, fps: int, cfg: Config):
             frame = cv2.resize(frame, frame_size, interpolation=cv2.INTER_AREA)
         video.write(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     video.release()
-    os.system(f"ffmpeg -y -i {tmp_name} -vcodec libx264 {video_name}")
+    # pass args as a list (no shell) so that video_name is never interpreted by a shell
+    subprocess.run(["ffmpeg", "-y", "-i", tmp_name, "-vcodec", "libx264", video_name], check=False)
     log.debug(f"Replay video saved to {video_name}!")
 
 

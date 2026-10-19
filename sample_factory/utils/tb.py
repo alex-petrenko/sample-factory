@@ -8,6 +8,7 @@ Inspired by code originally written by Shao-Hua Sun https://github.com/shaohua01
 import argparse
 import glob
 import os.path
+import shlex
 import subprocess
 import sys
 import time
@@ -64,23 +65,22 @@ def main():
 
     train_dirs = ",".join([f"{os.path.basename(s)}:{s}" for s in train_dirs])
 
-    cmd = (
-        f"tensorboard "
-        f"--port={args.port} "
-        f"{logdir_arg}={train_dirs} "
-        f"--reload_interval={args.reload_interval} "
-        f"--max_reload_threads=8 "
-        f'--samples_per_plugin="scalars=200"'
-    )
+    cmd = [
+        "tensorboard",
+        f"--port={args.port}",
+        f"{logdir_arg}={train_dirs}",
+        f"--reload_interval={args.reload_interval}",
+        "--max_reload_threads=8",
+        "--samples_per_plugin=scalars=200",
+    ]
 
-    if args.quiet:
-        cmd += " 2>/dev/null"
+    stderr = subprocess.DEVNULL if args.quiet else None
 
     num_restarts = 0
     while True:
         num_restarts += 1
-        print(cmd)
-        p = subprocess.Popen(cmd, shell=True)
+        print(shlex.join(cmd))
+        p = subprocess.Popen(cmd, stderr=stderr)
         time.sleep(args.refresh)
         print("Kill current tensorboard process", p.pid, "...")
         kill(p.pid)
