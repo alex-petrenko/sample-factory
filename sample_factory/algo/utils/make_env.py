@@ -131,6 +131,12 @@ class NonBatchedDictObservationsWrapper(_DictObservationsWrapper):
 
 
 class BatchedListToDictWrapper(Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        is_multiagent, num_agents = get_multiagent_info(env)
+        self.is_multiagent: bool = is_multiagent
+        self.num_agents: int = num_agents
+
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         if isinstance(obs, list):

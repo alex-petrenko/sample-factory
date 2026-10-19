@@ -13,8 +13,16 @@ from sample_factory.algo.utils.tensor_utils import ensure_torch_tensor
 from sample_factory.utils.typing import Config
 
 
+def _get_batch_size(cfg: Config) -> int:
+    if str(cfg.algo).upper() == "DQN":
+        dqn_batch_size = getattr(cfg, "dqn_batch_size", 0)
+        if dqn_batch_size > 0:
+            return dqn_batch_size
+    return cfg.batch_size
+
+
 def trajectories_per_minibatch(cfg: Config) -> int:
-    return cfg.batch_size // cfg.rollout
+    return _get_batch_size(cfg) // cfg.rollout
 
 
 def trajectories_per_training_iteration(cfg: Config) -> int:
