@@ -18,7 +18,7 @@ from sample_factory.algo.utils.tensor_utils import unsqueeze_tensor
 from sample_factory.cfg.arguments import load_from_checkpoint
 from sample_factory.huggingface.huggingface_utils import generate_model_card, generate_replay_video, push_to_hf
 from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
-from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.model.model_utils import get_rnn_size, upgrade_legacy_state_dict
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config, StatusCode
 from sample_factory.utils.utils import debug_log_every_n, experiment_dir, log
@@ -95,7 +95,7 @@ def load_state_dict(cfg: Config, actor_critic: ActorCritic, device: torch.device
     checkpoints = Learner.get_checkpoints(Learner.checkpoint_dir(cfg, policy_id), f"{name_prefix}_*")
     checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
     if checkpoint_dict:
-        actor_critic.load_state_dict(checkpoint_dict["model"])
+        actor_critic.load_state_dict(upgrade_legacy_state_dict(checkpoint_dict["model"], actor_critic))
     else:
         raise RuntimeError("Could not load checkpoint")
 

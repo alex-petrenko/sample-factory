@@ -24,6 +24,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_
 from sample_factory.algo.utils.torch_utils import masked_select, synchronize, to_scalar
 from sample_factory.cfg.configurable import Configurable
 from sample_factory.model.actor_critic import ActorCritic, create_actor_critic
+from sample_factory.model.model_utils import upgrade_legacy_state_dict
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.decay import LinearDecay
 from sample_factory.utils.dicts import iterate_recursively
@@ -291,7 +292,7 @@ class Learner(Configurable):
             self.train_step = checkpoint_dict["train_step"]
             self.env_steps = checkpoint_dict["env_steps"]
             self.best_performance = checkpoint_dict.get("best_performance", self.best_performance)
-        self.actor_critic.load_state_dict(checkpoint_dict["model"])
+        self.actor_critic.load_state_dict(upgrade_legacy_state_dict(checkpoint_dict["model"], self.actor_critic))
         self.optimizer.load_state_dict(checkpoint_dict["optimizer"])
         self.curr_lr = checkpoint_dict.get("curr_lr", self.cfg.learning_rate)
 
