@@ -7,6 +7,7 @@ import torch
 from torch.distributions import Categorical
 
 from sample_factory.algo.utils.action_distributions import (
+    argmax_actions,
     calc_num_action_parameters,
     calc_num_actions,
     get_action_distribution,
@@ -235,3 +236,50 @@ def generate_expected_actions(action_space_size, batch_size, has_action_mask):
         action_mask = None
 
     return expected_actions, action_mask
+
+
+@pytest.mark.parametrize("batch_size", [1, 3, 7])
+@pytest.mark.parametrize(
+    "spaces",
+    [
+        [gym.spaces.Discrete(3)],
+        [gym.spaces.Discrete(3), gym.spaces.Discrete(5)],
+        [gym.spaces.Discrete(3), gym.spaces.Box(-1, 1, shape=(2,))],
+        [gym.spaces.Box(-1, 1, shape=(2,)), gym.spaces.Discrete(3)],
+        [gym.spaces.Box(-1, 1, shape=(2,)), gym.spaces.Box(-1, 1, shape=(3,))],
+        [gym.spaces.Tuple([gym.spaces.Discrete(3), gym.spaces.Box(-1, 1, shape=(2,))]), gym.spaces.Discrete(5)],
+    ],
+)
+def test_tuple_argmax_preserves_batch_and_action_axes(batch_size, spaces):
+    def make_logits_and_actions(space):
+        if isinstance(space, gym.spaces.Discrete):
+            actions = torch.arange(batch_size) % space.n
+            logits = torch.zeros(batch_size, space.n)
+            logits.scatter_(1, actions[:, None], 1.0)
+            return logits, actions[:, None]
+        if isinstance(space, gym.spaces.Box):
+            means = torch.linspace(-0.75, 0.75, batch_size * space.shape[0]).reshape(batch_size, -1)
+            return torch.cat([means, torch.zeros_like(means)], dim=1), means
+        parts = [make_logits_and_actions(s) for s in space.spaces]
+        return torch.cat([p[0] for p in parts], dim=1), torch.cat([p[1] for p in parts], dim=1)
+
+    action_space = gym.spaces.Tuple(spaces)
+    logits, expected = make_logits_and_actions(action_space)
+    distribution = get_action_distribution(action_space, logits)
+
+    actions = argmax_actions(distribution)
+
+    assert actions.shape == (batch_size, calc_num_actions(action_space))
+    torch.testing.assert_close(actions, expected)
+    assert distribution.log_prob(actions).shape == (batch_size,)
+
+
+def test_tuple_argmax_respects_action_masks():
+    space = gym.spaces.Tuple([gym.spaces.Discrete(3), gym.spaces.Discrete(3)])
+    logits = torch.tensor([[5.0, 3.0, 1.0], [1.0, 3.0, 5.0], [3.0, 5.0, 1.0]])
+    masks = [torch.tensor([[0, 1, 1], [1, 1, 0], [1, 0, 1]]), torch.ones(3, 3)]
+    distribution = get_action_distribution(space, torch.cat([logits, logits], dim=1), masks)
+
+    actions = argmax_actions(distribution)
+
+    torch.testing.assert_close(actions, torch.tensor([[1, 0], [1, 2], [0, 1]]))
