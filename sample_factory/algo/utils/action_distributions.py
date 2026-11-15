@@ -253,7 +253,8 @@ class TupleActionDistribution:
 
     def argmax(self):
         list_of_action_batches = [argmax_actions(d) for d in self.distributions]
-        return torch.cat(list_of_action_batches).unsqueeze(0)
+        list_of_action_batches = [a.unsqueeze(-1) if a.ndim == 1 else a for a in list_of_action_batches]
+        return self._flatten_actions(list_of_action_batches)
 
     def log_prob(self, actions):
         # split into batches of actions from individual distributions
